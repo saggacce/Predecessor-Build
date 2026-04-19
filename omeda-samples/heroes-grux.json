@@ -1,0 +1,295 @@
+{
+  "id": 9,
+  "game_id": null,
+  "name": "Grux",
+  "display_name": "Grux",
+  "slug": "grux",
+  "image": "/assets/4d1f268b89b454f6.webp",
+  "stats": [
+    5,
+    4,
+    6,
+    3
+  ],
+  "classes": [
+    "Fighter"
+  ],
+  "roles": [
+    "Offlane",
+    "Jungle"
+  ],
+  "abilities": [
+    {
+      "display_name": "The Chieftains Warclubs",
+      "image": "/assets/5bd6b1e3987b6a06.webp",
+      "game_description": "<Header>Ranged Basic Attack.</Header><br>\n• Deals <AttackDamageText>{Damage}</AttackDamageText>(<img id=\"ADIconOrange\"></img>)<AttackDamageText>Damage</AttackDamageText>.<br>\n• Attacks per second: <EffectText>{AttackSpeed}</EffectText>.",
+      "menu_description": "Melee basic attack dealing 64/66.87/69.89/73.07/76.4/79.89/83.53/87.32/91.27/95.37/99.62/104.03/108.59/113.3/118.17/123.19/128.37/133.7 <AttackDamageText>(+90%</AttackDamageText><img id=\"ADIconOrange\"></img><AttackDamageText>)</AttackDamageText> physical damage.",
+      "cooldown": [],
+      "cost": [],
+      "key": "LMB"
+    },
+    {
+      "display_name": "Double Pain",
+      "image": "/assets/7f9676a8cb548845.webp",
+      "game_description": "<Header>Cleave everything in front of you.</Header><br>\n• Deals <AttackDamageText>{Damage}</AttackDamageText>(<img id=\"ADIconOrange\"></img>)<AttackDamageText>Damage</AttackDamageText>.<br>\n• Applies <EffectText>On-Hit Effects</EffectText> twice.<br>\n<br>\nFor each Hero or Camp Leader hit:<br>\n• Restores <HealthText>{Heal}</HealthText>(<img id=\"HealthIconGreen\"></img>) (<HealthText>+{MissingHealthHealingPercent}% Missing Health</HealthText>) <HealthText>Health</HealthText>.",
+      "menu_description": "Using both weapons, Grux cleaves all Enemies in front of him, dealing {DoublePain_Damage} <AttackDamageText>(+115/125/135/145/155%</AttackDamageText><img id=\"ADIconOrange\"></img><AttackDamageText>)</AttackDamageText> physical damage. <br>\n<br>\nDouble Pain applies on-hit effects twice and restores <HealthText>(+3% Max Health)</HealthText> <HealthText>(+5/7/9/11/13% Missing Health)</HealthText> Health for each Enemy Hero or Camp Leader it hits.",
+      "cooldown": [
+        9.0,
+        8.0,
+        7.0,
+        6.0,
+        5.0
+      ],
+      "cost": [
+        30.0,
+        35.0,
+        40.0,
+        45.0,
+        50.0
+      ],
+      "key": "RMB"
+    },
+    {
+      "display_name": "Smash 'n Grab",
+      "image": "/assets/bb83338c03f02a7d.webp",
+      "game_description": "<Header>Smash the ground, sending forward a shockwave.</Header><br>\n• <EffectText>Channel</EffectText> for up to <EffectText>{Duration}s</EffectText>.<br>\n• <EffectText>Range</EffectText> increases based on <EffectText>Channel</EffectText> time.<br>\n• <CC_Text>Pulls</CC_Text> all Enemies in towards you.<br>\n• Deals <AttackDamageText>{Damage}</AttackDamageText>(<img id=\"ADIconOrange\"></img>)<AttackDamageText>Damage</AttackDamageText>.<br>\n• <CC_Text>Stuns</CC_Text> them for <CC_Text>{Stun}s</CC_Text>.",
+      "menu_description": "Grux raises his clubs in the air before smashing the ground, sending forth a shockwave that Pulls all Enemies in its path towards Grux, dealing 60/85/110/135/160 <AttackDamageText>(+100%</AttackDamageText><img id=\"ADIconOrange\"></img><AttackDamageText>)</AttackDamageText> physical damage and Stunning them for 0.75s.<br>\n<br>\nRange increases based on Channel Duration.",
+      "cooldown": [
+        24.0,
+        22.5,
+        21.0,
+        19.5,
+        18.0
+      ],
+      "cost": [
+        65.0,
+        60.0,
+        55.0,
+        50.0,
+        45.0
+      ],
+      "key": "Q"
+    },
+    {
+      "display_name": "Stampede",
+      "image": "/assets/0f9a5cb51c049f39.webp",
+      "game_description": "<Header>Dash forward after a delay.</Header><br>\n• Deals <AttackDamageText>{Damage}</AttackDamageText>(<img id=\"ADIconOrange\"></img>)<AttackDamageText>Damage</AttackDamageText>. <br>\n• <CC_Text>Drags</CC_Text> Enemy Heroes along the path.<br>\n• Applies a <CC_Text>{Slow}% Slow</CC_Text> for <CC_Text>{SlowDuration}s</CC_Text>.",
+      "menu_description": "After a brief delay, Grux charges forward a long distance, dealing 80/125/170/215/260 <AttackDamageText>(+120%</AttackDamageText><img id=\"ADIconOrange\"></img><AttackDamageText>)</AttackDamageText> physical damage to all Enemies he passes through and Slowing them by 40% for 1.2s.<br>\n<br>\nEnemy Heroes are dragged along the path with Grux.",
+      "cooldown": [
+        20.0,
+        19.0,
+        18.0,
+        17.0,
+        16.0
+      ],
+      "cost": [
+        50.0,
+        50.0,
+        50.0,
+        50.0,
+        50.0
+      ],
+      "key": "E"
+    },
+    {
+      "display_name": "Warlord's Challenge",
+      "image": "/assets/77480cf6f861d16d.webp",
+      "game_description": "<Header>Slam your clubs together creating a shockwave.</Header><br>\n• <CC_Text>Stuns</CC_Text> Targets for <CC_Text>{Stun}s</CC_Text> and gain <EffectText>Empowered</EffectText> for <EffectText>{BuffDuration}s</EffectText>.<br>\n<br>\nWhile <EffectText>Empowered</EffectText>:<br>\n• Gain <EffectText>{AttackSpeed}% Attack Speed</EffectText>.<br>\n• Steal <AttackDamageText>{StealPhysicalPower} Physical Power</AttackDamageText> <EffectText>On-Hit</EffectText> for <AttackDamageText>{StealDuration}s</AttackDamageText>.<br>\n• Duration is increased by <EffectText>{DurationExtension}s</EffectText> when applying <EffectText>Blood Loss</EffectText> <br>\nto Max Stacked Enemy Heroes. ",
+      "menu_description": "Grux slams his clubs together, Stunning all nearby Enemy Heroes for 0.75s. <br>\n<br>\nFor the next 8/10/12s, Grux gains 30/60/90% Attack Speed and empowers his attacks against Enemy Heroes to repeatedly steal 3/4/5 Physical Power on-hit, returning after 4s.<br>\n<br>\nThis abilities duration is extended by 0.5s on-hit when Grux attacks Enemy Heroes that are afflicted with Max Bloodlust stacks. ",
+      "cooldown": [
+        125.0,
+        105.0,
+        85.0
+      ],
+      "cost": [
+        100.0,
+        100.0,
+        100.0
+      ],
+      "key": "R"
+    },
+    {
+      "display_name": "Bloodlust",
+      "image": "/assets/00a80f46d6b71f76.webp",
+      "game_description": "<Header>On hitting an Enemy with a Basic Attack:</Header><br>\n• Apply <EffectText>Blood Loss</EffectText>.<br>\n• Deals <AttackDamageText>{Damage}</AttackDamageText>(<img id=\"ADIconOrange\"></img>)<AttackDamageText>Damage</AttackDamageText> over <AttackDamageText>{BleedDuration}s</AttackDamageText>.<br>\n• Stacks up to <EffectText>{BleedMaxStacks}</EffectText> times. ",
+      "menu_description": "Grux's basic attacks apply a Bleed on-hit, dealing 8/9/10/11/12/13/14/15/16/17/18/19/20/21/22/23/24/25 (+1 per Level) <AttackDamageText>(+30%</AttackDamageText><img id=\"ADIconOrange\"></img><AttackDamageText>)</AttackDamageText> physical damage over 5s, stacking up to 6 times. ",
+      "cooldown": [],
+      "cost": [],
+      "key": "Passive"
+    }
+  ],
+  "base_stats": {
+    "physical_power": [
+      64.0,
+      66.87,
+      69.89375000000001,
+      73.07125,
+      76.4025,
+      79.8875,
+      83.52625,
+      87.31875000000001,
+      91.26500000000001,
+      95.36500000000001,
+      99.61875,
+      104.02625,
+      108.5875,
+      113.30250000000001,
+      118.17125000000001,
+      123.19375000000001,
+      128.37,
+      133.70000000000002
+    ],
+    "attack_range": [
+      300.0
+    ],
+    "cleave": [
+      0.2
+    ],
+    "attack_speed": [
+      1.0,
+      1.0112,
+      1.0230000000000001,
+      1.0354,
+      1.0484,
+      1.062,
+      1.0762,
+      1.091,
+      1.1064,
+      1.1224,
+      1.139,
+      1.1562000000000001,
+      1.1740000000000002,
+      1.1924000000000001,
+      1.2114,
+      1.231,
+      1.2512,
+      1.272
+    ],
+    "basic_attack_time": [
+      1.2
+    ],
+    "base_health_regeneration": [
+      1.8,
+      1.954,
+      2.11625,
+      2.28675,
+      2.4655,
+      2.6525,
+      2.84775,
+      3.05125,
+      3.263,
+      3.483,
+      3.71125,
+      3.94775,
+      4.1925,
+      4.4455,
+      4.7067499999999995,
+      4.976249999999999,
+      5.254,
+      5.539999999999999
+    ],
+    "max_mana": [
+      250.0,
+      290.6,
+      333.375,
+      378.325,
+      425.45,
+      474.75,
+      526.225,
+      579.875,
+      635.7,
+      693.7,
+      753.875,
+      816.225,
+      880.75,
+      947.45,
+      1016.325,
+      1087.375,
+      1160.6,
+      1236.0
+    ],
+    "magical_armor": [
+      30.0,
+      30.98,
+      32.0125,
+      33.097500000000004,
+      34.23500000000001,
+      35.425000000000004,
+      36.667500000000004,
+      37.962500000000006,
+      39.31,
+      40.71,
+      42.1625,
+      43.667500000000004,
+      45.225,
+      46.835,
+      48.4975,
+      50.212500000000006,
+      51.980000000000004,
+      53.800000000000004
+    ],
+    "physical_armor": [
+      30.0,
+      33.5,
+      37.1875,
+      41.0625,
+      45.125,
+      49.375,
+      53.8125,
+      58.4375,
+      63.25,
+      68.25,
+      73.4375,
+      78.8125,
+      84.375,
+      90.125,
+      96.0625,
+      102.1875,
+      108.5,
+      115.0
+    ],
+    "base_movement_speed": [
+      705.0
+    ],
+    "max_health": [
+      660.0,
+      739.1,
+      822.4375,
+      910.0125,
+      1001.825,
+      1097.875,
+      1198.1625,
+      1302.6875,
+      1411.45,
+      1524.45,
+      1641.6875,
+      1763.1625,
+      1888.875,
+      2018.825,
+      2153.0125,
+      2291.4375,
+      2434.1,
+      2581.0
+    ],
+    "base_mana_regeneration": [
+      1.4,
+      1.456,
+      1.515,
+      1.577,
+      1.642,
+      1.71,
+      1.781,
+      1.855,
+      1.932,
+      2.012,
+      2.095,
+      2.181,
+      2.27,
+      2.362,
+      2.4570000000000003,
+      2.555,
+      2.656,
+      2.7600000000000002
+    ]
+  }
+}
