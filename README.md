@@ -53,8 +53,6 @@ docs/
   project_predecessor.md            → Product + technical specification
   predecessor_api_technical_doc.md  → API integration reference
   future_features_roadmap.md        → Pending capabilities with priority/effort
-  workflow.md                       → Branch/PR/merge working agreement
-  planning.md                       → Task + sub-task execution tracker
 scripts/
   explore_omeda_api.py  → One-shot API audit tool
   api-samples/          → Raw API response fixtures (used in tests)
