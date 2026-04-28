@@ -35,7 +35,7 @@ docs/
   predecessor_api_technical_doc.md → API reference (REST + GraphQL)
 scripts/
   explore_omeda_api.py  → One-shot API audit tool
-  api-samples/          → Raw API response fixtures (used in tests)
+  api-samples/          → Raw API response snapshots (reference for sync worker dev)
 ```
 
 ## Delivery phases
