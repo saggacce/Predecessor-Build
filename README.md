@@ -73,4 +73,4 @@ scripts/
 - **REST** — `omeda.city` (heroes, items, builds — no auth required)
 - **GraphQL** — `pred.gg/gql` (players, matches, teams, matchups — OAuth2 required)
 
-See [`docs/predecessor_api_technical_doc.md`](docs/predecessor_api_technical_doc.md) for API details and [`docs/future_features_roadmap.md`](docs/future_features_roadmap.md) for pending capabilities.
+See [`docs/project_predecessor.md`](docs/project_predecessor.md) for product scope, [`docs/predecessor_api_technical_doc.md`](docs/predecessor_api_technical_doc.md) for API details, [`docs/future_features_roadmap.md`](docs/future_features_roadmap.md) for future capabilities, [`docs/workflow.md`](docs/workflow.md) for execution flow, and [`docs/planning.md`](docs/planning.md) for task tracking.
