@@ -1,5 +1,19 @@
 # Documento Técnico: API de pred.gg (Predecessor)
-## Para uso con Claude Code — Aplicación de análisis de equipo, scouting y gestión
+## Referencia de integración para plataforma de scouting, análisis competitivo y build intelligence
+
+---
+
+## 0. Propósito de este documento
+
+Este documento cubre **la capa de integración de API** (GraphQL/OAuth2, queries, límites y consideraciones técnicas).
+
+No reemplaza la especificación de producto. La visión, alcance y roadmap funcional viven en `docs/project_predecessor.md`.
+
+Prioridad actual del producto:
+1. Seguimiento de jugadores.
+2. Scouting de jugadores rivales.
+3. Análisis de equipos para scrims y partidos.
+4. Build/stat calculator como fase posterior.
 
 ---
 
