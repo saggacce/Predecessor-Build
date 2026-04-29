@@ -1,7 +1,12 @@
 import { Router } from 'express';
+import { z } from 'zod';
 import { getTeamProfile, listTeams } from '../services/team-service.js';
 
 export const teamsRouter = Router();
+
+const listQuerySchema = z.object({
+  type: z.enum(['OWN', 'RIVAL']).optional(),
+});
 
 /**
  * GET /teams
@@ -9,7 +14,7 @@ export const teamsRouter = Router();
  */
 teamsRouter.get('/', async (req, res, next) => {
   try {
-    const type = req.query.type as 'OWN' | 'RIVAL' | undefined;
+    const { type } = listQuerySchema.parse(req.query);
     const teams = await listTeams(type);
     res.json({ teams });
   } catch (err) {

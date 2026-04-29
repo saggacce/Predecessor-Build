@@ -75,15 +75,17 @@ export async function getTeamProfile(teamId: string): Promise<TeamProfile> {
   for (const r of team.roster) {
     const snap = r.player.snapshots[0];
     if (!snap) continue;
-    const gs = snap.generalStats as Record<string, number>;
-    totalKills += gs.kills ?? 0;
-    totalDeaths += gs.deaths ?? 0;
-    totalAssists += gs.assists ?? 0;
-    totalMatches += gs.matches ?? 0;
+    const gs = snap.generalStats;
+    if (typeof gs !== 'object' || gs === null || Array.isArray(gs)) continue;
+    const stats = gs as Record<string, unknown>;
+    totalKills += typeof stats.kills === 'number' ? stats.kills : 0;
+    totalDeaths += typeof stats.deaths === 'number' ? stats.deaths : 0;
+    totalAssists += typeof stats.assists === 'number' ? stats.assists : 0;
+    totalMatches += typeof stats.matches === 'number' ? stats.matches : 0;
   }
 
   const averageKDA = totalDeaths > 0
-    ? parseFloat(((totalKills + totalAssists) / totalDeaths).toFixed(2))
+    ? Math.round(((totalKills + totalAssists) / totalDeaths) * 100) / 100
     : 0;
 
   return {
