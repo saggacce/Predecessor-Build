@@ -57,8 +57,8 @@ export async function generateScrimReport(
         try {
           const profile = await getPlayerProfile(member.playerId);
           topHeroes = extractTopHeroes(profile.heroStats);
-        } catch {
-          // Player profile might fail — continue without hero data
+        } catch (err) {
+          console.warn(`[report-service] could not load profile for player ${member.playerId}:`, err);
         }
 
         return {

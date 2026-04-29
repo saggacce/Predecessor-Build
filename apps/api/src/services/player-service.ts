@@ -1,6 +1,14 @@
 import { db } from '../db.js';
 import { AppError } from '../middleware/error-handler.js';
 
+function isRecord(val: unknown): val is Record<string, unknown> {
+  return val !== null && typeof val === 'object' && !Array.isArray(val);
+}
+
+function safeNumber(val: unknown): number {
+  return typeof val === 'number' && isFinite(val) ? val : 0;
+}
+
 export interface PlayerProfile {
   id: string;
   displayName: string;
@@ -86,9 +94,9 @@ export async function getPlayerProfile(playerId: string): Promise<PlayerProfile>
           ratingPoints: latestSnapshot.ratingPoints,
         }
       : null,
-    generalStats: (latestSnapshot?.generalStats as Record<string, unknown>) ?? {},
-    heroStats: (latestSnapshot?.heroStats as unknown[]) ?? [],
-    roleStats: (latestSnapshot?.roleStats as unknown[]) ?? [],
+    generalStats: isRecord(latestSnapshot?.generalStats) ? latestSnapshot.generalStats : {},
+    heroStats: Array.isArray(latestSnapshot?.heroStats) ? latestSnapshot.heroStats : [],
+    roleStats: Array.isArray(latestSnapshot?.roleStats) ? latestSnapshot.roleStats : [],
     recentMatches,
   };
 }
@@ -113,16 +121,16 @@ export async function comparePlayers(
     getPlayerProfile(playerIdB),
   ]);
 
-  const statsA = a.generalStats as Record<string, number>;
-  const statsB = b.generalStats as Record<string, number>;
+  const statsA = isRecord(a.generalStats) ? a.generalStats : {};
+  const statsB = isRecord(b.generalStats) ? b.generalStats : {};
 
   // Compare common numeric stats
   const allKeys = new Set([...Object.keys(statsA), ...Object.keys(statsB)]);
   const deltas = Array.from(allKeys)
     .filter((key) => typeof statsA[key] === 'number' && typeof statsB[key] === 'number')
     .map((stat) => {
-      const valA = statsA[stat] ?? 0;
-      const valB = statsB[stat] ?? 0;
+      const valA = safeNumber(statsA[stat]);
+      const valB = safeNumber(statsB[stat]);
       const diff = valA - valB;
       return {
         stat,
