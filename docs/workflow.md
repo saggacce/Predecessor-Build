@@ -36,12 +36,18 @@ main (GitHub) → branch local → commits → push → PR → review → merge 
    git commit -m "tipo: descripción concisa en inglés"
    ```
 
-5. **Claude pushea el branch a GitHub**
+5. **Claude pushea el branch a GitHub** (autónomo — PAT configurado)
    ```bash
    git push -u origin <nombre-del-branch>
    ```
 
-6. **Claude abre un PR** hacia `main` con título y descripción claros.
+6. **Claude abre un PR** hacia `main` vía GitHub API (autónomo)
+   ```bash
+   curl -s -X POST \
+     -H "Authorization: token <PAT>" \
+     https://api.github.com/repos/saggacce/Predecessor-Build/pulls \
+     -d '{"title":"...","head":"...","base":"main","body":"..."}'
+   ```
 
 7. **El usuario revisa el PR** en GitHub, aprueba o pide cambios.
 
@@ -97,6 +103,13 @@ chore: sync local repo with main from GitHub
 - **PRs con alcance acotado.** Un PR resuelve una cosa concreta.
 - **Claude sincroniza antes de empezar.** Siempre `git pull origin main` al inicio de cada sesión o tarea.
 - **El usuario decide el merge.** Claude abre el PR pero no lo mergea sin instrucción explícita.
+- **Claude es autosuficiente.** Push y creación de PR son autónomos — no requieren intervención del usuario.
+
+### Git identity (WSL)
+```bash
+git config user.name "gabriel"
+git config user.email "gaby0806@gmail.com"
+```
 
 ---
 
