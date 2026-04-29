@@ -22,10 +22,10 @@ Tablero simple de tareas generales y subtareas.
 - [x] Documentar política de calidad/frescura de datos. → `docs/data_quality_policy.md`
 
 ## Tarea 2 — API de scouting (MVP)
-- [ ] Endpoint de perfil de jugador.
-- [ ] Endpoint de perfil de equipo.
-- [ ] Endpoint de comparación de jugadores.
-- [ ] Endpoint de generación de reportes de scrim.
+- [x] Endpoint de perfil de jugador.
+- [x] Endpoint de perfil de equipo.
+- [x] Endpoint de comparación de jugadores.
+- [x] Endpoint de generación de reportes de scrim.
 
 ## Tarea 3 — Frontend de análisis competitivo (MVP)
 - [ ] Vista de seguimiento de jugadores propios.
