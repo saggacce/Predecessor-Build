@@ -4,6 +4,7 @@ import { execFile } from 'child_process';
 import { promisify } from 'util';
 import path from 'path';
 import { db } from '../db.js';
+import { logger } from '../logger.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -46,7 +47,20 @@ adminRouter.post('/sync-data', async (req, res, next) => {
     // Use execFile (not exec) to prevent shell injection — args are passed as
     // an array, never interpolated into a shell string.
     const cmdArgs = ['tsx', 'src/index.ts', body.command, ...(body.args ?? [])];
-    const { stdout, stderr } = await execFileAsync('npx', cmdArgs, { cwd: syncDir });
+    const start = Date.now();
+    logger.info({ command: body.command, args: body.args }, 'sync started');
+
+    let stdout = '';
+    let stderr = '';
+    try {
+      ({ stdout, stderr } = await execFileAsync('npx', cmdArgs, { cwd: syncDir }));
+      const elapsed = Date.now() - start;
+      logger.info({ command: body.command, elapsed }, 'sync completed');
+    } catch (syncErr) {
+      const elapsed = Date.now() - start;
+      logger.error({ command: body.command, elapsed, err: syncErr }, 'sync failed');
+      throw syncErr;
+    }
 
     res.json({
       command: body.command,

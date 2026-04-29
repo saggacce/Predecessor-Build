@@ -1,6 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
+import pinoHttp from 'pino-http';
 import { playersRouter } from './routes/players.js';
 import { teamsRouter } from './routes/teams.js';
 import { reportsRouter } from './routes/reports.js';
@@ -8,60 +9,52 @@ import { patchesRouter } from './routes/patches.js';
 import { adminRouter } from './routes/admin.js';
 import { errorHandler } from './middleware/error-handler.js';
 import { disconnectDb } from './db.js';
+import { logger } from './logger.js';
 
 const app = express();
 const PORT = parseInt(process.env.PORT ?? '3001', 10);
 
-// Middleware
 app.use(helmet());
 app.use(cors());
 app.use(express.json());
 
-// Health check
+// HTTP access log — skip health checks to avoid noise
+app.use(pinoHttp({
+  logger,
+  autoLogging: { ignore: (req) => req.url === '/health' },
+}));
+
 app.get('/health', (_req, res) => {
   res.json({ status: 'ok', timestamp: new Date() });
 });
 
-// Routes
 app.use('/players', playersRouter);
 app.use('/teams', teamsRouter);
 app.use('/reports', reportsRouter);
 app.use('/patches', patchesRouter);
 app.use('/admin', adminRouter);
 
-// Error handler (must be last)
 app.use(errorHandler);
 
-// Start server
 let server: ReturnType<typeof app.listen> | undefined;
 if (process.env.NODE_ENV !== 'test') {
   server = app.listen(PORT, () => {
-    console.log(`[api] listening on http://localhost:${PORT}`);
-    console.log(`[api] endpoints:`);
-    console.log(`  GET  /health`);
-    console.log(`  GET  /players/search?q=name`);
-    console.log(`  GET  /players/:id`);
-    console.log(`  POST /players/compare`);
-    console.log(`  GET  /teams`);
-    console.log(`  GET  /teams/:id`);
-    console.log(`  POST /reports/scrim`);
-    console.log(`  GET  /patches`);
-    console.log(`  GET  /patches/latest`);
-    console.log(`  POST /admin/sync-data`);
-    console.log(`  GET  /admin/sync-logs`);
+    logger.info({ port: PORT }, 'api server started');
+    logger.info('endpoints: GET /health | GET /players/search | GET /players/:id | POST /players/compare | GET /teams | GET /teams/:id | POST /reports/scrim | GET /patches | GET /patches/latest | POST /admin/sync-data | GET /admin/sync-logs');
   });
 }
 
-// Graceful shutdown
 function shutdown() {
-  console.log('\n[api] shutting down...');
+  logger.info('shutting down gracefully');
   if (server) {
     server.close(async () => {
-      await disconnectDb();
+      await disconnectDb().catch((err) => logger.error({ err }, 'error disconnecting db'));
       process.exit(0);
     });
   } else {
-    disconnectDb().then(() => process.exit(0));
+    Promise.resolve(disconnectDb())
+      .catch((err) => logger.error({ err }, 'error disconnecting db'))
+      .finally(() => process.exit(0));
   }
 }
 

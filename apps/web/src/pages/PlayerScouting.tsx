@@ -1,25 +1,28 @@
 import { useState } from 'react';
-import { Search, User, AlertCircle } from 'lucide-react';
-import { apiClient, type PlayerSearchResult } from '../api/client';
+import { Search, User } from 'lucide-react';
+import { toast } from 'sonner';
+import { apiClient, type PlayerSearchResult, ApiErrorResponse } from '../api/client';
 
 export default function PlayerScouting() {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<PlayerSearchResult[]>([]);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [searched, setSearched] = useState(false);
 
   const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!query.trim()) return;
     setLoading(true);
-    setError(null);
     setSearched(true);
     try {
       const data = await apiClient.players.search(query.trim());
       setResults(data.results ?? []);
+      if (!data.results?.length) {
+        toast.info('No players found in local database.', { description: 'Try fetching from pred.gg below.' });
+      }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Error searching players.');
+      const message = err instanceof ApiErrorResponse ? err.error.message : 'Error searching players.';
+      toast.error(message);
       setResults([]);
     } finally {
       setLoading(false);
@@ -28,16 +31,19 @@ export default function PlayerScouting() {
 
   const handleFetchFromPredgg = async () => {
     setLoading(true);
-    setError(null);
+    const toastId = toast.loading(`Fetching "${query}" from pred.gg...`);
     try {
       await apiClient.admin.syncData('sync-player', [query.trim()]);
       const data = await apiClient.players.search(query.trim());
       setResults(data.results ?? []);
-      if (!data.results?.length) {
-        setError('Player not found in pred.gg either.');
+      if (data.results?.length) {
+        toast.success(`Player "${query}" synced`, { id: toastId });
+      } else {
+        toast.warning('Player not found in pred.gg either.', { id: toastId });
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Error fetching from pred.gg');
+      const message = err instanceof ApiErrorResponse ? err.error.message : 'Error fetching from pred.gg.';
+      toast.error(message, { id: toastId });
     } finally {
       setLoading(false);
     }
@@ -60,14 +66,9 @@ export default function PlayerScouting() {
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               style={{
-                width: '100%',
-                background: 'var(--bg-dark)',
-                border: '1px solid var(--border-color)',
-                borderRadius: 'var(--radius-sm)',
-                padding: '1rem 1rem 1rem 3rem',
-                color: 'var(--text-primary)',
-                outline: 'none',
-                fontSize: '1rem',
+                width: '100%', background: 'var(--bg-dark)', border: '1px solid var(--border-color)',
+                borderRadius: 'var(--radius-sm)', padding: '1rem 1rem 1rem 3rem',
+                color: 'var(--text-primary)', outline: 'none', fontSize: '1rem',
               }}
             />
           </div>
@@ -76,13 +77,6 @@ export default function PlayerScouting() {
           </button>
         </form>
       </div>
-
-      {error && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--accent-danger)', marginBottom: '1rem' }}>
-          <AlertCircle size={18} />
-          <span style={{ fontSize: '0.875rem' }}>{error}</span>
-        </div>
-      )}
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(250px, 1fr))', gap: '1rem' }}>
         {results.map((p) => (
@@ -95,14 +89,12 @@ export default function PlayerScouting() {
                 {p.displayName}
                 {p.isPrivate && <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginLeft: '0.5rem' }}>(private)</span>}
               </div>
-              {p.inferredRegion && (
-                <div style={{ fontSize: '0.875rem', color: 'var(--text-muted)' }}>{p.inferredRegion}</div>
-              )}
+              {p.inferredRegion && <div style={{ fontSize: '0.875rem', color: 'var(--text-muted)' }}>{p.inferredRegion}</div>}
             </div>
           </div>
         ))}
 
-        {!loading && searched && results.length === 0 && !error && (
+        {!loading && searched && results.length === 0 && (
           <div style={{ gridColumn: '1 / -1', textAlign: 'center', padding: '2rem', background: 'var(--bg-dark)', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-color)' }}>
             <p style={{ color: 'var(--text-muted)', marginBottom: '1rem' }}>Player not found in local database.</p>
             <button onClick={handleFetchFromPredgg} disabled={loading} className="btn-primary">

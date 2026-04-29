@@ -1,13 +1,13 @@
 import { useEffect, useState } from 'react';
 import { Server, Zap, RefreshCw } from 'lucide-react';
-import { apiClient, type SyncCommand } from '../api/client';
+import { toast } from 'sonner';
+import { apiClient, type SyncCommand, ApiErrorResponse } from '../api/client';
 import type { VersionRecord } from '@predecessor/data-model';
 
 export default function Dashboard() {
   const [healthStatus, setHealthStatus] = useState<'checking' | 'ok' | 'error'>('checking');
   const [latestPatch, setLatestPatch] = useState<VersionRecord | null>(null);
   const [syncing, setSyncing] = useState(false);
-  const [syncMessage, setSyncMessage] = useState<{ text: string; ok: boolean } | null>(null);
 
   useEffect(() => {
     void fetchDashboardData();
@@ -24,15 +24,17 @@ export default function Dashboard() {
 
   async function handleSync(command: SyncCommand) {
     setSyncing(true);
-    setSyncMessage(null);
+    const toastId = toast.loading(`Running ${command}...`);
     try {
       const res = await apiClient.admin.syncData(command);
-      setSyncMessage({ text: `✓ ${command} completed`, ok: true });
-      // Refresh dashboard data after a short pause to let sync settle
-      setTimeout(() => void fetchDashboardData(), 1500);
-      console.log('[sync]', res.stdout);
-    } catch {
-      setSyncMessage({ text: `✗ Failed to run ${command}`, ok: false });
+      toast.success(`${command} completed`, {
+        id: toastId,
+        description: res.stdout ? res.stdout.slice(0, 120) : undefined,
+      });
+      setTimeout(() => void fetchDashboardData(), 1000);
+    } catch (err) {
+      const message = err instanceof ApiErrorResponse ? err.error.message : `Failed to run ${command}`;
+      toast.error(message, { id: toastId });
     } finally {
       setSyncing(false);
     }
@@ -48,7 +50,6 @@ export default function Dashboard() {
       </header>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '1.5rem' }}>
-        {/* System Health */}
         <div className="glass-card">
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1rem' }}>
             <Server color="var(--accent-blue)" size={24} />
@@ -61,12 +62,11 @@ export default function Dashboard() {
               boxShadow: healthStatus === 'ok' ? '0 0 10px var(--accent-success)' : 'none',
             }} />
             <span style={{ color: 'var(--text-secondary)', fontWeight: 500 }}>
-              {healthStatus === 'ok' ? 'API Online & Connected' : healthStatus === 'error' ? 'API Disconnected' : 'Checking connection...'}
+              {healthStatus === 'ok' ? 'API Online & Connected' : healthStatus === 'error' ? 'API Disconnected' : 'Checking...'}
             </span>
           </div>
         </div>
 
-        {/* Current Patch */}
         <div className="glass-card">
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1rem' }}>
             <Zap color="var(--accent-purple)" size={24} />
@@ -84,7 +84,6 @@ export default function Dashboard() {
           )}
         </div>
 
-        {/* Data Controls */}
         <div className="glass-card">
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1rem' }}>
             <RefreshCw
@@ -94,8 +93,7 @@ export default function Dashboard() {
             />
             <h3 style={{ color: 'var(--text-primary)', margin: 0 }}>Data Controls</h3>
           </div>
-
-          <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.75rem' }}>
+          <div style={{ display: 'flex', gap: '0.5rem' }}>
             <button
               onClick={() => void handleSync('sync-stale')}
               disabled={syncing || healthStatus !== 'ok'}
@@ -111,12 +109,6 @@ export default function Dashboard() {
               Sync Versions
             </button>
           </div>
-
-          {syncMessage && (
-            <p style={{ fontSize: '0.875rem', color: syncMessage.ok ? 'var(--accent-success)' : 'var(--accent-danger)', margin: 0 }}>
-              {syncMessage.text}
-            </p>
-          )}
         </div>
       </div>
     </div>
