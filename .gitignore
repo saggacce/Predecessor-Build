@@ -39,3 +39,6 @@ Thumbs.db
 
 # Claude local context files
 CLAUDE.md
+
+# Exploration / scratch test files
+workers/data-sync/src/test*.ts

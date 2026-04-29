@@ -25,14 +25,17 @@ export async function syncVersions(db: PrismaClient): Promise<number> {
   let upserted = 0;
 
   for (const v of data.versions) {
+    const patchName = v.name || 'Unknown';
+    const patchType = v.patchType || 'UNKNOWN';
+    
     await db.version.upsert({
       where: { predggId: v.id },
-      update: { name: v.name, patchType: v.patchType, syncedAt: now },
+      update: { name: patchName, patchType: patchType, syncedAt: now },
       create: {
         predggId: v.id,
-        name: v.name,
+        name: patchName,
         releaseDate: new Date(v.releaseDate),
-        patchType: v.patchType,
+        patchType: patchType,
         syncedAt: now,
       },
     });
