@@ -16,16 +16,16 @@ Tablero simple de tareas generales y subtareas.
 ---
 
 ## Tarea 1 — Fundaciones de datos (Scouting)
-- [ ] Definir esquema normalizado mínimo (jugador, equipo, partida, parche).
-- [ ] Diseñar proceso de sincronización inicial desde fuentes externas.
-- [ ] Establecer estrategia de versionado por parche/sync timestamp.
-- [ ] Documentar política de calidad/frescura de datos.
+- [x] Definir esquema normalizado mínimo (jugador, equipo, partida, parche). → `workers/data-sync/prisma/schema.prisma`
+- [x] Diseñar proceso de sincronización inicial desde fuentes externas. → `workers/data-sync/src/sync/` (versions, players, matches)
+- [x] Establecer estrategia de versionado por parche/sync timestamp. → Version model + syncedAt en todos los registros
+- [x] Documentar política de calidad/frescura de datos. → `docs/data_quality_policy.md`
 
 ## Tarea 2 — API de scouting (MVP)
-- [ ] Endpoint de perfil de jugador.
-- [ ] Endpoint de perfil de equipo.
-- [ ] Endpoint de comparación de jugadores.
-- [ ] Endpoint de generación de reportes de scrim.
+- [x] Endpoint de perfil de jugador.
+- [x] Endpoint de perfil de equipo.
+- [x] Endpoint de comparación de jugadores.
+- [x] Endpoint de generación de reportes de scrim.
 
 ## Tarea 3 — Frontend de análisis competitivo (MVP)
 - [ ] Vista de seguimiento de jugadores propios.
