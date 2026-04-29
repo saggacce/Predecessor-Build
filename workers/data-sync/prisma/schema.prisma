@@ -1,0 +1,124 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Version {
+  id          String   @id @default(cuid())
+  predggId    String   @unique
+  name        String
+  releaseDate DateTime
+  patchType   String
+  syncedAt    DateTime
+
+  matches   Match[]
+  snapshots PlayerSnapshot[]
+}
+
+model Player {
+  id             String   @id @default(cuid())
+  predggId       String   @unique
+  predggUuid     String   @unique
+  displayName    String
+  isPrivate      Boolean  @default(false)
+  inferredRegion String?
+  firstSeen      DateTime @default(now())
+  lastSynced     DateTime
+
+  snapshots     PlayerSnapshot[]
+  matchPlayers  MatchPlayer[]
+  rosterEntries TeamRoster[]
+}
+
+model PlayerSnapshot {
+  id           String   @id @default(cuid())
+  playerId     String
+  player       Player   @relation(fields: [playerId], references: [id])
+  versionId    String?
+  version      Version? @relation(fields: [versionId], references: [id])
+  syncedAt     DateTime
+  generalStats Json
+  heroStats    Json
+  roleStats    Json
+  rankLabel    String?
+  ratingPoints Int?
+}
+
+model Team {
+  id           String     @id @default(cuid())
+  name         String
+  abbreviation String?
+  type         TeamType
+  region       String?
+  notes        String?
+  createdAt    DateTime   @default(now())
+
+  roster TeamRoster[]
+}
+
+enum TeamType {
+  OWN
+  RIVAL
+}
+
+model TeamRoster {
+  id         String    @id @default(cuid())
+  teamId     String
+  team       Team      @relation(fields: [teamId], references: [id])
+  playerId   String
+  player     Player    @relation(fields: [playerId], references: [id])
+  role       String?
+  activeFrom DateTime  @default(now())
+  activeTo   DateTime?
+}
+
+model Match {
+  id          String   @id @default(cuid())
+  predggUuid  String   @unique
+  startTime   DateTime
+  duration    Int
+  gameMode    String
+  region      String?
+  winningTeam String?
+  versionId   String?
+  version     Version? @relation(fields: [versionId], references: [id])
+  syncedAt    DateTime
+
+  matchPlayers MatchPlayer[]
+}
+
+model MatchPlayer {
+  id             String  @id @default(cuid())
+  matchId        String
+  match          Match   @relation(fields: [matchId], references: [id])
+  playerId       String?
+  player         Player? @relation(fields: [playerId], references: [id])
+  playerName     String
+  team           String
+  role           String?
+  heroSlug       String
+  kills          Int
+  deaths         Int
+  assists        Int
+  heroDamage     Int?
+  totalDamage    Int?
+  gold           Int?
+  wardsPlaced    Int?
+  inventoryItems Json
+  perkSlug       String?
+  abilityOrder   Json?
+}
+
+model SyncLog {
+  id        String   @id @default(cuid())
+  entity    String
+  entityId  String
+  operation String
+  status    String
+  syncedAt  DateTime @default(now())
+  error     String?
+}
