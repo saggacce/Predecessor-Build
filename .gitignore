@@ -36,3 +36,6 @@ Thumbs.db
 
 # Script output files
 *.txt
+
+# Claude local context files
+CLAUDE.md
