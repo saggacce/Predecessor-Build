@@ -8,90 +8,33 @@ interface PredggPlayer {
   uuid: string;
   name: string;
   blockSearch: boolean;
-  generalStatistic: {
-    wins: number;
-    losses: number;
-    kills: number;
-    deaths: number;
-    assists: number;
-    goldEarned: number;
-    heroDamage: number;
-    wardsPlaced: number;
-    matches: number;
-  } | null;
-  heroStatistics: Array<{
-    heroData: { slug: string; name: string };
-    wins: number;
-    losses: number;
-    kills: number;
-    deaths: number;
-    assists: number;
-  }>;
-  roleStatistics: Array<{
-    role: string;
-    wins: number;
-    losses: number;
-    matches: number;
-  }>;
-  ratings: Array<{
-    rank: { label: string } | null;
-    points: number;
-    rating: { name: string } | null;
-  }>;
 }
 
 const PLAYER_QUERY = `
-  query GetPlayer($name: String!) {
-    player(by: { name: $name }) {
-      id
-      uuid: legacyUuid
-      name
-      blockSearch
-      generalStatistic(filter: { gameModes: [RANKED, STANDARD] }) {
-        wins
-        losses
-        kills
-        deaths
-        assists
-        goldEarned
-        heroDamage
-        wardsPlaced
-        matches
-      }
-      heroStatistics(filter: { gameModes: [RANKED, STANDARD] }) {
-        heroData { slug name }
-        wins
-        losses
-        kills
-        deaths
-        assists
-      }
-      roleStatistics(filter: { gameModes: [RANKED, STANDARD] }) {
-        role
-        wins
-        losses
-        matches
-      }
-      ratings {
-        rank { label }
-        points
-        rating { name }
+  query SearchPlayer($name: String!) {
+    playersPaginated(filter: { search: $name }, limit: 1) {
+      results {
+        id
+        uuid
+        name
+        blockSearch
       }
     }
   }
 `;
 
 export async function syncPlayer(db: PrismaClient, playerName: string): Promise<string | null> {
-  const data = await gql<{ player: PredggPlayer | null }>(PLAYER_QUERY, { name: playerName });
+  const data = await gql<{ playersPaginated: { results: PredggPlayer[] } }>(PLAYER_QUERY, { name: playerName });
 
-  if (!data.player) {
+  const p = data?.playersPaginated?.results?.[0];
+
+  if (!p) {
     await db.syncLog.create({
       data: { entity: 'player', entityId: playerName, operation: 'fetch', status: 'skipped', error: 'not found' },
     });
     return null;
   }
 
-  const p = data.player;
   const now = new Date();
   const isPrivate = p.blockSearch || p.name === 'HIDDEN';
 
@@ -107,17 +50,14 @@ export async function syncPlayer(db: PrismaClient, playerName: string): Promise<
     },
   });
 
-  // Snapshot de stats actuales
-  const currentRating = p.ratings?.[0];
+  // Snapshot de stats actuales (minimal for MVP since API changed)
   await db.playerSnapshot.create({
     data: {
       playerId: player.id,
       syncedAt: now,
-      generalStats: p.generalStatistic ?? {},
-      heroStats: p.heroStatistics ?? [],
-      roleStats: p.roleStatistics ?? [],
-      rankLabel: currentRating?.rank?.label ?? null,
-      ratingPoints: currentRating?.points ?? null,
+      generalStats: {},
+      heroStats: [],
+      roleStats: [],
     },
   });
 
