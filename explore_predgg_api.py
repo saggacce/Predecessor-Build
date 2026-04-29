@@ -88,7 +88,7 @@ SAMPLE_QUERIES = [
     ),
     (
         "items",
-        "{ items { id name cost } }",
+        "{ items { id name slug } }",
     ),
     (
         "perks (crests)",
@@ -100,11 +100,11 @@ SAMPLE_QUERIES = [
     ),
     (
         "versions (patches)",
-        "{ versions { id label } }",
+        "{ versions { id name releaseDate } }",
     ),
     (
         "ratings (seasons)",
-        "{ ratings { id label } }",
+        "{ ratings { id name } }",
     ),
 ]
 
