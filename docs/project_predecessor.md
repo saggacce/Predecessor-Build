@@ -31,7 +31,17 @@ Core product outcomes
 • Separation of concerns. Keep ingestion, calculations, API, and frontend presentation isolated so the rules engine can evolve safely.
 • Competitive usefulness. Outputs should reflect practical decisions: spikes, burst windows, survivability, damage profile, and build identity.
 3. Scope
-In scope for version 1
+In scope for version 1 (Scouting & Data Foundations)
+• Normalized internal schema for players, teams, matches, and patches
+• Data ingestion and synchronization from external sources
+• Patch/sync timestamp versioning strategy
+• Data quality and freshness policy
+• Player profile and team profile API endpoints
+• Player comparison and scrim report generation endpoints
+• Competitive analysis frontend: player tracking, rival scouting, team analysis, pre-scrim reports
+• Admin/update pipeline for synced game data
+
+In scope for version 2 (Build & Stat Module)
 • Hero build planner
 • Item selection and ordered build paths
 • Skill order selection
@@ -39,13 +49,14 @@ In scope for version 1
 • Derived combat metrics (burst, DPS, effective health, sustain-related indicators where possible)
 • Same-hero build comparison
 • Saved/shared build links
-• Admin/update pipeline for synced game data
+
 Out of scope for version 1
 • Full replay analysis
 • Live match telemetry
 • Teamfight simulation
 • Patch-note auto-interpretation
 • Guaranteed winner prediction between any two heroes
+• Hero build planner UI (deferred to version 2)
 4. Assumptions and external data
 The tool is expected to use Pred.gg as the main external data source because it exposes game resources through its API and already structures information around heroes, items, builds, skill priority, and player/game statistics. This should be treated as a dependency that may evolve, so the internal system must not couple frontend logic directly to the external schema.
 Required external data domains
@@ -58,20 +69,35 @@ Data dependency policy
 • Version the imported data by patch or sync timestamp.
 • Add a fallback cache so the app remains usable if the external source is temporarily unavailable.
 5. Primary user stories
+Phase 1 — Scouting & Data:
+Coach / analyst: Track own players' performance across matches and patches to identify improvement areas.
+Coach / analyst: Scout a rival player's profile and tendencies before a scrim.
+Coach / analyst: Analyze a rival team's composition and playstyle patterns.
+Coach / analyst: Generate and download a pre-scrim report to prepare the team.
+Admin: Resync player, team, and match data when new patches or matches are available.
+
+Phase 2 — Build & Stat Module:
 Player: Build a hero and inspect stat changes at key levels to understand spikes.
 Player: Compare two builds on the same hero to choose between burst, durability, or sustained damage.
 Player: Compare one hero/build against another and understand likely matchup strengths and weaknesses.
 Coach / analyst: See transparent formulas and assumptions to trust the outputs.
-Admin: Resync hero and item data when game patches change.
 6. Functional requirements
-• FR-01: The system must allow hero selection, role selection, level selection, and build order selection.
-• FR-02: The system must support manual and template-based skill order selection.
-• FR-03: The calculator must output base stats, bonus stats, final stats, and calculated secondary metrics at each selected level.
-• FR-04: The UI must show incremental changes after each item purchase and after each ability rank milestone.
-• FR-05: The comparison view must support at minimum: build A vs build B for the same hero.
-• FR-06: The system should support future hero-vs-hero comparison without redesigning the data model.
-• FR-07: The app must expose calculation explanations or formula tooltips for major displayed values.
-• FR-08: The system must support build persistence by shareable URL and database-backed saved builds.
+Phase 1 — Data & Scouting:
+• FR-01: The system must ingest and normalize player, team, match, and patch data from external sources.
+• FR-02: The system must version all synced data by patch and sync timestamp.
+• FR-03: The system must remain functional with cached data when the external source is unavailable.
+• FR-04: The API must expose player profile, team profile, player comparison, and scrim report endpoints.
+• FR-05: The frontend must provide views for player tracking, rival scouting, rival team analysis, and pre-scrim report generation.
+
+Phase 2 — Build & Stat Module:
+• FR-06: The system must allow hero selection, role selection, level selection, and build order selection.
+• FR-07: The system must support manual and template-based skill order selection.
+• FR-08: The calculator must output base stats, bonus stats, final stats, and calculated secondary metrics at each selected level.
+• FR-09: The UI must show incremental changes after each item purchase and after each ability rank milestone.
+• FR-10: The comparison view must support at minimum: build A vs build B for the same hero.
+• FR-11: The system should support future hero-vs-hero comparison without redesigning the data model.
+• FR-12: The app must expose calculation explanations or formula tooltips for major displayed values.
+• FR-13: The system must support build persistence by shareable URL and database-backed saved builds.
 7. Calculation engine requirements
 The calculation engine is the core of the product. It should be implemented as a pure, testable domain module with no frontend dependencies.
 Inputs
@@ -150,6 +176,31 @@ Recommended module split
 • workers/data-sync - Pred.gg ingestion and normalization
 11. Data model
 Below is a practical starting model. It is intentionally normalized enough for maintainability without trying to represent every future feature on day one.
+
+Phase 1 entities (Scouting & Data):
+Entity
+Key fields
+Purpose
+Player
+id, username, region, patchVersion
+Player identity
+PlayerStats
+playerId, heroId, role, metrics, patchVersion
+Aggregated performance per hero/role
+Team
+id, name, region, roster
+Team identity
+Match
+id, patch, date, teams, result
+Match record
+ScrimReport
+id, teamId, rivalTeamId, generatedAt, content
+Pre-scrim analysis output
+PatchSync
+id, sourceVersion, syncedAt, status
+Data auditability
+
+Phase 2 entities (Build & Stat Module):
 Entity
 Key fields
 Purpose
@@ -174,34 +225,47 @@ Saved user build
 BuildSnapshot
 buildId, level, final stats, derived metrics
 Cached outputs
-PatchSync
-id, sourceVersion, syncedAt, status
-Data auditability
 
 12. Backend API design
 Suggested endpoints or GraphQL operations
+
+Phase 1 — Scouting API:
+• GET /players/:id
+• POST /players/compare
+• GET /teams/:id
+• POST /reports/scrim
+• POST /admin/sync-data
+• GET /patches/latest
+
+Phase 2 — Build & Stat API:
 • GET /heroes
 • GET /heroes/:id
 • GET /items
 • POST /builds/calculate
 • POST /builds/compare
 • POST /matchups/evaluate
-• POST /admin/sync-data
-• GET /patches/latest
+
 Whether the public app API is REST or GraphQL is less important than keeping the domain engine independent. The backend should call the domain engine and return structured results plus explanations.
 13. Frontend requirements
+Phase 1 — Competitive analysis UI:
+• Player tracking view: own roster performance across matches and patches
+• Rival player scouting view: profile, hero pool, tendencies
+• Rival team analysis view: composition patterns, playstyle
+• Pre-scrim report view with download option
+• Responsive layout for desktop first, tablet second, mobile optional for MVP
+• Admin sync/status panel (internal only)
+
+Phase 2 — Build planner UI:
 • Fast hero and item selection UX
 • Clear build order UI
 • Visible per-level and per-item stat changes
 • Tabbed views for overview, raw stats, abilities, timeline, and comparison
 • Formula/explanation tooltips
-• Responsive layout for desktop first, tablet second, mobile optional for MVP
-Main screens
+Main screens (Phase 2):
 • Hero build planner
 • Build comparison
 • Matchup analysis
 • Saved builds library
-• Admin sync/status panel (internal only)
 14. Non-functional requirements
 • Deterministic calculations
 • Good test coverage on all formulas and passive interactions
@@ -210,15 +274,23 @@ Main screens
 • Strong typing across backend and frontend data contracts
 • Response times suitable for interactive use
 15. Testing strategy
-Required automated tests
+Required automated tests — Phase 1:
+• Unit tests for metric aggregation per player/team
+• Unit tests for patch/time-window filters
+• Integration tests for sync pipeline correctness
+• Regression tests across patch versions for data normalization
+
+Required automated tests — Phase 2:
 • Unit tests for stat aggregation
 • Unit tests for level scaling
 • Unit tests for ability damage calculations
 • Unit tests for item effect stacking and exclusion rules
 • Snapshot tests for representative hero builds
 • Regression tests across patch versions if formulas or data change
-Manual QA
-• Cross-check sample outputs against in-game values where practical
+
+Manual QA:
+• Validate scouting outputs against known match data
+• Cross-check build/stat outputs against in-game values where practical
 • Validate hero/item edge cases
 • Verify same-hero comparison is numerically consistent
 • Verify unsupported passives are surfaced, not hidden
@@ -226,15 +298,15 @@ Manual QA
 Phase
 Deliverable
 Phase 1
-Data ingestion + normalized schema + stat calculator foundation
+Data foundations (scouting): normalized schema for players, teams, matches, and patches; external sync process; versioning strategy; data quality policy
 Phase 2
-Build planner UI + per-level/per-item breakdown
+Scouting API (MVP): player profile endpoint, team profile endpoint, player comparison endpoint, scrim report generation endpoint
 Phase 3
-Same-hero build comparison
+Competitive analysis frontend (MVP): player tracking view, rival player scouting view, rival team analysis view, pre-scrim report view/download
 Phase 4
-First matchup evaluator with explainable weighted scoring
+Quality and operations: metric aggregation tests, patch/time-window filter tests, logging and error conventions for sync and API, internal release checklist per phase
 Phase 5
-Refinement, patch handling, saved builds, recommendation helpers
+Build/Stat module: define engine input/output contract, implement level + items + skills base calculation, add same-hero build comparison, integrate delta and spike visualization
 
 17. Risks and mitigations
 External API changes: Hide the source behind an internal normalized data layer and sync jobs.
@@ -243,6 +315,25 @@ Misleading matchup outputs: Use explainable weighted models and assumption label
 Patch drift: Version all synced data and expose the current patch in the UI.
 Overengineering too early: Ship the calculator first; do not start with a full simulation engine.
 18. Acceptance criteria for MVP
+Phase 1 MVP (Data Foundations):
+• A developer can sync player, team, and match data into the internal normalized schema.
+• All synced data is versioned by patch and sync timestamp.
+• The system remains usable with cached data when the external source is unavailable.
+• Data quality and freshness policy is documented and enforced.
+
+Phase 2 MVP (Scouting API):
+• A coach can retrieve a player's profile with aggregated performance metrics.
+• A coach can retrieve a team's profile and composition patterns.
+• A coach can request a comparison between two players.
+• A coach can generate a pre-scrim report for a rival team.
+
+Phase 3 MVP (Frontend):
+• The UI allows tracking own players across matches and patches.
+• The UI allows scouting a rival player's profile.
+• The UI allows analyzing a rival team's tendencies.
+• A pre-scrim report can be viewed and downloaded.
+
+Phase 5 MVP (Build/Stat module):
 • A developer can sync hero, item, and ability data into the internal schema.
 • A user can create a build for a hero and select a level.
 • The app returns final stats and ability values for that state.
@@ -250,4 +341,4 @@ Overengineering too early: Ship the calculator first; do not start with a full s
 • The app can compare two builds of the same hero with trusted outputs.
 • The calculation engine has test coverage for representative heroes and item combinations.
 19. Final implementation recommendation
-Start with a reliable build and stat engine. Treat matchup prediction as a second-stage capability built on top of verified formulas. If the first milestone is trustworthy, the rest of the product becomes much easier to scale, explain, and maintain.
+Start with a reliable data foundation and scouting layer. Normalized, versioned, and quality-controlled data is the prerequisite for every downstream feature. Deliver the scouting API and competitive analysis frontend before building the build/stat engine — the latter depends on trusted data infrastructure already being in place. If the data and scouting layers are trustworthy, the build calculator and matchup evaluator become much easier to scale, explain, and maintain.

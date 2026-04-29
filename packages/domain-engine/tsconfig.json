@@ -1,0 +1,11 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "outDir": "dist",
+    "rootDir": "src",
+    "paths": {
+      "@predecessor/data-model": ["../data-model/src/index.ts"]
+    }
+  },
+  "include": ["src"]
+}
