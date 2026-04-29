@@ -88,11 +88,23 @@ SAMPLE_QUERIES = [
     ),
     (
         "items",
-        "{ items { id name } }",
+        "{ items { id name cost } }",
+    ),
+    (
+        "perks (crests)",
+        "{ perks { id name } }",
     ),
     (
         "hero-detail (Grux)",
-        '{ hero(name: "Grux") { id name abilities { id name } } }',
+        '{ hero(by: { slug: "grux" }) { id name } }',
+    ),
+    (
+        "versions (patches)",
+        "{ versions { id label } }",
+    ),
+    (
+        "ratings (seasons)",
+        "{ ratings { id label } }",
     ),
 ]
 
