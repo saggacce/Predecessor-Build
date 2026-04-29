@@ -1,30 +1,12 @@
-# Predecessor Competitive Intelligence Platform
+# Predecessor Build Planner & Matchup Evaluator
 
-Web-based platform for [Predecessor](https://www.predecessorgame.com/) focused on **player tracking, scouting, and match preparation** first, and **build simulation** second.
+Web-based analysis tool for [Predecessor](https://www.predecessorgame.com/) that helps players understand itemization, stat progression, and matchup dynamics.
 
-## Product direction (updated)
+## What it does
 
-- **Phase-first objective**: create practical tools for coaches/analysts to prepare scrims and official matches.
-- **Secondary objective**: add a build calculator that explains stat changes by level, abilities, and items.
-- **Long-term vision**: approach a LoL-style competitive companion experience (similar in spirit to iTero) adapted to Predecessor data constraints.
-
-## Core capabilities by stage
-
-### Stage A — Competitive scouting (current priority)
-- Player tracking dashboard (form, role trends, comfort picks, patch windows)
-- Rival scouting reports (player and team level)
-- Match preparation summaries for scrims and official games
-- Team analysis (identity, draft tendencies, performance splits)
-
-### Stage B — Draft and preparation intelligence
-- Draft support recommendations from historical tendencies
-- Risk indicators (target bans, role-flex risks, comfort-denial opportunities)
-- Explainable confidence bands, never “guaranteed winner” claims
-
-### Stage C — Build and stat simulation
-- Hero level scaling + item progression + skill order impacts
-- Build comparison for the same hero
-- Explainable stat deltas and power-spike timeline
+- **Build planner** — select a hero, level, item order, and skill order; see final and per-level stats
+- **Build comparison** — compare two builds on the same hero with traceable numbers
+- **Matchup evaluator** — weighted, explainable advantage report between two hero/build combos
 
 ## Tech stack
 
@@ -32,7 +14,7 @@ Web-based platform for [Predecessor](https://www.predecessorgame.com/) focused o
 |-------|-----------|
 | Frontend | React + TypeScript |
 | Backend | Node.js + TypeScript |
-| Analytics engines | Shared TypeScript packages (pure functions) |
+| Domain engine | Shared TypeScript package (pure functions) |
 | Database | PostgreSQL |
 | Cache | Redis |
 | Data source | Omeda.city REST API + pred.gg GraphQL API |
