@@ -42,3 +42,7 @@ CLAUDE.md
 
 # Exploration / scratch test files
 workers/data-sync/src/test*.ts
+
+# serve.sh runtime files
+.pids/
+logs/
