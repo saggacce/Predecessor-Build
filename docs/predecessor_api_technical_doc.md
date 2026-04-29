@@ -137,6 +137,58 @@ Para producción se necesita registrar una aplicación (existe la query `applica
 
 ---
 
+### 2.1 Hallazgos de autenticación (probado)
+
+> Pruebas realizadas con la Application registrada en pred.gg (APP_ID: HiDUme4).
+
+#### Resultado por método
+
+| Método | HTTP | Resultado | Notas |
+|--------|------|-----------|-------|
+| Sin header de auth | 200 | ✅ Datos públicos accesibles | Heroes, items, matches, builds funcionan |
+| `X-Api-Key: <clientSecret>` | 200 | ✅ Mismo acceso público | Recomendado para producción (rate limits) |
+| `Authorization: Basic base64(clientId:clientSecret)` | 401 | ❌ Rechazado | El middleware HTTP rechaza Basic auth |
+| `Authorization: Bearer <clientSecret>` | 401 | ❌ Rechazado | El middleware HTTP rechaza Bearer con el secret |
+| Mutation `authorize` (sin sesión de usuario) | 200 | ❌ `Forbidden` | Requiere sesión de usuario activa — no sirve para scripts |
+
+#### Conclusión para el worker de datos
+
+Los datos públicos del juego (heroes, items, partidas, jugadores) son accesibles **sin autenticación**. Para producción, enviar el `clientSecret` como `X-Api-Key` para identificar la aplicación y evitar rate limiting anónimo.
+
+```python
+# Modo recomendado para el data sync worker
+headers = {
+    "Content-Type": "application/json",
+    "X-Api-Key": PREDGG_CLIENT_SECRET,  # del .env
+}
+```
+
+#### Sobre el mutation `authorize`
+
+Schema confirmado por introspección:
+
+```graphql
+# Argumentos reales (confirmados)
+mutation Authorize($clientId: String!, $scope: String!, $consent: Boolean!) {
+  authorize(clientId: $clientId, scope: $scope, consent: $consent) {
+    application { id name }   # tipo Application
+    token                     # String — JWT de sesión de usuario
+  }
+}
+```
+
+**Este mutation es para flujos OAuth2 interactivos de usuario** (equivalente a "Iniciar sesión con pred.gg"). Devuelve `Forbidden` si se llama desde un script sin sesión de usuario, independientemente del valor de `scope`. No usar en el worker de datos ni en la API backend.
+
+#### Variables de credenciales (`.env`)
+
+```
+PREDGG_APP_ID=HiDUme4
+PREDGG_CLIENT_ID=l5vdyvqawgovh2qptnumwrsb11ufanyf
+PREDGG_CLIENT_SECRET=<client_secret>
+```
+
+---
+
 ## 3. Schema GraphQL Completo
 
 ### 3.1 Queries disponibles (35 total)

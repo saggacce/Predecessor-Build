@@ -1,39 +1,121 @@
 # Workflow de trabajo del proyecto
 
-Este documento define el flujo operativo acordado para trabajar de forma iterativa en features.
+Este documento define el flujo operativo acordado entre el usuario y Claude
+para trabajar de forma iterativa sobre el repositorio local y GitHub.
 
-## 1) Ciclo de trabajo por feature
+---
 
-1. Crear un branch nuevo desde `main` para la feature.
-2. Implementar cambios en commits pequeños y claros.
-3. Abrir PR con resumen de cambios y validaciones.
-4. Revisar y ajustar según feedback.
-5. Cuando el cambio esté listo, **cerrar ciclo**:
-   - merge del PR a `main`
-   - borrado del branch
-6. Volver a empezar el siguiente ciclo desde `main` actualizado.
+## 1. Flujo completo por tarea
 
-## 2) Reglas prácticas
+```
+main (GitHub) → branch local → commits → push → PR → review → merge → main
+```
 
-- Un branch por objetivo (feature/fix/documentación).
-- Commits atómicos y descriptivos.
-- PR con alcance acotado (evitar mezclar cambios no relacionados).
-- Mantener `main` como rama estable y fuente de verdad.
+### Paso a paso
 
-## 3) Documentación de referencia obligatoria
+1. **Claude parte siempre desde `main` actualizado**
+   ```bash
+   git checkout main
+   git pull origin main
+   ```
 
-Antes de comenzar cualquier tarea, revisar:
+2. **Claude crea un branch descriptivo para la tarea**
+   ```bash
+   git checkout -b <tipo>/<descripcion-corta>
+   # Ejemplos:
+   # feat/player-profile-endpoint
+   # fix/stat-calculator-level-scaling
+   # docs/update-api-auth-section
+   ```
 
-- `docs/project_predecessor.md` → visión de producto, alcance, requisitos y roadmap.
-- `docs/predecessor_api_technical_doc.md` → integración API externa y límites técnicos.
-- `docs/future_features_roadmap.md` → backlog de capacidades futuras y dependencias.
-- `docs/planning.md` → tareas activas y subtareas con estado.
+3. **Claude trabaja localmente** — edita archivos, ejecuta validaciones.
 
-## 4) Criterio de “Done” por PR
+4. **Claude commitea en incrementos atómicos**
+   ```bash
+   git add <archivos-especificos>
+   git commit -m "tipo: descripción concisa en inglés"
+   ```
 
-Una feature/tarea se considera completada cuando:
+5. **Claude pushea el branch a GitHub**
+   ```bash
+   git push -u origin <nombre-del-branch>
+   ```
+
+6. **Claude abre un PR** hacia `main` con título y descripción claros.
+
+7. **El usuario revisa el PR** en GitHub, aprueba o pide cambios.
+
+8. **Merge y limpieza** — el usuario mergea el PR en GitHub y elimina el branch remoto.
+   Claude elimina el branch local:
+   ```bash
+   git checkout main
+   git pull origin main
+   git branch -d <nombre-del-branch>
+   ```
+
+---
+
+## 2. Convención de nombres de branch
+
+| Prefijo   | Cuándo usarlo                             | Ejemplo                          |
+|-----------|-------------------------------------------|----------------------------------|
+| `feat/`   | Nueva funcionalidad                       | `feat/player-profile-api`        |
+| `fix/`    | Corrección de bug o error                 | `fix/hero-stat-level-18`         |
+| `docs/`   | Solo cambios en documentación             | `docs/auth-findings-predgg`      |
+| `chore/`  | Configuración, dependencias, limpieza     | `chore/monorepo-tsconfig`        |
+| `refactor/` | Cambios internos sin cambio funcional   | `refactor/domain-engine-types`   |
+
+---
+
+## 3. Convención de commits
+
+Formato: `tipo: descripción en inglés (imperativo, minúsculas)`
+
+| Tipo       | Cuándo usarlo                                  |
+|------------|------------------------------------------------|
+| `feat`     | Nueva funcionalidad                            |
+| `fix`      | Corrección de bug                              |
+| `docs`     | Cambios en documentación                       |
+| `chore`    | Tareas de mantenimiento (configs, deps)        |
+| `refactor` | Refactorización sin cambio de comportamiento   |
+| `test`     | Añadir o corregir tests                        |
+
+Ejemplos válidos:
+```
+feat: add player profile GraphQL query handler
+fix: correct level-18 stat interpolation in domain engine
+docs: add pred.gg auth test findings to API doc
+chore: sync local repo with main from GitHub
+```
+
+---
+
+## 4. Reglas operativas
+
+- **Un branch por objetivo.** No mezclar features, fixes y docs en el mismo branch.
+- **`main` es siempre estable.** Claude nunca pushea directo a `main`.
+- **PRs con alcance acotado.** Un PR resuelve una cosa concreta.
+- **Claude sincroniza antes de empezar.** Siempre `git pull origin main` al inicio de cada sesión o tarea.
+- **El usuario decide el merge.** Claude abre el PR pero no lo mergea sin instrucción explícita.
+
+---
+
+## 5. Criterio de "Done" por PR
+
+Una tarea se considera completada cuando:
 
 - Se cumplen los criterios funcionales acordados.
 - La documentación afectada está actualizada.
 - Se han ejecutado validaciones razonables para el tipo de cambio.
-- El PR está mergeado en `main` y el branch eliminado.
+- El PR está mergeado en `main` y el branch eliminado (remoto y local).
+
+---
+
+## 6. Documentación de referencia obligatoria
+
+Antes de comenzar cualquier tarea, Claude revisa:
+
+- `docs/planning.md` → tareas activas y subtareas con estado.
+- `docs/project_predecessor.md` → visión de producto, alcance, requisitos y roadmap.
+- `docs/predecessor_api_technical_doc.md` → integración API externa y límites técnicos.
+- `docs/future_features_roadmap.md` → backlog de capacidades futuras y dependencias.
