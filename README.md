@@ -19,38 +19,40 @@ Web-based analysis tool for [Predecessor](https://www.predecessorgame.com/) that
 | Cache | Redis |
 | Data source | Omeda.city REST API + pred.gg GraphQL API |
 
-## Project structure
+## Project structure (target)
 
 ```
 apps/
-  web/          → React frontend
-  api/          → Node.js backend
+  web/             → React frontend (dashboards and reports)
+  api/             → Node.js backend
 packages/
-  domain-engine/  → Stat and matchup calculation (no UI deps)
-  data-model/     → Shared types and DTOs
+  scouting-engine/ → Player/team scouting metrics and scoring
+  domain-engine/   → Build/stat calculation (phase B/C)
+  data-model/      → Shared types and DTOs
 workers/
-  data-sync/    → Omeda.city / pred.gg ingestion and normalization
+  data-sync/       → Omeda.city / pred.gg ingestion and normalization
 docs/
-  project_predecessor.md           → Product specification
-  predecessor_api_technical_doc.md → API reference (REST + GraphQL)
+  project_predecessor.md            → Product + technical specification
+  predecessor_api_technical_doc.md  → API integration reference
+  future_features_roadmap.md        → Pending capabilities with priority/effort
 scripts/
   explore_omeda_api.py  → One-shot API audit tool
-  api-samples/          → Raw API response snapshots (reference for sync worker dev)
+  api-samples/          → Raw API response fixtures (used in tests)
 ```
 
-## Delivery phases
+## Delivery roadmap
 
 | Phase | Deliverable |
 |-------|-------------|
-| 1 | Data ingestion + normalized schema + stat calculator |
-| 2 | Build planner UI + per-level/per-item breakdown |
-| 3 | Same-hero build comparison |
-| 4 | Matchup evaluator with explainable weighted scoring |
-| 5 | Patch handling, saved builds, recommendation helpers |
+| 1 | Data ingestion + normalized schema + player/team scouting foundation |
+| 2 | Scouting dashboards + rival reports + scrim prep summaries |
+| 3 | Draft-support recommendations (explainable) |
+| 4 | Build/stat calculator (level/skills/items) |
+| 5 | Iterative intelligence upgrades and advanced recommendations |
 
 ## Data sources
 
 - **REST** — `omeda.city` (heroes, items, builds — no auth required)
-- **GraphQL** — `pred.gg/gql` (matchups, win rates, player data — OAuth2 required)
+- **GraphQL** — `pred.gg/gql` (players, matches, teams, matchups — OAuth2 required)
 
-See [`docs/predecessor_api_technical_doc.md`](docs/predecessor_api_technical_doc.md) for full API reference.
+See [`docs/project_predecessor.md`](docs/project_predecessor.md) for product scope, [`docs/predecessor_api_technical_doc.md`](docs/predecessor_api_technical_doc.md) for API details, [`docs/future_features_roadmap.md`](docs/future_features_roadmap.md) for future capabilities, [`docs/workflow.md`](docs/workflow.md) for execution flow, and [`docs/planning.md`](docs/planning.md) for task tracking.
