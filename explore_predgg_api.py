@@ -1,18 +1,20 @@
+"""
+pred.gg GraphQL API Explorer
+
+Auth findings:
+- Public game data (heroes, items, matches) is accessible without authentication.
+- The clientSecret can be sent as X-Api-Key header (likely for elevated rate limits
+  or access to additional endpoints).
+- The `authorize` mutation is for user-facing OAuth2 consent flows (requires an
+  active user session) — not usable for machine-to-machine access.
+"""
+
 import json
 import os
+import time
 import requests
 
 GQL_URL = "https://pred.gg/gql"
-
-HEADERS = {
-    "Content-Type": "application/json",
-    "User-Agent": (
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-        "AppleWebKit/537.36 (KHTML, like Gecko) "
-        "Chrome/124.0.0.0 Safari/537.36"
-    ),
-}
-
 TIMEOUT = 15
 
 
@@ -26,64 +28,94 @@ def load_env():
                 if line and not line.startswith("#") and "=" in line:
                     k, v = line.split("=", 1)
                     env[k.strip()] = v.strip()
-    for k in ["PREDGG_CLIENT_ID", "PREDGG_SCOPE"]:
+    for k in ["PREDGG_CLIENT_ID", "PREDGG_CLIENT_SECRET"]:
         if k in os.environ:
             env[k] = os.environ[k]
     return env
 
 
-def gql(query, variables=None, token=None):
-    headers = {**HEADERS}
-    if token:
-        headers["Authorization"] = f"Bearer {token}"
+def make_headers(api_key=None):
+    headers = {
+        "Content-Type": "application/json",
+        "User-Agent": (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) "
+            "Chrome/124.0.0.0 Safari/537.36"
+        ),
+    }
+    if api_key:
+        headers["X-Api-Key"] = api_key
+    return headers
+
+
+def gql(query, variables=None, api_key=None):
     payload = {"query": query}
     if variables:
         payload["variables"] = variables
-    return requests.post(GQL_URL, headers=headers, json=payload, timeout=TIMEOUT)
+    resp = requests.post(
+        GQL_URL,
+        headers=make_headers(api_key),
+        json=payload,
+        timeout=TIMEOUT,
+    )
+    return resp
 
 
-def get_token(client_id, scope):
-    mutation = """
-    mutation Authorize($clientId: String!, $scope: String!, $consent: Boolean!) {
-      authorize(clientId: $clientId, scope: $scope, consent: $consent) {
-        application { id name }
-        token
-      }
-    }
-    """
-    resp = gql(mutation, {"clientId": client_id, "scope": scope, "consent": True})
-    if resp.status_code != 200:
-        return None, None, f"HTTP {resp.status_code}: {resp.text[:300]}"
-    data = resp.json()
-    errors = data.get("errors")
-    if errors:
-        return None, None, f"GraphQL errors: {json.dumps(errors, indent=2)}"
-    authorize = data.get("data", {}).get("authorize", {})
-    return authorize.get("token"), authorize.get("application", {}), None
-
-
-def introspect_operations(token):
+def introspect_operations(api_key=None):
     query = """
     {
       __schema {
-        queryType  { fields { name description } }
+        queryType    { fields { name description } }
         mutationType { fields { name description } }
       }
     }
     """
-    resp = gql(query, token=token)
+    resp = gql(query, api_key=api_key)
     if resp.status_code != 200:
         return None, f"HTTP {resp.status_code}: {resp.text[:300]}"
     data = resp.json()
-    errors = data.get("errors")
-    if errors:
-        return None, f"GraphQL errors: {json.dumps(errors, indent=2)}"
+    if data.get("errors"):
+        return None, f"GraphQL errors: {json.dumps(data['errors'], indent=2)}"
     return data.get("data", {}).get("__schema", {}), None
 
 
-def print_section(title, items, limit=30):
+# ── Sample queries ──────────────────────────────────────────────────────────
+
+SAMPLE_QUERIES = [
+    (
+        "heroes",
+        "{ heroes { id name } }",
+    ),
+    (
+        "items",
+        "{ items { id name } }",
+    ),
+    (
+        "hero-detail (Grux)",
+        '{ hero(name: "Grux") { id name abilities { id name } } }',
+    ),
+]
+
+
+def run_sample(label, query, api_key=None):
+    try:
+        resp = gql(query, api_key=api_key)
+        status = resp.status_code
+        if status != 200:
+            return status, 0, f"HTTP {status}", None
+        data = resp.json()
+        errors = data.get("errors")
+        if errors:
+            return status, 0, errors[0].get("message", "error"), None
+        kb = len(resp.content) / 1024
+        return status, kb, None, data.get("data")
+    except Exception as exc:
+        return 0, 0, str(exc), None
+
+
+def print_section(title, items, limit=40):
     print(f"\n  {title} ({len(items)} total):")
-    print("  " + "-" * 60)
+    print("  " + "-" * 62)
     for item in items[:limit]:
         desc = (item.get("description") or "")[:55]
         suffix = f"  — {desc}" if desc else ""
@@ -94,46 +126,62 @@ def print_section(title, items, limit=30):
 
 def main():
     env = load_env()
-    client_id = env.get("PREDGG_CLIENT_ID")
-    scope = env.get("PREDGG_SCOPE", "public")
-
-    if not client_id:
-        print("ERROR: PREDGG_CLIENT_ID no está configurado.")
-        print("Crea un archivo .env con PREDGG_CLIENT_ID=<tu_client_id>")
-        return
+    api_key = env.get("PREDGG_CLIENT_SECRET")
 
     print("=" * 65)
     print("PRED.GG API EXPLORER")
     print("=" * 65)
-    print(f"\n→ Autenticando  clientId={client_id[:8]}...  scope={scope}")
+    auth_mode = f"X-Api-Key={api_key[:8]}..." if api_key else "sin autenticación (público)"
+    print(f"\n  Modo: {auth_mode}")
 
-    token, app, error = get_token(client_id, scope)
+    # ── Schema introspection ────────────────────────────────────────────────
+    print("\n→ Introspectando esquema GraphQL...")
+    schema, error = introspect_operations(api_key)
     if error:
         print(f"  FAILED: {error}")
-        return
+    else:
+        queries   = schema.get("queryType",    {}).get("fields", [])
+        mutations = schema.get("mutationType", {}).get("fields", [])
+        print_section("Queries disponibles", queries)
+        print_section("Mutations disponibles", mutations)
 
-    if not token:
-        print("  FAILED: la respuesta no incluyó token. Verifica el scope.")
-        return
+    # ── Sample data queries ─────────────────────────────────────────────────
+    print("\n\n→ Probando queries de datos...")
+    print("  " + "-" * 62)
+    col_label  = 24
+    col_status = 8
+    col_kb     = 8
+    print(
+        "  " + "ENDPOINT".ljust(col_label)
+        + "STATUS".ljust(col_status)
+        + "KB".ljust(col_kb)
+        + "RESULTADO"
+    )
+    print("  " + "-" * 62)
 
-    print(f"  OK  token={token[:25]}...")
-    if app:
-        print(f"  Application: {app.get('name')}  (id: {app.get('id')})")
-
-    print("\n→ Introspectando operaciones disponibles...")
-    schema, error = introspect_operations(token)
-    if error:
-        print(f"  FAILED: {error}")
-        return
-
-    queries   = schema.get("queryType",    {}).get("fields", [])
-    mutations = schema.get("mutationType", {}).get("fields", [])
-
-    print_section("Queries", queries)
-    print_section("Mutations", mutations)
+    for label, query in SAMPLE_QUERIES:
+        status, kb, error, data = run_sample(label, query, api_key)
+        if error:
+            detail = f"ERROR: {error}"[:50]
+        else:
+            # Show first record as preview
+            first_key = next(iter(data), None)
+            value = data.get(first_key) if first_key else None
+            if isinstance(value, list):
+                detail = f"{len(value)} registros  — primero: {json.dumps(value[0])[:60]}"
+            else:
+                detail = str(value)[:80]
+        print(
+            "  " + label.ljust(col_label)
+            + str(status).ljust(col_status)
+            + f"{kb:.1f}".ljust(col_kb)
+            + detail
+        )
+        time.sleep(0.5)
 
     print("\n" + "=" * 65)
-    print(f"Token para usar en otras llamadas:\n{token}")
+    print("Nota: para datos de usuario/jugador se necesita OAuth2 con")
+    print("sesión de usuario (authorize mutation, flujo interactivo).")
     print("=" * 65)
 
 
