@@ -1,0 +1,103 @@
+=================================================================
+PRED.GG API EXPLORER
+=================================================================
+
+  Modo: sin autenticación (público)
+
+? Introspectando esquema GraphQL...
+
+  Queries disponibles (35 total):
+  --------------------------------------------------------------
+    • application
+    • applicationsPaginated
+    • backend
+    • comment
+    • communityChallenge
+    • connectionInfo
+    • currentAuth
+    • currentUser
+    • event
+    • events
+    • group
+    • groups
+    • guide
+    • guidesPaginated
+    • hero
+    • heroes
+    • item
+    • items
+    • leaderboardPaginated
+    • match
+    • matchSpoilerBlocks
+    • perk
+    • perks
+    • player
+    • players
+    • playersPaginated
+    • prediction
+    • rating
+    • ratingStatistic
+    • ratings
+    • team
+    • teams
+    • user
+    • version
+    • versions
+
+  Mutations disponibles (63 total):
+  --------------------------------------------------------------
+    • addPredictionQuestion
+    • approvePlayerClaim
+    • assignBracketNodeMatch
+    • authorize
+    • autoSolvePrediction
+    • autoSolvePredictionQuestion
+    • claimPlayer
+    • createApplication
+    • createBracket
+    • createCommunityChallenge
+    • createEvent
+    • createEventEntry
+    • createGroup
+    • createGuide
+    • createMatchSpoilerBlock
+    • createPrediction
+    • createTeam
+    • createTophy
+    • deleteBracket
+    • deleteCommunityChallenge
+    • deleteEvent
+    • deleteGuide
+    • deletePlayerCustomization
+    • deleteTrophy
+    • discourseSso
+    • editEventEntries
+    • editPrediction
+    • editPredictionQuestions
+    • liftMatchSpoilerBlock
+    • linkProvider
+    • linkProviderId
+    • postComment
+    • rateComment
+    • rateGuide
+    • resetApplicationSecret
+    • restoreGuide
+    • reviewMatchSpoilerBlock
+    • setBracketNodeAutoProtect
+    • setPredictionResults
+    • startCheckout
+    ... y 23 más
+
+
+? Probando queries de datos...
+  --------------------------------------------------------------
+  ENDPOINT                STATUS  KB      RESULTADO
+  --------------------------------------------------------------
+  heroes                  200     1.4     51 registros  — primero: {"id": "31", "name": "Wraith"}
+  items                   200     9.1     281 registros  — primero: {"id": "217", "name": "MistmeadowBuckler"}
+  hero-detail (Grux)      200     0.0     ERROR: Field "hero" argument "by" of type "Query"
+
+=================================================================
+Nota: para datos de usuario/jugador se necesita OAuth2 con
+sesión de usuario (authorize mutation, flujo interactivo).
+=================================================================
