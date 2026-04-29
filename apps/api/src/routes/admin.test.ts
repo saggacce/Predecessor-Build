@@ -1,23 +1,22 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import request from 'supertest';
-
-// Mock child_process before importing app so promisify wraps the mock
-vi.mock('child_process', () => ({
-  execFile: vi.fn((_cmd: string, _args: string[], _opts: object, cb: (err: null, stdout: string, stderr: string) => void) => {
-    cb(null, 'sync completed\n', '');
-  }),
-}));
+import app from '../index.js';
 
 vi.mock('../db.js', () => ({
   db: {
     syncLog: { findMany: vi.fn().mockResolvedValue([]) },
+    version: { upsert: vi.fn().mockResolvedValue({}) },
+    player: { findMany: vi.fn().mockResolvedValue([]) },
   },
   disconnectDb: vi.fn().mockResolvedValue(undefined),
 }));
 
-import app from '../index.js';
-import { db } from '../db.js';
-const mockSyncLog = (db as any).syncLog as { findMany: ReturnType<typeof vi.fn> };
+// Mock sync-service so no real HTTP calls to pred.gg are made
+vi.mock('../services/sync-service.js', () => ({
+  syncVersionsFromPredgg: vi.fn().mockResolvedValue(5),
+  syncStalePlayers: vi.fn().mockResolvedValue({ synced: 2, skipped: 0, errors: 0 }),
+  syncPlayerByName: vi.fn().mockResolvedValue(null),
+}));
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -28,49 +27,49 @@ afterEach(() => {
   delete process.env.ADMIN_API_KEY;
 });
 
-describe('POST /admin/sync-data — validation', () => {
-  it('returns 400 VALIDATION_ERROR for unknown command', async () => {
-    const res = await request(app).post('/admin/sync-data').send({ command: 'rm-rf' });
-    expect(res.status).toBe(400);
-    expect(res.body.error.code).toBe('VALIDATION_ERROR');
+describe('POST /admin/sync-versions', () => {
+  it('returns 200 with sync result', async () => {
+    const res = await request(app).post('/admin/sync-versions');
+    expect(res.status).toBe(200);
+    expect(res.body).toHaveProperty('synced', 5);
+    expect(res.body).toHaveProperty('elapsed');
+    expect(res.body).toHaveProperty('timestamp');
   });
 
-  it('returns 400 when args contain shell metacharacters', async () => {
-    const res = await request(app)
-      .post('/admin/sync-data')
-      .send({ command: 'sync-player', args: ['; rm -rf /'] });
-    expect(res.status).toBe(400);
-    expect(res.body.error.code).toBe('VALIDATION_ERROR');
-  });
-
-  it('returns 400 when body is empty', async () => {
-    const res = await request(app).post('/admin/sync-data').send({});
-    expect(res.status).toBe(400);
-    expect(res.body.error.code).toBe('VALIDATION_ERROR');
-  });
-});
-
-describe('POST /admin/sync-data — auth guard', () => {
-  it('returns 401 when ADMIN_API_KEY is set and X-Admin-Key header is missing', async () => {
+  it('returns 401 when ADMIN_API_KEY is set and header is missing', async () => {
     process.env.ADMIN_API_KEY = 'secret-key';
-    const res = await request(app).post('/admin/sync-data').send({ command: 'sync-versions' });
+    const res = await request(app).post('/admin/sync-versions');
     expect(res.status).toBe(401);
     expect(res.body.error.code).toBe('ADMIN_KEY_REQUIRED');
   });
 
-  it('returns 401 when X-Admin-Key is wrong', async () => {
+  it('accepts correct X-Admin-Key header', async () => {
     process.env.ADMIN_API_KEY = 'secret-key';
     const res = await request(app)
-      .post('/admin/sync-data')
-      .set('X-Admin-Key', 'wrong-key')
-      .send({ command: 'sync-versions' });
+      .post('/admin/sync-versions')
+      .set('X-Admin-Key', 'secret-key');
+    expect(res.status).toBe(200);
+  });
+});
+
+describe('POST /admin/sync-stale', () => {
+  it('returns 200 with sync result including synced/skipped/errors', async () => {
+    const res = await request(app).post('/admin/sync-stale');
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({ synced: 2, skipped: 0, errors: 0 });
+    expect(res.body).toHaveProperty('elapsed');
+  });
+
+  it('returns 401 when ADMIN_API_KEY is set and header is missing', async () => {
+    process.env.ADMIN_API_KEY = 'secret-key';
+    const res = await request(app).post('/admin/sync-stale');
     expect(res.status).toBe(401);
+    expect(res.body.error.code).toBe('ADMIN_KEY_REQUIRED');
   });
 });
 
 describe('GET /admin/sync-logs', () => {
   it('returns 200 with logs array', async () => {
-    mockSyncLog.findMany.mockResolvedValue([]);
     const res = await request(app).get('/admin/sync-logs');
     expect(res.status).toBe(200);
     expect(Array.isArray(res.body.logs)).toBe(true);
@@ -84,6 +83,17 @@ describe('GET /admin/sync-logs', () => {
 
   it('returns 400 when limit exceeds maximum', async () => {
     const res = await request(app).get('/admin/sync-logs?limit=9999');
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe('VALIDATION_ERROR');
+  });
+
+  it('accepts entity and status filters', async () => {
+    const res = await request(app).get('/admin/sync-logs?entity=player&status=ok');
+    expect(res.status).toBe(200);
+  });
+
+  it('returns 400 when status filter is invalid', async () => {
+    const res = await request(app).get('/admin/sync-logs?status=invalid');
     expect(res.status).toBe(400);
     expect(res.body.error.code).toBe('VALIDATION_ERROR');
   });

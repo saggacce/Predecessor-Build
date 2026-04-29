@@ -101,7 +101,28 @@ export interface ScrimReport {
   matchupNotes: string[];
 }
 
-export type SyncCommand = 'sync-all' | 'sync-versions' | 'sync-player' | 'sync-stale' | 'sync-match' | 'sync-player-matches';
+export interface SyncedPlayer {
+  id: string;
+  predggId: string;
+  displayName: string;
+  isPrivate: boolean;
+  inferredRegion: string | null;
+  lastSynced: Date;
+}
+
+export interface AdminSyncVersionsResult {
+  synced: number;
+  elapsed: number;
+  timestamp: string;
+}
+
+export interface AdminSyncStaleResult {
+  synced: number;
+  skipped: number;
+  errors: number;
+  elapsed: number;
+  timestamp: string;
+}
 
 // ── Fetch helper ─────────────────────────────────────────────────────────────
 
@@ -141,6 +162,11 @@ export const apiClient = {
       if (limit) params.set('limit', String(limit));
       return fetchApi<{ results: PlayerSearchResult[] }>(`/players/search?${params}`);
     },
+    sync: (name: string) =>
+      fetchApi<{ synced: boolean; player: SyncedPlayer }>('/players/sync', {
+        method: 'POST',
+        body: JSON.stringify({ name }),
+      }),
     getProfile: (id: string) => fetchApi<PlayerProfile>(`/players/${id}`),
     compare: (playerIdA: string, playerIdB: string) =>
       fetchApi<{ players: [PlayerProfile, PlayerProfile]; deltas: unknown[] }>('/players/compare', {
@@ -166,11 +192,15 @@ export const apiClient = {
   },
 
   admin: {
-    syncData: (command: SyncCommand, args?: string[]) =>
-      fetchApi<{ command: string; stdout: string; stderr: string; timestamp: string }>(
-        '/admin/sync-data',
-        { method: 'POST', body: JSON.stringify({ command, args }) },
-      ),
-    syncLogs: (limit = 50) => fetchApi<{ logs: unknown[] }>(`/admin/sync-logs?limit=${limit}`),
+    syncVersions: () =>
+      fetchApi<AdminSyncVersionsResult>('/admin/sync-versions', { method: 'POST' }),
+    syncStale: () =>
+      fetchApi<AdminSyncStaleResult>('/admin/sync-stale', { method: 'POST' }),
+    syncLogs: (limit = 50, entity?: string, status?: string) => {
+      const params = new URLSearchParams({ limit: String(limit) });
+      if (entity) params.set('entity', entity);
+      if (status) params.set('status', status);
+      return fetchApi<{ logs: unknown[]; total: number }>(`/admin/sync-logs?${params}`);
+    },
   },
 };

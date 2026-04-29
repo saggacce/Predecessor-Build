@@ -1,13 +1,15 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { getPlayerProfile, comparePlayers, searchPlayers } from '../services/player-service.js';
+import { syncPlayerByName } from '../services/sync-service.js';
 import { AppError } from '../middleware/error-handler.js';
+import { db } from '../db.js';
 
 export const playersRouter = Router();
 
 /**
  * GET /players/search?q=name&limit=20
- * Search players by display name.
+ * Searches the local database for players matching the name.
  */
 playersRouter.get('/search', async (req, res, next) => {
   try {
@@ -17,6 +19,34 @@ playersRouter.get('/search', async (req, res, next) => {
     }).parse(req.query);
     const results = await searchPlayers(q, limit);
     res.json({ results });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * POST /players/sync
+ * Body: { name: string }
+ * Fetches a player from pred.gg and saves them to the local database.
+ * Returns the synced player record immediately — no child process, no CLI.
+ */
+playersRouter.post('/sync', async (req, res, next) => {
+  try {
+    const { name } = z.object({
+      name: z.string().min(1).max(100).trim(),
+    }).parse(req.body);
+
+    const synced = await syncPlayerByName(db, name);
+
+    if (!synced) {
+      throw new AppError(
+        404,
+        `Player "${name}" not found on pred.gg`,
+        'PLAYER_NOT_FOUND_PREDGG',
+      );
+    }
+
+    res.json({ synced: true, player: synced });
   } catch (err) {
     next(err);
   }
@@ -38,7 +68,6 @@ playersRouter.get('/:id', async (req, res, next) => {
 /**
  * POST /players/compare
  * Body: { playerIdA: string, playerIdB: string }
- * Compare two players side by side.
  */
 playersRouter.post('/compare', async (req, res, next) => {
   try {
@@ -46,7 +75,6 @@ playersRouter.post('/compare', async (req, res, next) => {
       playerIdA: z.string().min(1),
       playerIdB: z.string().min(1),
     }).parse(req.body);
-
     const comparison = await comparePlayers(body.playerIdA, body.playerIdB);
     res.json(comparison);
   } catch (err) {

@@ -1,22 +1,15 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
-import { execFile } from 'child_process';
-import { promisify } from 'util';
-import path from 'path';
 import { db } from '../db.js';
 import { logger } from '../logger.js';
-
-const execFileAsync = promisify(execFile);
+import { syncVersionsFromPredgg, syncStalePlayers } from '../services/sync-service.js';
 
 export const adminRouter = Router();
 
-// Simple API key guard — set ADMIN_API_KEY in .env to enable protection.
-// Without it the endpoint is open (acceptable for local dev MVP).
 function requireAdminKey(req: Request, res: Response, next: NextFunction) {
   const key = process.env.ADMIN_API_KEY;
-  if (!key) return next(); // no key configured → allow in dev
-  const provided = req.headers['x-admin-key'];
-  if (provided !== key) {
+  if (!key) return next();
+  if (req.headers['x-admin-key'] !== key) {
     res.status(401).json({ error: { message: 'Unauthorized', code: 'ADMIN_KEY_REQUIRED' } });
     return;
   }
@@ -25,49 +18,35 @@ function requireAdminKey(req: Request, res: Response, next: NextFunction) {
 
 adminRouter.use(requireAdminKey);
 
-const SYNC_COMMANDS = ['sync-all', 'sync-versions', 'sync-player', 'sync-stale', 'sync-match', 'sync-player-matches'] as const;
-type SyncCommand = typeof SYNC_COMMANDS[number];
-
-const syncBodySchema = z.object({
-  command: z.enum(SYNC_COMMANDS),
-  // Each arg validated individually: no shell metacharacters allowed
-  args: z.array(z.string().regex(/^[a-zA-Z0-9_\-. ]+$/, 'Invalid argument')).max(5).optional(),
+/**
+ * POST /admin/sync-versions
+ * Fetches all game versions from pred.gg and upserts into local DB.
+ */
+adminRouter.post('/sync-versions', async (_req, res, next) => {
+  try {
+    const start = Date.now();
+    logger.info('admin: sync-versions started');
+    const count = await syncVersionsFromPredgg(db);
+    const elapsed = Date.now() - start;
+    logger.info({ count, elapsed }, 'admin: sync-versions complete');
+    res.json({ synced: count, elapsed, timestamp: new Date() });
+  } catch (err) {
+    next(err);
+  }
 });
 
 /**
- * POST /admin/sync-data
- * Body: { command: SyncCommand, args?: string[] }
- * Protected by X-Admin-Key header when ADMIN_API_KEY env var is set.
+ * POST /admin/sync-stale
+ * Re-syncs all players whose data is older than 1 hour.
  */
-adminRouter.post('/sync-data', async (req, res, next) => {
+adminRouter.post('/sync-stale', async (_req, res, next) => {
   try {
-    const body = syncBodySchema.parse(req.body);
-    const syncDir = path.resolve(process.cwd(), '../../workers/data-sync');
-
-    // Use execFile (not exec) to prevent shell injection — args are passed as
-    // an array, never interpolated into a shell string.
-    const cmdArgs = ['tsx', 'src/index.ts', body.command, ...(body.args ?? [])];
     const start = Date.now();
-    logger.info({ command: body.command, args: body.args }, 'sync started');
-
-    let stdout = '';
-    let stderr = '';
-    try {
-      ({ stdout, stderr } = await execFileAsync('npx', cmdArgs, { cwd: syncDir }));
-      const elapsed = Date.now() - start;
-      logger.info({ command: body.command, elapsed }, 'sync completed');
-    } catch (syncErr) {
-      const elapsed = Date.now() - start;
-      logger.error({ command: body.command, elapsed, err: syncErr }, 'sync failed');
-      throw syncErr;
-    }
-
-    res.json({
-      command: body.command,
-      stdout: stdout.trim(),
-      stderr: stderr.trim(),
-      timestamp: new Date(),
-    });
+    logger.info('admin: sync-stale started');
+    const result = await syncStalePlayers(db);
+    const elapsed = Date.now() - start;
+    logger.info({ ...result, elapsed }, 'admin: sync-stale complete');
+    res.json({ ...result, elapsed, timestamp: new Date() });
   } catch (err) {
     next(err);
   }
@@ -75,22 +54,26 @@ adminRouter.post('/sync-data', async (req, res, next) => {
 
 const logsQuerySchema = z.object({
   limit: z.coerce.number().int().positive().max(500).default(50),
+  entity: z.string().optional(),
+  status: z.enum(['ok', 'error', 'skipped']).optional(),
 });
 
 /**
- * GET /admin/sync-logs?limit=50
+ * GET /admin/sync-logs?limit=50&entity=player&status=error
  */
 adminRouter.get('/sync-logs', async (req, res, next) => {
   try {
-    const { limit } = logsQuerySchema.parse(req.query);
+    const { limit, entity, status } = logsQuerySchema.parse(req.query);
     const logs = await db.syncLog.findMany({
+      where: {
+        ...(entity && { entity }),
+        ...(status && { status }),
+      },
       orderBy: { syncedAt: 'desc' },
       take: limit,
     });
-    res.json({ logs });
+    res.json({ logs, total: logs.length });
   } catch (err) {
     next(err);
   }
 });
-
-export type { SyncCommand };
