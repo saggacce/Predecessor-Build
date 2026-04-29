@@ -2,6 +2,7 @@ import { db } from '../db.js';
 import { AppError } from '../middleware/error-handler.js';
 import { getTeamProfile } from './team-service.js';
 import { getPlayerProfile } from './player-service.js';
+import { logger } from '../logger.js';
 
 export interface ScrimReport {
   generatedAt: Date;
@@ -58,7 +59,7 @@ export async function generateScrimReport(
           const profile = await getPlayerProfile(member.playerId);
           topHeroes = extractTopHeroes(profile.heroStats);
         } catch (err) {
-          console.warn(`[report-service] could not load profile for player ${member.playerId}:`, err);
+          logger.warn({ playerId: member.playerId, err }, 'player profile unavailable for report');
         }
 
         return {

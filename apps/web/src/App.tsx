@@ -1,4 +1,5 @@
 import { BrowserRouter, Routes, Route, Link } from 'react-router';
+import { Toaster } from 'sonner';
 import { Home, Users, Target, Shield } from 'lucide-react';
 import Dashboard from './pages/Dashboard';
 import PlayerScouting from './pages/PlayerScouting';
@@ -37,6 +38,7 @@ export default function App() {
           </Routes>
         </main>
       </div>
+      <Toaster position="bottom-right" theme="dark" richColors closeButton />
     </BrowserRouter>
   );
 }

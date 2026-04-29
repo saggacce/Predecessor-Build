@@ -11,8 +11,10 @@ export const playersRouter = Router();
  */
 playersRouter.get('/search', async (req, res, next) => {
   try {
-    const q = z.string().min(1).parse(req.query.q);
-    const limit = req.query.limit ? parseInt(String(req.query.limit), 10) : 20;
+    const { q, limit } = z.object({
+      q: z.string().min(1),
+      limit: z.coerce.number().int().positive().max(100).default(20),
+    }).parse(req.query);
     const results = await searchPlayers(q, limit);
     res.json({ results });
   } catch (err) {
