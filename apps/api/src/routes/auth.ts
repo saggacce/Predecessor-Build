@@ -100,8 +100,10 @@ authRouter.get('/callback', async (req, res) => {
       return;
     }
 
-    const { access_token, refresh_token, expires_in } = tokenData;
+    const { access_token, refresh_token, expires_in, scope: grantedScope } = tokenData as typeof tokenData & { scope?: string };
     const tokenMaxAge = (expires_in ?? 3600) * 1000;
+
+    logger.info({ grantedScope, expires_in }, 'token exchange successful — granted scopes');
 
     res.cookie(COOKIE_TOKEN, access_token!, { ...COOKIE_OPTS, maxAge: tokenMaxAge });
 
