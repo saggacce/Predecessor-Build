@@ -145,11 +145,15 @@ Para producción se necesita registrar una aplicación (existe la query `applica
 
 | Método | HTTP | Resultado | Notas |
 |--------|------|-----------|-------|
-| Sin header de auth | 200 | ✅ Datos públicos accesibles | Heroes, items, matches, builds funcionan |
+| Sin header de auth | 200 | ✅ Datos públicos accesibles | Heroes, items, patches funcionan |
 | `X-Api-Key: <clientSecret>` | 200 | ✅ Mismo acceso público | Recomendado para producción (rate limits) |
 | `Authorization: Basic base64(clientId:clientSecret)` | 401 | ❌ Rechazado | El middleware HTTP rechaza Basic auth |
 | `Authorization: Bearer <clientSecret>` | 401 | ❌ Rechazado | El middleware HTTP rechaza Bearer con el secret |
 | Mutation `authorize` (sin sesión de usuario) | 200 | ❌ `Forbidden` | Requiere sesión de usuario activa — no sirve para scripts |
+| `playersPaginated` (con o sin X-Api-Key) | 200 | ❌ `Forbidden` | Requiere OAuth de usuario — no disponible server-side |
+| `leaderboardPaginated` (con o sin X-Api-Key) | 200 | ❌ `Forbidden` | Requiere OAuth de usuario — no disponible server-side |
+
+> **Limitación crítica confirmada (2026-04-30):** Todas las queries relacionadas con jugadores (`playersPaginated`, `leaderboardPaginated`, `player`, `players`) devuelven `Forbidden` desde un servidor sin sesión de usuario activa. Solo los datos de juego estáticos (heroes, items, perks, versions) son accesibles sin OAuth. La búsqueda y sincronización de jugadores requiere implementar el flujo OAuth2 completo con redirección al usuario.
 
 #### Conclusión para el worker de datos
 

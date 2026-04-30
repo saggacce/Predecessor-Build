@@ -3,6 +3,7 @@
  * No child processes. No external CLI. Called directly from API route handlers.
  */
 import { PrismaClient } from '@prisma/client';
+import { AppError } from '../middleware/error-handler.js';
 import { logger } from '../logger.js';
 
 const GQL_URL = process.env.PRED_GG_GQL_URL ?? 'https://pred.gg/gql';
@@ -81,9 +82,23 @@ export async function syncPlayerByName(
       { name },
     );
   } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    // pred.gg requires user-level OAuth to search players by name.
+    // Return a clear 503 so the UI can show a meaningful message.
+    if (message === 'Forbidden') {
+      logger.warn({ name }, 'pred.gg player search requires OAuth — not available server-side');
+      await db.syncLog.create({
+        data: { entity: 'player', entityId: name, operation: 'fetch', status: 'error', error: 'pred.gg auth required' },
+      });
+      throw new AppError(
+        503,
+        'pred.gg requires user authentication to search players. This feature will be available once OAuth login is implemented.',
+        'PREDGG_AUTH_REQUIRED',
+      );
+    }
     logger.error({ name, err }, 'pred.gg query failed');
     await db.syncLog.create({
-      data: { entity: 'player', entityId: name, operation: 'fetch', status: 'error', error: String(err) },
+      data: { entity: 'player', entityId: name, operation: 'fetch', status: 'error', error: message },
     });
     throw err;
   }

@@ -13,6 +13,20 @@ Difficulty legend:
 
 ---
 
+## 0. pred.gg OAuth2 login (blocker para scouting de jugadores)
+- **Priority:** P0 — **blocker**: sin esto no hay búsqueda ni sync de jugadores
+- **Difficulty:** Medium
+- **Estimated time:** 1–2 weeks
+- **What it is:** flujo OAuth2 completo con pred.gg. El usuario hace login con su cuenta de pred.gg, nuestra app recibe un token de sesión, y con ese token podemos llamar `playersPaginated` y `leaderboardPaginated`.
+- **Why blocked:** todas las queries de jugadores en pred.gg devuelven `Forbidden` sin sesión de usuario activa. El `X-Api-Key` con el clientSecret solo desbloquea datos estáticos (heroes, items, versiones).
+- **Implementation path:**
+  1. Ruta `GET /auth/predgg` → redirige a pred.gg con `clientId` + `redirect_uri`
+  2. Ruta `GET /auth/callback` → recibe el código de autorización, llama mutation `authorize(clientId, scope, consent: true)` con la sesión activa, guarda el token
+  3. Usar el token en las llamadas a `playersPaginated`
+- **Confirmed 2026-04-30:** `playersPaginated` y `leaderboardPaginated` son Forbidden server-side sin token de usuario.
+
+---
+
 ## 1. Real-time draft assistant (advanced)
 - **Priority:** P0
 - **Difficulty:** High

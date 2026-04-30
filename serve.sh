@@ -61,7 +61,13 @@ wait_for_port() {
 check_env() {
   if [[ ! -f "$ROOT/.env" ]]; then
     warn ".env not found — copy .env.example and fill in DATABASE_URL and PRED_GG_* vars"
+    return
   fi
+  # Export all vars from .env so child processes inherit them
+  set -a
+  # shellcheck disable=SC1090
+  source "$ROOT/.env"
+  set +a
 }
 
 # ── Start ─────────────────────────────────────────────────────────────────────
@@ -172,6 +178,14 @@ status_service() {
 CMD="${1:-help}"
 ARG="${2:---dev}"
 MODE="${ARG#--}"   # strip leading "--"  →  dev | prod
+
+# Load .env for all commands that interact with services
+if [[ -f "$ROOT/.env" && "$CMD" != "help" ]]; then
+  set -a
+  # shellcheck disable=SC1090
+  source "$ROOT/.env"
+  set +a
+fi
 
 case "$CMD" in
 
