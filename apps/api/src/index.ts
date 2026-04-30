@@ -11,12 +11,14 @@ try {
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
+import cookieParser from 'cookie-parser';
 import pinoHttp from 'pino-http';
 import { playersRouter } from './routes/players.js';
 import { teamsRouter } from './routes/teams.js';
 import { reportsRouter } from './routes/reports.js';
 import { patchesRouter } from './routes/patches.js';
 import { adminRouter } from './routes/admin.js';
+import { authRouter } from './routes/auth.js';
 import { errorHandler } from './middleware/error-handler.js';
 import { disconnectDb } from './db.js';
 import { logger } from './logger.js';
@@ -24,9 +26,10 @@ import { logger } from './logger.js';
 const app = express();
 const PORT = parseInt(process.env.PORT ?? '3001', 10);
 
-app.use(helmet());
-app.use(cors());
+app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
+app.use(cors({ origin: process.env.FRONTEND_URL ?? 'http://localhost:5173', credentials: true }));
 app.use(express.json());
+app.use(cookieParser());
 
 // HTTP access log — skip health checks to avoid noise
 app.use(pinoHttp({
@@ -38,6 +41,7 @@ app.get('/health', (_req, res) => {
   res.json({ status: 'ok', timestamp: new Date() });
 });
 
+app.use('/auth', authRouter);
 app.use('/players', playersRouter);
 app.use('/teams', teamsRouter);
 app.use('/reports', reportsRouter);

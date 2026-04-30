@@ -84,10 +84,10 @@ start_api() {
   mkdir -p "$PIDS_DIR" "$LOGS_DIR"
 
   if [[ "$mode" == "prod" ]]; then
-    NODE_ENV=production npm run start --workspace=@predecessor/api \
+    NODE_ENV=production npx tsx "$ROOT/apps/api/src/index.ts" \
       >> "$API_LOG" 2>&1 &
   else
-    NODE_ENV=development npm run dev --workspace=@predecessor/api \
+    NODE_ENV=development npx tsx watch "$ROOT/apps/api/src/index.ts" \
       >> "$API_LOG" 2>&1 &
   fi
 

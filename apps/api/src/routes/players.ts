@@ -4,6 +4,7 @@ import { getPlayerProfile, comparePlayers, searchPlayers } from '../services/pla
 import { syncPlayerByName } from '../services/sync-service.js';
 import { AppError } from '../middleware/error-handler.js';
 import { db } from '../db.js';
+import { COOKIE_TOKEN } from './auth.js';
 
 export const playersRouter = Router();
 
@@ -36,7 +37,8 @@ playersRouter.post('/sync', async (req, res, next) => {
       name: z.string().min(1).max(100).trim(),
     }).parse(req.body);
 
-    const synced = await syncPlayerByName(db, name);
+    const userToken = (req as any).cookies?.[COOKIE_TOKEN] as string | undefined;
+    const synced = await syncPlayerByName(db, name, userToken);
 
     if (!synced) {
       throw new AppError(
