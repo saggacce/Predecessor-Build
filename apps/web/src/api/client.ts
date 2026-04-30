@@ -31,12 +31,16 @@ export interface PlayerSearchResult {
 }
 
 export interface HeroStat {
-  heroData: { slug: string; name: string };
+  heroData: { slug: string; name: string; imageUrl?: string | null };
+  matches?: number;
   wins: number;
   losses: number;
+  winRate?: number;
   kills: number;
   deaths: number;
   assists: number;
+  heroDamage?: number;
+  gold?: number;
 }
 
 export interface RoleStat {
@@ -44,6 +48,12 @@ export interface RoleStat {
   wins: number;
   losses: number;
   matches: number;
+  winRate?: number;
+  kills?: number;
+  deaths?: number;
+  assists?: number;
+  heroDamage?: number;
+  gold?: number;
 }
 
 export interface RecentMatch {
@@ -58,6 +68,8 @@ export interface RecentMatch {
   result: 'win' | 'loss' | 'unknown';
   date: string;
   duration: number;
+  heroName: string | null;
+  heroImageUrl: string | null;
 }
 
 export interface PlayerProfile {

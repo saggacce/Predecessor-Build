@@ -2,7 +2,7 @@
 # serve.sh — Manage Predecessor Build services (API + Frontend)
 #
 # Usage:
-#   ./serve.sh start              # start in dev mode (hot reload)
+#   ./serve.sh start              # start in dev mode
 #   ./serve.sh start --prod       # build and start in production mode
 #   ./serve.sh stop               # stop all services
 #   ./serve.sh restart            # stop + start (same mode as before)
@@ -87,7 +87,7 @@ start_api() {
     NODE_ENV=production npx tsx "$ROOT/apps/api/src/index.ts" \
       >> "$API_LOG" 2>&1 &
   else
-    NODE_ENV=development npx tsx watch "$ROOT/apps/api/src/index.ts" \
+    NODE_ENV=development npx tsx "$ROOT/apps/api/src/index.ts" \
       >> "$API_LOG" 2>&1 &
   fi
 
@@ -158,6 +158,29 @@ stop_service() {
   fi
 }
 
+stop_repo_orphans() {
+  local matches
+  matches="$(pgrep -af "$ROOT" 2>/dev/null || true)"
+  if [[ -z "$matches" ]]; then
+    return
+  fi
+
+  local pids=()
+  while IFS= read -r line; do
+    [[ -z "$line" ]] && continue
+    if [[ "$line" =~ (tsx|vite|npm|node) ]]; then
+      pids+=("${line%% *}")
+    fi
+  done <<< "$matches"
+
+  if (( ${#pids[@]} == 0 )); then
+    return
+  fi
+
+  warn "Stopping orphan repo processes: ${pids[*]}"
+  kill "${pids[@]}" 2>/dev/null || true
+}
+
 # ── Status ────────────────────────────────────────────────────────────────────
 
 status_service() {
@@ -208,6 +231,7 @@ case "$CMD" in
     echo "──────────────────────────────────────────"
     stop_service "API"      "$API_PID"
     stop_service "Frontend" "$WEB_PID"
+    stop_repo_orphans
     echo ""
     ;;
 
@@ -218,6 +242,7 @@ case "$CMD" in
     echo "──────────────────────────────────────────"
     stop_service "API"      "$API_PID"
     stop_service "Frontend" "$WEB_PID"
+    stop_repo_orphans
     sleep 1
     start_api  "$MODE"
     start_web  "$MODE"
@@ -255,7 +280,7 @@ case "$CMD" in
     echo "  logs    [api|web|build]  Tail log files (default: both)"
     echo ""
     echo -e "${BOLD}Modes:${NC}"
-    echo "  --dev    Hot-reload dev servers (tsx watch + vite)"
+    echo "  --dev    Dev servers (API requires restart; frontend uses Vite)"
     echo "  --prod   Build frontend, then run production servers"
     echo ""
     echo -e "${BOLD}Prerequisites:${NC}"

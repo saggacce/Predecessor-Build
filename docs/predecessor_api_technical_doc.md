@@ -153,11 +153,57 @@ Para producción se necesita registrar una aplicación (existe la query `applica
 | `playersPaginated` (con o sin X-Api-Key) | 200 | ❌ `Forbidden` | Requiere OAuth de usuario — no disponible server-side |
 | `leaderboardPaginated` (con o sin X-Api-Key) | 200 | ❌ `Forbidden` | Requiere OAuth de usuario — no disponible server-side |
 
-> **Limitación crítica confirmada (2026-04-30):** Todas las queries relacionadas con jugadores (`playersPaginated`, `leaderboardPaginated`, `player`, `players`) devuelven `Forbidden` desde un servidor sin sesión de usuario activa. Solo los datos de juego estáticos (heroes, items, perks, versions) son accesibles sin OAuth. La búsqueda y sincronización de jugadores requiere implementar el flujo OAuth2 completo con redirección al usuario.
+> **Limitación resuelta (2026-04-30):** Player search requería OAuth2, ahora implementado. Datos de jugadores y estadísticas accesibles con Bearer token de usuario.
+
+### 2.2 Flujo OAuth2 correcto (PKCE) — ✅ Implementado y funcionando
+
+#### Descubrimiento clave
+
+**No redirigir a `/api/oauth2/authorize` directamente.** El flujo debe empezar en la ruta SPA de pred.gg (`/oauth2/authorize`), que añade el token de sesión del usuario antes de llamar a la API interna.
+
+```
+Nuestro app → https://pred.gg/oauth2/authorize?client_id=...&code_challenge=...&code_challenge_method=S256
+  → El frontend de pred.gg añade el token de sesión del usuario
+  → pred.gg llama internamente a /api/oauth2/authorize?...&token=<sesión>
+  → pred.gg redirige a nuestro callback: http://localhost:3001/auth/callback?code=...&state=...
+  → POST https://pred.gg/api/oauth2/token  (grant_type=authorization_code + code_verifier)
+  → Devuelve access_token + refresh_token
+  → Bearer token guardado en cookie HTTP-only
+  → playersPaginated, heroStatistics, etc. funcionan con Authorization: Bearer <token>
+```
+
+#### Variables de entorno para el flujo OAuth2
+
+```
+PRED_GG_AUTHORIZE_URL=https://pred.gg/oauth2/authorize      ← SPA route, NOT /api/
+PRED_GG_TOKEN_URL=https://pred.gg/api/oauth2/token
+PRED_GG_TOKEN_URL_FALLBACK=https://pred.saibotu.de/api/oauth2/token
+PRED_GG_OAUTH_SCOPES=offline_access profile player:read:interval hero_leaderboard:read matchup_statistic:read
+PRED_GG_CLIENT_AUTH_METHOD=auto  ← prueba Basic, body, y público PKCE automáticamente
+PRED_GG_CALLBACK_URL=http://localhost:3001/auth/callback
+```
+
+#### Implementación en el backend (`apps/api/src/routes/auth.ts`)
+
+- **PKCE (RFC 7636):** `code_verifier` generado con 64 bytes random, `code_challenge` = SHA256 en base64url
+- **State:** 16 bytes random para protección CSRF
+- **Cookies:** `predgg_state` y `predgg_code_verifier` en HTTP-only cookies (5 min TTL) para el callback
+- **Token exchange:** multi-intento — prueba pred.gg y saibotu con variantes de autenticación (Basic, body, público) hasta obtener `access_token`
+- **Scopes obtenidos:** `offline_access profile player:read:interval hero_leaderboard:read matchup_statistic:read`
+
+#### Rutas OAuth2 disponibles
+
+| Ruta | Método | Descripción |
+|------|--------|-------------|
+| `/auth/predgg` | GET | Inicia login → redirige a pred.gg |
+| `/auth/callback` | GET | Recibe código → intercambia por token → cookie |
+| `/auth/me` | GET | `{ authenticated: bool }` |
+| `/auth/logout` | POST | Limpia cookies |
+| `/auth/refresh` | POST | Renueva access_token con refresh_token |
 
 #### Conclusión para el worker de datos
 
-Los datos públicos del juego (heroes, items, partidas, jugadores) son accesibles **sin autenticación**. Para producción, enviar el `clientSecret` como `X-Api-Key` para identificar la aplicación y evitar rate limiting anónimo.
+Los datos públicos del juego (heroes, items, perks, versions) son accesibles **sin autenticación**. Las búsquedas y datos de jugadores siguen requiriendo OAuth de usuario. Para producción, enviar el `clientSecret` como `X-Api-Key` solo identifica la aplicación y puede ayudar con rate limiting, pero no sustituye el Bearer token del usuario.
 
 ```python
 # Modo recomendado para el data sync worker

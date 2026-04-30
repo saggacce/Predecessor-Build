@@ -28,15 +28,16 @@ Tablero simple de tareas generales y subtareas.
 - [x] Endpoint de generación de reportes de scrim.
 
 ## Tarea 3 — Frontend de análisis competitivo (MVP)
+- [x] Vista de scouting de jugador rival. → `apps/web/src/pages/PlayerScouting.tsx` (máquina de estados 10 fases, ficha completa con stats, héroes, partidas recientes)
+- [x] Login con pred.gg (OAuth2 PKCE). → `apps/api/src/routes/auth.ts` + botón en sidebar
 - [ ] Vista de seguimiento de jugadores propios.
-- [ ] Vista de scouting de jugador rival.
 - [ ] Vista de análisis de equipo rival.
 - [ ] Vista/descarga de reporte pre-scrim.
 
 ## Tarea 4 — Calidad y operación
+- [x] Convenciones de logs/errores para sync y API. → Pino con redacción de credenciales, logging estructurado
 - [ ] Tests base de agregación de métricas.
 - [ ] Tests base de filtros por parche/ventana temporal.
-- [ ] Convenciones de logs/errores para sync y API.
 - [ ] Checklist de release interno por fase.
 
 ## Tarea 5 — Build/Stat module (fase posterior)

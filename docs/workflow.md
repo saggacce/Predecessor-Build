@@ -52,10 +52,11 @@ main (GitHub) → branch local → commits → push → PR → review → merge 
 7. **El usuario revisa el PR** en GitHub, aprueba o pide cambios.
 
 8. **Merge y limpieza** — el usuario mergea el PR en GitHub y elimina el branch remoto.
-   Claude elimina el branch local:
+   ⚠️ **Importante:** mergear en GitHub NO actualiza el WSL automáticamente. Son dos copias separadas.
+   Claude sincroniza y elimina el branch local:
    ```bash
    git checkout main
-   git pull origin main
+   git pull origin main   # ← SIEMPRE necesario después de un merge en GitHub
    git branch -d <nombre-del-branch>
    ```
 
