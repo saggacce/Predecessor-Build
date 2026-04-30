@@ -73,7 +73,6 @@ authRouter.get('/callback', async (req, res) => {
       redirect_uri: CALLBACK_URL,
       code,
     });
-    // Only add secret if the app is configured as confidential
     if (CLIENT_SECRET) body.set('client_secret', CLIENT_SECRET);
 
     logger.info({ code: code.slice(0, 8) + '...' }, 'exchanging authorization code');
@@ -88,6 +87,19 @@ authRouter.get('/callback', async (req, res) => {
       logger.warn('pred.gg token failed — trying saibotu fallback');
       tokenRes = await fetch(TOKEN_URL_FALLBACK, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: body.toString() });
       tokenData = await tokenRes.json() as TokenResponse;
+      logger.info({ endpoint: 'saibotu', status: tokenRes.status, error: tokenData.error }, 'token exchange attempt');
+    }
+
+    logger.info({ endpoint: 'pred.gg', status: tokenRes.status, error: tokenData.error }, 'token exchange attempt');
+
+    if (!tokenRes.ok || tokenData.error) {
+      logger.warn({ tokenData }, 'pred.gg token failed — trying saibotu endpoint');
+      tokenRes = await fetch(TOKEN_URL_SAIBOTU, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: body.toString(),
+      });
+      tokenData = await tokenRes.json() as typeof tokenData;
       logger.info({ endpoint: 'saibotu', status: tokenRes.status, error: tokenData.error }, 'token exchange attempt');
     }
 
