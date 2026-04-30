@@ -3,7 +3,7 @@ import { randomBytes } from 'crypto';
 import { logger } from '../logger.js';
 
 const TOKEN_URL = 'https://pred.gg/api/oauth2/token';
-const AUTHORIZE_URL = 'https://pred.gg/authorize';
+const AUTHORIZE_URL = 'https://pred.gg/api/oauth2/authorize';
 const CLIENT_ID = process.env.PRED_GG_CLIENT_ID ?? '';
 const CLIENT_SECRET = process.env.PRED_GG_CLIENT_SECRET; // public client — may not be needed
 const CALLBACK_URL = process.env.PRED_GG_CALLBACK_URL ?? 'http://localhost:3001/auth/callback';
