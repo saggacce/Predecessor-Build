@@ -1,11 +1,7 @@
 import type { PlayerRecord, VersionRecord } from '@predecessor/data-model';
 
 export const API_BASE = '/api';
-// Direct API URL — bypasses Vite proxy for OAuth redirects (proxy intercepts 302s)
-export const API_DIRECT = import.meta.env.VITE_API_URL ?? 'http://localhost:3001';
-
-// Direct URL to the API — bypasses the Vite proxy for OAuth redirects.
-// The proxy intercepts 302s internally so the browser never gets them.
+// Direct API URL — bypasses Vite proxy for OAuth redirects (proxy intercepts 302s internally)
 export const API_DIRECT = import.meta.env.VITE_API_URL ?? 'http://localhost:3001';
 
 export interface ApiError {
