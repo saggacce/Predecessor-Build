@@ -49,6 +49,8 @@ export default function PlayerScouting() {
     } catch (err) {
       if (err instanceof ApiErrorResponse && err.status === 404) {
         setPhase({ tag: 'not_found', query: name });
+      } else if (err instanceof ApiErrorResponse && err.error.code === 'PREDGG_AUTH_REQUIRED') {
+        setPhase({ tag: 'error', message: 'pred.gg requires user login to search players. Add players manually once OAuth is available.' });
       } else {
         const msg = err instanceof ApiErrorResponse ? err.error.message : 'Sync failed.';
         setPhase({ tag: 'error', message: msg });

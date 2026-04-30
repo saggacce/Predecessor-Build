@@ -1,3 +1,13 @@
+// Load .env from project root before anything else.
+// process.loadEnvFile is built into Node.js 20.12+ — no extra dependencies.
+import { fileURLToPath } from 'url';
+import { resolve, dirname } from 'path';
+try {
+  process.loadEnvFile(resolve(dirname(fileURLToPath(import.meta.url)), '../../../.env'));
+} catch {
+  // .env not present — rely on system environment variables
+}
+
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
