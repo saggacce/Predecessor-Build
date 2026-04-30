@@ -3,7 +3,7 @@ import { randomBytes } from 'crypto';
 import { logger } from '../logger.js';
 
 // pred.saibotu.de is the OAuth2 authorization server for apps registered there.
-// Token endpoint is on pred.gg as documented in the Discord by the pred.gg team.
+// Token endpoint is on pred.gg as documented by the pred.gg team in Discord.
 const AUTHORIZE_URL = 'https://pred.saibotu.de/api/oauth2/authorize';
 const TOKEN_URL = 'https://pred.gg/api/oauth2/token';
 const TOKEN_URL_FALLBACK = 'https://pred.saibotu.de/api/oauth2/token';
@@ -37,7 +37,7 @@ authRouter.get('/predgg', (_req, res) => {
   url.searchParams.set('scope', SCOPES);
   url.searchParams.set('state', state);
 
-  logger.info({ url: url.toString() }, 'initiating pred.gg OAuth2 login');
+  logger.info({ url: url.toString() }, 'initiating OAuth2 login via saibotu');
   res.redirect(url.toString());
 });
 
@@ -52,7 +52,6 @@ authRouter.get('/callback', async (req, res) => {
     return;
   }
 
-  // CSRF protection
   const expectedState = (req as any).cookies?.[COOKIE_STATE];
   if (!expectedState || state !== expectedState) {
     logger.warn({ state, expectedState }, 'OAuth state mismatch — possible CSRF');
@@ -77,29 +76,32 @@ authRouter.get('/callback', async (req, res) => {
 
     logger.info({ code: code.slice(0, 8) + '...' }, 'exchanging authorization code');
 
-    type TokenResponse = { access_token?: string; refresh_token?: string; expires_in?: number; token_type?: string; scope?: string; error?: string };
+    type TokenResponse = {
+      access_token?: string;
+      refresh_token?: string;
+      expires_in?: number;
+      token_type?: string;
+      scope?: string;
+      error?: string;
+    };
 
-    let tokenRes = await fetch(TOKEN_URL, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: body.toString() });
+    // Try pred.gg token endpoint first, fall back to saibotu
+    let tokenRes = await fetch(TOKEN_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: body.toString(),
+    });
     let tokenData = await tokenRes.json() as TokenResponse;
     logger.info({ endpoint: 'pred.gg', status: tokenRes.status, error: tokenData.error }, 'token exchange attempt');
 
     if (!tokenRes.ok || tokenData.error) {
       logger.warn('pred.gg token failed — trying saibotu fallback');
-      tokenRes = await fetch(TOKEN_URL_FALLBACK, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: body.toString() });
-      tokenData = await tokenRes.json() as TokenResponse;
-      logger.info({ endpoint: 'saibotu', status: tokenRes.status, error: tokenData.error }, 'token exchange attempt');
-    }
-
-    logger.info({ endpoint: 'pred.gg', status: tokenRes.status, error: tokenData.error }, 'token exchange attempt');
-
-    if (!tokenRes.ok || tokenData.error) {
-      logger.warn({ tokenData }, 'pred.gg token failed — trying saibotu endpoint');
-      tokenRes = await fetch(TOKEN_URL_SAIBOTU, {
+      tokenRes = await fetch(TOKEN_URL_FALLBACK, {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         body: body.toString(),
       });
-      tokenData = await tokenRes.json() as typeof tokenData;
+      tokenData = await tokenRes.json() as TokenResponse;
       logger.info({ endpoint: 'saibotu', status: tokenRes.status, error: tokenData.error }, 'token exchange attempt');
     }
 
@@ -109,21 +111,17 @@ authRouter.get('/callback', async (req, res) => {
       return;
     }
 
-    const { access_token, refresh_token, expires_in, scope: grantedScope } = tokenData as typeof tokenData & { scope?: string };
+    const { access_token, refresh_token, expires_in, scope: grantedScope } = tokenData;
     const tokenMaxAge = (expires_in ?? 3600) * 1000;
 
-    logger.info({ grantedScope, expires_in }, 'token exchange successful — granted scopes');
+    logger.info({ grantedScope, expires_in }, 'token exchange successful');
 
     res.cookie(COOKIE_TOKEN, access_token!, { ...COOKIE_OPTS, maxAge: tokenMaxAge });
-
     if (refresh_token) {
-      res.cookie(COOKIE_REFRESH, refresh_token, {
-        ...COOKIE_OPTS,
-        maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
-      });
+      res.cookie(COOKIE_REFRESH, refresh_token, { ...COOKIE_OPTS, maxAge: 30 * 24 * 60 * 60 * 1000 });
     }
 
-    logger.info('pred.gg OAuth2 login successful');
+    logger.info('OAuth2 login successful — redirecting to players');
     res.redirect(`${FRONTEND_URL}/players`);
   } catch (err) {
     logger.error({ err }, 'token exchange threw error');
@@ -169,12 +167,7 @@ authRouter.post('/refresh', async (req, res, next) => {
       body: body.toString(),
     });
 
-    const tokenData = (await tokenRes.json()) as {
-      access_token?: string;
-      refresh_token?: string;
-      expires_in?: number;
-      error?: string;
-    };
+    const tokenData = await tokenRes.json() as { access_token?: string; refresh_token?: string; expires_in?: number; error?: string };
 
     if (!tokenRes.ok || tokenData.error) {
       res.clearCookie(COOKIE_TOKEN);
@@ -183,10 +176,9 @@ authRouter.post('/refresh', async (req, res, next) => {
       return;
     }
 
-    const { access_token, refresh_token: newRefresh, expires_in } = tokenData;
-    res.cookie(COOKIE_TOKEN, access_token!, { ...COOKIE_OPTS, maxAge: (expires_in ?? 3600) * 1000 });
-    if (newRefresh) {
-      res.cookie(COOKIE_REFRESH, newRefresh, { ...COOKIE_OPTS, maxAge: 30 * 24 * 60 * 60 * 1000 });
+    res.cookie(COOKIE_TOKEN, tokenData.access_token!, { ...COOKIE_OPTS, maxAge: (tokenData.expires_in ?? 3600) * 1000 });
+    if (tokenData.refresh_token) {
+      res.cookie(COOKIE_REFRESH, tokenData.refresh_token, { ...COOKIE_OPTS, maxAge: 30 * 24 * 60 * 60 * 1000 });
     }
 
     logger.info('token refreshed successfully');
