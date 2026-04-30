@@ -1,7 +1,8 @@
 import { useState } from 'react';
-import { Search, User, RefreshCw, AlertCircle, CheckCircle, XCircle } from 'lucide-react';
+import { Search, User, RefreshCw, AlertCircle, CheckCircle, XCircle, LogIn } from 'lucide-react';
 import { toast } from 'sonner';
 import { apiClient, type PlayerSearchResult, type SyncedPlayer, ApiErrorResponse } from '../api/client';
+import { useAuth } from '../hooks/useAuth';
 
 type Phase =
   | { tag: 'idle' }
@@ -14,6 +15,7 @@ type Phase =
   | { tag: 'error'; message: string };
 
 export default function PlayerScouting() {
+  const { authenticated } = useAuth();
   const [query, setQuery] = useState('');
   const [phase, setPhase] = useState<Phase>({ tag: 'idle' });
 
@@ -50,7 +52,7 @@ export default function PlayerScouting() {
       if (err instanceof ApiErrorResponse && err.status === 404) {
         setPhase({ tag: 'not_found', query: name });
       } else if (err instanceof ApiErrorResponse && err.error.code === 'PREDGG_AUTH_REQUIRED') {
-        setPhase({ tag: 'error', message: 'pred.gg requires user login to search players. Add players manually once OAuth is available.' });
+        setPhase({ tag: 'error', message: 'pred.gg requires login to search players. Use the "Login with pred.gg" button in the sidebar.' });
       } else {
         const msg = err instanceof ApiErrorResponse ? err.error.message : 'Sync failed.';
         setPhase({ tag: 'error', message: msg });
@@ -141,16 +143,29 @@ export default function PlayerScouting() {
           <h3 style={{ color: 'var(--text-primary)', marginBottom: '0.5rem' }}>
             "{phase.query}" not in local database
           </h3>
-          <p style={{ color: 'var(--text-muted)', marginBottom: '1.5rem', fontSize: '0.875rem' }}>
-            Fetch the player directly from pred.gg and save them locally.
-          </p>
-          <button
-            onClick={() => void handleSyncFromPredgg(phase.query)}
-            className="btn-primary"
-            style={{ padding: '0.75rem 2rem' }}
-          >
-            Fetch from pred.gg
-          </button>
+          {authenticated ? (
+            <>
+              <p style={{ color: 'var(--text-muted)', marginBottom: '1.5rem', fontSize: '0.875rem' }}>
+                Fetch the player directly from pred.gg and save them locally.
+              </p>
+              <button
+                onClick={() => void handleSyncFromPredgg(phase.query)}
+                className="btn-primary"
+                style={{ padding: '0.75rem 2rem' }}
+              >
+                Fetch from pred.gg
+              </button>
+            </>
+          ) : (
+            <>
+              <p style={{ color: 'var(--text-muted)', marginBottom: '1.5rem', fontSize: '0.875rem' }}>
+                Login with pred.gg to search and sync players from the API.
+              </p>
+              <a href={apiClient.auth.loginUrl()} className="btn-primary" style={{ padding: '0.75rem 2rem', display: 'inline-flex', alignItems: 'center', gap: '0.5rem' }}>
+                <LogIn size={16} /> Login with pred.gg
+              </a>
+            </>
+          )}
         </div>
       )}
 

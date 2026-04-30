@@ -129,7 +129,7 @@ export interface AdminSyncStaleResult {
 async function fetchApi<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
   const url = `${API_BASE}${endpoint}`;
   const headers = { 'Content-Type': 'application/json', ...options.headers };
-  const response = await fetch(url, { ...options, headers });
+  const response = await fetch(url, { ...options, headers, credentials: 'include' });
 
   const data = await response.json().catch((err) => {
     console.warn(`[api] failed to parse JSON from ${url}:`, err);
@@ -189,6 +189,12 @@ export const apiClient = {
         method: 'POST',
         body: JSON.stringify({ ownTeamId, rivalTeamId }),
       }),
+  },
+
+  auth: {
+    me: () => fetchApi<{ authenticated: boolean }>('/auth/me'),
+    logout: () => fetchApi<{ ok: boolean }>('/auth/logout', { method: 'POST' }),
+    loginUrl: () => `${API_BASE}/auth/predgg`,
   },
 
   admin: {

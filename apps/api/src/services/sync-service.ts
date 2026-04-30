@@ -13,9 +13,12 @@ const STALE_THRESHOLD_MS = 60 * 60 * 1000; // 1 hour
 async function predggQuery<T>(
   query: string,
   variables?: Record<string, unknown>,
+  userToken?: string,
 ): Promise<T> {
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-  if (API_KEY) headers['X-Api-Key'] = API_KEY;
+  // User OAuth token takes priority — unlocks player data
+  if (userToken) headers['Authorization'] = `Bearer ${userToken}`;
+  else if (API_KEY) headers['X-Api-Key'] = API_KEY;
 
   const res = await fetch(GQL_URL, {
     method: 'POST',
@@ -71,6 +74,7 @@ const PLAYER_SEARCH_QUERY = `
 export async function syncPlayerByName(
   db: PrismaClient,
   name: string,
+  userToken?: string,
 ): Promise<SyncedPlayer | null> {
   const start = Date.now();
   logger.info({ name }, 'syncing player from pred.gg');
@@ -80,6 +84,7 @@ export async function syncPlayerByName(
     data = await predggQuery<{ playersPaginated: { results: PredggPlayerResult[] } }>(
       PLAYER_SEARCH_QUERY,
       { name },
+      userToken,
     );
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
