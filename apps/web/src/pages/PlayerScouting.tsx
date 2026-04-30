@@ -1,7 +1,25 @@
 import { useState } from 'react';
-import { Search, User, RefreshCw, AlertCircle, CheckCircle, XCircle, LogIn } from 'lucide-react';
+import {
+  Activity,
+  AlertCircle,
+  ArrowLeft,
+  Calendar,
+  CheckCircle,
+  Clock,
+  Coins,
+  LogIn,
+  MapPin,
+  RefreshCw,
+  Search,
+  Shield,
+  Swords,
+  Target,
+  Trophy,
+  User,
+  XCircle,
+} from 'lucide-react';
 import { toast } from 'sonner';
-import { apiClient, type PlayerSearchResult, type SyncedPlayer, ApiErrorResponse } from '../api/client';
+import { apiClient, type PlayerProfile, type PlayerSearchResult, type SyncedPlayer, ApiErrorResponse } from '../api/client';
 import { useAuth } from '../hooks/useAuth';
 
 type Phase =
@@ -14,10 +32,17 @@ type Phase =
   | { tag: 'not_found'; query: string }      // pred.gg also has nothing
   | { tag: 'error'; message: string };
 
+type ProfilePhase =
+  | { tag: 'idle' }
+  | { tag: 'loading'; playerId: string }
+  | { tag: 'loaded'; profile: PlayerProfile }
+  | { tag: 'error'; message: string };
+
 export default function PlayerScouting() {
   const { authenticated } = useAuth();
   const [query, setQuery] = useState('');
   const [phase, setPhase] = useState<Phase>({ tag: 'idle' });
+  const [profilePhase, setProfilePhase] = useState<ProfilePhase>({ tag: 'idle' });
 
   async function handleSearch(e: React.FormEvent) {
     e.preventDefault();
@@ -29,6 +54,7 @@ export default function PlayerScouting() {
       const data = await apiClient.players.search(q);
       const players = data.results ?? [];
       setPhase(players.length > 0 ? { tag: 'results', players } : { tag: 'empty', query: q });
+      setProfilePhase({ tag: 'idle' });
     } catch (err) {
       const msg = err instanceof ApiErrorResponse ? err.error.message : 'Search failed.';
       setPhase({ tag: 'error', message: msg });
@@ -48,6 +74,7 @@ export default function PlayerScouting() {
       await new Promise((r) => setTimeout(r, 300));
       setPhase({ tag: 'synced', player: res.player });
       toast.success(`"${res.player.displayName}" synced successfully`);
+      void handleSelectPlayer(res.player.id);
     } catch (err) {
       if (err instanceof ApiErrorResponse && err.status === 404) {
         setPhase({ tag: 'not_found', query: name });
@@ -63,7 +90,20 @@ export default function PlayerScouting() {
 
   function reset() {
     setPhase({ tag: 'idle' });
+    setProfilePhase({ tag: 'idle' });
     setQuery('');
+  }
+
+  async function handleSelectPlayer(playerId: string) {
+    setProfilePhase({ tag: 'loading', playerId });
+    try {
+      const profile = await apiClient.players.getProfile(playerId);
+      setProfilePhase({ tag: 'loaded', profile });
+    } catch (err) {
+      const msg = err instanceof ApiErrorResponse ? err.error.message : 'Could not load player profile.';
+      setProfilePhase({ tag: 'error', message: msg });
+      toast.error(msg);
+    }
   }
 
   return (
@@ -120,6 +160,28 @@ export default function PlayerScouting() {
         <StatusCard icon={<Spinner />} title="Searching local database..." color="var(--accent-blue)" />
       )}
 
+      {profilePhase.tag !== 'idle' && (
+        <div style={{ marginBottom: '2rem' }}>
+          {profilePhase.tag === 'loading' && (
+            <StatusCard icon={<Spinner />} title="Loading player profile..." color="var(--accent-blue)" />
+          )}
+          {profilePhase.tag === 'error' && (
+            <StatusCard
+              icon={<AlertCircle color="var(--accent-danger)" size={24} />}
+              title={profilePhase.message}
+              color="var(--accent-danger)"
+            />
+          )}
+          {profilePhase.tag === 'loaded' && (
+            <PlayerProfilePanel
+              profile={profilePhase.profile}
+              onClose={() => setProfilePhase({ tag: 'idle' })}
+              onRefresh={authenticated ? () => void handleSyncFromPredgg(profilePhase.profile.displayName) : undefined}
+            />
+          )}
+        </div>
+      )}
+
       {/* Phase: results */}
       {phase.tag === 'results' && (
         <>
@@ -128,7 +190,7 @@ export default function PlayerScouting() {
           </p>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: '1rem' }}>
             {phase.players.map((p) => (
-              <PlayerCard key={p.id} player={p} />
+              <PlayerCard key={p.id} player={p} onSelect={() => void handleSelectPlayer(p.id)} />
             ))}
           </div>
         </>
@@ -198,6 +260,7 @@ export default function PlayerScouting() {
               inferredRegion: phase.player.inferredRegion,
               lastSynced: phase.player.lastSynced.toString(),
             }}
+            onSelect={() => void handleSelectPlayer(phase.player.id)}
           />
           <p style={{ color: 'var(--text-muted)', fontSize: '0.75rem', marginTop: '1rem' }}>
             Player is now saved locally. Search for them anytime without fetching again.
@@ -232,9 +295,28 @@ export default function PlayerScouting() {
 
 // ── Sub-components ──────────────────────────────────────────────────────────
 
-function PlayerCard({ player }: { player: { id: string; displayName: string; isPrivate: boolean; inferredRegion: string | null; lastSynced: string } }) {
+function PlayerCard({
+  player,
+  onSelect,
+}: {
+  player: { id: string; displayName: string; isPrivate: boolean; inferredRegion: string | null; lastSynced: string };
+  onSelect?: () => void;
+}) {
   return (
-    <div className="glass-card" style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+    <button
+      type="button"
+      onClick={onSelect}
+      className="glass-card"
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: '1rem',
+        width: '100%',
+        textAlign: 'left',
+        color: 'var(--text-primary)',
+        cursor: onSelect ? 'pointer' : 'default',
+      }}
+    >
       <div style={{ background: 'var(--bg-hover)', padding: '0.75rem', borderRadius: '50%', flexShrink: 0 }}>
         <User size={24} color={player.isPrivate ? 'var(--text-muted)' : 'var(--accent-blue)'} />
       </div>
@@ -254,8 +336,498 @@ function PlayerCard({ player }: { player: { id: string; displayName: string; isP
           Last synced {new Date(player.lastSynced).toLocaleDateString()}
         </div>
       </div>
+    </button>
+  );
+}
+
+function PlayerProfilePanel({
+  profile,
+  onClose,
+  onRefresh,
+}: {
+  profile: PlayerProfile;
+  onClose: () => void;
+  onRefresh?: () => void;
+}) {
+  const primaryRole = getPrimaryRole(profile);
+  const topHero = profile.heroStats[0] ?? null;
+  const favoriteHero = getFavoriteHero(profile.generalStats);
+  const headerHero = topHero?.heroData ?? favoriteHero;
+  const heroBySlug = new Map(profile.heroStats.map((hero) => [hero.heroData.slug, hero]));
+  const matches = getGeneralNumber(profile.generalStats, 'matches');
+  const winRate = getGeneralNumber(profile.generalStats, 'winRate');
+  const kda = getGeneralNumber(profile.generalStats, 'kda');
+  const heroDamage = getGeneralNumber(profile.generalStats, 'heroDamage');
+
+  return (
+    <div className="glass-card" style={{ padding: 0, overflow: 'hidden' }}>
+      <div
+        style={{
+          padding: '1.5rem',
+          borderBottom: '1px solid var(--border-color)',
+          background:
+            'linear-gradient(135deg, rgba(0,245,212,0.12), rgba(157,78,221,0.10) 42%, rgba(239,35,60,0.07))',
+        }}
+      >
+        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '1.25rem' }}>
+          <button
+            type="button"
+            onClick={onClose}
+            className="btn-secondary"
+            style={{ padding: '0.5rem 0.75rem', display: 'inline-flex', alignItems: 'center', gap: '0.5rem', flex: '0 0 auto' }}
+          >
+            <ArrowLeft size={16} /> Back
+          </button>
+          {onRefresh && (
+            <button
+              type="button"
+              onClick={onRefresh}
+              className="btn-secondary"
+              style={{ padding: '0.5rem 0.75rem', display: 'inline-flex', alignItems: 'center', gap: '0.5rem', flex: '0 0 auto' }}
+            >
+              <RefreshCw size={16} /> Refresh
+            </button>
+          )}
+        </div>
+
+        <div style={{ display: 'flex', gap: '1.25rem', alignItems: 'center', flexWrap: 'wrap' }}>
+          <HeroAvatar
+            hero={headerHero}
+            size={88}
+            rounded={18}
+          />
+
+          <div style={{ minWidth: 0, flex: '1 1 18rem' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap', marginBottom: '0.5rem' }}>
+              <h2 style={{ margin: 0, color: 'var(--text-primary)', fontSize: '2rem', lineHeight: 1.05 }}>{profile.displayName}</h2>
+              {primaryRole && <RoleBadge role={primaryRole} size="large" />}
+            </div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.75rem', color: 'var(--text-secondary)', fontSize: '0.875rem' }}>
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}>
+                <MapPin size={14} /> {profile.inferredRegion ?? 'Region unknown'}
+              </span>
+              <span>Last synced {new Date(profile.lastSynced).toLocaleString()}</span>
+              <span>{profile.isPrivate ? 'Private profile' : 'Public profile'}</span>
+            </div>
+          </div>
+
+          <div style={{ textAlign: 'right', minWidth: '9rem', flex: '0 1 9rem' }}>
+            <div style={{ color: 'var(--text-muted)', fontSize: '0.75rem', textTransform: 'uppercase' }}>Rank</div>
+            <div style={{ color: 'var(--accent-success)', fontWeight: 800, fontSize: '1.1rem' }}>
+              {profile.rating?.rankLabel ?? 'Unranked'}
+            </div>
+            {profile.rating?.ratingPoints !== null && profile.rating?.ratingPoints !== undefined && (
+              <div style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>{profile.rating.ratingPoints} RP</div>
+            )}
+          </div>
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '0.75rem', marginTop: '1.25rem' }}>
+          <SummaryMetric label="Matches" value={matches !== null ? formatCompactNumber(matches) : '-'} />
+          <SummaryMetric label="Win Rate" value={winRate !== null ? `${winRate.toFixed(1)}%` : '-'} />
+          <SummaryMetric label="KDA" value={kda !== null ? kda.toFixed(2) : '-'} />
+          <SummaryMetric label="Hero Damage" value={heroDamage !== null ? formatCompactNumber(heroDamage) : '-'} />
+        </div>
+      </div>
+
+      <div style={{ padding: '1.5rem' }}>
+        <section style={{ marginBottom: '1.5rem' }}>
+          <SectionTitle icon={<Swords size={18} />} title="Comfort Heroes" />
+          {profile.heroStats.length > 0 ? (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '0.75rem' }}>
+              {profile.heroStats.slice(0, 6).map((hero, index) => (
+                <HeroStatCard key={`${hero.heroData.slug}-${index}`} hero={hero} />
+              ))}
+            </div>
+          ) : (
+            <EmptyStatsText />
+          )}
+        </section>
+
+        <section style={{ marginBottom: '1.5rem' }}>
+          <SectionTitle icon={<Shield size={18} />} title="Role Performance" />
+          {profile.roleStats.length > 0 ? (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '0.75rem' }}>
+              {profile.roleStats.map((role) => (
+                <RoleStatCard key={role.role} role={role} />
+              ))}
+            </div>
+          ) : (
+            <EmptyStatsText />
+          )}
+        </section>
+
+        <section>
+          <SectionTitle icon={<Calendar size={18} />} title="Recent Matches" />
+          {profile.recentMatches.length > 0 ? (
+            <div style={{ border: '1px solid var(--border-color)', borderRadius: 'var(--radius-sm)', overflowX: 'auto', overflowY: 'hidden' }}>
+              {profile.recentMatches.slice(0, 12).map((match) => {
+                const hero = heroBySlug.get(match.heroSlug);
+                return (
+                  <MatchRow
+                    key={match.matchId}
+                    match={match}
+                    hero={{
+                      slug: match.heroSlug,
+                      name: match.heroName ?? hero?.heroData.name ?? match.heroSlug,
+                      imageUrl: match.heroImageUrl ?? hero?.heroData.imageUrl ?? null,
+                    }}
+                  />
+                );
+              })}
+            </div>
+          ) : (
+            <EmptyStatsText />
+          )}
+        </section>
+      </div>
     </div>
   );
+}
+
+function SummaryMetric({ label, value }: { label: string; value: string }) {
+  return (
+    <div style={{ border: '1px solid var(--border-color)', borderRadius: 'var(--radius-sm)', padding: '0.8rem', background: 'rgba(10,10,12,0.42)' }}>
+      <div style={{ color: 'var(--text-muted)', fontSize: '0.72rem', marginBottom: '0.35rem', textTransform: 'uppercase' }}>{label}</div>
+      <div style={{ color: 'var(--text-primary)', fontWeight: 800, fontSize: '1.15rem' }}>{value}</div>
+    </div>
+  );
+}
+
+function HeroStatCard({ hero }: { hero: PlayerProfile['heroStats'][number] }) {
+  const matches = hero.matches ?? hero.wins + hero.losses;
+  const winrate = typeof hero.winRate === 'number' ? hero.winRate : matches > 0 ? Math.round((hero.wins / matches) * 1000) / 10 : 0;
+  const deaths = Math.max(hero.deaths, 1);
+  const kda = (hero.kills + hero.assists) / deaths;
+
+  return (
+    <div style={{ border: '1px solid var(--border-color)', borderRadius: 'var(--radius-sm)', padding: '0.85rem', background: 'rgba(255,255,255,0.03)' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.75rem' }}>
+        <HeroAvatar hero={hero.heroData} size={54} rounded={12} />
+        <div style={{ minWidth: 0 }}>
+          <div style={{ fontWeight: 800, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{hero.heroData.name}</div>
+          <div style={{ color: 'var(--text-muted)', fontSize: '0.78rem' }}>{matches} matches</div>
+        </div>
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.5rem', fontSize: '0.8rem' }}>
+        <MiniMetric label="WR" value={`${winrate.toFixed(1)}%`} />
+        <MiniMetric label="W/L" value={`${hero.wins}/${hero.losses}`} />
+        <MiniMetric label="KDA" value={kda.toFixed(2)} />
+      </div>
+    </div>
+  );
+}
+
+function RoleStatCard({ role }: { role: PlayerProfile['roleStats'][number] }) {
+  const winrate = typeof role.winRate === 'number'
+    ? role.winRate
+    : role.matches > 0
+      ? Math.round((role.wins / role.matches) * 1000) / 10
+      : 0;
+  const kda = typeof role.kills === 'number' && typeof role.assists === 'number' && typeof role.deaths === 'number'
+    ? (role.kills + role.assists) / Math.max(role.deaths, 1)
+    : null;
+
+  return (
+    <div style={{ border: '1px solid var(--border-color)', borderRadius: 'var(--radius-sm)', padding: '0.85rem', background: 'rgba(255,255,255,0.03)' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.75rem', marginBottom: '0.75rem' }}>
+        <RoleBadge role={role.role} />
+        <span style={{ color: 'var(--text-muted)', fontSize: '0.78rem' }}>{role.matches} matches</span>
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.5rem', fontSize: '0.8rem' }}>
+        <MiniMetric label="WR" value={`${winrate.toFixed(1)}%`} />
+        <MiniMetric label="W/L" value={`${role.wins}/${role.losses}`} />
+        <MiniMetric label="KDA" value={kda !== null ? kda.toFixed(2) : '-'} />
+      </div>
+    </div>
+  );
+}
+
+function MatchRow({
+  match,
+  hero,
+}: {
+  match: PlayerProfile['recentMatches'][number];
+  hero: { slug: string; name: string; imageUrl?: string | null };
+}) {
+  const minutes = match.duration > 0 ? match.duration / 60 : 0;
+  const gpm = minutes > 0 && match.gold !== null ? Math.round(match.gold / minutes) : null;
+  const dpm = minutes > 0 && match.heroDamage !== null ? Math.round(match.heroDamage / minutes) : null;
+
+  return (
+    <div
+      style={{
+        display: 'grid',
+        gridTemplateColumns: 'minmax(190px, 1.4fr) minmax(94px, 0.7fr) repeat(5, minmax(74px, 0.55fr))',
+        gap: '0.75rem',
+        alignItems: 'center',
+        minWidth: '760px',
+        padding: '0.8rem 0.9rem',
+        borderBottom: '1px solid var(--border-color)',
+        background: 'rgba(255,255,255,0.02)',
+        fontSize: '0.84rem',
+      }}
+    >
+      <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', minWidth: 0 }}>
+        <HeroAvatar hero={hero} size={44} rounded={10} />
+        <div style={{ minWidth: 0 }}>
+          <div style={{ fontWeight: 800, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{hero.name}</div>
+          <div style={{ color: 'var(--text-muted)', fontSize: '0.74rem' }}>{new Date(match.date).toLocaleDateString()}</div>
+        </div>
+      </div>
+
+      <div>{match.role ? <RoleBadge role={match.role} compact /> : <span style={{ color: 'var(--text-muted)' }}>No role</span>}</div>
+      <ResultPill result={match.result} />
+      <MatchMetric label="KDA" value={`${match.kills}/${match.deaths}/${match.assists}`} />
+      <MatchMetric icon={<Coins size={13} />} label="GPM" value={gpm !== null ? String(gpm) : '-'} />
+      <MatchMetric icon={<Target size={13} />} label="DPM" value={dpm !== null ? String(dpm) : '-'} />
+      <MatchMetric icon={<Clock size={13} />} label="Time" value={formatDuration(match.duration)} />
+    </div>
+  );
+}
+
+function MiniMetric({ label, value }: { label: string; value: string }) {
+  return (
+    <div style={{ border: '1px solid rgba(255,255,255,0.06)', borderRadius: 'var(--radius-sm)', padding: '0.45rem', background: 'rgba(10,10,12,0.34)' }}>
+      <div style={{ color: 'var(--text-muted)', fontSize: '0.68rem', marginBottom: '0.2rem' }}>{label}</div>
+      <div style={{ color: 'var(--text-primary)', fontWeight: 800 }}>{value}</div>
+    </div>
+  );
+}
+
+function MatchMetric({ icon, label, value }: { icon?: React.ReactNode; label: string; value: string }) {
+  return (
+    <div style={{ minWidth: 0 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', color: 'var(--text-muted)', fontSize: '0.68rem', marginBottom: '0.15rem' }}>
+        {icon}
+        {label}
+      </div>
+      <div style={{ color: 'var(--text-primary)', fontWeight: 750, overflow: 'hidden', textOverflow: 'ellipsis' }}>{value}</div>
+    </div>
+  );
+}
+
+function ResultPill({ result }: { result: 'win' | 'loss' | 'unknown' }) {
+  return (
+    <span
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        width: '4.6rem',
+        padding: '0.32rem 0.45rem',
+        borderRadius: '999px',
+        border: `1px solid ${resultColor(result)}`,
+        color: resultColor(result),
+        background: resultBackground(result),
+        fontSize: '0.72rem',
+        fontWeight: 850,
+        textTransform: 'uppercase',
+      }}
+    >
+      {result}
+    </span>
+  );
+}
+
+function RoleBadge({ role, compact = false, size = 'normal' }: { role: string; compact?: boolean; size?: 'normal' | 'large' }) {
+  const meta = getRoleMeta(role);
+  const iconSize = size === 'large' ? 16 : 14;
+
+  return (
+    <span
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: compact ? '0.25rem' : '0.4rem',
+        width: compact ? 'fit-content' : undefined,
+        padding: size === 'large' ? '0.42rem 0.65rem' : '0.3rem 0.5rem',
+        borderRadius: '999px',
+        border: `1px solid ${meta.color}`,
+        color: meta.color,
+        background: `${meta.color}1f`,
+        fontSize: size === 'large' ? '0.82rem' : '0.74rem',
+        fontWeight: 800,
+        whiteSpace: 'nowrap',
+      }}
+    >
+      {roleIcon(meta.key, iconSize)}
+      {!compact && meta.label}
+    </span>
+  );
+}
+
+function HeroAvatar({
+  hero,
+  size,
+  rounded,
+}: {
+  hero: { slug?: string | null; name?: string | null; imageUrl?: string | null } | null;
+  size: number;
+  rounded: number;
+}) {
+  const [failed, setFailed] = useState(false);
+  const src = !failed ? normalizeHeroAsset(hero?.imageUrl) : null;
+  const label = hero?.name ?? hero?.slug ?? 'Hero';
+  const initials = label
+    .split(/[\s_-]+/)
+    .filter(Boolean)
+    .map((part) => part[0])
+    .join('')
+    .slice(0, 2)
+    .toUpperCase();
+
+  return (
+    <div
+      style={{
+        width: size,
+        height: size,
+        borderRadius: rounded,
+        overflow: 'hidden',
+        flexShrink: 0,
+        border: '1px solid rgba(255,255,255,0.12)',
+        background: heroGradient(hero?.slug ?? label),
+        display: 'grid',
+        placeItems: 'center',
+        color: 'white',
+        fontWeight: 900,
+        fontSize: Math.max(12, size * 0.28),
+      }}
+      title={label}
+    >
+      {src ? (
+        <img
+          src={src}
+          alt={label}
+          onError={() => setFailed(true)}
+          style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+        />
+      ) : (
+        initials || 'H'
+      )}
+    </div>
+  );
+}
+
+function SectionTitle({ icon, title }: { icon: React.ReactNode; title: string }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.75rem', color: 'var(--text-secondary)', fontWeight: 700 }}>
+      {icon}
+      <h3 style={{ margin: 0, fontSize: '0.95rem' }}>{title}</h3>
+    </div>
+  );
+}
+
+function EmptyStatsText() {
+  return (
+    <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem', margin: 0 }}>
+      No detailed stats have been captured for this player yet.
+    </p>
+  );
+}
+
+function getGeneralNumber(stats: Record<string, unknown>, key: string): number | null {
+  const value = stats[key];
+  return typeof value === 'number' && Number.isFinite(value) ? value : null;
+}
+
+function getFavoriteHero(stats: Record<string, unknown>): { slug?: string | null; name?: string | null; imageUrl?: string | null } | null {
+  const favHero = stats.favHero;
+  if (favHero === null || typeof favHero !== 'object' || Array.isArray(favHero)) return null;
+
+  const hero = favHero as Record<string, unknown>;
+  const slug = typeof hero.slug === 'string' ? hero.slug : null;
+  const name = typeof hero.name === 'string' ? hero.name : null;
+  const imageUrl = typeof hero.imageUrl === 'string' ? hero.imageUrl : null;
+
+  return slug || name || imageUrl ? { slug, name, imageUrl } : null;
+}
+
+function getPrimaryRole(profile: PlayerProfile): string | null {
+  const role = [...profile.roleStats].sort((a, b) => b.matches - a.matches)[0]?.role;
+  if (role) return role;
+
+  const favRole = profile.generalStats.favRole;
+  return typeof favRole === 'string' && favRole ? favRole : null;
+}
+
+function normalizeRole(role: string): string {
+  return role.replace(/[\s-]/g, '_').toUpperCase();
+}
+
+function getRoleMeta(role: string): { key: string; label: string; color: string } {
+  const key = normalizeRole(role);
+  const map: Record<string, { label: string; color: string }> = {
+    CARRY: { label: 'Carry', color: '#f59e0b' },
+    SUPPORT: { label: 'Support', color: '#06d6a0' },
+    JUNGLE: { label: 'Jungle', color: '#84cc16' },
+    OFFLANE: { label: 'Offlane', color: '#ef233c' },
+    MIDLANE: { label: 'Mid Lane', color: '#9d4edd' },
+    MID_LANE: { label: 'Mid Lane', color: '#9d4edd' },
+  };
+
+  return { key, ...(map[key] ?? { label: formatRoleLabel(role), color: '#38bdf8' }) };
+}
+
+function roleIcon(roleKey: string, size: number): React.ReactNode {
+  if (roleKey === 'CARRY') return <Target size={size} />;
+  if (roleKey === 'SUPPORT') return <Shield size={size} />;
+  if (roleKey === 'JUNGLE') return <Activity size={size} />;
+  if (roleKey === 'OFFLANE') return <Swords size={size} />;
+  if (roleKey === 'MIDLANE' || roleKey === 'MID_LANE') return <Trophy size={size} />;
+  return <User size={size} />;
+}
+
+function formatRoleLabel(role: string): string {
+  return role
+    .toLowerCase()
+    .replace(/[_-]/g, ' ')
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function normalizeHeroAsset(url?: string | null): string | null {
+  if (!url) return null;
+  if (url.startsWith('http://') || url.startsWith('https://')) return url;
+  if (url.startsWith('/')) return `https://pred.gg${url}`;
+  return url;
+}
+
+function heroGradient(seed: string): string {
+  const palette = [
+    ['#0ea5e9', '#7c3aed'],
+    ['#ef4444', '#f59e0b'],
+    ['#10b981', '#2563eb'],
+    ['#a855f7', '#ec4899'],
+    ['#14b8a6', '#84cc16'],
+  ];
+  const index = Math.abs(seed.split('').reduce((sum, char) => sum + char.charCodeAt(0), 0)) % palette.length;
+  const [a, b] = palette[index];
+  return `linear-gradient(135deg, ${a}, ${b})`;
+}
+
+function formatCompactNumber(value: number): string {
+  if (Math.abs(value) >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M`;
+  if (Math.abs(value) >= 1_000) return `${(value / 1_000).toFixed(1)}K`;
+  return Number.isInteger(value) ? value.toLocaleString() : value.toFixed(2);
+}
+
+function formatDuration(seconds: number): string {
+  if (!Number.isFinite(seconds) || seconds <= 0) return '-';
+  const minutes = Math.floor(seconds / 60);
+  const rest = Math.round(seconds % 60);
+  return `${minutes}:${String(rest).padStart(2, '0')}`;
+}
+
+function resultColor(result: 'win' | 'loss' | 'unknown'): string {
+  if (result === 'win') return 'var(--accent-success)';
+  if (result === 'loss') return 'var(--accent-danger)';
+  return 'var(--text-muted)';
+}
+
+function resultBackground(result: 'win' | 'loss' | 'unknown'): string {
+  if (result === 'win') return 'rgba(6,214,160,0.12)';
+  if (result === 'loss') return 'rgba(239,35,60,0.12)';
+  return 'rgba(255,255,255,0.03)';
 }
 
 function StatusCard({ icon, title, color }: { icon: React.ReactNode; title: string; color: string }) {

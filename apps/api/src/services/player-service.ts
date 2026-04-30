@@ -35,7 +35,27 @@ export interface PlayerProfile {
     result: 'win' | 'loss' | 'unknown';
     date: Date;
     duration: number;
+    heroName: string | null;
+    heroImageUrl: string | null;
   }>;
+}
+
+function buildHeroMetaMap(heroStats: unknown): Map<string, { name: string | null; imageUrl: string | null }> {
+  const meta = new Map<string, { name: string | null; imageUrl: string | null }>();
+  if (!Array.isArray(heroStats)) return meta;
+
+  for (const raw of heroStats) {
+    if (!isRecord(raw) || !isRecord(raw.heroData)) continue;
+    const slug = typeof raw.heroData.slug === 'string' ? raw.heroData.slug : null;
+    if (!slug) continue;
+
+    meta.set(slug, {
+      name: typeof raw.heroData.name === 'string' ? raw.heroData.name : null,
+      imageUrl: typeof raw.heroData.imageUrl === 'string' ? raw.heroData.imageUrl : null,
+    });
+  }
+
+  return meta;
 }
 
 export async function getPlayerProfile(playerId: string): Promise<PlayerProfile> {
@@ -61,10 +81,12 @@ export async function getPlayerProfile(playerId: string): Promise<PlayerProfile>
   }
 
   const latestSnapshot = player.snapshots[0] ?? null;
+  const heroMeta = buildHeroMetaMap(latestSnapshot?.heroStats);
 
   const recentMatches = player.matchPlayers.map((mp) => {
     const isWin = mp.match.winningTeam !== null && mp.team === mp.match.winningTeam;
     const isLoss = mp.match.winningTeam !== null && mp.team !== mp.match.winningTeam;
+    const hero = heroMeta.get(mp.heroSlug);
 
     return {
       matchId: mp.match.id,
@@ -78,6 +100,8 @@ export async function getPlayerProfile(playerId: string): Promise<PlayerProfile>
       result: (isWin ? 'win' : isLoss ? 'loss' : 'unknown') as 'win' | 'loss' | 'unknown',
       date: mp.match.startTime,
       duration: mp.match.duration,
+      heroName: hero?.name ?? null,
+      heroImageUrl: hero?.imageUrl ?? null,
     };
   });
 
