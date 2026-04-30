@@ -2,21 +2,19 @@ import { Router } from 'express';
 import { randomBytes } from 'crypto';
 import { logger } from '../logger.js';
 
+// pred.saibotu.de is the OAuth2 authorization server for apps registered there.
+// Token endpoint is on pred.gg as documented in the Discord by the pred.gg team.
+const AUTHORIZE_URL = 'https://pred.saibotu.de/api/oauth2/authorize';
 const TOKEN_URL = 'https://pred.gg/api/oauth2/token';
-const AUTHORIZE_URL = 'https://pred.gg/api/oauth2/authorize';
+const TOKEN_URL_FALLBACK = 'https://pred.saibotu.de/api/oauth2/token';
+
 const CLIENT_ID = process.env.PRED_GG_CLIENT_ID ?? '';
-const CLIENT_SECRET = process.env.PRED_GG_CLIENT_SECRET; // public client — may not be needed
+const CLIENT_SECRET = process.env.PRED_GG_CLIENT_SECRET;
 const CALLBACK_URL = process.env.PRED_GG_CALLBACK_URL ?? 'http://localhost:3001/auth/callback';
 const FRONTEND_URL = process.env.FRONTEND_URL ?? 'http://localhost:5173';
 
-// Scopes needed for scouting
-const SCOPES = [
-  'offline_access',
-  'profile',
-  'player:read:interval',
-  'hero_leaderboard:read',
-  'matchup_statistic:read',
-].join(' ');
+// Only request scopes configured in the saibotu app
+const SCOPES = ['offline_access', 'profile'].join(' ');
 
 export const COOKIE_TOKEN = 'predgg_token';
 export const COOKIE_REFRESH = 'predgg_refresh';
@@ -80,22 +78,21 @@ authRouter.get('/callback', async (req, res) => {
 
     logger.info({ code: code.slice(0, 8) + '...' }, 'exchanging authorization code');
 
-    const tokenRes = await fetch(TOKEN_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: body.toString(),
-    });
+    type TokenResponse = { access_token?: string; refresh_token?: string; expires_in?: number; token_type?: string; scope?: string; error?: string };
 
-    const tokenData = (await tokenRes.json()) as {
-      access_token?: string;
-      refresh_token?: string;
-      expires_in?: number;
-      token_type?: string;
-      error?: string;
-    };
+    let tokenRes = await fetch(TOKEN_URL, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: body.toString() });
+    let tokenData = await tokenRes.json() as TokenResponse;
+    logger.info({ endpoint: 'pred.gg', status: tokenRes.status, error: tokenData.error }, 'token exchange attempt');
 
     if (!tokenRes.ok || tokenData.error) {
-      logger.error({ status: tokenRes.status, tokenData }, 'token exchange failed');
+      logger.warn('pred.gg token failed — trying saibotu fallback');
+      tokenRes = await fetch(TOKEN_URL_FALLBACK, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: body.toString() });
+      tokenData = await tokenRes.json() as TokenResponse;
+      logger.info({ endpoint: 'saibotu', status: tokenRes.status, error: tokenData.error }, 'token exchange attempt');
+    }
+
+    if (!tokenRes.ok || tokenData.error) {
+      logger.error({ tokenData }, 'token exchange failed on both endpoints');
       res.redirect(`${FRONTEND_URL}/?auth_error=${encodeURIComponent(tokenData.error ?? 'token_failed')}`);
       return;
     }

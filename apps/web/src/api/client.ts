@@ -1,6 +1,8 @@
 import type { PlayerRecord, VersionRecord } from '@predecessor/data-model';
 
 export const API_BASE = '/api';
+// Direct API URL — bypasses Vite proxy for OAuth redirects (proxy intercepts 302s)
+export const API_DIRECT = import.meta.env.VITE_API_URL ?? 'http://localhost:3001';
 
 export interface ApiError {
   message: string;
@@ -194,7 +196,7 @@ export const apiClient = {
   auth: {
     me: () => fetchApi<{ authenticated: boolean }>('/auth/me'),
     logout: () => fetchApi<{ ok: boolean }>('/auth/logout', { method: 'POST' }),
-    loginUrl: () => `${API_BASE}/auth/predgg`,
+    loginUrl: () => `${API_DIRECT}/auth/predgg`,
   },
 
   admin: {
