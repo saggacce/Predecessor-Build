@@ -68,6 +68,7 @@ export interface RecentMatch {
   result: 'win' | 'loss' | 'unknown';
   date: string;
   duration: number;
+  gameMode: string;
   heroName: string | null;
   heroImageUrl: string | null;
 }

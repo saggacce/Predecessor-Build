@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import React, { useState } from 'react';
 import {
   Activity,
   AlertCircle,
@@ -481,27 +481,7 @@ function PlayerProfilePanel({
         </section>
 
         <section>
-          <SectionTitle icon={<Calendar size={18} />} title="Recent Matches" />
-          {profile.recentMatches.length > 0 ? (
-            <div style={{ border: '1px solid var(--border-color)', borderRadius: 'var(--radius-sm)', overflowX: 'auto', overflowY: 'hidden' }}>
-              {profile.recentMatches.slice(0, 12).map((match) => {
-                const hero = heroBySlug.get(match.heroSlug);
-                return (
-                  <MatchRow
-                    key={match.matchId}
-                    match={match}
-                    hero={{
-                      slug: match.heroSlug,
-                      name: match.heroName ?? hero?.heroData.name ?? match.heroSlug,
-                      imageUrl: match.heroImageUrl ?? hero?.heroData.imageUrl ?? null,
-                    }}
-                  />
-                );
-              })}
-            </div>
-          ) : (
-            <EmptyStatsText />
-          )}
+          <MatchesSection matches={profile.recentMatches} heroBySlug={heroBySlug} />
         </section>
       </div>
     </div>
@@ -566,6 +546,81 @@ function RoleStatCard({ role }: { role: PlayerProfile['roleStats'][number] }) {
   );
 }
 
+// ── Game mode helpers ────────────────────────────────────────────────────────
+
+const GAME_MODE_LABELS: Record<string, string> = {
+  RANKED: 'Ranked', STANDARD: 'Normal', ARAM: 'ARAM',
+  CUSTOM: 'Custom', PRACTICE: 'Practice', SOLO: 'Solo',
+  ARENA: 'Arena', DAYBREAK: 'Daybreak', RUSH: 'Rush',
+  TEAM_VS_AI: 'vs AI', LEGACY: 'Legacy', NONE: 'Unknown',
+};
+
+function gameModeLabel(mode: string): string {
+  return GAME_MODE_LABELS[mode] ?? mode;
+}
+
+function MatchesSection({
+  matches,
+  heroBySlug,
+}: {
+  matches: PlayerProfile['recentMatches'];
+  heroBySlug: Map<string, { heroData: { name: string; imageUrl?: string | null } }>;
+}) {
+  const [activeMode, setActiveMode] = React.useState<string>('ALL');
+
+  const modes = ['ALL', ...Array.from(new Set(matches.map((m) => m.gameMode))).sort()];
+  const filtered = activeMode === 'ALL' ? matches : matches.filter((m) => m.gameMode === activeMode);
+
+  return (
+    <>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--text-secondary)', fontSize: '0.875rem', fontWeight: 600 }}>
+          <Calendar size={18} /> Recent Matches
+          <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>({filtered.length}{activeMode !== 'ALL' ? ` ${gameModeLabel(activeMode)}` : ''})</span>
+        </div>
+        <div style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap' }}>
+          {modes.map((mode) => (
+            <button
+              key={mode}
+              onClick={() => setActiveMode(mode)}
+              style={{
+                fontSize: '0.72rem', fontWeight: 600, padding: '0.2rem 0.55rem',
+                borderRadius: '999px', cursor: 'pointer',
+                border: activeMode === mode ? '1px solid var(--accent-purple)' : '1px solid var(--border-color)',
+                background: activeMode === mode ? 'rgba(157,78,221,0.18)' : 'var(--bg-dark)',
+                color: activeMode === mode ? 'var(--accent-purple)' : 'var(--text-muted)',
+                transition: 'all 0.15s',
+              }}
+            >
+              {mode === 'ALL' ? 'All' : gameModeLabel(mode)}
+            </button>
+          ))}
+        </div>
+      </div>
+      {filtered.length > 0 ? (
+        <div style={{ border: '1px solid var(--border-color)', borderRadius: 'var(--radius-sm)', overflowX: 'auto', overflowY: 'hidden' }}>
+          {filtered.map((match) => {
+            const hero = heroBySlug.get(match.heroSlug);
+            return (
+              <MatchRow
+                key={match.matchId}
+                match={match}
+                hero={{
+                  slug: match.heroSlug,
+                  name: match.heroName ?? hero?.heroData.name ?? match.heroSlug,
+                  imageUrl: match.heroImageUrl ?? hero?.heroData.imageUrl ?? null,
+                }}
+              />
+            );
+          })}
+        </div>
+      ) : (
+        <EmptyStatsText />
+      )}
+    </>
+  );
+}
+
 function MatchRow({
   match,
   hero,
@@ -595,7 +650,12 @@ function MatchRow({
         <HeroAvatar hero={hero} size={44} rounded={10} />
         <div style={{ minWidth: 0 }}>
           <div style={{ fontWeight: 800, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{hero.name}</div>
-          <div style={{ color: 'var(--text-muted)', fontSize: '0.74rem' }}>{new Date(match.date).toLocaleDateString()}</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.74rem', color: 'var(--text-muted)' }}>
+            <span>{new Date(match.date).toLocaleDateString()}</span>
+            <span style={{ background: 'rgba(255,255,255,0.07)', borderRadius: '4px', padding: '0.05rem 0.35rem', fontSize: '0.68rem', fontWeight: 600 }}>
+              {gameModeLabel(match.gameMode)}
+            </span>
+          </div>
         </div>
       </div>
 
