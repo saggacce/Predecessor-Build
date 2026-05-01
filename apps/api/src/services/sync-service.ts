@@ -266,7 +266,7 @@ const PLAYER_DETAIL_QUERY = `
           totalGold
         }
       }
-      matchesPaginated(limit: $matchLimit, filter: { gameModes: [RANKED, STANDARD] }) {
+      matchesPaginated(limit: $matchLimit) {
         results {
           id
           role
@@ -458,7 +458,7 @@ function inferRegion(matches: PredggMatchStat[]): string | null {
 async function fetchPlayerDetail(playerId: string, userToken?: string): Promise<PredggPlayerDetail | null> {
   const data = await predggQuery<{ player: PredggPlayerDetail | null }>(
     PLAYER_DETAIL_QUERY,
-    { playerId, matchLimit: 20 },
+    { playerId, matchLimit: 50 },
     userToken,
   );
   return data?.player ?? null;

@@ -106,6 +106,29 @@ export default function PlayerScouting() {
     }
   }
 
+  // Refresh the currently-viewed player profile in place — does NOT collapse the
+  // profile panel. Syncs from pred.gg first then reloads from the local DB.
+  async function handleRefreshProfile(displayName: string, playerId: string) {
+    const toastId = toast.loading(`Syncing "${displayName}" from pred.gg...`);
+    setProfilePhase({ tag: 'loading', playerId });
+    try {
+      await apiClient.players.sync(displayName);
+      const profile = await apiClient.players.getProfile(playerId);
+      setProfilePhase({ tag: 'loaded', profile });
+      toast.success('Profile updated', { id: toastId });
+    } catch (err) {
+      const msg = err instanceof ApiErrorResponse ? err.error.message : 'Sync failed.';
+      toast.error(msg, { id: toastId });
+      // Reload what we had before rather than leaving a blank panel
+      try {
+        const profile = await apiClient.players.getProfile(playerId);
+        setProfilePhase({ tag: 'loaded', profile });
+      } catch {
+        setProfilePhase({ tag: 'error', message: msg });
+      }
+    }
+  }
+
   return (
     <div>
       <header className="header">
@@ -176,7 +199,7 @@ export default function PlayerScouting() {
             <PlayerProfilePanel
               profile={profilePhase.profile}
               onClose={() => setProfilePhase({ tag: 'idle' })}
-              onRefresh={authenticated ? () => void handleSyncFromPredgg(profilePhase.profile.displayName) : undefined}
+              onRefresh={authenticated ? () => void handleRefreshProfile(profilePhase.profile.displayName, profilePhase.profile.id) : undefined}
             />
           )}
         </div>
