@@ -67,27 +67,27 @@ PROBES = {
     "hero":                 '{ hero(by: { slug: "grux" }) { id name slug } }',
     "items":                '{ items { id name slug } }',
     "item":                 '{ item(by: { slug: "ashbringer" }) { id name } }',
-    "perks":                '{ perks { id name slug } }',
+    "perks":                '{ perks { id name } }',                                  # Perk has no slug field
     "versions":             '{ versions { id name releaseDate patchType } }',
     "ratings":              '{ ratings { id name startTime endTime } }',
     "teams":                '{ teams { id name } }',
     "events":               '{ events { id } }',
     "groups":               '{ groups { id } }',
-    "currentUser":          '{ currentUser { id username } }',
-    "currentAuth":          '{ currentAuth { application { id name } } }',
-    "connectionInfo":       '{ connectionInfo { ip country } }',
-    "backend":              '{ backend { version } }',
+    "currentUser":          '{ currentUser { id name uuid } }',                       # User.name not username
+    "currentAuth":          '{ currentAuth { scope roles provider { id provider username } } }',  # provider is ProviderLink
+    "connectionInfo":       '{ connectionInfo { country } }',                         # Only country, no ip
+    "backend":              '{ backend { commitHash } }',                             # Only commitHash, no version
     "player":               '{ player(by: { id: "9ac7a82d-0dab-4ca3-ab4f-0ce1b269cd82" }) { id name uuid } }',
     "players":              '{ players(by: [{ id: "9ac7a82d-0dab-4ca3-ab4f-0ce1b269cd82" }]) { id name } }',
     "playersPaginated":     '{ playersPaginated(filter: { search: "saggacce" }, limit: 1) { results { id name } totalCount } }',
     "leaderboardPaginated": '{ leaderboardPaginated(ratingId: "11", limit: 3, offset: 0) { results { points rank { name } player { id name } } totalCount } }',
-    "ratingStatistic":      '{ ratingStatistic(ratingId: "11", granularity: WEEK) { results { timestamp value } } }',
+    "ratingStatistic":      '{ ratingStatistic(ratingId: "11", granularity: WEEK) { results { bucketTs countMatch } } }',  # No timestamp/value fields
     "rating":               '{ rating(by: { id: "11" }) { id name startTime } }',
     "version":              '{ version(by: { id: "143" }) { id name releaseDate } }',
     "team":                 '{ team(id: "1") { id name } }',
     "matchSpoilerBlocks":   '{ matchSpoilerBlocks { id } }',
     "guidesPaginated":      '{ guidesPaginated(limit: 2, offset: 0) { results { id } } }',
-    "applicationsPaginated":'{ applicationsPaginated(limit: 1, offset: 0) { results { id name } } }',
+    "applicationsPaginated":'{ applicationsPaginated(limit: 1, offset: 0) { result { id name } } }',  # result not results
 }
 
 KEY_TYPES = [

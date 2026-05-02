@@ -1,6 +1,6 @@
 # pred.gg GraphQL API — Full Inventory
 
-**Generated:** 2026-05-02 23:13:54  
+**Generated:** 2026-05-02 23:22:06  
 **Endpoint:** `https://pred.gg/gql`  
 **Token:** ✅ provided
 
@@ -128,33 +128,33 @@
 | `hero` | ✅ OK | ✅ OK |
 | `items` | ✅ OK | ✅ OK |
 | `item` | ✅ OK | ✅ OK |
-| `perks` | ⚠️ Unknown field "slug" on type "Perk". | ⚠️ Unknown field "slug" on type "Perk". |
+| `perks` | ✅ OK | ✅ OK |
 | `versions` | ✅ OK | ✅ OK |
 | `ratings` | ✅ OK | ✅ OK |
 | `teams` | ✅ OK | ✅ OK |
 | `events` | ✅ OK | ✅ OK |
 | `groups` | ❌ Forbidden | ❌ Forbidden |
-| `currentUser` | ⚠️ Unknown field "username" on type "User". | ⚠️ Unknown field "username" on type "User". |
-| `currentAuth` | ⚠️ Unknown field "application" on type "Authorization". | ⚠️ Unknown field "application" on type "Authorization". |
-| `connectionInfo` | ⚠️ Unknown field "ip" on type "ConnectionInfo". | ⚠️ Unknown field "ip" on type "ConnectionInfo". |
-| `backend` | ⚠️ Unknown field "version" on type "Backend". | ⚠️ Unknown field "version" on type "Backend". |
+| `currentUser` | ❌ Forbidden | ✅ OK |
+| `currentAuth` | ⚠️ null (query ok) | ✅ OK |
+| `connectionInfo` | ❌ Forbidden | ❌ Forbidden |
+| `backend` | ✅ OK | ✅ OK |
 | `player` | ✅ OK | ✅ OK |
 | `players` | ❌ Forbidden | ✅ OK |
 | `playersPaginated` | ❌ Forbidden | ✅ OK |
 | `leaderboardPaginated` | ❌ Forbidden | ✅ OK |
-| `ratingStatistic` | ⚠️ Unknown field "timestamp" on type "RatingStatistic". | ⚠️ Unknown field "timestamp" on type "RatingStatistic". |
+| `ratingStatistic` | ❌ Forbidden | ❌ Forbidden |
 | `rating` | ✅ OK | ✅ OK |
 | `version` | ✅ OK | ✅ OK |
 | `team` | ✅ OK | ✅ OK |
 | `matchSpoilerBlocks` | ❌ Forbidden | ❌ Forbidden |
 | `guidesPaginated` | ❌ Forbidden | ❌ Forbidden |
-| `applicationsPaginated` | ⚠️ Unknown field "results" on type "PaginatedApplications". Did | ⚠️ Unknown field "results" on type "PaginatedApplications". Did |
+| `applicationsPaginated` | ❌ Forbidden | ❌ Forbidden |
 
 ### Sample data (authenticated)
 
 **`heroes`**
 ```json
-{"heroes": [{"id": "36", "name": "Aurora", "slug": "aurora"}, {"id": "15", "name": "Narbash", "slug": "narbash"}, {"id": "48", "name": "Cryptmaker", "slug": "bayle"}, {"id": "39", "name": "Boost", "sl...
+{"heroes": [{"id": "25", "name": "Phase", "slug": "phase"}, {"id": "17", "name": "Riktor", "slug": "riktor"}, {"id": "9", "name": "Howitzer", "slug": "howitzer"}, {"id": "39", "name": "Boost", "slug":...
 ```
 
 **`hero`**
@@ -164,12 +164,17 @@
 
 **`items`**
 ```json
-{"items": [{"id": "137", "name": "Kingsbane", "slug": "kingsbane"}, {"id": "202", "name": "Judgement", "slug": "judgement"}, {"id": "257", "name": "DivinePouch", "slug": "divine-pouch"}, {"id": "205",...
+{"items": [{"id": "16", "name": "Brutallax", "slug": "brutallax"}, {"id": "182", "name": "StealthWard", "slug": "stealth-ward"}, {"id": "242", "name": "SyonicEcho", "slug": "syonic-echo"}, {"id": "269...
 ```
 
 **`item`**
 ```json
 {"item": {"id": "105", "name": "Ashbringer"}}
+```
+
+**`perks`**
+```json
+{"perks": [{"id": "137", "name": "Perk_Yin_DeflectBuff"}, {"id": "167", "name": "Perk_Aurora_CrystalWall"}, {"id": "193", "name": "Perk_Hemlock_ThornWhip"}, {"id": "175", "name": "Perk_Gadget_FDALevel...
 ```
 
 **`versions`**
@@ -179,7 +184,7 @@
 
 **`ratings`**
 ```json
-{"ratings": [{"id": "11", "name": "Season 1 - Split 4", "startTime": "2026-02-24T14:00:00Z", "endTime": null}, {"id": "10", "name": "Season 1 - Split 3", "startTime": "2025-11-25T13:00:00Z", "endTime"...
+{"ratings": [{"id": "3", "name": "Season 0", "startTime": "2024-06-15T14:00:00Z", "endTime": "2025-04-28T09:00:00Z"}, {"id": "4", "name": "Season 1 - Split 1", "startTime": "2025-04-29T12:00:00Z", "en...
 ```
 
 **`teams`**
@@ -190,6 +195,21 @@
 **`events`**
 ```json
 {"events": [{"id": "wNqVesa"}, {"id": "xCFD6gI"}, {"id": "S7GG2FP"}, {"id": "HPDCme4"}, {"id": "f69MQoR"}, {"id": "Gk4stZX"}, {"id": "wNqOsae"}, {"id": "dOPA0NW"}, {"id": "oDAVbQN"}, {"id": "FzNnY0d"}...
+```
+
+**`currentUser`**
+```json
+{"currentUser": {"id": "1642760d-c0a9-42c9-888b-18fd99babdb4", "name": "saggacce", "uuid": "1642760d-c0a9-42c9-888b-18fd99babdb4"}}
+```
+
+**`currentAuth`**
+```json
+{"currentAuth": {"scope": "offline_access profile", "roles": [], "provider": null}}
+```
+
+**`backend`**
+```json
+{"backend": {"commitHash": "c6ca2de1988c746fa4c3bb95b1cb41efed498967"}}
 ```
 
 **`player`**
@@ -613,37 +633,37 @@
 
 ## Summary
 
-### ✅ Public (no auth required) — 12 queries
+### ✅ Public (no auth required) — 14 queries
 
 - `heroes`
 - `hero`
 - `items`
 - `item`
+- `perks`
 - `versions`
 - `ratings`
 - `teams`
 - `events`
+- `backend`
 - `player`
 - `rating`
 - `version`
 - `team`
 
-### 🔑 Unlocked with Bearer token — 3 queries
+### 🔑 Unlocked with Bearer token — 5 queries
 
+- `currentUser`
+- `currentAuth`
 - `players`
 - `playersPaginated`
 - `leaderboardPaginated`
 
-### ❌ Still inaccessible — 10 queries
+### ❌ Still inaccessible — 6 queries
 
-- `perks` → ⚠️ Unknown field "slug" on type "Perk".
 - `groups` → ❌ Forbidden
-- `currentUser` → ⚠️ Unknown field "username" on type "User".
-- `currentAuth` → ⚠️ Unknown field "application" on type "Authorization".
-- `connectionInfo` → ⚠️ Unknown field "ip" on type "ConnectionInfo".
-- `backend` → ⚠️ Unknown field "version" on type "Backend".
-- `ratingStatistic` → ⚠️ Unknown field "timestamp" on type "RatingStatistic".
+- `connectionInfo` → ❌ Forbidden
+- `ratingStatistic` → ❌ Forbidden
 - `matchSpoilerBlocks` → ❌ Forbidden
 - `guidesPaginated` → ❌ Forbidden
-- `applicationsPaginated` → ⚠️ Unknown field "results" on type "PaginatedApplications". Did
+- `applicationsPaginated` → ❌ Forbidden
 
