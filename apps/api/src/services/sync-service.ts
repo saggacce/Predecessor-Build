@@ -664,7 +664,7 @@ export async function syncPlayerByName(
 /**
  * Re-syncs all players whose lastSynced is older than STALE_THRESHOLD_MS.
  */
-export async function syncStalePlayers(db: PrismaClient): Promise<SyncResult> {
+export async function syncStalePlayers(db: PrismaClient, userToken?: string): Promise<SyncResult> {
   const staleThreshold = new Date(Date.now() - STALE_THRESHOLD_MS);
   const stalePlayers = await db.player.findMany({
     where: { lastSynced: { lt: staleThreshold } },
@@ -675,7 +675,7 @@ export async function syncStalePlayers(db: PrismaClient): Promise<SyncResult> {
 
   for (const player of stalePlayers) {
     try {
-      const synced = await syncPlayerByName(db, player.displayName);
+      const synced = await syncPlayerByName(db, player.displayName, userToken);
       if (synced) result.synced++;
       else result.skipped++;
     } catch {

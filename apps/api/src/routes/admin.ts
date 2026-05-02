@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { db } from '../db.js';
 import { logger } from '../logger.js';
 import { syncVersionsFromPredgg, syncStalePlayers } from '../services/sync-service.js';
+import { COOKIE_TOKEN } from './auth.js';
 
 export const adminRouter = Router();
 
@@ -39,11 +40,15 @@ adminRouter.post('/sync-versions', async (_req, res, next) => {
  * POST /admin/sync-stale
  * Re-syncs all players whose data is older than 1 hour.
  */
-adminRouter.post('/sync-stale', async (_req, res, next) => {
+adminRouter.post('/sync-stale', async (req, res, next) => {
   try {
     const start = Date.now();
-    logger.info('admin: sync-stale started');
-    const result = await syncStalePlayers(db);
+    const userToken = (req as any).cookies?.[COOKIE_TOKEN] as string | undefined;
+    if (!userToken) {
+      logger.warn('sync-stale called without user token — player queries will fail (login required)');
+    }
+    logger.info({ hasToken: !!userToken }, 'admin: sync-stale started');
+    const result = await syncStalePlayers(db, userToken);
     const elapsed = Date.now() - start;
     logger.info({ ...result, elapsed }, 'admin: sync-stale complete');
     res.json({ ...result, elapsed, timestamp: new Date() });
