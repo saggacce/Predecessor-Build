@@ -60,11 +60,64 @@ const CLIENT_AUTH_METHOD = resolveClientAuthMethod(process.env.PRED_GG_CLIENT_AU
 
 export const COOKIE_TOKEN = 'predgg_token';
 export const COOKIE_REFRESH = 'predgg_refresh';
+export const COOKIE_EXPIRES_AT = 'predgg_expires_at'; // readable by JS (not httpOnly)
 const COOKIE_STATE = 'predgg_state';
 const COOKIE_CODE_VERIFIER = 'predgg_code_verifier';
 const COOKIE_OPTS = { httpOnly: true, sameSite: 'lax' as const };
+const REFRESH_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 
 export const authRouter = Router();
+
+// ── Cookie helpers ────────────────────────────────────────────────────────────
+
+import type { Request, Response } from 'express';
+
+function setTokenCookies(res: Response, data: TokenResponse) {
+  const expiresIn = data.expires_in ?? 3600;
+  const expiresAt = Date.now() + expiresIn * 1000;
+  res.cookie(COOKIE_TOKEN, data.access_token!, { ...COOKIE_OPTS, maxAge: expiresIn * 1000 });
+  // expires_at is NOT httpOnly so the frontend can read it for proactive refresh
+  res.cookie(COOKIE_EXPIRES_AT, String(expiresAt), { sameSite: 'lax', maxAge: REFRESH_TTL_MS });
+  if (data.refresh_token) {
+    res.cookie(COOKIE_REFRESH, data.refresh_token, { ...COOKIE_OPTS, maxAge: REFRESH_TTL_MS });
+  }
+}
+
+/**
+ * Returns a valid Bearer token for the current request.
+ * If the access token is expired (or close to expiry), automatically refreshes
+ * using the refresh token and sets new cookies — the user never re-logs in
+ * as long as the refresh token is valid (30 days).
+ */
+export async function getValidToken(req: Request, res: Response): Promise<string | undefined> {
+  const token = (req as any).cookies?.[COOKIE_TOKEN] as string | undefined;
+  const expiresAt = parseInt((req as any).cookies?.[COOKIE_EXPIRES_AT] ?? '0', 10);
+  const refreshToken = (req as any).cookies?.[COOKIE_REFRESH] as string | undefined;
+
+  // Token is still valid with >2 min buffer — use it directly
+  if (token && expiresAt > Date.now() + 2 * 60 * 1000) {
+    return token;
+  }
+
+  // Token missing or expired — try to refresh silently
+  if (!refreshToken) return token; // no refresh token, return whatever we have
+
+  logger.info('access token expired or missing — attempting silent refresh');
+  const result = await exchangeToken({ grant_type: 'refresh_token', refresh_token: refreshToken });
+
+  if (result.ok && result.data.access_token) {
+    setTokenCookies(res, result.data);
+    logger.info('silent token refresh successful');
+    return result.data.access_token;
+  }
+
+  logger.warn({ error: result.data.error }, 'silent refresh failed — user must re-login');
+  // Clear stale cookies so /auth/me returns unauthenticated
+  res.clearCookie(COOKIE_TOKEN);
+  res.clearCookie(COOKIE_EXPIRES_AT);
+  res.clearCookie(COOKIE_REFRESH);
+  return undefined;
+}
 
 type TokenResponse = {
   access_token?: string;
@@ -294,15 +347,8 @@ authRouter.get('/callback', async (req, res) => {
       return;
     }
 
-    const { access_token, refresh_token, expires_in, scope: grantedScope } = tokenData;
-    const tokenMaxAge = (expires_in ?? 3600) * 1000;
-
-    logger.info({ grantedScope, expires_in }, 'token exchange successful');
-
-    res.cookie(COOKIE_TOKEN, access_token!, { ...COOKIE_OPTS, maxAge: tokenMaxAge });
-    if (refresh_token) {
-      res.cookie(COOKIE_REFRESH, refresh_token, { ...COOKIE_OPTS, maxAge: 30 * 24 * 60 * 60 * 1000 });
-    }
+    logger.info({ grantedScope: tokenData.scope, expires_in: tokenData.expires_in }, 'token exchange successful');
+    setTokenCookies(res, tokenData);
 
     logger.info('OAuth2 login successful — redirecting to players');
     res.redirect(`${FRONTEND_URL}/players`);
@@ -314,8 +360,9 @@ authRouter.get('/callback', async (req, res) => {
 
 // ── Auth status ───────────────────────────────────────────────────────────────
 
-authRouter.get('/me', (req, res) => {
-  const token = (req as any).cookies?.[COOKIE_TOKEN];
+authRouter.get('/me', async (req, res) => {
+  // getValidToken silently refreshes if the access token is expired
+  const token = await getValidToken(req, res);
   res.json({ authenticated: !!token });
 });
 
@@ -352,10 +399,7 @@ authRouter.post('/refresh', async (req, res, next) => {
       return;
     }
 
-    res.cookie(COOKIE_TOKEN, tokenData.access_token!, { ...COOKIE_OPTS, maxAge: (tokenData.expires_in ?? 3600) * 1000 });
-    if (tokenData.refresh_token) {
-      res.cookie(COOKIE_REFRESH, tokenData.refresh_token, { ...COOKIE_OPTS, maxAge: 30 * 24 * 60 * 60 * 1000 });
-    }
+    setTokenCookies(res, tokenData);
 
     logger.info('token refreshed successfully');
     res.json({ ok: true });

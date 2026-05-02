@@ -71,7 +71,7 @@ export async function getPlayerProfile(playerId: string): Promise<PlayerProfile>
           match: true,
         },
         orderBy: { match: { startTime: 'desc' } },
-        take: 20,
+        take: 50,
       },
     },
   });
@@ -100,6 +100,7 @@ export async function getPlayerProfile(playerId: string): Promise<PlayerProfile>
       result: (isWin ? 'win' : isLoss ? 'loss' : 'unknown') as 'win' | 'loss' | 'unknown',
       date: mp.match.startTime,
       duration: mp.match.duration,
+      gameMode: mp.match.gameMode,
       heroName: hero?.name ?? null,
       heroImageUrl: hero?.imageUrl ?? null,
     };

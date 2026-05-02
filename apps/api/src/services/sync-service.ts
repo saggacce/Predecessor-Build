@@ -266,7 +266,7 @@ const PLAYER_DETAIL_QUERY = `
           totalGold
         }
       }
-      matchesPaginated(limit: $matchLimit, filter: { gameModes: [RANKED, STANDARD] }) {
+      matchesPaginated(limit: $matchLimit) {
         results {
           id
           role
@@ -458,7 +458,7 @@ function inferRegion(matches: PredggMatchStat[]): string | null {
 async function fetchPlayerDetail(playerId: string, userToken?: string): Promise<PredggPlayerDetail | null> {
   const data = await predggQuery<{ player: PredggPlayerDetail | null }>(
     PLAYER_DETAIL_QUERY,
-    { playerId, matchLimit: 20 },
+    { playerId, matchLimit: 50 },
     userToken,
   );
   return data?.player ?? null;
@@ -664,7 +664,7 @@ export async function syncPlayerByName(
 /**
  * Re-syncs all players whose lastSynced is older than STALE_THRESHOLD_MS.
  */
-export async function syncStalePlayers(db: PrismaClient): Promise<SyncResult> {
+export async function syncStalePlayers(db: PrismaClient, userToken?: string): Promise<SyncResult> {
   const staleThreshold = new Date(Date.now() - STALE_THRESHOLD_MS);
   const stalePlayers = await db.player.findMany({
     where: { lastSynced: { lt: staleThreshold } },
@@ -675,7 +675,7 @@ export async function syncStalePlayers(db: PrismaClient): Promise<SyncResult> {
 
   for (const player of stalePlayers) {
     try {
-      const synced = await syncPlayerByName(db, player.displayName);
+      const synced = await syncPlayerByName(db, player.displayName, userToken);
       if (synced) result.synced++;
       else result.skipped++;
     } catch {
