@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { db } from '../db.js';
 import { logger } from '../logger.js';
 import { syncVersionsFromPredgg, syncStalePlayers } from '../services/sync-service.js';
-import { COOKIE_TOKEN } from './auth.js';
+import { getValidToken } from './auth.js';
 
 export const adminRouter = Router();
 
@@ -43,7 +43,7 @@ adminRouter.post('/sync-versions', async (_req, res, next) => {
 adminRouter.post('/sync-stale', async (req, res, next) => {
   try {
     const start = Date.now();
-    const userToken = (req as any).cookies?.[COOKIE_TOKEN] as string | undefined;
+    const userToken = await getValidToken(req, res);
     if (!userToken) {
       logger.warn('sync-stale called without user token — player queries will fail (login required)');
     }
