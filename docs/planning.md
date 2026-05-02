@@ -15,29 +15,35 @@ Tablero simple de tareas generales y subtareas.
 
 ---
 
-## Tarea 1 — Fundaciones de datos (Scouting)
+## [x] Tarea 1 — Fundaciones de datos (Scouting)
 - [x] Definir esquema normalizado mínimo (jugador, equipo, partida, parche). → `workers/data-sync/prisma/schema.prisma`
-- [x] Diseñar proceso de sincronización inicial desde fuentes externas. → `workers/data-sync/src/sync/` (versions, players, matches)
-- [x] Establecer estrategia de versionado por parche/sync timestamp. → Version model + syncedAt en todos los registros
+- [x] Diseñar proceso de sincronización inicial desde fuentes externas. → `workers/data-sync/src/sync/`
+- [x] Establecer estrategia de versionado por parche/sync timestamp. → `Version` model + `syncedAt` en todos los registros
 - [x] Documentar política de calidad/frescura de datos. → `docs/data_quality_policy.md`
 
-## Tarea 2 — API de scouting (MVP)
-- [x] Endpoint de perfil de jugador.
-- [x] Endpoint de perfil de equipo.
-- [x] Endpoint de comparación de jugadores.
-- [x] Endpoint de generación de reportes de scrim.
+## [x] Tarea 2 — API de scouting (MVP)
+- [x] Endpoint de perfil de jugador. → `GET /players/:id`
+- [x] Endpoint de perfil de equipo. → `GET /teams/:id`
+- [x] Endpoint de comparación de jugadores. → `POST /players/compare`
+- [x] Endpoint de generación de reportes de scrim. → `POST /reports/scrim`
 
 ## Tarea 3 — Frontend de análisis competitivo (MVP)
-- [x] Vista de scouting de jugador rival. → `apps/web/src/pages/PlayerScouting.tsx` (máquina de estados 10 fases, ficha completa con stats, héroes, partidas recientes)
-- [x] Login con pred.gg (OAuth2 PKCE). → `apps/api/src/routes/auth.ts` + botón en sidebar
-- [ ] Vista de seguimiento de jugadores propios.
-- [ ] Vista de análisis de equipo rival.
-- [ ] Vista/descarga de reporte pre-scrim.
+- [x] Login con pred.gg (OAuth2 PKCE + sesión persistente 30 días). → `apps/api/src/routes/auth.ts` + sidebar
+- [x] Vista de scouting de jugador rival. → `apps/web/src/pages/PlayerScouting.tsx` (máquina de estados 10 fases, ficha completa, filtro por modo de partida)
+- [x] Vista básica de análisis de equipo. → `apps/web/src/pages/TeamAnalysis.tsx` (stub con roster y stats agregadas)
+- [x] Vista básica de reporte pre-scrim. → `apps/web/src/pages/ScrimReport.tsx` (generación básica con notas de matchup)
+- [ ] **Gestión de equipos (crear, editar, añadir jugadores al roster).** ← PRÓXIMA TAREA
+- [ ] Vista de seguimiento de jugadores propios (histórico, evolución).
+- [ ] Análisis de equipo rival enriquecido (objetivos, timeline, draft tendencies).
+- [ ] Descarga/exportación de reporte pre-scrim.
 
 ## Tarea 4 — Calidad y operación
-- [x] Convenciones de logs/errores para sync y API. → Pino con redacción de credenciales, logging estructurado
-- [ ] Tests base de agregación de métricas.
-- [ ] Tests base de filtros por parche/ventana temporal.
+- [x] Convenciones de logs/errores para sync y API. → Pino con redacción de credenciales, logging estructurado JSON
+- [x] Tests base de rutas API (players, teams, admin). → 43 tests en Vitest + Supertest
+- [x] CI/CD con GitHub Actions. → `.github/workflows/ci.yml` (typecheck + vitest en cada PR)
+- [x] Branch protection en main. → CI requerido antes de merge
+- [ ] Tests de agregación de métricas de jugador.
+- [ ] Tests de filtros por parche/ventana temporal.
 - [ ] Checklist de release interno por fase.
 
 ## Tarea 5 — Build/Stat module (fase posterior)
@@ -52,4 +58,5 @@ Tablero simple de tareas generales y subtareas.
 - `docs/workflow.md`
 - `docs/project_predecessor.md`
 - `docs/predecessor_api_technical_doc.md`
+- `docs/predgg_api_inventory.md`
 - `docs/future_features_roadmap.md`

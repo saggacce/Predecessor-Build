@@ -8,8 +8,9 @@ This document defines how the Predecessor Build platform manages external data q
 
 | Source | Type | Auth | Data provided |
 |--------|------|------|---------------|
-| pred.gg | GraphQL | `X-Api-Key` (optional, recommended) | Players, matches, teams, versions, ratings |
-| omeda.city | REST | None | Heroes, items, abilities, base stats |
+| pred.gg | GraphQL | Bearer token (OAuth2 PKCE) | Players, matches, teams, versions, ratings, hero/item data |
+
+> **Note:** omeda.city was originally evaluated as a secondary source but is no longer used. pred.gg provides all required data including heroes, items, and patches.
 
 ---
 

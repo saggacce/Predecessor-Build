@@ -6,6 +6,35 @@
 
 ---
 
+## Currently used by the application
+
+These are the queries and mutations the app actively calls. For auth details see `apps/api/src/routes/auth.ts`.
+
+### Queries in use
+
+| Query | Where used | Auth required |
+|-------|-----------|---------------|
+| `player(by: {uuid})` | Player profile lookup by UUID | No |
+| `playersPaginated(filter: {search})` | Player search by name | **Yes** |
+| `players(by: [{id}])` | Batch player lookup | **Yes** |
+| `leaderboardPaginated` | Top players by season | **Yes** |
+| `versions` | Sync all game patches | No |
+| `heroes` | Hero catalog | No |
+| `items` | Item catalog | No |
+| `ratings` | Ranked seasons | No |
+
+### Mutations in use
+
+| Mutation | Where used |
+|----------|-----------|
+| `authorize` | OAuth2 PKCE flow (via pred.gg/oauth2/authorize → /api/oauth2/token) |
+
+### Token endpoint (REST, not GraphQL)
+
+`POST https://pred.gg/api/oauth2/token` — exchanges authorization code + PKCE verifier for Bearer token.
+
+---
+
 ## Schema overview
 - **Queries:** 35
 - **Mutations:** 63
