@@ -37,8 +37,22 @@ Thumbs.db
 # Script output files
 *.txt
 
+# HAR files (OAuth diagnostic captures — may contain session tokens)
+*.har
+
+# Certificates and private keys
+*.pem
+*.key
+*.p12
+*.pfx
+*.crt
+*.cer
+
 # Claude local context files
 CLAUDE.md
+
+# Claude Code marker files
+.codex
 
 # Exploration / scratch test files
 workers/data-sync/src/test*.ts
@@ -46,3 +60,7 @@ workers/data-sync/src/test*.ts
 # serve.sh runtime files
 .pids/
 logs/
+
+# API sample fixtures (large JSON files, regenerate from live API)
+omeda-samples/
+scripts/api-samples/
