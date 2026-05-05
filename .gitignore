@@ -51,6 +51,9 @@ Thumbs.db
 # Claude local context files
 CLAUDE.md
 
+# AI Agent Efficiency Framework (local dev tool, not project code)
+ai-agent-efficiency-framework/
+
 # Claude Code marker files
 .codex
 
