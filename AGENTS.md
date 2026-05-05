@@ -42,6 +42,7 @@ Use for scoped, well-defined implementation work:
 ## Skills — load when relevant
 | Skill | When to load |
 |-------|-------------|
-| `.claude/skills/ui-design-system/SKILL.md` | Any UI, CSS, page, or component change |
+| `.claude/skills/web-development/SKILL.md` | Any frontend or backend task (React, Express, Prisma, responsive) |
+| `.claude/skills/ui-design-system/SKILL.md` | UI changes that affect colors, typography, or visual tokens |
 | `.claude/skills/pred-gg-api/SKILL.md` | Sync worker, GraphQL queries, event stream |
 | `.claude/skills/pr-workflow/SKILL.md` | Creating branches, commits, or PRs |
