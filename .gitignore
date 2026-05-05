@@ -48,10 +48,10 @@ Thumbs.db
 *.crt
 *.cer
 
-# Claude local context files
+# AI tooling — local config, not application code
 CLAUDE.md
-
-# AI Agent Efficiency Framework (local dev tool, not project code)
+AGENTS.md
+.claude/
 ai-agent-efficiency-framework/
 
 # Claude Code marker files
