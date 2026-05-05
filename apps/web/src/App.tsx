@@ -1,6 +1,8 @@
-import { BrowserRouter, Routes, Route, Link } from 'react-router';
+import { useEffect, useState } from 'react';
+import { BrowserRouter, Routes, Route, NavLink } from 'react-router';
 import { Toaster, toast } from 'sonner';
-import { Home, Users, Target, Shield, LogIn, LogOut, Loader } from 'lucide-react';
+import { Home, Users, Target, Shield, LogIn, LogOut, Loader, Radio, Zap } from 'lucide-react';
+import type { VersionRecord } from '@predecessor/data-model';
 import Dashboard from './pages/Dashboard';
 import PlayerScouting from './pages/PlayerScouting';
 import TeamAnalysis from './pages/TeamAnalysis';
@@ -8,6 +10,38 @@ import ScrimReport from './pages/ScrimReport';
 import { useAuth } from './hooks/useAuth';
 import { apiClient } from './api/client';
 import './App.css';
+
+function WorkspaceHeader() {
+  const { authenticated } = useAuth();
+  const [latestPatch, setLatestPatch] = useState<VersionRecord | null>(null);
+
+  useEffect(() => {
+    void apiClient.patches.latest()
+      .then(setLatestPatch)
+      .catch(() => setLatestPatch(null));
+  }, []);
+
+  return (
+    <header className="workspace-header" aria-label="Workspace status">
+      <div>
+        <div className="workspace-title">Predecessor competitive workspace</div>
+        <div className="workspace-subtitle">Scouting, roster analysis and scrim preparation</div>
+      </div>
+      <div className="workspace-meta">
+        {latestPatch && (
+          <div className="workspace-chip">
+            <Zap size={13} />
+            Patch v{latestPatch.name}
+          </div>
+        )}
+        <div className={`workspace-chip ${authenticated ? 'connected' : ''}`}>
+          <Radio size={13} />
+          {authenticated ? 'pred.gg connected' : 'pred.gg login required'}
+        </div>
+      </div>
+    </header>
+  );
+}
 
 function Sidebar() {
   const { authenticated, loading } = useAuth();
@@ -21,24 +55,44 @@ function Sidebar() {
     }
   }
 
+  const navItems = [
+    { to: '/', label: 'Dashboard', icon: <Home size={18} /> },
+    { to: '/players', label: 'Player Scouting', icon: <Target size={18} /> },
+    { to: '/teams', label: 'Team Analysis', icon: <Users size={18} /> },
+    { to: '/scrims', label: 'Scrim Reports', icon: <Shield size={18} /> },
+  ];
+
   return (
     <aside className="sidebar">
       <div className="sidebar-brand">
-        <div className="logo-gradient">PREDECESSOR</div>
-        <div className="sidebar-subtitle">Scouting Engine</div>
+        <div className="brand-lockup">
+          <div className="brand-mark" aria-hidden="true">
+            <img src="/favicon.svg" alt="" />
+          </div>
+          <div>
+            <div className="logo-name">PrimeSight</div>
+            <div className="sidebar-subtitle">Competitive Intelligence</div>
+          </div>
+        </div>
       </div>
 
-      <nav style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', flex: 1 }}>
-        <Link to="/" className="nav-link"><Home size={18} /> Dashboard</Link>
-        <Link to="/players" className="nav-link"><Target size={18} /> Player Scouting</Link>
-        <Link to="/teams" className="nav-link"><Users size={18} /> Team Analysis</Link>
-        <Link to="/scrims" className="nav-link"><Shield size={18} /> Scrim Reports</Link>
+      <nav className="sidebar-nav">
+        {navItems.map((item) => (
+          <NavLink
+            key={item.to}
+            to={item.to}
+            end={item.to === '/'}
+            className={({ isActive }) => `nav-link${isActive ? ' active' : ''}`}
+          >
+            {item.icon}
+            <span>{item.label}</span>
+          </NavLink>
+        ))}
       </nav>
 
-      {/* Auth section at bottom of sidebar */}
       <div className="sidebar-auth">
         {loading ? (
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--text-muted)', fontSize: '0.8rem' }}>
+          <div className="session-state muted">
             <Loader size={14} style={{ animation: 'spin 1s linear infinite' }} />
             Checking session...
           </div>
@@ -52,13 +106,13 @@ function Sidebar() {
           </a>
         )}
         {!loading && !authenticated && (
-          <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '0.5rem', lineHeight: 1.4 }}>
+          <p className="sidebar-note">
             Login to enable player search and stats
           </p>
         )}
         {!loading && authenticated && (
-          <p style={{ fontSize: '0.7rem', color: 'var(--accent-success)', marginTop: '0.5rem' }}>
-            ✓ pred.gg connected
+          <p className="sidebar-note connected">
+            pred.gg connected
           </p>
         )}
       </div>
@@ -72,6 +126,7 @@ export default function App() {
       <div className="app-container">
         <Sidebar />
         <main className="main-content">
+          <WorkspaceHeader />
           <Routes>
             <Route path="/" element={<Dashboard />} />
             <Route path="/players" element={<PlayerScouting />} />

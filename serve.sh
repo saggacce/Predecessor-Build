@@ -84,10 +84,10 @@ start_api() {
   mkdir -p "$PIDS_DIR" "$LOGS_DIR"
 
   if [[ "$mode" == "prod" ]]; then
-    NODE_ENV=production npx tsx "$ROOT/apps/api/src/index.ts" \
+    NODE_ENV=production "$ROOT/node_modules/.bin/tsx" "$ROOT/apps/api/src/index.ts" \
       >> "$API_LOG" 2>&1 &
   else
-    NODE_ENV=development npx tsx "$ROOT/apps/api/src/index.ts" \
+    NODE_ENV=development "$ROOT/node_modules/.bin/tsx" "$ROOT/apps/api/src/index.ts" \
       >> "$API_LOG" 2>&1 &
   fi
 
@@ -118,7 +118,7 @@ start_web() {
     npm run build --workspace=@predecessor/web >> "$LOGS_DIR/build.log" 2>&1 \
       || { fail "Build failed — check logs/build.log"; return 1; }
     ok "Build complete"
-    npm run preview --workspace=@predecessor/web \
+    (cd "$ROOT/apps/web" && exec "$ROOT/apps/web/node_modules/.bin/vite" preview) \
       >> "$WEB_LOG" 2>&1 &
     local pid=$!
     echo "$pid" > "$WEB_PID"
@@ -128,7 +128,7 @@ start_web() {
       fail "Frontend did not come up — check logs/web.log"
     fi
   else
-    npm run dev --workspace=@predecessor/web \
+    (cd "$ROOT/apps/web" && exec "$ROOT/apps/web/node_modules/.bin/vite") \
       >> "$WEB_LOG" 2>&1 &
     local pid=$!
     echo "$pid" > "$WEB_PID"

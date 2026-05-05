@@ -1,28 +1,65 @@
 :root {
-  --bg-dark: #0a0a0c;
-  --bg-card: rgba(20, 20, 24, 0.7);
-  --bg-hover: rgba(40, 40, 48, 0.8);
-  
-  --text-primary: #ffffff;
-  --text-secondary: #a0a0ab;
-  --text-muted: #666670;
-  
-  --accent-purple: #9d4edd;
-  --accent-blue: #00f5d4;
-  --accent-danger: #ef233c;
-  --accent-success: #06d6a0;
-  
-  --border-color: rgba(255, 255, 255, 0.08);
-  --border-highlight: rgba(157, 78, 221, 0.5);
-  
-  --shadow-neon: 0 0 20px rgba(157, 78, 221, 0.3);
-  --shadow-card: 0 8px 32px rgba(0, 0, 0, 0.4);
-  
-  --radius-sm: 6px;
-  --radius-md: 12px;
-  --radius-lg: 20px;
-  
-  --transition-fast: 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  /* ── Backgrounds (design doc exact values) ─────────────────────────── */
+  --bg-dark:    #0a0c10;
+  --bg-page:    #0a0c10;
+  --bg-panel:   #111318;
+  --bg-card:    #1e2330;
+  --bg-elevated: #252c3a;
+  --bg-hover:   #252c3a;
+
+  /* ── Text ──────────────────────────────────────────────────────────── */
+  --text-primary:   #e2e8f0;
+  --text-secondary: #94a3b8;
+  --text-muted:     #64748b;
+  --text-dim:       #475569;
+
+  /* ── Semantic accents ──────────────────────────────────────────────── */
+  /* Primary analysis action — buttons, focus, active CTA */
+  --accent-blue:   #5b9cf6;
+  --accent-blue-2: #3d7de4;
+
+  /* Teal — vision, scouting, connection, map */
+  --accent-teal:        #14b8a6;
+  --accent-teal-bright: #38d4c8;
+
+  /* Violet — rank, draft, intelligence */
+  --accent-violet: #a78bfa;
+
+  /* Gold — Prime, objectives, highlights */
+  --accent-prime:  #f0b429;
+
+  /* Semantic win / loss */
+  --accent-win:    #4ade80;
+  --accent-loss:   #f87171;
+  --accent-warn:   #f0b429;
+
+  /* Legacy aliases kept for backward compat with existing pages */
+  --accent-success: #4ade80;
+  --accent-danger:  #f87171;
+  --accent-warning: #f0b429;
+  --accent-purple:  #a78bfa;
+
+  /* ── Borders ────────────────────────────────────────────────────────── */
+  --border-color:     rgba(255, 255, 255, 0.07);
+  --border-strong:    rgba(255, 255, 255, 0.12);
+  --border-highlight: rgba(91, 156, 246, 0.45);  /* blue focus ring */
+  --border-teal:      rgba(56, 212, 200, 0.28);  /* nav active / scouting */
+
+  /* ── Shadows ─────────────────────────────────────────────────────────── */
+  --shadow-neon: 0 0 0 1px rgba(91, 156, 246, 0.18), 0 16px 44px rgba(0, 0, 0, 0.34);
+  --shadow-card: 0 4px 24px rgba(0, 0, 0, 0.28);
+
+  /* ── Radii ───────────────────────────────────────────────────────────── */
+  --radius-sm: 7px;
+  --radius-md: 10px;
+  --radius-lg: 16px;
+
+  /* ── Motion ──────────────────────────────────────────────────────────── */
+  --transition-fast: 0.16s ease;
+
+  /* ── Fonts ───────────────────────────────────────────────────────────── */
+  --font-body: 'DM Sans', 'Outfit', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-mono: 'JetBrains Mono', 'Fira Code', ui-monospace, monospace;
 }
 
 * {
@@ -32,19 +69,36 @@
 }
 
 body {
-  font-family: 'Outfit', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-  background-color: var(--bg-dark);
+  font-family: var(--font-body);
+  background-color: var(--bg-page);
   color: var(--text-primary);
   min-height: 100vh;
   -webkit-font-smoothing: antialiased;
-  background-image: 
-    radial-gradient(circle at 15% 50%, rgba(157, 78, 221, 0.08), transparent 25%),
-    radial-gradient(circle at 85% 30%, rgba(0, 245, 212, 0.05), transparent 25%);
+
+  /* Grid + lane diagonals + subtle radials — design doc spec */
+  background-image:
+    /* Gradient veil */
+    linear-gradient(180deg, rgba(17, 22, 32, 0.82), rgba(10, 12, 16, 0.97) 480px),
+    /* Prime/gold radial top-right */
+    radial-gradient(ellipse at 78% 8%, rgba(240, 180, 41, 0.07), transparent 300px),
+    /* Blue radial bottom-left */
+    radial-gradient(ellipse at 18% 88%, rgba(91, 156, 246, 0.06), transparent 260px),
+    /* Lane diagonal 1 — teal */
+    linear-gradient(135deg, transparent 0 46.8%, rgba(56, 212, 200, 0.055) 47% 47.5%, transparent 47.7%),
+    /* Lane diagonal 2 — violet */
+    linear-gradient(45deg,  transparent 0 52.3%, rgba(167, 139, 250, 0.04) 52.5% 53%, transparent 53.2%),
+    /* Grid horizontal */
+    linear-gradient(rgba(255, 255, 255, 0.022) 1px, transparent 1px),
+    /* Grid vertical */
+    linear-gradient(90deg, rgba(255, 255, 255, 0.018) 1px, transparent 1px);
+
+  background-size: auto, auto, auto, auto, auto, 48px 48px, 48px 48px;
+  background-attachment: fixed;
 }
 
 h1, h2, h3, h4, h5, h6 {
   font-weight: 600;
-  letter-spacing: -0.02em;
+  letter-spacing: 0;
 }
 
 a {
@@ -54,29 +108,50 @@ a {
 }
 
 a:hover {
-  color: #fff;
-  text-shadow: 0 0 8px var(--accent-blue);
+  color: var(--text-primary);
 }
 
-/* Base Glassmorphism Card */
+/* ── Mono utility — apply to all metric numbers ─────────────────────── */
+.mono {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum';
+}
+
+/* ── Base Glassmorphism Card ─────────────────────────────────────────── */
 .glass-card {
-  background: var(--bg-card);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
+  position: relative;
+  overflow: hidden;
+  background: linear-gradient(160deg, rgba(30, 37, 52, 0.98), rgba(20, 26, 38, 0.99));
   border: 1px solid var(--border-color);
   border-radius: var(--radius-md);
   padding: 1.5rem;
   box-shadow: var(--shadow-card);
-  transition: transform var(--transition-fast), border-color var(--transition-fast), box-shadow var(--transition-fast);
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.glass-card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  border-radius: inherit;
+  background:
+    linear-gradient(90deg, rgba(91, 156, 246, 0.12), transparent 22%, transparent 78%, rgba(240, 180, 41, 0.07)),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.03), transparent 30%);
+  opacity: 0.3;
+}
+
+.glass-card > * {
+  position: relative;
+  z-index: 1;
 }
 
 .glass-card:hover {
-  transform: translateY(-2px);
-  border-color: var(--border-highlight);
-  box-shadow: var(--shadow-neon);
+  border-color: var(--border-strong);
 }
 
-/* Layout Utilities */
+/* ── Layout ──────────────────────────────────────────────────────────── */
 .app-container {
   display: flex;
   min-height: 100vh;
@@ -84,20 +159,68 @@ a:hover {
 
 .main-content {
   flex: 1;
-  padding: 2rem;
-  max-width: 1400px;
+  padding: 1.75rem 2rem;
+  max-width: 1480px;
   margin: 0 auto;
   width: 100%;
 }
 
+/* ── Page header ─────────────────────────────────────────────────────── */
 .header {
-  margin-bottom: 2rem;
+  margin-bottom: 1.5rem;
 }
 
 .header-title {
-  font-size: 2.5rem;
+  font-size: 1.75rem;
   font-weight: 800;
-  background: linear-gradient(135deg, var(--text-primary), var(--accent-purple));
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
+  line-height: 1.1;
+  color: var(--text-primary);
+}
+
+.header-title::after {
+  content: '';
+  display: block;
+  width: 3rem;
+  height: 2px;
+  margin-top: 0.55rem;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--accent-teal-bright), var(--accent-blue), transparent);
+}
+
+/* ── Selection ───────────────────────────────────────────────────────── */
+::selection {
+  background: rgba(91, 156, 246, 0.25);
+}
+
+/* ── Form elements ───────────────────────────────────────────────────── */
+button, input, select, textarea {
+  font-family: inherit;
+}
+
+button {
+  -webkit-tap-highlight-color: transparent;
+}
+
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid rgba(91, 156, 246, 0.55);
+  outline-offset: 2px;
+}
+
+/* ── Responsive ──────────────────────────────────────────────────────── */
+@media (max-width: 920px) {
+  .app-container {
+    flex-direction: column;
+  }
+
+  .main-content {
+    padding: 1.25rem;
+  }
+
+  .header-title {
+    font-size: 1.5rem;
+  }
 }

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Shield, FileText, ChevronRight } from 'lucide-react';
+import { FileText, ChevronRight } from 'lucide-react';
 import { toast } from 'sonner';
 import { apiClient, type TeamProfile, type ScrimReport as ScrimReportData, ApiErrorResponse } from '../api/client';
 
@@ -99,8 +99,8 @@ export default function ScrimReport() {
               <h3 style={{ color: 'var(--text-primary)', marginBottom: '1rem' }}>Intelligence Notes</h3>
               <ul style={{ listStyle: 'none', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
                 {report.matchupNotes.map((note, i) => (
-                  <li key={i} style={{ display: 'flex', gap: '0.75rem', padding: '0.75rem', background: 'var(--bg-dark)', borderRadius: 'var(--radius-sm)' }}>
-                    <span style={{ color: 'var(--accent-purple)', fontWeight: 700, flexShrink: 0 }}>{i + 1}.</span>
+                  <li key={i} style={{ display: 'flex', gap: '0.75rem', padding: '0.65rem 0.75rem', background: 'var(--bg-dark)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-color)' }}>
+                    <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--accent-violet)', fontWeight: 600, flexShrink: 0, fontSize: '0.78rem', paddingTop: '0.1rem' }}>{String(i + 1).padStart(2, '0')}</span>
                     <span style={{ color: 'var(--text-secondary)' }}>{note}</span>
                   </li>
                 ))}
@@ -112,19 +112,26 @@ export default function ScrimReport() {
             {[{ label: 'Our Roster', data: report.ownTeam, color: 'var(--accent-blue)' },
               { label: 'Rival Roster', data: report.rivalTeam, color: 'var(--accent-danger)' }].map(({ label, data, color }) => (
               <div key={label} className="glass-card">
-                <h3 style={{ color, marginBottom: '1rem' }}>{label}: {data.name}</h3>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem' }}>
+                  <div style={{ width: '3px', height: '1rem', borderRadius: '999px', background: color, flexShrink: 0 }} />
+                  <h3 style={{ color, margin: 0, fontSize: '0.9rem' }}>{label}: <span style={{ color: 'var(--text-primary)' }}>{data.name}</span></h3>
+                </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
                   {data.roster.map((member, i) => (
-                    <div key={i} style={{ padding: '0.75rem', background: 'var(--bg-dark)', borderRadius: 'var(--radius-sm)' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.4rem' }}>
-                        <span style={{ fontWeight: 600 }}>{member.displayName}</span>
-                        {member.rankLabel && <span style={{ fontSize: '0.75rem', color: 'var(--accent-purple)' }}>{member.rankLabel}</span>}
+                    <div key={i} style={{ padding: '0.7rem 0.75rem', background: 'var(--bg-dark)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-color)' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: member.topHeroes.length > 0 ? '0.4rem' : 0 }}>
+                        <span style={{ fontWeight: 600, fontSize: '0.875rem' }}>{member.displayName}</span>
+                        {member.rankLabel && (
+                          <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.7rem', color: 'var(--accent-violet)', fontWeight: 500 }}>
+                            {member.rankLabel}
+                          </span>
+                        )}
                       </div>
                       {member.topHeroes.length > 0 && (
-                        <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
+                        <div style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap' }}>
                           {member.topHeroes.map((h) => (
-                            <span key={h.slug} style={{ fontSize: '0.7rem', padding: '0.2rem 0.5rem', background: 'rgba(157,78,221,0.15)', borderRadius: '999px', color: 'var(--accent-purple)' }}>
-                              {h.slug} {h.wins}W/{h.losses}L
+                            <span key={h.slug} style={{ fontFamily: 'var(--font-mono)', fontSize: '0.65rem', padding: '0.15rem 0.45rem', background: 'rgba(167,139,250,0.1)', border: '1px solid rgba(167,139,250,0.2)', borderRadius: '999px', color: 'var(--accent-violet)' }}>
+                              {h.slug} <span style={{ color: 'var(--accent-win)' }}>{h.wins}W</span>/<span style={{ color: 'var(--accent-loss)' }}>{h.losses}L</span>
                             </span>
                           ))}
                         </div>
