@@ -25,6 +25,7 @@ export class ApiErrorResponse extends Error {
 export interface PlayerSearchResult {
   id: string;
   displayName: string;
+  customName: string | null;
   isPrivate: boolean;
   inferredRegion: string | null;
   lastSynced: string;
@@ -76,6 +77,7 @@ export interface RecentMatch {
 export interface PlayerProfile {
   id: string;
   displayName: string;
+  customName: string | null;
   isPrivate: boolean;
   inferredRegion: string | null;
   firstSeen: string;
@@ -91,6 +93,7 @@ export interface RosterMember {
   rosterId: string;
   playerId: string;
   displayName: string;
+  customName: string | null;
   role: string | null;
   activeFrom: string;
   activeTo: string | null;
@@ -191,6 +194,11 @@ export const apiClient = {
       fetchApi<{ players: [PlayerProfile, PlayerProfile]; deltas: unknown[] }>('/players/compare', {
         method: 'POST',
         body: JSON.stringify({ playerIdA, playerIdB }),
+      }),
+    setCustomName: (id: string, customName: string | null) =>
+      fetchApi<{ player: { id: string; customName: string | null; displayName: string } }>(`/players/${id}/name`, {
+        method: 'PATCH',
+        body: JSON.stringify({ customName }),
       }),
   },
 

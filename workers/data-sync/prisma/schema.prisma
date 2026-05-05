@@ -29,6 +29,8 @@ model Player {
   firstSeen      DateTime @default(now())
   lastSynced     DateTime
 
+  customName    String?
+
   snapshots     PlayerSnapshot[]
   matchPlayers  MatchPlayer[]
   rosterEntries TeamRoster[]

@@ -14,6 +14,7 @@ export interface TeamProfile {
     rosterId: string;
     playerId: string;
     displayName: string;
+    customName: string | null;
     role: string | null;
     activeFrom: Date;
     activeTo: Date | null;
@@ -59,6 +60,7 @@ export async function getTeamProfile(teamId: string): Promise<TeamProfile> {
       rosterId: r.id,
       playerId: r.player.id,
       displayName: r.player.displayName,
+      customName: r.player.customName,
       role: r.role,
       activeFrom: r.activeFrom,
       activeTo: r.activeTo,
@@ -112,7 +114,7 @@ export async function listTeams(type?: 'OWN' | 'RIVAL') {
       roster: {
         where: { activeTo: null },
         select: {
-          player: { select: { id: true, displayName: true } },
+          player: { select: { id: true, displayName: true, customName: true } },
           role: true,
         },
       },

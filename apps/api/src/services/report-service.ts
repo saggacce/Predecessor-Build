@@ -24,6 +24,7 @@ export interface ScrimReport {
       topHeroes: Array<{ slug: string; wins: number; losses: number }>;
     }>;
   };
+  // displayName in roster entries already reflects customName ?? displayName resolution
   matchupNotes: string[];
 }
 
@@ -63,7 +64,7 @@ export async function generateScrimReport(
         }
 
         return {
-          displayName: member.displayName,
+          displayName: member.customName ?? member.displayName,
           role: member.role,
           rankLabel: member.rating?.rankLabel ?? null,
           topHeroes,

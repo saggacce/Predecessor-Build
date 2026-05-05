@@ -46,13 +46,13 @@ Tablero simple de tareas generales y subtareas.
 - [ ] Tests de filtros por parche/ventana temporal.
 - [ ] Checklist de release interno por fase.
 
-## Tarea 5 — Mejoras de gestión de equipos y jugadores
-- [ ] Subida de logo de equipo (upload de imagen o URL) en formulario de crear/editar equipo. → `apps/api/src/routes/teams.ts` + `apps/web/src/pages/TeamAnalysis.tsx`
-- [ ] Nombre personalizado para jugadores sin cuenta pred.gg (`customName`):
-  - [ ] Migration: añadir campo `customName String?` a modelo `Player` en Prisma.
-  - [ ] API: `PATCH /players/:id/name` → actualiza `customName`, nunca sobreescrito por sync.
-  - [ ] Lógica de display: `customName ?? displayName ?? "Unknown"` en toda la app.
-  - [ ] UI: icono de edición junto al nombre en roster y vistas de scouting para jugadores sin nombre pred.gg.
+## [x] Tarea 5 — Mejoras de gestión de equipos y jugadores
+- [x] Subida de logo de equipo (upload de imagen o URL) en formulario de crear/editar equipo. → `apps/web/src/pages/TeamAnalysis.tsx` (FileReader → base64 data URL → logoUrl)
+- [x] Nombre personalizado para jugadores sin cuenta pred.gg (`customName`):
+  - [x] Migration: añadir campo `customName String?` a modelo `Player` en Prisma.
+  - [x] API: `PATCH /players/:id/name` → actualiza `customName`, nunca sobreescrito por sync.
+  - [x] Lógica de display: `customName ?? displayName` en toda la app (TeamAnalysis, PlayerScouting, report-service).
+  - [x] UI: icono de edición (Pencil) junto al nombre en roster — inline edit con Enter/Escape, badge "custom" si hay nombre personalizado.
   - [ ] Sync worker: al procesar event stream, crear registro `Player` para todos los UUIDs encontrados aunque no tengan nombre (prerequisito: Fase 2 event stream activo).
 
 ## Tarea 6 — Event stream y métricas de Fase 2
