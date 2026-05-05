@@ -15,9 +15,7 @@ export default function Dashboard() {
   const [latestPatch, setLatestPatch] = useState<VersionRecord | null>(null);
   const [syncState, setSyncState] = useState<SyncState>({ tag: 'idle' });
 
-  useEffect(() => {
-    void fetchDashboardData();
-  }, []);
+  useEffect(() => { void fetchDashboardData(); }, []);
 
   async function fetchDashboardData() {
     const [health, patch] = await Promise.allSettled([
@@ -35,7 +33,7 @@ export default function Dashboard() {
       const label = `${res.synced} version${res.synced !== 1 ? 's' : ''} synced in ${(res.elapsed / 1000).toFixed(1)}s`;
       setSyncState({ tag: 'done', op: 'Versions', result: label });
       toast.success('Versions synced', { description: label });
-      void fetchDashboardData(); // refresh patch display
+      void fetchDashboardData();
     } catch (err) {
       const msg = err instanceof ApiErrorResponse ? err.error.message : 'Sync failed';
       setSyncState({ tag: 'failed', op: 'Versions', message: msg });
@@ -62,78 +60,77 @@ export default function Dashboard() {
   }
 
   const isSyncing = syncState.tag === 'running';
+  const statusColor = healthStatus === 'ok' ? 'var(--accent-win)' : healthStatus === 'error' ? 'var(--accent-loss)' : 'var(--accent-violet)';
 
   return (
-    <div className="dashboard">
+    <div>
       <header className="header">
         <h1 className="header-title">Dashboard</h1>
-        <p style={{ color: 'var(--text-secondary)', marginTop: '0.5rem' }}>
+        <p style={{ color: 'var(--text-secondary)', marginTop: '0.35rem', fontSize: '0.875rem' }}>
           System status and data controls.
         </p>
       </header>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '1.5rem' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1rem' }}>
 
-        {/* System Health */}
         <div className="glass-card">
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1rem' }}>
-            <Server color="var(--accent-blue)" size={24} />
-            <h3 style={{ color: 'var(--text-primary)', margin: 0 }}>System Health</h3>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', marginBottom: '1rem' }}>
+            <Server color="var(--accent-blue)" size={18} />
+            <h3 style={{ color: 'var(--text-muted)', margin: 0, fontSize: '0.72rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em' }}>System Health</h3>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
             <div style={{
-              width: '10px', height: '10px', borderRadius: '50%',
-              background: healthStatus === 'ok' ? 'var(--accent-success)'
-                : healthStatus === 'error' ? 'var(--accent-danger)'
-                : 'var(--accent-purple)',
-              boxShadow: healthStatus === 'ok' ? '0 0 8px var(--accent-success)' : 'none',
+              width: '8px', height: '8px', borderRadius: '50%', flexShrink: 0,
+              background: statusColor,
+              boxShadow: healthStatus === 'ok' ? '0 0 8px var(--accent-win)' : 'none',
+              transition: 'background 0.3s',
             }} />
-            <span style={{ color: 'var(--text-secondary)', fontWeight: 500, fontSize: '0.875rem' }}>
-              {healthStatus === 'ok' ? 'API Online & Connected'
-                : healthStatus === 'error' ? 'API Disconnected'
-                : 'Checking...'}
+            <span style={{ color: healthStatus === 'ok' ? 'var(--text-primary)' : statusColor, fontWeight: 600, fontSize: '0.9rem' }}>
+              {healthStatus === 'ok' ? 'API Online' : healthStatus === 'error' ? 'API Disconnected' : 'Checking…'}
             </span>
           </div>
+          {healthStatus === 'ok' && (
+            <p style={{ color: 'var(--text-dim)', fontSize: '0.72rem', marginTop: '0.35rem' }}>pred.gg pipeline active</p>
+          )}
         </div>
 
-        {/* Current Patch */}
         <div className="glass-card">
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1rem' }}>
-            <Zap color="var(--accent-purple)" size={24} />
-            <h3 style={{ color: 'var(--text-primary)', margin: 0 }}>Current Patch</h3>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', marginBottom: '1rem' }}>
+            <Zap color="var(--accent-violet)" size={18} />
+            <h3 style={{ color: 'var(--text-muted)', margin: 0, fontSize: '0.72rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Current Patch</h3>
           </div>
           {latestPatch ? (
             <>
-              <div style={{ fontSize: '2rem', fontWeight: 800, color: 'var(--text-primary)', marginBottom: '0.25rem' }}>
+              <div style={{ fontFamily: 'var(--font-mono)', fontSize: '1.65rem', fontWeight: 500, color: 'var(--text-primary)', letterSpacing: '-0.02em', lineHeight: 1 }}>
                 v{latestPatch.name}
               </div>
-              <span style={{ color: 'var(--text-muted)', fontSize: '0.875rem' }}>
+              <p style={{ color: 'var(--text-muted)', fontSize: '0.72rem', marginTop: '0.45rem', fontFamily: 'var(--font-mono)' }}>
                 {new Date(latestPatch.releaseDate).toLocaleDateString()} · {latestPatch.patchType}
-              </span>
+              </p>
             </>
           ) : (
             <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem' }}>
-              No patch data. Run "Sync Versions" to pull from pred.gg.
+              No patch data. Run "Sync Versions" below.
             </p>
           )}
         </div>
 
-        {/* Data Sync Controls */}
         <div className="glass-card">
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1.25rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', marginBottom: '1.1rem' }}>
             <RefreshCw
-              color="var(--text-primary)"
-              size={22}
+              color="var(--text-muted)"
+              size={18}
               style={{ animation: isSyncing ? 'spin 0.8s linear infinite' : 'none' }}
             />
-            <h3 style={{ color: 'var(--text-primary)', margin: 0 }}>Data Controls</h3>
+            <h3 style={{ color: 'var(--text-muted)', margin: 0, fontSize: '0.72rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Data Controls</h3>
           </div>
 
-          <div style={{ display: 'flex', gap: '0.75rem', marginBottom: '1rem' }}>
+          <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.85rem' }}>
             <button
               onClick={() => void handleSyncVersions()}
               disabled={isSyncing || healthStatus !== 'ok'}
               className="btn-secondary"
+              style={{ flex: 1 }}
             >
               Sync Versions
             </button>
@@ -141,33 +138,27 @@ export default function Dashboard() {
               onClick={() => void handleSyncStale()}
               disabled={isSyncing || healthStatus !== 'ok'}
               className="btn-primary"
+              style={{ flex: 1 }}
             >
               Sync Players
             </button>
           </div>
 
-          {/* Live sync feedback */}
           {syncState.tag === 'running' && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.875rem', color: 'var(--accent-blue)' }}>
-              <div style={{
-                width: '10px', height: '10px', borderRadius: '50%',
-                border: '2px solid var(--accent-blue)',
-                borderTopColor: 'transparent',
-                animation: 'spin 0.6s linear infinite',
-                flexShrink: 0,
-              }} />
-              Syncing {syncState.op}...
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.78rem', color: 'var(--accent-blue)', fontFamily: 'var(--font-mono)' }}>
+              <div style={{ width: '8px', height: '8px', borderRadius: '50%', flexShrink: 0, border: '2px solid var(--accent-blue)', borderTopColor: 'transparent', animation: 'spin 0.6s linear infinite' }} />
+              Syncing {syncState.op}…
             </div>
           )}
           {syncState.tag === 'done' && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.875rem', color: 'var(--accent-success)' }}>
-              <CheckCircle size={16} />
-              {syncState.op}: {syncState.result}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.78rem', color: 'var(--accent-win)', fontFamily: 'var(--font-mono)' }}>
+              <CheckCircle size={14} />
+              {syncState.result}
             </div>
           )}
           {syncState.tag === 'failed' && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.875rem', color: 'var(--accent-danger)' }}>
-              <XCircle size={16} />
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.78rem', color: 'var(--accent-loss)', fontFamily: 'var(--font-mono)' }}>
+              <XCircle size={14} />
               {syncState.op} failed: {syncState.message}
             </div>
           )}

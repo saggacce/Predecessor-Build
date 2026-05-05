@@ -1,4 +1,4 @@
-import type { PlayerRecord, VersionRecord } from '@predecessor/data-model';
+import type { VersionRecord } from '@predecessor/data-model';
 
 export const API_BASE = '/api';
 // Direct API URL — bypasses Vite proxy for OAuth redirects (proxy intercepts 302s internally)
@@ -88,6 +88,7 @@ export interface PlayerProfile {
 }
 
 export interface RosterMember {
+  rosterId: string;
   playerId: string;
   displayName: string;
   role: string | null;
@@ -97,10 +98,13 @@ export interface RosterMember {
   rating: { rankLabel: string | null; ratingPoints: number | null } | null;
 }
 
+export type TeamRole = 'carry' | 'jungle' | 'midlane' | 'offlane' | 'support';
+
 export interface TeamProfile {
   id: string;
   name: string;
   abbreviation: string | null;
+  logoUrl: string | null;
   type: 'OWN' | 'RIVAL';
   region: string | null;
   notes: string | null;
@@ -196,6 +200,18 @@ export const apiClient = {
       return fetchApi<{ teams: TeamProfile[] }>(`/teams${params}`);
     },
     getProfile: (id: string) => fetchApi<TeamProfile>(`/teams/${id}`),
+    create: (data: { name: string; abbreviation?: string; logoUrl?: string; type: 'OWN' | 'RIVAL'; region?: string; notes?: string }) =>
+      fetchApi<TeamProfile>('/teams', { method: 'POST', body: JSON.stringify(data) }),
+    update: (id: string, data: { name?: string; abbreviation?: string | null; logoUrl?: string | null; region?: string | null; notes?: string | null }) =>
+      fetchApi<TeamProfile>(`/teams/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+    delete: (id: string) =>
+      fetchApi<{ ok: boolean }>(`/teams/${id}`, { method: 'DELETE' }),
+    addPlayer: (teamId: string, playerId: string, role?: TeamRole) =>
+      fetchApi<{ id: string }>(`/teams/${teamId}/roster`, { method: 'POST', body: JSON.stringify({ playerId, role }) }),
+    updateRoster: (teamId: string, rosterId: string, role: TeamRole | null) =>
+      fetchApi<{ id: string }>(`/teams/${teamId}/roster/${rosterId}`, { method: 'PATCH', body: JSON.stringify({ role }) }),
+    removePlayer: (teamId: string, rosterId: string) =>
+      fetchApi<{ ok: boolean }>(`/teams/${teamId}/roster/${rosterId}`, { method: 'DELETE' }),
   },
 
   reports: {

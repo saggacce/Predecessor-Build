@@ -1,0 +1,1746 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Portal MOBA Analytics — Especificación de Diseño</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;700;800&family=DM+Sans:ital,wght@0,300;0,400;0,500;1,400&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+<style>
+  :root {
+    --bg: #0a0c10;
+    --bg2: #111318;
+    --bg3: #181c24;
+    --surface: #1e2330;
+    --surface2: #252c3a;
+    --border: rgba(255,255,255,0.07);
+    --border2: rgba(255,255,255,0.12);
+    --accent: #5b9cf6;
+    --accent2: #3d7de4;
+    --gold: #f0b429;
+    --teal: #14b8a6;
+    --violet: #a78bfa;
+    --red: #f87171;
+    --green: #4ade80;
+    --text: #e2e8f0;
+    --text2: #94a3b8;
+    --text3: #64748b;
+    --font-display: 'Syne', sans-serif;
+    --font-body: 'DM Sans', sans-serif;
+    --font-mono: 'JetBrains Mono', monospace;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-body);
+    font-size: 15px;
+    line-height: 1.75;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* ===== GRID BACKGROUND ===== */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(91,156,246,0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(91,156,246,0.03) 1px, transparent 1px);
+    background-size: 48px 48px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .wrap {
+    position: relative;
+    z-index: 1;
+    max-width: 960px;
+    margin: 0 auto;
+    padding: 0 32px 120px;
+  }
+
+  /* ===== HERO ===== */
+  .hero {
+    padding: 80px 0 64px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .hero-eyebrow {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--accent);
+    background: rgba(91,156,246,0.1);
+    border: 1px solid rgba(91,156,246,0.2);
+    padding: 5px 12px;
+    border-radius: 999px;
+    margin-bottom: 28px;
+  }
+
+  .hero-eyebrow::before {
+    content: '';
+    width: 6px; height: 6px;
+    background: var(--accent);
+    border-radius: 50%;
+  }
+
+  h1 {
+    font-family: var(--font-display);
+    font-size: clamp(36px, 6vw, 64px);
+    font-weight: 800;
+    line-height: 1.05;
+    letter-spacing: -0.02em;
+    margin-bottom: 20px;
+  }
+
+  h1 em {
+    font-style: normal;
+    background: linear-gradient(135deg, var(--accent) 0%, var(--violet) 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .hero-sub {
+    font-size: 17px;
+    color: var(--text2);
+    max-width: 580px;
+    line-height: 1.7;
+    margin-bottom: 40px;
+  }
+
+  .meta-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 24px;
+    font-size: 13px;
+    color: var(--text3);
+  }
+
+  .meta-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .meta-item strong {
+    color: var(--text2);
+    font-weight: 500;
+  }
+
+  /* ===== TOC ===== */
+  .toc {
+    margin: 48px 0;
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 28px 32px;
+  }
+
+  .toc-title {
+    font-family: var(--font-display);
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--text3);
+    margin-bottom: 16px;
+  }
+
+  .toc-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 4px 24px;
+  }
+
+  .toc-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 5px 0;
+    font-size: 13px;
+    color: var(--text2);
+    text-decoration: none;
+    transition: color 0.15s;
+  }
+
+  .toc-item:hover { color: var(--accent); }
+
+  .toc-num {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--text3);
+    min-width: 20px;
+  }
+
+  /* ===== SECTIONS ===== */
+  section {
+    padding: 64px 0 0;
+  }
+
+  .section-label {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 32px;
+  }
+
+  .section-num {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--accent);
+    background: rgba(91,156,246,0.1);
+    border: 1px solid rgba(91,156,246,0.15);
+    padding: 3px 8px;
+    border-radius: 4px;
+  }
+
+  h2 {
+    font-family: var(--font-display);
+    font-size: 28px;
+    font-weight: 800;
+    letter-spacing: -0.01em;
+    line-height: 1.2;
+  }
+
+  h3 {
+    font-family: var(--font-display);
+    font-size: 18px;
+    font-weight: 700;
+    margin: 36px 0 12px;
+    color: var(--text);
+  }
+
+  p {
+    color: var(--text2);
+    margin-bottom: 16px;
+  }
+
+  /* ===== PLATFORM CARDS ===== */
+  .platform-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap: 16px;
+    margin: 24px 0;
+  }
+
+  .platform-card {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 22px 24px;
+    position: relative;
+    overflow: hidden;
+    transition: border-color 0.2s, transform 0.2s;
+  }
+
+  .platform-card:hover {
+    border-color: var(--border2);
+    transform: translateY(-2px);
+  }
+
+  .platform-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 2px;
+    background: var(--card-accent, var(--accent));
+    opacity: 0.7;
+  }
+
+  .platform-name {
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: 16px;
+    margin-bottom: 4px;
+  }
+
+  .platform-url {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text3);
+    margin-bottom: 14px;
+  }
+
+  .platform-desc {
+    font-size: 13px;
+    color: var(--text2);
+    line-height: 1.6;
+    margin-bottom: 16px;
+  }
+
+  .tag-row { display: flex; flex-wrap: wrap; gap: 6px; }
+
+  .tag {
+    font-size: 11px;
+    padding: 3px 9px;
+    border-radius: 999px;
+    border: 1px solid;
+  }
+
+  .tag-green { color: var(--green); border-color: rgba(74,222,128,0.25); background: rgba(74,222,128,0.07); }
+  .tag-red { color: var(--red); border-color: rgba(248,113,113,0.25); background: rgba(248,113,113,0.07); }
+  .tag-gold { color: var(--gold); border-color: rgba(240,180,41,0.25); background: rgba(240,180,41,0.07); }
+  .tag-blue { color: var(--accent); border-color: rgba(91,156,246,0.25); background: rgba(91,156,246,0.07); }
+  .tag-violet { color: var(--violet); border-color: rgba(167,139,250,0.25); background: rgba(167,139,250,0.07); }
+  .tag-teal { color: var(--teal); border-color: rgba(20,184,166,0.25); background: rgba(20,184,166,0.07); }
+
+  /* ===== INSIGHT BOXES ===== */
+  .insight {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--accent);
+    border-radius: 0 10px 10px 0;
+    padding: 18px 22px;
+    margin: 24px 0;
+    font-size: 14px;
+    color: var(--text2);
+    line-height: 1.7;
+  }
+
+  .insight.gold { border-left-color: var(--gold); }
+  .insight.teal { border-left-color: var(--teal); }
+  .insight.violet { border-left-color: var(--violet); }
+  .insight.red { border-left-color: var(--red); }
+
+  .insight-label {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    margin-bottom: 6px;
+    color: var(--accent);
+  }
+
+  .insight.gold .insight-label { color: var(--gold); }
+  .insight.teal .insight-label { color: var(--teal); }
+  .insight.violet .insight-label { color: var(--violet); }
+  .insight.red .insight-label { color: var(--red); }
+
+  /* ===== FEATURE GRID ===== */
+  .feature-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 16px;
+    margin: 24px 0;
+  }
+
+  .feature-card {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 22px 24px;
+    transition: border-color 0.2s;
+  }
+
+  .feature-card:hover { border-color: var(--border2); }
+
+  .feature-icon {
+    width: 40px; height: 40px;
+    background: var(--icon-bg, rgba(91,156,246,0.1));
+    border: 1px solid var(--icon-border, rgba(91,156,246,0.2));
+    border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 18px;
+    margin-bottom: 14px;
+  }
+
+  .feature-title {
+    font-family: var(--font-display);
+    font-size: 15px;
+    font-weight: 700;
+    margin-bottom: 8px;
+    color: var(--text);
+  }
+
+  .feature-desc {
+    font-size: 13px;
+    color: var(--text2);
+    line-height: 1.65;
+  }
+
+  /* ===== PRIORITY TABLE ===== */
+  .priority-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 24px 0;
+    font-size: 13px;
+  }
+
+  .priority-table th {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text3);
+    text-align: left;
+    padding: 8px 16px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .priority-table td {
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border);
+    color: var(--text2);
+    vertical-align: top;
+  }
+
+  .priority-table tr:last-child td { border-bottom: none; }
+  .priority-table tr:hover td { background: rgba(255,255,255,0.02); }
+
+  .prio-badge {
+    display: inline-block;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-weight: 500;
+  }
+
+  .prio-p1 { background: rgba(248,113,113,0.15); color: var(--red); border: 1px solid rgba(248,113,113,0.2); }
+  .prio-p2 { background: rgba(240,180,41,0.12); color: var(--gold); border: 1px solid rgba(240,180,41,0.2); }
+  .prio-p3 { background: rgba(91,156,246,0.1); color: var(--accent); border: 1px solid rgba(91,156,246,0.18); }
+
+  /* ===== UX PRINCIPLES ===== */
+  .principles-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 12px;
+    margin: 24px 0;
+  }
+
+  .principle {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px 20px;
+  }
+
+  .principle-num {
+    font-family: var(--font-mono);
+    font-size: 22px;
+    font-weight: 500;
+    color: var(--border2);
+    margin-bottom: 8px;
+  }
+
+  .principle-title {
+    font-family: var(--font-display);
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--text);
+    margin-bottom: 6px;
+  }
+
+  .principle-desc {
+    font-size: 12px;
+    color: var(--text2);
+    line-height: 1.6;
+  }
+
+  /* ===== ARCHITECTURE ===== */
+  .arch-block {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 24px;
+    margin: 24px 0;
+  }
+
+  .arch-row {
+    display: grid;
+    grid-template-columns: 130px 1fr;
+    gap: 20px;
+    align-items: start;
+    padding: 12px 0;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .arch-row:last-child { border-bottom: none; }
+
+  .arch-layer {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text3);
+    padding-top: 2px;
+  }
+
+  .arch-items { display: flex; flex-wrap: wrap; gap: 8px; }
+
+  .arch-item {
+    background: var(--surface);
+    border: 1px solid var(--border2);
+    border-radius: 6px;
+    padding: 4px 12px;
+    font-size: 12px;
+    color: var(--text2);
+  }
+
+  /* ===== MOCKUP SECTION ===== */
+  .mockup-container {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    overflow: hidden;
+    margin: 24px 0;
+  }
+
+  .mockup-topbar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 14px 20px;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg3);
+  }
+
+  .dot { width: 10px; height: 10px; border-radius: 50%; }
+  .dot-red { background: #ff5f57; }
+  .dot-yellow { background: #ffbd2e; }
+  .dot-green { background: #28ca41; }
+
+  .mockup-url {
+    flex: 1;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 5px 12px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text3);
+    text-align: center;
+  }
+
+  .mockup-body { padding: 24px; }
+
+  .mockup-nav {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    margin-bottom: 24px;
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 4px;
+  }
+
+  .nav-item {
+    padding: 6px 14px;
+    border-radius: 7px;
+    font-size: 12px;
+    color: var(--text3);
+    cursor: default;
+    transition: background 0.15s;
+  }
+
+  .nav-item.active {
+    background: var(--surface2);
+    color: var(--text);
+  }
+
+  .mockup-dash {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 12px;
+    margin-bottom: 20px;
+  }
+
+  .stat-card {
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px;
+  }
+
+  .stat-label { font-size: 11px; color: var(--text3); margin-bottom: 6px; }
+  .stat-value { font-family: var(--font-display); font-size: 24px; font-weight: 800; }
+  .stat-sub { font-size: 11px; margin-top: 4px; }
+  .up { color: var(--green); }
+  .dn { color: var(--red); }
+
+  .mockup-mid {
+    display: grid;
+    grid-template-columns: 2fr 1fr;
+    gap: 12px;
+  }
+
+  .chart-area {
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px;
+  }
+
+  .chart-title { font-size: 11px; color: var(--text3); margin-bottom: 12px; }
+
+  .bar-chart { display: flex; align-items: flex-end; gap: 6px; height: 80px; }
+
+  .bar {
+    flex: 1;
+    background: rgba(91,156,246,0.3);
+    border-radius: 3px 3px 0 0;
+    border-top: 2px solid rgba(91,156,246,0.7);
+    transition: background 0.2s;
+    position: relative;
+  }
+
+  .bar:hover { background: rgba(91,156,246,0.5); }
+  .bar.highlight { background: rgba(91,156,246,0.6); border-color: var(--accent); }
+
+  .champion-list {
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px;
+  }
+
+  .champ-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 6px 0;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .champ-item:last-child { border-bottom: none; }
+
+  .champ-avatar {
+    width: 28px; height: 28px;
+    border-radius: 6px;
+    flex-shrink: 0;
+  }
+
+  .champ-name { font-size: 12px; color: var(--text); flex: 1; }
+  .champ-wr {
+    font-family: var(--font-mono);
+    font-size: 11px;
+  }
+
+  /* ===== DESIGN SYSTEM ===== */
+  .color-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin: 20px 0;
+  }
+
+  .color-swatch {
+    text-align: center;
+    width: 80px;
+  }
+
+  .swatch-box {
+    width: 80px; height: 48px;
+    border-radius: 8px;
+    margin-bottom: 6px;
+    border: 1px solid rgba(255,255,255,0.06);
+  }
+
+  .swatch-name { font-family: var(--font-mono); font-size: 10px; color: var(--text3); }
+  .swatch-hex { font-family: var(--font-mono); font-size: 10px; color: var(--text2); }
+
+  .type-scale {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 24px;
+    margin: 20px 0;
+  }
+
+  .type-row {
+    display: grid;
+    grid-template-columns: 100px 1fr;
+    align-items: baseline;
+    gap: 20px;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .type-row:last-child { border-bottom: none; }
+
+  .type-meta { font-family: var(--font-mono); font-size: 10px; color: var(--text3); }
+
+  /* ===== KPI ROW ===== */
+  .kpi-row {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    gap: 12px;
+    margin: 24px 0;
+  }
+
+  .kpi-card {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px;
+    text-align: center;
+  }
+
+  .kpi-val {
+    font-family: var(--font-display);
+    font-size: 30px;
+    font-weight: 800;
+    line-height: 1;
+    margin-bottom: 4px;
+  }
+
+  .kpi-label {
+    font-size: 12px;
+    color: var(--text3);
+    line-height: 1.4;
+  }
+
+  /* ===== ROADMAP ===== */
+  .roadmap {
+    position: relative;
+    margin: 24px 0;
+    padding-left: 28px;
+  }
+
+  .roadmap::before {
+    content: '';
+    position: absolute;
+    left: 7px; top: 8px; bottom: 8px;
+    width: 1px;
+    background: var(--border);
+  }
+
+  .phase {
+    position: relative;
+    margin-bottom: 28px;
+  }
+
+  .phase::before {
+    content: '';
+    position: absolute;
+    left: -24px; top: 6px;
+    width: 10px; height: 10px;
+    border-radius: 50%;
+    background: var(--phase-color, var(--accent));
+    box-shadow: 0 0 0 3px var(--bg), 0 0 0 4px var(--phase-color, var(--accent));
+  }
+
+  .phase-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 8px;
+  }
+
+  .phase-title {
+    font-family: var(--font-display);
+    font-size: 15px;
+    font-weight: 700;
+  }
+
+  .phase-timing {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--text3);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    padding: 2px 8px;
+    border-radius: 4px;
+  }
+
+  .phase-items {
+    list-style: none;
+    font-size: 13px;
+    color: var(--text2);
+  }
+
+  .phase-items li {
+    padding: 3px 0;
+    padding-left: 14px;
+    position: relative;
+  }
+
+  .phase-items li::before {
+    content: '→';
+    position: absolute;
+    left: 0;
+    color: var(--text3);
+  }
+
+  /* ===== DIVIDERS ===== */
+  hr {
+    border: none;
+    border-top: 1px solid var(--border);
+    margin: 0;
+  }
+
+  /* ===== FOOTER ===== */
+  .doc-footer {
+    margin-top: 80px;
+    padding: 40px 0;
+    border-top: 1px solid var(--border);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 12px;
+    font-size: 12px;
+    color: var(--text3);
+  }
+
+  .footer-brand {
+    font-family: var(--font-display);
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--text2);
+  }
+
+  /* ===== RESPONSIVE ===== */
+  @media (max-width: 640px) {
+    .wrap { padding: 0 20px 80px; }
+    .mockup-dash { grid-template-columns: 1fr; }
+    .mockup-mid { grid-template-columns: 1fr; }
+    .arch-row { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <!-- HERO -->
+  <div class="hero">
+    <div class="hero-eyebrow">Especificación de Producto · v1.0 · 2025</div>
+    <h1>Diseño de un Portal<br/><em>MOBA Analytics</em></h1>
+    <p class="hero-sub">
+      Análisis competitivo de las principales plataformas del mercado
+      (iTero.gg, Mobalytics, OP.GG, Porofessor, U.GG) y especificación
+      completa para construir un portal moderno, ágil y centrado en el jugador.
+    </p>
+    <div class="meta-row">
+      <div class="meta-item">📄 <strong>Tipo:</strong> Product Design Specification</div>
+      <div class="meta-item">🎮 <strong>Target:</strong> League of Legends · Dota 2 · SMITE</div>
+      <div class="meta-item">📅 <strong>Fecha:</strong> Abril 2026</div>
+    </div>
+  </div>
+
+  <!-- TOC -->
+  <nav class="toc">
+    <div class="toc-title">Índice de contenidos</div>
+    <div class="toc-grid">
+      <a href="#analisis" class="toc-item"><span class="toc-num">01</span>Análisis del Mercado</a>
+      <a href="#problemas" class="toc-item"><span class="toc-num">02</span>Problemas Detectados</a>
+      <a href="#vision" class="toc-item"><span class="toc-num">03</span>Visión del Portal</a>
+      <a href="#ux" class="toc-item"><span class="toc-num">04</span>Principios UX</a>
+      <a href="#funcionalidades" class="toc-item"><span class="toc-num">05</span>Funcionalidades Clave</a>
+      <a href="#diseño" class="toc-item"><span class="toc-num">06</span>Diseño Visual</a>
+      <a href="#arquitectura" class="toc-item"><span class="toc-num">07</span>Arquitectura Técnica</a>
+      <a href="#roadmap" class="toc-item"><span class="toc-num">08</span>Roadmap</a>
+      <a href="#metricas" class="toc-item"><span class="toc-num">09</span>KPIs y Métricas</a>
+    </div>
+  </nav>
+
+  <!-- ===== 01 ANÁLISIS ===== -->
+  <section id="analisis">
+    <div class="section-label">
+      <span class="section-num">01</span>
+      <h2>Análisis del Mercado</h2>
+    </div>
+    <p>
+      El ecosistema de herramientas de análisis MOBA ha evolucionado enormemente en los últimos
+      cinco años. Hemos analizado en profundidad las plataformas más relevantes para extraer sus
+      fortalezas, debilidades y los huecos del mercado que un nuevo portal puede ocupar.
+    </p>
+
+    <div class="platform-grid">
+
+      <div class="platform-card" style="--card-accent: #5b9cf6;">
+        <div class="platform-name">iTero.gg</div>
+        <div class="platform-url">itero.gg · Overwolf App</div>
+        <p class="platform-desc">
+          Coach AI especializado en el draft y fase de ban-pick. Analiza sinergia de campeones por
+          carril, contras y balance AP/AD en tiempo real. Modelo predictivo entrenado con más de
+          1 millón de partidas, con precisión ~70-73% (vs ~63-65% de los bookmakers).
+        </p>
+        <div class="tag-row">
+          <span class="tag tag-green">✓ Draft AI</span>
+          <span class="tag tag-green">✓ Personalizado</span>
+          <span class="tag tag-red">✗ Solo LoL</span>
+          <span class="tag tag-red">✗ Requiere Overwolf</span>
+        </div>
+      </div>
+
+      <div class="platform-card" style="--card-accent: #a78bfa;">
+        <div class="platform-name">Mobalytics</div>
+        <div class="platform-url">mobalytics.gg · Adquirida por ESL FACEIT (2025)</div>
+        <p class="platform-desc">
+          Plataforma all-in-one con su sistema GPI (Gamer Performance Index) que cuantifica
+          combate, macro, visión y objetivos. Apoya múltiples títulos: LoL, Valorant, Destiny 2
+          y Marvel Rivals. Usada por T1 y otros equipos profesionales.
+        </p>
+        <div class="tag-row">
+          <span class="tag tag-green">✓ Multi-juego</span>
+          <span class="tag tag-green">✓ GPI Score</span>
+          <span class="tag tag-red">✗ UI compleja</span>
+          <span class="tag tag-red">✗ Sin app móvil LoL</span>
+        </div>
+      </div>
+
+      <div class="platform-card" style="--card-accent: #f0b429;">
+        <div class="platform-name">OP.GG</div>
+        <div class="platform-url">op.gg · App iOS + Android + Desktop</div>
+        <p class="platform-desc">
+          El referente histórico del track de estadísticas. Mejor ecosistema multi-plataforma
+          del mercado: web, móvil (iOS+Android), desktop perfectamente sincronizados. Excelente
+          UX/UI, premiada por su diseño. Soporte para ARAM, ARENA, URF y modos especiales.
+        </p>
+        <div class="tag-row">
+          <span class="tag tag-green">✓ Ecosistema completo</span>
+          <span class="tag tag-green">✓ App móvil</span>
+          <span class="tag tag-gold">~ Overlay tardío</span>
+          <span class="tag tag-gold">~ Poca IA</span>
+        </div>
+      </div>
+
+      <div class="platform-card" style="--card-accent: #14b8a6;">
+        <div class="platform-name">Porofessor.gg</div>
+        <div class="platform-url">porofessor.gg · +16.6M descargas</div>
+        <p class="platform-desc">
+          Conectado a LeagueofGraphs.com, ofrece métricas poco comunes: frecuencia de ping,
+          colocación de wards, estadísticas por lado (azul/rojo). Sistema automático de
+          etiquetado de estilo (Aggressive Early, Vision Master...). Profundidad analítica muy alta.
+        </p>
+        <div class="tag-row">
+          <span class="tag tag-green">✓ Métricas únicas</span>
+          <span class="tag tag-green">✓ Playstyle tags</span>
+          <span class="tag tag-red">✗ UX obsoleta</span>
+          <span class="tag tag-red">✗ Solo Android</span>
+        </div>
+      </div>
+
+      <div class="platform-card" style="--card-accent: #4ade80;">
+        <div class="platform-name">U.GG</div>
+        <div class="platform-url">u.gg · Desktop + Web</div>
+        <p class="platform-desc">
+          Tier lists y builds de alta precisión basadas en datos de miles de partidas de alto
+          Elo. Auto-importación de runas y objetos. Interfaz limpia con énfasis en la
+          recomendación inmediata. Desktop app con overlay, pero sin versión móvil.
+        </p>
+        <div class="tag-row">
+          <span class="tag tag-green">✓ Tier lists precisas</span>
+          <span class="tag tag-green">✓ Auto-runes</span>
+          <span class="tag tag-red">✗ Sin móvil</span>
+          <span class="tag tag-gold">~ Funciones limitadas</span>
+        </div>
+      </div>
+
+      <div class="platform-card" style="--card-accent: #f87171;">
+        <div class="platform-name">STATUP.GG</div>
+        <div class="platform-url">statup.gg · Voice Coaching AI</div>
+        <p class="platform-desc">
+          Diferenciación radical: coaching por voz en tiempo real. Detecta ventanas de roaming,
+          presión de jungla y ventajas posicionales. Da feedback inmediato post-kill o post-
+          muerte. Sistema de condiciones conductuales, no solo estadísticas.
+        </p>
+        <div class="tag-row">
+          <span class="tag tag-violet">✓ Voice AI</span>
+          <span class="tag tag-green">✓ Tiempo real</span>
+          <span class="tag tag-gold">~ Solo LoL</span>
+          <span class="tag tag-gold">~ Nicho específico</span>
+        </div>
+      </div>
+
+    </div>
+
+    <div class="insight gold">
+      <div class="insight-label">Conclusión de mercado</div>
+      El mercado está fragmentado: cada plataforma destaca en una sola dimensión (iTero en draft,
+      Porofessor en profundidad, OP.GG en ecosistema, STATUP en coaching de voz). No existe una
+      plataforma que combine análisis de draft con IA, coaching contextual, UX moderna y cobertura
+      multi-plataforma de forma cohesiva. <strong>Ahí está la oportunidad.</strong>
+    </div>
+  </section>
+
+  <!-- ===== 02 PROBLEMAS ===== -->
+  <section id="problemas">
+    <div class="section-label">
+      <span class="section-num">02</span>
+      <h2>Problemas Detectados en las Plataformas Actuales</h2>
+    </div>
+    <p>Tras el análisis exhaustivo, identificamos cuatro categorías de problemas recurrentes:</p>
+
+    <div class="feature-grid">
+      <div class="feature-card" style="border-left: 2px solid var(--red);">
+        <div class="feature-icon" style="--icon-bg: rgba(248,113,113,0.1); --icon-border: rgba(248,113,113,0.2);">⚡</div>
+        <div class="feature-title">Rendimiento y velocidad</div>
+        <p class="feature-desc">Tiempos de carga excesivos al consultar historial de partidas. Overwolf introduce latencia y consume recursos significativos de CPU/RAM en mid-game.</p>
+      </div>
+
+      <div class="feature-card" style="border-left: 2px solid var(--gold);">
+        <div class="feature-icon" style="--icon-bg: rgba(240,180,41,0.1); --icon-border: rgba(240,180,41,0.2);">🗺️</div>
+        <div class="feature-title">UX fragmentada</div>
+        <p class="feature-desc">Interfaces diseñadas en distintas épocas sin coherencia visual. Porofessor y U.GG especialmente sufren de layouts densos e información difícil de jerarquizar.</p>
+      </div>
+
+      <div class="feature-card" style="border-left: 2px solid var(--violet);">
+        <div class="feature-icon" style="--icon-bg: rgba(167,139,250,0.1); --icon-border: rgba(167,139,250,0.2);">📱</div>
+        <div class="feature-title">Soporte móvil deficiente</div>
+        <p class="feature-desc">Solo OP.GG ofrece apps nativas de calidad en iOS y Android. La mayoría de plataformas ignoran el consumo mobile, que representa 40%+ del tráfico.</p>
+      </div>
+
+      <div class="feature-card" style="border-left: 2px solid var(--teal);">
+        <div class="feature-icon" style="--icon-bg: rgba(20,184,166,0.1); --icon-border: rgba(20,184,166,0.2);">🔒</div>
+        <div class="feature-title">Silos de datos</div>
+        <p class="feature-desc">Cada plataforma funciona de forma aislada. No hay forma de exportar análisis, comparar datos entre herramientas o integrar con Discord/Teams para trabajo colaborativo.</p>
+      </div>
+
+      <div class="feature-card" style="border-left: 2px solid var(--accent);">
+        <div class="feature-icon" style="--icon-bg: rgba(91,156,246,0.1); --icon-border: rgba(91,156,246,0.2);">🤖</div>
+        <div class="feature-title">IA no explicable</div>
+        <p class="feature-desc">Las recomendaciones de IA se presentan como "caja negra". Los jugadores desconfían cuando no entienden el porqué de las sugerencias. ProComps, por ejemplo, recomienda picks incorrectos contra ciertos matchups.</p>
+      </div>
+
+      <div class="feature-card" style="border-left: 2px solid rgba(255,255,255,0.2);">
+        <div class="feature-icon" style="--icon-bg: rgba(255,255,255,0.05); --icon-border: rgba(255,255,255,0.1);">🌍</div>
+        <div class="feature-title">Un solo juego</div>
+        <p class="feature-desc">Casi todas las plataformas están construidas en torno a LoL y tienen soporte nominal para otros MOBAs. La audiencia de Dota 2, SMITE o Wild Rift está desatendida.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== 03 VISIÓN ===== -->
+  <section id="vision">
+    <div class="section-label">
+      <span class="section-num">03</span>
+      <h2>Visión del Portal</h2>
+    </div>
+
+    <div class="insight teal">
+      <div class="insight-label">Declaración de misión</div>
+      Construir la plataforma de análisis MOBA más ágil, explicable e integrada del mercado:
+      una herramienta que acompaña al jugador antes, durante y después de cada partida,
+      con una experiencia unificada en web, móvil y overlay sin fricciones.
+    </div>
+
+    <h3>Propuesta de valor diferencial</h3>
+    <p>Nuestro portal se diferencia en tres ejes que ningún competidor cubre simultáneamente:</p>
+
+    <div class="kpi-row">
+      <div class="kpi-card">
+        <div class="kpi-val" style="color: var(--accent);">IA<br/>Explicable</div>
+        <div class="kpi-label">Cada sugerencia muestra el razonamiento detrás</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-val" style="color: var(--teal);">Multi<br/>MOBA</div>
+        <div class="kpi-label">LoL, Dota 2, SMITE, Wild Rift desde el día 1</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-val" style="color: var(--gold);">Native<br/>Mobile</div>
+        <div class="kpi-label">App iOS + Android con paridad de features</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-val" style="color: var(--violet);">&lt;200ms</div>
+        <div class="kpi-label">Tiempo de respuesta objetivo en todas las consultas</div>
+      </div>
+    </div>
+
+    <h3>Audiencias objetivo</h3>
+    <div class="feature-grid">
+      <div class="feature-card">
+        <div class="feature-title">🎮 Jugador casual (Bronce-Oro)</div>
+        <p class="feature-desc">Necesita orientación simple y rápida. Valor principal: "dime qué jugar y por qué" en less de 10 segundos.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-title">📈 Jugador competitivo (Plata-Diamante)</div>
+        <p class="feature-desc">Quiere entender sus patrones, mejorar métricas específicas y explorar el meta en profundidad. Consume análisis post-partida detallados.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-title">🏆 Jugador semi-pro / streamer</div>
+        <p class="feature-desc">Necesita datos para tomar decisiones estratégicas en directo y compartir análisis con su audiencia o equipo.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-title">🧑‍🏫 Coach y analista</div>
+        <p class="feature-desc">Requiere herramientas de scouting de jugadores, comparativas de equipos y exportación de datos para sesiones de coaching.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== 04 UX ===== -->
+  <section id="ux">
+    <div class="section-label">
+      <span class="section-num">04</span>
+      <h2>Principios de Diseño UX</h2>
+    </div>
+    <p>Estos principios deben guiar cada decisión de diseño e implementación del portal.</p>
+
+    <div class="principles-grid">
+      <div class="principle">
+        <div class="principle-num">01</div>
+        <div class="principle-title">Zero a valor en &lt;5 segundos</div>
+        <p class="principle-desc">El usuario debe obtener información útil sin login, sin onboarding y sin configuración. La primera pantalla visible ya aporta valor.</p>
+      </div>
+      <div class="principle">
+        <div class="principle-num">02</div>
+        <div class="principle-title">Progresive Disclosure</div>
+        <p class="principle-desc">La superficie muestra lo esencial. La profundidad está disponible para quien la necesita, sin abrumar al que no.</p>
+      </div>
+      <div class="principle">
+        <div class="principle-num">03</div>
+        <div class="principle-title">Contexto sobre datos</div>
+        <p class="principle-desc">Nunca mostrar un número sin su contexto. Un 53% de winrate solo tiene significado si sabes si es bueno, malo o en qué condiciones.</p>
+      </div>
+      <div class="principle">
+        <div class="principle-num">04</div>
+        <div class="principle-title">Velocidad como feature</div>
+        <p class="principle-desc">La latencia percibida es parte del producto. Skeleton screens, optimistic UI y prefetching son obligatorios, no opcionales.</p>
+      </div>
+      <div class="principle">
+        <div class="principle-num">05</div>
+        <div class="principle-title">Mobile-first real</div>
+        <p class="principle-desc">No "responsive", sino diseñado primero para móvil. Los flujos de consulta rápida (entre muertes, en loading screen) son prioritarios.</p>
+      </div>
+      <div class="principle">
+        <div class="principle-num">06</div>
+        <div class="principle-title">Feedback siempre visible</div>
+        <p class="principle-desc">Cada acción del usuario tiene respuesta visual inmediata. Estados de carga, errores y éxitos son parte del diseño, no afterthoughts.</p>
+      </div>
+      <div class="principle">
+        <div class="principle-num">07</div>
+        <div class="principle-title">IA transparente</div>
+        <p class="principle-desc">Los modelos explican sus recomendaciones en lenguaje natural. El usuario entiende el porqué, no solo el qué.</p>
+      </div>
+      <div class="principle">
+        <div class="principle-num">08</div>
+        <div class="principle-title">Accesibilidad sin excusas</div>
+        <p class="principle-desc">WCAG AA mínimo. Contraste correcto, navegación por teclado y soporte de lectores de pantalla son requisitos de ingeniería, no aspiraciones.</p>
+      </div>
+    </div>
+
+    <!-- MOCKUP -->
+    <h3>Mockup: Dashboard principal</h3>
+    <div class="mockup-container">
+      <div class="mockup-topbar">
+        <div class="dot dot-red"></div>
+        <div class="dot dot-yellow"></div>
+        <div class="dot dot-green"></div>
+        <div class="mockup-url">mobaanalysis.gg / dashboard</div>
+      </div>
+      <div class="mockup-body">
+        <div class="mockup-nav">
+          <div class="nav-item active">Dashboard</div>
+          <div class="nav-item">Draft Coach</div>
+          <div class="nav-item">Análisis</div>
+          <div class="nav-item">Campeones</div>
+          <div class="nav-item">Meta</div>
+          <div class="nav-item">Perfil</div>
+        </div>
+        <div class="mockup-dash">
+          <div class="stat-card">
+            <div class="stat-label">WINRATE (30D)</div>
+            <div class="stat-value" style="color: var(--green);">57.3%</div>
+            <div class="stat-sub up">↑ +3.1% vs mes anterior</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">KDA MEDIO</div>
+            <div class="stat-value" style="color: var(--accent);">3.8</div>
+            <div class="stat-sub up">↑ +0.4 vs media de elo</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">PARTIDAS</div>
+            <div class="stat-value" style="color: var(--text);">124</div>
+            <div class="stat-sub" style="color: var(--text3);">Última: hace 2h</div>
+          </div>
+        </div>
+        <div class="mockup-mid">
+          <div class="chart-area">
+            <div class="chart-title">WINRATE POR CAMPEÓN (SEMANA)</div>
+            <div class="bar-chart">
+              <div class="bar" style="height: 60%;" title="Jinx"></div>
+              <div class="bar highlight" style="height: 85%;" title="Caitlyn"></div>
+              <div class="bar" style="height: 45%;" title="Ezreal"></div>
+              <div class="bar" style="height: 70%;" title="Jhin"></div>
+              <div class="bar" style="height: 55%;" title="Ashe"></div>
+              <div class="bar" style="height: 90%;" title="Vayne"></div>
+              <div class="bar" style="height: 38%;" title="MF"></div>
+              <div class="bar" style="height: 72%;" title="Sivir"></div>
+            </div>
+          </div>
+          <div class="champion-list">
+            <div class="chart-title">POOL RECOMENDADO</div>
+            <div class="champ-item">
+              <div class="champ-avatar" style="background: linear-gradient(135deg, #1e3a8a, #3b82f6);"></div>
+              <div class="champ-name">Caitlyn</div>
+              <div class="champ-wr" style="color: var(--green);">85%</div>
+            </div>
+            <div class="champ-item">
+              <div class="champ-avatar" style="background: linear-gradient(135deg, #7c2d12, #ea580c);"></div>
+              <div class="champ-name">Vayne</div>
+              <div class="champ-wr" style="color: var(--green);">79%</div>
+            </div>
+            <div class="champ-item">
+              <div class="champ-avatar" style="background: linear-gradient(135deg, #14532d, #22c55e);"></div>
+              <div class="champ-name">Jinx</div>
+              <div class="champ-wr" style="color: var(--gold);">61%</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== 05 FUNCIONALIDADES ===== -->
+  <section id="funcionalidades">
+    <div class="section-label">
+      <span class="section-num">05</span>
+      <h2>Funcionalidades Clave</h2>
+    </div>
+    <p>
+      El portal se estructura en módulos independientes pero interconectados. Cada módulo
+      tiene un propósito claro y puede usarse de forma autónoma o en combinación.
+    </p>
+
+    <h3>Módulo 1 — Draft Coach (Core diferenciador)</h3>
+    <p>Inspirado en iTero.gg pero con más transparencia y cobertura multi-MOBA.</p>
+    <div class="feature-grid">
+      <div class="feature-card">
+        <div class="feature-icon">🤖</div>
+        <div class="feature-title">IA de predicción de draft</div>
+        <p class="feature-desc">Modelo entrenado con millones de partidas. Sugiere los mejores picks dado el contexto del draft con explicación de por qué: counter, sinergia, balance de daño.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">🔗</div>
+        <div class="feature-title">Análisis de sinergias</div>
+        <p class="feature-desc">Mapa visual de cómo interactúan los campeones en el equipo. No solo 1v1 sino todo el teamcomp: peel, engage, poke, scaling, cc encadenado.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">⚖️</div>
+        <div class="feature-title">Balance automático</div>
+        <p class="feature-desc">Alertas en tiempo real si el team tiene demasiado daño físico/mágico, poca tankiness o carece de crowd control relevante.</p>
+      </div>
+    </div>
+
+    <h3>Módulo 2 — Análisis Post-Partida</h3>
+    <div class="feature-grid">
+      <div class="feature-card">
+        <div class="feature-icon">📊</div>
+        <div class="feature-title">Descomposición de partida</div>
+        <p class="feature-desc">Timeline interactivo de la partida con eventos clave: first blood, torres, objetivos, teamfights. Compara tu decisión con la decisión "óptima" estadística.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">🗺️</div>
+        <div class="feature-title">Heatmaps de movimiento</div>
+        <p class="feature-desc">Visualización sobre el mapa de tus patrones de movimiento, zonas de muerte recurrentes y comparativa con jugadores de tu mismo Elo.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">📌</div>
+        <div class="feature-title">Momento crítico destacado</div>
+        <p class="feature-desc">La IA identifica automáticamente el momento donde se giró la partida y explica qué pasó: decisión propia, enemigo o estructura de draft.</p>
+      </div>
+    </div>
+
+    <h3>Módulo 3 — Perfil y Progresión</h3>
+    <div class="feature-grid">
+      <div class="feature-card">
+        <div class="feature-icon">🧬</div>
+        <div class="feature-title">Playstyle DNA</div>
+        <p class="feature-desc">Perfil visual del estilo de juego: agresivo/defensivo, macro/micro, teamplayer/carry. Evoluciona dinámicamente con las partidas más recientes.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">📈</div>
+        <div class="feature-title">Curvas de progresión</div>
+        <p class="feature-desc">Gráficas longitudinales de 500+ métricas ajustadas por parche, campeón y Elo. Filtrables por período, modo de juego y posición.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">🎯</div>
+        <div class="feature-title">Objetivos personalizados</div>
+        <p class="feature-desc">El jugador define metas (mejorar CS@15, reducir muertes en la laning phase) y el portal proporciona micro-misiones y seguimiento automático.</p>
+      </div>
+    </div>
+
+    <h3>Módulo 4 — Meta Explorer</h3>
+    <div class="feature-grid">
+      <div class="feature-card">
+        <div class="feature-icon">🏆</div>
+        <div class="feature-title">Tier lists dinámicas</div>
+        <p class="feature-desc">Actualizadas cada 6 horas con datos de partidas de alto Elo. Filtradas por rol, Elo de referencia y estado del parche. Mostrando contexto de por qué un campeón sube o baja.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">📰</div>
+        <div class="feature-title">Patch notes en acción</div>
+        <p class="feature-desc">Cuando sale un parche, el portal muestra automáticamente cómo están cambiando los winrates en tiempo real, con las primeras 48h de datos post-parche.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">🔍</div>
+        <div class="feature-title">Comparador de matchups</div>
+        <p class="feature-desc">Interfaz de selección de dos campeones con todos los datos de enfrentamiento: winrate general, por Elo, ventajas en early/mid/late y skills clave de cada uno.</p>
+      </div>
+    </div>
+
+    <h3>Módulo 5 — Overlay en juego (nativo, sin Overwolf)</h3>
+    <div class="insight violet">
+      <div class="insight-label">Diferenciador técnico clave</div>
+      La mayoría de plataformas dependen de Overwolf como capa de overlay, lo que añade
+      latencia, consume recursos y requiere instalación de un cliente adicional. Nuestro
+      portal ofrece un overlay nativo ultraligero (&lt;50MB) que se integra directamente
+      con la API oficial del juego.
+    </div>
+    <div class="feature-grid">
+      <div class="feature-card">
+        <div class="feature-icon">⏱️</div>
+        <div class="feature-title">Timers de objetivos</div>
+        <p class="feature-desc">Leyendas automáticas de Dragon, Baron, Heraldo y torreta con countdown visual no intrusivo, ajustable en posición y opacidad.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">💊</div>
+        <div class="feature-title">Builds al instante</div>
+        <p class="feature-desc">Recomendación de build ajustada al draft enemigo, importable con un clic al cliente del juego. Se actualiza si el enemigo cambia de build.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">👁️</div>
+        <div class="feature-title">Scouting de enemigos</div>
+        <p class="feature-desc">En champ select: historial reciente, winrate con ese campeón, patrones de juego habituales y tips específicos sobre cómo contrarrestar su estilo.</p>
+      </div>
+    </div>
+
+    <!-- PRIORITY TABLE -->
+    <h3>Priorización de funcionalidades (MoSCoW)</h3>
+    <table class="priority-table">
+      <thead>
+        <tr>
+          <th>Prioridad</th>
+          <th>Feature</th>
+          <th>Impacto en usuario</th>
+          <th>Complejidad</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><span class="prio-badge prio-p1">P1 Must</span></td>
+          <td>Búsqueda de invocador y perfil</td>
+          <td>Cualquier usuario lo necesita para entrar</td>
+          <td>Media</td>
+        </tr>
+        <tr>
+          <td><span class="prio-badge prio-p1">P1 Must</span></td>
+          <td>Historial de partidas con estadísticas</td>
+          <td>Feature base de toda plataforma</td>
+          <td>Media</td>
+        </tr>
+        <tr>
+          <td><span class="prio-badge prio-p1">P1 Must</span></td>
+          <td>Draft Coach con IA explicable</td>
+          <td>Diferenciador principal del producto</td>
+          <td>Alta</td>
+        </tr>
+        <tr>
+          <td><span class="prio-badge prio-p1">P1 Must</span></td>
+          <td>Tier lists y meta (auto-actualizado)</td>
+          <td>Contenido recurrente de alto tráfico</td>
+          <td>Media</td>
+        </tr>
+        <tr>
+          <td><span class="prio-badge prio-p2">P2 Should</span></td>
+          <td>App móvil nativa (iOS + Android)</td>
+          <td>40%+ del tráfico potencial</td>
+          <td>Alta</td>
+        </tr>
+        <tr>
+          <td><span class="prio-badge prio-p2">P2 Should</span></td>
+          <td>Overlay nativo sin Overwolf</td>
+          <td>Experiencia in-game sin fricción</td>
+          <td>Muy Alta</td>
+        </tr>
+        <tr>
+          <td><span class="prio-badge prio-p2">P2 Should</span></td>
+          <td>Playstyle DNA y objetivos personalizados</td>
+          <td>Retención y engagement profundo</td>
+          <td>Alta</td>
+        </tr>
+        <tr>
+          <td><span class="prio-badge prio-p3">P3 Could</span></td>
+          <td>Heatmaps y timeline de partida</td>
+          <td>Diferenciador analítico avanzado</td>
+          <td>Muy Alta</td>
+        </tr>
+        <tr>
+          <td><span class="prio-badge prio-p3">P3 Could</span></td>
+          <td>Coaching colaborativo (equipos)</td>
+          <td>Segmento semi-pro y academias</td>
+          <td>Alta</td>
+        </tr>
+        <tr>
+          <td><span class="prio-badge prio-p3">P3 Could</span></td>
+          <td>Soporte Dota 2 y SMITE</td>
+          <td>Expansión de mercado</td>
+          <td>Alta</td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- ===== 06 DISEÑO ===== -->
+  <section id="diseño">
+    <div class="section-label">
+      <span class="section-num">06</span>
+      <h2>Diseño Visual e Identidad</h2>
+    </div>
+    <p>
+      El lenguaje visual del portal debe comunicar <strong>confianza técnica</strong> y
+      <strong>precisión de datos</strong> sin sacrificar la energía del gaming.
+      Oscuro, denso y rápido — como el juego mismo.
+    </p>
+
+    <h3>Paleta de colores</h3>
+    <div class="color-grid">
+      <div class="color-swatch">
+        <div class="swatch-box" style="background: #0a0c10;"></div>
+        <div class="swatch-name">Background</div>
+        <div class="swatch-hex">#0a0c10</div>
+      </div>
+      <div class="color-swatch">
+        <div class="swatch-box" style="background: #111318;"></div>
+        <div class="swatch-name">Surface</div>
+        <div class="swatch-hex">#111318</div>
+      </div>
+      <div class="color-swatch">
+        <div class="swatch-box" style="background: #1e2330;"></div>
+        <div class="swatch-name">Card</div>
+        <div class="swatch-hex">#1e2330</div>
+      </div>
+      <div class="color-swatch">
+        <div class="swatch-box" style="background: #5b9cf6;"></div>
+        <div class="swatch-name">Primary</div>
+        <div class="swatch-hex">#5b9cf6</div>
+      </div>
+      <div class="color-swatch">
+        <div class="swatch-box" style="background: #14b8a6;"></div>
+        <div class="swatch-name">Teal</div>
+        <div class="swatch-hex">#14b8a6</div>
+      </div>
+      <div class="color-swatch">
+        <div class="swatch-box" style="background: #a78bfa;"></div>
+        <div class="swatch-name">Violet</div>
+        <div class="swatch-hex">#a78bfa</div>
+      </div>
+      <div class="color-swatch">
+        <div class="swatch-box" style="background: #f0b429;"></div>
+        <div class="swatch-name">Gold</div>
+        <div class="swatch-hex">#f0b429</div>
+      </div>
+      <div class="color-swatch">
+        <div class="swatch-box" style="background: #4ade80;"></div>
+        <div class="swatch-name">Win</div>
+        <div class="swatch-hex">#4ade80</div>
+      </div>
+      <div class="color-swatch">
+        <div class="swatch-box" style="background: #f87171;"></div>
+        <div class="swatch-name">Loss</div>
+        <div class="swatch-hex">#f87171</div>
+      </div>
+    </div>
+
+    <h3>Sistema tipográfico</h3>
+    <div class="type-scale">
+      <div class="type-row">
+        <div class="type-meta">Hero<br/>Syne 800<br/>64px</div>
+        <div style="font-family: 'Syne', sans-serif; font-size: 40px; font-weight: 800; letter-spacing: -0.02em; line-height: 1; color: var(--text);">Análisis</div>
+      </div>
+      <div class="type-row">
+        <div class="type-meta">H2<br/>Syne 800<br/>28px</div>
+        <div style="font-family: 'Syne', sans-serif; font-size: 28px; font-weight: 800; color: var(--text);">Draft Coach</div>
+      </div>
+      <div class="type-row">
+        <div class="type-meta">H3<br/>Syne 700<br/>18px</div>
+        <div style="font-family: 'Syne', sans-serif; font-size: 18px; font-weight: 700; color: var(--text);">Módulo de análisis post-partida</div>
+      </div>
+      <div class="type-row">
+        <div class="type-meta">Body<br/>DM Sans 400<br/>15px</div>
+        <div style="font-family: 'DM Sans', sans-serif; font-size: 15px; color: var(--text2); line-height: 1.75;">El análisis de sinergias evalúa cómo interactúan los campeones seleccionados a lo largo de todas las fases de la partida.</div>
+      </div>
+      <div class="type-row">
+        <div class="type-meta">Mono<br/>JetBrains<br/>12px</div>
+        <div style="font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--text3);">WR: 57.3% · KDA: 3.84 · CS/min: 8.2 · Visión: 1.4/min</div>
+      </div>
+    </div>
+
+    <h3>Principios del sistema de diseño</h3>
+    <div class="feature-grid">
+      <div class="feature-card">
+        <div class="feature-title">Dark-first, siempre</div>
+        <p class="feature-desc">El tema oscuro es el predeterminado y el primario. Es más cómodo para sesiones largas y más legible cuando el juego está en segundo plano. El tema claro existe pero no es la experiencia principal.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-title">Color semántico</div>
+        <p class="feature-desc">Verde = victoria/mejora, Rojo = derrota/deterioro, Dorado = destacado/importante. Nunca usar estos colores con otro significado. Consistencia absoluta en todo el portal.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-title">Densidad de información</div>
+        <p class="feature-desc">Los jugadores experimentados esperan densidad. Usar padding generoso no significa perder información — significa jerarquizarla mejor. El espacio guía el ojo, no lo frustra.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-title">Microanimaciones funcionales</div>
+        <p class="feature-desc">Las transiciones comunican estado, no decoran. Un número que sube debe animarse hacia arriba. Un loadout que cambia debe hacer flip. Cada animación tiene propósito.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== 07 ARQUITECTURA ===== -->
+  <section id="arquitectura">
+    <div class="section-label">
+      <span class="section-num">07</span>
+      <h2>Arquitectura Técnica</h2>
+    </div>
+    <p>
+      La arquitectura debe soportar alta concurrencia post-parche (cuando todo el mundo
+      consulta la nueva tier list al mismo tiempo), latencia baja en consultas de perfil
+      y procesamiento intensivo de datos de partidas en background.
+    </p>
+
+    <div class="arch-block">
+      <div class="arch-row">
+        <div class="arch-layer">Frontend</div>
+        <div class="arch-items">
+          <div class="arch-item">Next.js 15 (App Router)</div>
+          <div class="arch-item">React 19</div>
+          <div class="arch-item">TypeScript</div>
+          <div class="arch-item">Tailwind CSS</div>
+          <div class="arch-item">Framer Motion</div>
+          <div class="arch-item">React Query v5</div>
+        </div>
+      </div>
+      <div class="arch-row">
+        <div class="arch-layer">Mobile</div>
+        <div class="arch-items">
+          <div class="arch-item">React Native (Expo)</div>
+          <div class="arch-item">Shared component lib</div>
+          <div class="arch-item">Native offline cache</div>
+          <div class="arch-item">Push notifications</div>
+        </div>
+      </div>
+      <div class="arch-row">
+        <div class="arch-layer">API Layer</div>
+        <div class="arch-items">
+          <div class="arch-item">Fastify (Node.js)</div>
+          <div class="arch-item">GraphQL (Pothos)</div>
+          <div class="arch-item">REST endpoints</div>
+          <div class="arch-item">WebSocket (partidas en vivo)</div>
+          <div class="arch-item">Rate limiting</div>
+        </div>
+      </div>
+      <div class="arch-row">
+        <div class="arch-layer">Datos</div>
+        <div class="arch-items">
+          <div class="arch-item">Riot Games API</div>
+          <div class="arch-item">PostgreSQL (perfiles)</div>
+          <div class="arch-item">ClickHouse (analytics)</div>
+          <div class="arch-item">Redis (caché + sessions)</div>
+          <div class="arch-item">S3 (assets)</div>
+        </div>
+      </div>
+      <div class="arch-row">
+        <div class="arch-layer">IA / ML</div>
+        <div class="arch-items">
+          <div class="arch-item">Python + FastAPI</div>
+          <div class="arch-item">XGBoost (draft model)</div>
+          <div class="arch-item">PyTorch (playstyle DNA)</div>
+          <div class="arch-item">MLflow (model registry)</div>
+          <div class="arch-item">Feature Store</div>
+        </div>
+      </div>
+      <div class="arch-row">
+        <div class="arch-layer">Infra</div>
+        <div class="arch-items">
+          <div class="arch-item">Kubernetes (GKE)</div>
+          <div class="arch-item">Cloudflare CDN</div>
+          <div class="arch-item">Cloudflare R2</div>
+          <div class="arch-item">GitHub Actions CI/CD</div>
+          <div class="arch-item">Grafana / Loki</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="insight">
+      <div class="insight-label">Decisión crítica de arquitectura</div>
+      El modelo de IA de draft se entrena offline con datos históricos (batch diario) pero
+      las inferencias en tiempo real se sirven desde endpoints dedicados con latencia &lt;100ms.
+      Separar el pipeline de entrenamiento del pipeline de inferencia es fundamental para
+      la estabilidad del servicio en peak hours.
+    </div>
+  </section>
+
+  <!-- ===== 08 ROADMAP ===== -->
+  <section id="roadmap">
+    <div class="section-label">
+      <span class="section-num">08</span>
+      <h2>Roadmap de Desarrollo</h2>
+    </div>
+
+    <div class="roadmap">
+      <div class="phase" style="--phase-color: #f0b429;">
+        <div class="phase-header">
+          <div class="phase-title">Fase 0 — Fundación</div>
+          <div class="phase-timing">Meses 1–2</div>
+        </div>
+        <ul class="phase-items">
+          <li>Integración con Riot Games API + sistema de ingesta de partidas</li>
+          <li>Base de datos de campeones, builds y matchups</li>
+          <li>Perfil de invocador básico con historial de partidas</li>
+          <li>Infraestructura de datos (ClickHouse + Redis)</li>
+          <li>Design System y componentes base (Storybook)</li>
+        </ul>
+      </div>
+
+      <div class="phase" style="--phase-color: #5b9cf6;">
+        <div class="phase-header">
+          <div class="phase-title">Fase 1 — MVP Web</div>
+          <div class="phase-timing">Meses 3–5</div>
+        </div>
+        <ul class="phase-items">
+          <li>Dashboard de perfil completo con estadísticas avanzadas</li>
+          <li>Tier lists y meta con actualización automática</li>
+          <li>Draft Coach v1 (recomendaciones básicas por matchup)</li>
+          <li>Playstyle DNA v1 (etiquetado automático de estilo)</li>
+          <li>Beta pública, onboarding y feedback loop</li>
+        </ul>
+      </div>
+
+      <div class="phase" style="--phase-color: #14b8a6;">
+        <div class="phase-header">
+          <div class="phase-title">Fase 2 — Diferenciación IA</div>
+          <div class="phase-timing">Meses 6–9</div>
+        </div>
+        <ul class="phase-items">
+          <li>Draft Coach v2 con modelo XGBoost explicable en producción</li>
+          <li>Análisis post-partida: timeline interactivo y momentos críticos</li>
+          <li>Heatmaps de movimiento por partida</li>
+          <li>App móvil iOS + Android (React Native)</li>
+          <li>Sistema de objetivos personalizados y micro-misiones</li>
+        </ul>
+      </div>
+
+      <div class="phase" style="--phase-color: #a78bfa;">
+        <div class="phase-header">
+          <div class="phase-title">Fase 3 — Overlay y Pro</div>
+          <div class="phase-timing">Meses 10–14</div>
+        </div>
+        <ul class="phase-items">
+          <li>Overlay nativo sin Overwolf (desktop app &lt;50MB)</li>
+          <li>Tier de Cuenta Pro: análisis ilimitado, exportación CSV, API pública</li>
+          <li>Modo Coach: scouting de jugadores, comparativas de equipo</li>
+          <li>Soporte inicial Dota 2 (perfil + historial)</li>
+          <li>Integración Discord (notificaciones, resumen de partidas)</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== 09 METRICAS ===== -->
+  <section id="metricas">
+    <div class="section-label">
+      <span class="section-num">09</span>
+      <h2>KPIs y Métricas de Éxito</h2>
+    </div>
+    <p>
+      Estas métricas definen el éxito del producto y deben medirse desde el primer día
+      de acceso público. Se revisan en sprints quincenales.
+    </p>
+
+    <h3>Métricas de Producto</h3>
+    <table class="priority-table">
+      <thead>
+        <tr>
+          <th>KPI</th>
+          <th>Objetivo 6 meses</th>
+          <th>Objetivo 12 meses</th>
+          <th>Herramienta</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Usuarios activos mensuales (MAU)</td>
+          <td>50.000</td>
+          <td>300.000</td>
+          <td>PostHog</td>
+        </tr>
+        <tr>
+          <td>Tiempo medio en sesión</td>
+          <td>&gt; 4 min</td>
+          <td>&gt; 7 min</td>
+          <td>PostHog</td>
+        </tr>
+        <tr>
+          <td>Consultas de Draft Coach / DAU</td>
+          <td>&gt; 1.2</td>
+          <td>&gt; 2.0</td>
+          <td>Analytics propio</td>
+        </tr>
+        <tr>
+          <td>Retención D7</td>
+          <td>&gt; 30%</td>
+          <td>&gt; 40%</td>
+          <td>PostHog</td>
+        </tr>
+        <tr>
+          <td>Latencia P95 de API</td>
+          <td>&lt; 250ms</td>
+          <td>&lt; 200ms</td>
+          <td>Grafana</td>
+        </tr>
+        <tr>
+          <td>NPS de producto</td>
+          <td>&gt; 40</td>
+          <td>&gt; 55</td>
+          <td>Typeform</td>
+        </tr>
+        <tr>
+          <td>Conversión a Pro</td>
+          <td>3%</td>
+          <td>6%</td>
+          <td>Stripe + PostHog</td>
+        </tr>
+        <tr>
+          <td>App Store Rating</td>
+          <td>&gt; 4.3 ⭐</td>
+          <td>&gt; 4.5 ⭐</td>
+          <td>App stores</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="insight teal">
+      <div class="insight-label">Métrica norte (North Star)</div>
+      <strong>Partidas jugadas por usuarios activos con Draft Coach activado.</strong>
+      Esta métrica captura el engagement real con el diferenciador principal del producto
+      y correlaciona directamente con la percepción de mejora del jugador — que es la razón
+      por la que vuelve al portal.
+    </div>
+
+    <h3>Señales de advertencia (Anti-métricas)</h3>
+    <div class="feature-grid">
+      <div class="feature-card" style="border-left: 2px solid var(--red);">
+        <div class="feature-title">🚨 Tiempo de carga &gt;3s</div>
+        <p class="feature-desc">Si el P90 de carga de perfil supera 3 segundos, se activa alerta crítica. Los usuarios abandonan la consulta después de la muerte y antes del siguiente spawn.</p>
+      </div>
+      <div class="feature-card" style="border-left: 2px solid var(--red);">
+        <div class="feature-title">🚨 Drop en retención D1</div>
+        <p class="feature-desc">Si la retención al día siguiente cae por debajo del 50%, se para el desarrollo de nuevas features y se audita el onboarding completo.</p>
+      </div>
+      <div class="feature-card" style="border-left: 2px solid var(--gold);">
+        <div class="feature-title">⚠️ Precisión del Draft AI &lt;65%</div>
+        <p class="feature-desc">Si el modelo no supera la precisión de referencia de los bookmakers de esports (~63-65%), la feature de draft se oculta hasta reentrenar.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- FOOTER -->
+  <div class="doc-footer">
+    <div class="footer-brand">Portal MOBA Analytics — Especificación v1.0</div>
+    <div>Investigación: iTero.gg · Mobalytics · OP.GG · Porofessor · U.GG · STATUP.GG</div>
+    <div>Generado: Abril 2026</div>
+  </div>
+
+</div>
+</body>
+</html>

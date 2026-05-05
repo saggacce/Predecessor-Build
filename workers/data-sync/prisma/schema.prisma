@@ -49,13 +49,14 @@ model PlayerSnapshot {
 }
 
 model Team {
-  id           String     @id @default(cuid())
+  id           String   @id @default(cuid())
   name         String
   abbreviation String?
+  logoUrl      String?
   type         TeamType
   region       String?
   notes        String?
-  createdAt    DateTime   @default(now())
+  createdAt    DateTime @default(now())
 
   roster TeamRoster[]
 }

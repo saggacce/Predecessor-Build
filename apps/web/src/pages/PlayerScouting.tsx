@@ -389,7 +389,7 @@ function PlayerProfilePanel({
           padding: '1.5rem',
           borderBottom: '1px solid var(--border-color)',
           background:
-            'linear-gradient(135deg, rgba(0,245,212,0.12), rgba(157,78,221,0.10) 42%, rgba(239,35,60,0.07))',
+            'linear-gradient(135deg, rgba(56,212,200,0.09), rgba(91,156,246,0.07) 45%, rgba(167,139,250,0.06))',
         }}
       >
         <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '1.25rem' }}>
@@ -434,13 +434,13 @@ function PlayerProfilePanel({
             </div>
           </div>
 
-          <div style={{ textAlign: 'right', minWidth: '9rem', flex: '0 1 9rem' }}>
-            <div style={{ color: 'var(--text-muted)', fontSize: '0.75rem', textTransform: 'uppercase' }}>Rank</div>
-            <div style={{ color: 'var(--accent-success)', fontWeight: 800, fontSize: '1.1rem' }}>
+          <div style={{ textAlign: 'right', minWidth: '8.5rem', flex: '0 1 8.5rem' }}>
+            <div style={{ color: 'var(--text-dim)', fontSize: '0.67rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '0.25rem' }}>Rank</div>
+            <div style={{ color: 'var(--accent-win)', fontWeight: 700, fontSize: '0.95rem' }}>
               {profile.rating?.rankLabel ?? 'Unranked'}
             </div>
             {profile.rating?.ratingPoints !== null && profile.rating?.ratingPoints !== undefined && (
-              <div style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>{profile.rating.ratingPoints} RP</div>
+              <div style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-muted)', fontSize: '0.75rem', marginTop: '0.15rem' }}>{Math.round(profile.rating.ratingPoints)} VP</div>
             )}
           </div>
         </div>
@@ -490,9 +490,9 @@ function PlayerProfilePanel({
 
 function SummaryMetric({ label, value }: { label: string; value: string }) {
   return (
-    <div style={{ border: '1px solid var(--border-color)', borderRadius: 'var(--radius-sm)', padding: '0.8rem', background: 'rgba(10,10,12,0.42)' }}>
-      <div style={{ color: 'var(--text-muted)', fontSize: '0.72rem', marginBottom: '0.35rem', textTransform: 'uppercase' }}>{label}</div>
-      <div style={{ color: 'var(--text-primary)', fontWeight: 800, fontSize: '1.15rem' }}>{value}</div>
+    <div style={{ border: '1px solid var(--border-color)', borderRadius: 'var(--radius-sm)', padding: '0.75rem 0.8rem', background: 'rgba(10,12,16,0.5)' }}>
+      <div style={{ color: 'var(--text-dim)', fontSize: '0.67rem', fontWeight: 700, marginBottom: '0.3rem', textTransform: 'uppercase', letterSpacing: '0.07em' }}>{label}</div>
+      <div style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-primary)', fontWeight: 500, fontSize: '1.1rem', letterSpacing: '-0.01em' }}>{value}</div>
     </div>
   );
 }
@@ -508,8 +508,8 @@ function HeroStatCard({ hero }: { hero: PlayerProfile['heroStats'][number] }) {
       <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.75rem' }}>
         <HeroAvatar hero={hero.heroData} size={54} rounded={12} />
         <div style={{ minWidth: 0 }}>
-          <div style={{ fontWeight: 800, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{hero.heroData.name}</div>
-          <div style={{ color: 'var(--text-muted)', fontSize: '0.78rem' }}>{matches} matches</div>
+          <div style={{ fontWeight: 700, fontSize: '0.88rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{hero.heroData.name}</div>
+          <div style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-muted)', fontSize: '0.72rem' }}>{matches} games</div>
         </div>
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.5rem', fontSize: '0.8rem' }}>
@@ -535,7 +535,7 @@ function RoleStatCard({ role }: { role: PlayerProfile['roleStats'][number] }) {
     <div style={{ border: '1px solid var(--border-color)', borderRadius: 'var(--radius-sm)', padding: '0.85rem', background: 'rgba(255,255,255,0.03)' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.75rem', marginBottom: '0.75rem' }}>
         <RoleBadge role={role.role} />
-        <span style={{ color: 'var(--text-muted)', fontSize: '0.78rem' }}>{role.matches} matches</span>
+        <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-muted)', fontSize: '0.72rem' }}>{role.matches} games</span>
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.5rem', fontSize: '0.8rem' }}>
         <MiniMetric label="WR" value={`${winrate.toFixed(1)}%`} />
@@ -586,9 +586,10 @@ function MatchesSection({
               style={{
                 fontSize: '0.72rem', fontWeight: 600, padding: '0.2rem 0.55rem',
                 borderRadius: '999px', cursor: 'pointer',
-                border: activeMode === mode ? '1px solid var(--accent-purple)' : '1px solid var(--border-color)',
-                background: activeMode === mode ? 'rgba(157,78,221,0.18)' : 'var(--bg-dark)',
-                color: activeMode === mode ? 'var(--accent-purple)' : 'var(--text-muted)',
+                border: activeMode === mode ? '1px solid var(--accent-violet)' : '1px solid var(--border-color)',
+                background: activeMode === mode ? 'rgba(167,139,250,0.14)' : 'rgba(255,255,255,0.03)',
+                color: activeMode === mode ? 'var(--accent-violet)' : 'var(--text-muted)',
+                fontFamily: 'var(--font-mono)',
                 transition: 'all 0.15s',
               }}
             >
@@ -652,7 +653,7 @@ function MatchRow({
           <div style={{ fontWeight: 800, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{hero.name}</div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.74rem', color: 'var(--text-muted)' }}>
             <span>{new Date(match.date).toLocaleDateString()}</span>
-            <span style={{ background: 'rgba(255,255,255,0.07)', borderRadius: '4px', padding: '0.05rem 0.35rem', fontSize: '0.68rem', fontWeight: 600 }}>
+            <span style={{ fontFamily: 'var(--font-mono)', background: 'rgba(255,255,255,0.06)', border: '1px solid var(--border-color)', borderRadius: '4px', padding: '0.05rem 0.35rem', fontSize: '0.62rem', fontWeight: 500 }}>
               {gameModeLabel(match.gameMode)}
             </span>
           </div>
@@ -671,9 +672,9 @@ function MatchRow({
 
 function MiniMetric({ label, value }: { label: string; value: string }) {
   return (
-    <div style={{ border: '1px solid rgba(255,255,255,0.06)', borderRadius: 'var(--radius-sm)', padding: '0.45rem', background: 'rgba(10,10,12,0.34)' }}>
-      <div style={{ color: 'var(--text-muted)', fontSize: '0.68rem', marginBottom: '0.2rem' }}>{label}</div>
-      <div style={{ color: 'var(--text-primary)', fontWeight: 800 }}>{value}</div>
+    <div style={{ border: '1px solid var(--border-color)', borderRadius: 'var(--radius-sm)', padding: '0.4rem 0.45rem', background: 'rgba(10,12,16,0.4)' }}>
+      <div style={{ color: 'var(--text-dim)', fontSize: '0.63rem', fontWeight: 700, marginBottom: '0.18rem', textTransform: 'uppercase', letterSpacing: '0.06em' }}>{label}</div>
+      <div style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-primary)', fontWeight: 500, fontSize: '0.82rem' }}>{value}</div>
     </div>
   );
 }
@@ -681,11 +682,11 @@ function MiniMetric({ label, value }: { label: string; value: string }) {
 function MatchMetric({ icon, label, value }: { icon?: React.ReactNode; label: string; value: string }) {
   return (
     <div style={{ minWidth: 0 }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', color: 'var(--text-muted)', fontSize: '0.68rem', marginBottom: '0.15rem' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', color: 'var(--text-dim)', fontSize: '0.63rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '0.12rem' }}>
         {icon}
         {label}
       </div>
-      <div style={{ color: 'var(--text-primary)', fontWeight: 750, overflow: 'hidden', textOverflow: 'ellipsis' }}>{value}</div>
+      <div style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-primary)', fontWeight: 500, fontSize: '0.82rem', overflow: 'hidden', textOverflow: 'ellipsis' }}>{value}</div>
     </div>
   );
 }
@@ -697,14 +698,16 @@ function ResultPill({ result }: { result: 'win' | 'loss' | 'unknown' }) {
         display: 'inline-flex',
         alignItems: 'center',
         justifyContent: 'center',
-        width: '4.6rem',
-        padding: '0.32rem 0.45rem',
+        width: '4.4rem',
+        padding: '0.28rem 0.4rem',
         borderRadius: '999px',
         border: `1px solid ${resultColor(result)}`,
         color: resultColor(result),
         background: resultBackground(result),
-        fontSize: '0.72rem',
-        fontWeight: 850,
+        fontFamily: 'var(--font-mono)',
+        fontSize: '0.65rem',
+        fontWeight: 600,
+        letterSpacing: '0.05em',
         textTransform: 'uppercase',
       }}
     >
@@ -841,12 +844,12 @@ function normalizeRole(role: string): string {
 function getRoleMeta(role: string): { key: string; label: string; color: string } {
   const key = normalizeRole(role);
   const map: Record<string, { label: string; color: string }> = {
-    CARRY: { label: 'Carry', color: '#f59e0b' },
-    SUPPORT: { label: 'Support', color: '#06d6a0' },
-    JUNGLE: { label: 'Jungle', color: '#84cc16' },
-    OFFLANE: { label: 'Offlane', color: '#ef233c' },
-    MIDLANE: { label: 'Mid Lane', color: '#9d4edd' },
-    MID_LANE: { label: 'Mid Lane', color: '#9d4edd' },
+    CARRY:    { label: 'Carry',    color: '#f0b429' },
+    SUPPORT:  { label: 'Support',  color: '#38d4c8' },
+    JUNGLE:   { label: 'Jungle',   color: '#7fd66b' },
+    OFFLANE:  { label: 'Offlane',  color: '#f87171' },
+    MIDLANE:  { label: 'Mid Lane', color: '#a78bfa' },
+    MID_LANE: { label: 'Mid Lane', color: '#a78bfa' },
   };
 
   return { key, ...(map[key] ?? { label: formatRoleLabel(role), color: '#38bdf8' }) };
@@ -908,8 +911,8 @@ function resultColor(result: 'win' | 'loss' | 'unknown'): string {
 }
 
 function resultBackground(result: 'win' | 'loss' | 'unknown'): string {
-  if (result === 'win') return 'rgba(6,214,160,0.12)';
-  if (result === 'loss') return 'rgba(239,35,60,0.12)';
+  if (result === 'win') return 'rgba(74,222,128,0.1)';
+  if (result === 'loss') return 'rgba(248,113,113,0.1)';
   return 'rgba(255,255,255,0.03)';
 }
 
