@@ -41,12 +41,14 @@ main (GitHub) → branch local → commits → push → PR → review → merge 
    git push -u origin <nombre-del-branch>
    ```
 
-6. **Claude abre un PR** hacia `main` vía GitHub API (autónomo)
+6. **Claude abre un PR** hacia `main` vía GitHub REST API con `curl` (**`gh` CLI no está instalado**)
    ```bash
+   TOKEN=$(git credential fill <<< $'protocol=https\nhost=github.com\n' 2>/dev/null | grep '^password=' | cut -d= -f2-)
    curl -s -X POST \
-     -H "Authorization: token <PAT>" \
+     -H "Authorization: token $TOKEN" \
+     -H "Content-Type: application/json" \
      https://api.github.com/repos/saggacce/Predecessor-Build/pulls \
-     -d '{"title":"...","head":"...","base":"main","body":"..."}'
+     -d '{"title":"...","head":"feat/branch-name","base":"main","body":"..."}'
    ```
 
 7. **El usuario revisa el PR** en GitHub, aprueba o pide cambios.
@@ -129,7 +131,10 @@ Una tarea se considera completada cuando:
 
 Antes de comenzar cualquier tarea, Claude revisa:
 
-- `docs/planning.md` → tareas activas y subtareas con estado.
-- `docs/project_predecessor.md` → visión de producto, alcance, requisitos y roadmap.
-- `docs/predecessor_api_technical_doc.md` → integración API externa y límites técnicos.
-- `docs/future_features_roadmap.md` → backlog de capacidades futuras y dependencias.
+- `docs/planning.md` → tareas activas y subtareas con estado ← **leer primero**
+- `docs/primesight_visual_design_direction.md` → antes de cualquier cambio de UI/UX
+- `docs/primesight_indicators_catalog.csv` → antes de implementar métricas o analytics
+- `docs/project_predecessor.md` → visión de producto, alcance y roadmap
+- `docs/predecessor_api_technical_doc.md` → integración pred.gg API (técnico)
+- `docs/predgg_api_inventory.md` → campos y endpoints disponibles
+- `docs/future_features_roadmap.md` → backlog de capacidades futuras y dependencias
