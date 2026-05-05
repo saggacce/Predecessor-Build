@@ -68,6 +68,32 @@ playersRouter.get('/:id', async (req, res, next) => {
 });
 
 /**
+ * PATCH /players/:id/name
+ * Body: { customName: string | null }
+ * Sets a custom display name for a player. Never overwritten by sync.
+ */
+playersRouter.patch('/:id/name', async (req, res, next) => {
+  try {
+    const { customName } = z.object({
+      customName: z.string().min(1).max(50).nullable(),
+    }).parse(req.body);
+
+    const player = await db.player.findUnique({ where: { id: req.params.id } });
+    if (!player) throw new AppError(404, 'Player not found', 'PLAYER_NOT_FOUND');
+
+    const updated = await db.player.update({
+      where: { id: req.params.id },
+      data: { customName },
+      select: { id: true, customName: true, displayName: true },
+    });
+
+    res.json({ player: updated });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
  * POST /players/compare
  * Body: { playerIdA: string, playerIdB: string }
  */

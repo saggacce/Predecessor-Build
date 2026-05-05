@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ChangeEvent, type CSSProperties, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ChangeEvent, type CSSProperties, type ReactNode, type KeyboardEvent } from 'react';
 import {
   Users,
   Shield,
@@ -60,6 +60,8 @@ export default function TeamAnalysis() {
   const [rosterResults, setRosterResults] = useState<PlayerSearchResult[]>([]);
   const [rosterSearching, setRosterSearching] = useState(false);
   const [addingRole, setAddingRole] = useState<TeamRole | undefined>(undefined);
+  const [editingNameId, setEditingNameId] = useState<string | null>(null);
+  const [editingNameValue, setEditingNameValue] = useState('');
   const searchTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   async function loadTeams() {
@@ -210,6 +212,21 @@ export default function TeamAnalysis() {
       await refreshSelected();
     } catch (err) {
       toast.error(err instanceof ApiErrorResponse ? err.error.message : 'Failed to remove player.');
+    }
+  }
+
+  function startEditName(rosterId: string, currentName: string) {
+    setEditingNameId(rosterId);
+    setEditingNameValue(currentName);
+  }
+
+  async function handleSaveCustomName(playerId: string) {
+    try {
+      await apiClient.players.setCustomName(playerId, editingNameValue.trim() || null);
+      setEditingNameId(null);
+      await refreshSelected();
+    } catch (err) {
+      toast.error(err instanceof ApiErrorResponse ? err.error.message : 'Failed to save name.');
     }
   }
 
@@ -377,7 +394,7 @@ export default function TeamAnalysis() {
                           style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.5rem 0.75rem', background: 'var(--bg-dark)', borderBottom: '1px solid var(--border-color)' }}
                         >
                           <span style={{ fontSize: '0.875rem', color: alreadyIn ? 'var(--text-muted)' : 'var(--text-primary)' }}>
-                            {p.displayName}
+                            {p.customName ?? p.displayName}
                             {alreadyIn && <span style={{ fontSize: '0.75rem', marginLeft: '0.5rem', color: 'var(--text-muted)' }}>(already in roster)</span>}
                           </span>
                           {!alreadyIn && (
@@ -400,32 +417,73 @@ export default function TeamAnalysis() {
                 <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem' }}>No active players. Search above to add.</p>
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                  {selected.roster.map((member) => (
-                    <div
-                      key={member.rosterId}
-                      style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.6rem 0.75rem', background: 'var(--bg-dark)', borderRadius: 'var(--radius-sm)' }}
-                    >
-                      <RoleIcon role={member.role} />
-                      <span style={{ fontWeight: 600, fontSize: '0.875rem', flex: 1 }}>{member.displayName}</span>
-                      <RankEmblem rating={member.rating} />
-                      <select
-                        className="input"
-                        value={member.role ?? ''}
-                        onChange={(e) => void handleChangeRole(member.rosterId, (e.target.value as TeamRole) || null)}
-                        style={{ width: '110px', fontSize: '0.8rem', padding: '0.25rem 0.5rem' }}
+                  {selected.roster.map((member) => {
+                    const displayedName = member.customName ?? member.displayName;
+                    const isEditing = editingNameId === member.rosterId;
+                    return (
+                      <div
+                        key={member.rosterId}
+                        style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.6rem 0.75rem', background: 'var(--bg-dark)', borderRadius: 'var(--radius-sm)' }}
                       >
-                        <option value="">No role</option>
-                        {ROLES.map((r) => <option key={r} value={r}>{roleLabel[r]}</option>)}
-                      </select>
-                      <button
-                        onClick={() => void handleRemovePlayer(member.rosterId, member.displayName)}
-                        title="Remove from roster"
-                        style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', padding: '0.25rem' }}
-                      >
-                        <UserMinus size={15} />
-                      </button>
-                    </div>
-                  ))}
+                        <RoleIcon role={member.role} />
+                        {isEditing ? (
+                          <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                            <input
+                              autoFocus
+                              className="input"
+                              value={editingNameValue}
+                              onChange={(e) => setEditingNameValue(e.target.value)}
+                              onKeyDown={(e: KeyboardEvent<HTMLInputElement>) => {
+                                if (e.key === 'Enter') void handleSaveCustomName(member.playerId);
+                                if (e.key === 'Escape') setEditingNameId(null);
+                              }}
+                              placeholder={member.displayName}
+                              style={{ fontSize: '0.875rem', padding: '0.2rem 0.5rem', flex: 1 }}
+                            />
+                            <button onClick={() => void handleSaveCustomName(member.playerId)} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--accent-win)', display: 'flex' }}>
+                              <Check size={15} />
+                            </button>
+                            <button onClick={() => setEditingNameId(null)} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', display: 'flex' }}>
+                              <X size={15} />
+                            </button>
+                          </div>
+                        ) : (
+                          <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '0.4rem', minWidth: 0 }}>
+                            <span style={{ fontWeight: 600, fontSize: '0.875rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                              {displayedName}
+                            </span>
+                            {member.customName && (
+                              <span style={{ fontSize: '0.65rem', color: 'var(--accent-violet)', fontFamily: 'var(--font-mono)' }}>custom</span>
+                            )}
+                            <button
+                              onClick={() => startEditName(member.rosterId, member.customName ?? '')}
+                              title="Set custom name"
+                              style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', display: 'flex', padding: '0.1rem', flexShrink: 0 }}
+                            >
+                              <Pencil size={12} />
+                            </button>
+                          </div>
+                        )}
+                        <RankEmblem rating={member.rating} />
+                        <select
+                          className="input"
+                          value={member.role ?? ''}
+                          onChange={(e) => void handleChangeRole(member.rosterId, (e.target.value as TeamRole) || null)}
+                          style={{ width: '110px', fontSize: '0.8rem', padding: '0.25rem 0.5rem' }}
+                        >
+                          <option value="">No role</option>
+                          {ROLES.map((r) => <option key={r} value={r}>{roleLabel[r]}</option>)}
+                        </select>
+                        <button
+                          onClick={() => void handleRemovePlayer(member.rosterId, displayedName)}
+                          title="Remove from roster"
+                          style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', padding: '0.25rem' }}
+                        >
+                          <UserMinus size={15} />
+                        </button>
+                      </div>
+                    );
+                  })}
                 </div>
               )}
             </div>
@@ -625,8 +683,19 @@ function TeamForm({
   title: string;
   hideType?: boolean;
 }) {
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const f = (field: keyof typeof form) => (e: ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) =>
     onChange({ ...form, [field]: e.target.value });
+
+  function handleFileChange(e: ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith('image/')) { toast.error('Only image files are supported.'); return; }
+    if (file.size > 200 * 1024) { toast.error('Image must be under 200 KB.'); return; }
+    const reader = new FileReader();
+    reader.onload = () => onChange({ ...form, logoUrl: reader.result as string });
+    reader.readAsDataURL(file);
+  }
 
   return (
     <div className="glass-card" style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
@@ -651,8 +720,28 @@ function TeamForm({
           <input className="input" value={form.region} onChange={f('region')} placeholder="e.g. EU, NA, LATAM" style={{ width: '100%' }} />
         </div>
         <div style={{ gridColumn: '1 / -1' }}>
-          <label style={labelStyle}>Logo URL</label>
-          <input className="input" value={form.logoUrl} onChange={f('logoUrl')} placeholder="https://..." style={{ width: '100%' }} />
+          <label style={labelStyle}>Logo</label>
+          <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+            <input className="input" value={form.logoUrl.startsWith('data:') ? '' : form.logoUrl} onChange={f('logoUrl')} placeholder="https://... or upload below" style={{ flex: 1 }} />
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              className="btn-secondary"
+              style={{ flex: 'unset', whiteSpace: 'nowrap', fontSize: '0.8rem', padding: '0.45rem 0.75rem' }}
+            >
+              Upload image
+            </button>
+            <input ref={fileInputRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={handleFileChange} />
+          </div>
+          {form.logoUrl && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '0.4rem' }}>
+              <img src={form.logoUrl} alt="Logo preview" style={{ width: 32, height: 32, objectFit: 'contain', borderRadius: 4, background: 'var(--bg-dark)', border: '1px solid var(--border-color)' }} onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+              <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{form.logoUrl.startsWith('data:') ? 'Uploaded image' : form.logoUrl}</span>
+              <button type="button" onClick={() => onChange({ ...form, logoUrl: '' })} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', display: 'flex', padding: 0 }}>
+                <X size={13} />
+              </button>
+            </div>
+          )}
         </div>
         {!hideType && (
           <div>
