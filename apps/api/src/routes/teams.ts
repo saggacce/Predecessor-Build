@@ -17,10 +17,15 @@ const listQuerySchema = z.object({
   type: z.enum(['OWN', 'RIVAL']).optional(),
 });
 
+const logoUrlSchema = z.string().max(300000).refine(
+  (val) => val.startsWith('data:image/') || /^https?:\/\/.+/.test(val),
+  { message: 'Must be a valid URL or an image data URL (data:image/...)' }
+);
+
 const createTeamSchema = z.object({
   name: z.string().min(1).max(100),
   abbreviation: z.string().max(10).optional(),
-  logoUrl: z.string().url().max(500).optional(),
+  logoUrl: logoUrlSchema.optional(),
   type: z.enum(['OWN', 'RIVAL']),
   region: z.string().max(100).optional(),
   notes: z.string().max(1000).optional(),
@@ -29,7 +34,7 @@ const createTeamSchema = z.object({
 const updateTeamSchema = z.object({
   name: z.string().min(1).max(100).optional(),
   abbreviation: z.string().max(10).nullable().optional(),
-  logoUrl: z.string().url().max(500).nullable().optional(),
+  logoUrl: logoUrlSchema.nullable().optional(),
   region: z.string().max(100).nullable().optional(),
   notes: z.string().max(1000).nullable().optional(),
 });
