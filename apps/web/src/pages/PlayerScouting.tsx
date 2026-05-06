@@ -697,9 +697,9 @@ function MatchesSection({
           {/* Column headers */}
           <div style={{
             display: 'grid',
-            gridTemplateColumns: '3fr 1.6fr 1.3fr 0.9fr 1.1fr 2fr 1fr 1fr 1fr 40px',
-            width: '100%', padding: '0.4rem 0',
-            fontSize: '0.62rem', fontWeight: 700, color: 'var(--text-muted)',
+            gridTemplateColumns: '2fr 1.9fr 1.4fr 0.9fr 1.1fr 2.3fr 1fr 1fr 1fr 40px',
+            width: '100%', padding: '0.45rem 0',
+            fontSize: '0.73rem', fontWeight: 700, color: 'var(--text-secondary)',
             textTransform: 'uppercase', letterSpacing: '0.07em',
             borderBottom: '1px solid var(--border-color)',
             background: 'rgba(255,255,255,0.015)',
@@ -771,7 +771,7 @@ function MatchRow({
   return (
     <div style={{
       display: 'grid',
-      gridTemplateColumns: '3fr 1.6fr 1.3fr 0.9fr 1.1fr 2fr 1fr 1fr 1fr 40px',
+      gridTemplateColumns: '2fr 1.9fr 1.4fr 0.9fr 1.1fr 2.3fr 1fr 1fr 1fr 40px',
       alignItems: 'center',
       width: '100%',
       borderBottom: '1px solid var(--border-color)',
