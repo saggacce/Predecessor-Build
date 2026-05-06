@@ -200,6 +200,31 @@ function TeamScoreBanner({ match, duskWon, dawnWon }: { match: MatchDetailData; 
   );
 }
 
+function HeaderTooltip({ label, tip, style }: { label: string; tip: string; style?: React.CSSProperties }) {
+  const [show, setShow] = useState(false);
+  return (
+    <span
+      style={{ position: 'relative', cursor: 'help', ...style }}
+      onMouseEnter={() => setShow(true)}
+      onMouseLeave={() => setShow(false)}
+    >
+      {label}
+      {show && (
+        <div style={{
+          position: 'absolute', bottom: 'calc(100% + 6px)', left: '50%', transform: 'translateX(-50%)',
+          zIndex: 200, background: 'var(--bg-card)', border: '1px solid var(--border-color)',
+          borderRadius: '6px', padding: '0.5rem 0.8rem', fontSize: '0.72rem',
+          color: 'var(--text-secondary)', fontWeight: 400, textTransform: 'none',
+          letterSpacing: 'normal', whiteSpace: 'nowrap',
+          boxShadow: '0 4px 20px rgba(0,0,0,0.5)', pointerEvents: 'none',
+        }}>
+          {tip}
+        </div>
+      )}
+    </span>
+  );
+}
+
 function ScoreboardTab({ match, duskWon, dawnWon, isAram, editingPlayerId, editingValue, onStartEdit, onSaveEdit, onCancelEdit, onEditValueChange }: {
   match: MatchDetailData;
   duskWon: boolean;
@@ -253,12 +278,13 @@ function ScoreboardTab({ match, duskWon, dawnWon, isAram, editingPlayerId, editi
             {/* Column headers */}
             <div style={headerRowStyle}>
               <span style={{ flex: '0 0 200px' }}>Player</span>
-              <span style={{ flex: '0 0 110px', display: 'flex', justifyContent: 'center' }}>K / D / A</span>
-              <span style={{ flex: '0 0 56px', display: 'flex', justifyContent: 'center' }}>KP%</span>
-              <span style={{ flex: '1 1 140px', display: 'flex', justifyContent: 'center' }}>DMG to heroes</span>
-              <span style={{ flex: '0 0 76px', display: 'flex', justifyContent: 'center' }}>Gold total</span>
-              {!isAram && <span className="hide-mobile" style={{ flex: '0 0 52px', display: 'flex', justifyContent: 'center' }}>Wards</span>}
-              <span className="hide-mobile" style={{ flex: '0 0 196px', display: 'flex', justifyContent: 'center' }}>Items</span>
+              <HeaderTooltip label="K / D / A" tip="Kills / Deaths / Assists" style={{ flex: '0 0 110px', display: 'flex', justifyContent: 'center' }} />
+              <HeaderTooltip label="KP%" tip="Kill Participation — % de kills del equipo en que participó (kills + assists)" style={{ flex: '0 0 56px', display: 'flex', justifyContent: 'center' }} />
+              <HeaderTooltip label="DMG to heroes" tip="Daño total infligido a héroes rivales durante la partida" style={{ flex: '1 1 120px', display: 'flex', justifyContent: 'center' }} />
+              <HeaderTooltip label="GPM" tip="Gold Per Minute — ritmo de farmeo y progresión económica" style={{ flex: '0 0 56px', display: 'flex', justifyContent: 'center' }} />
+              <HeaderTooltip label="Gold total" tip="Oro total acumulado al final de la partida" style={{ flex: '0 0 76px', display: 'flex', justifyContent: 'center' }} />
+              {!isAram && <span className="hide-mobile" style={{ flex: '0 0 52px', display: 'flex', justifyContent: 'center' }}><HeaderTooltip label="Wards" tip="Guardianes colocados durante la partida" /></span>}
+              <span className="hide-mobile" style={{ flex: '0 0 196px', display: 'flex', justifyContent: 'center' }}><HeaderTooltip label="Items" tip="Inventario final del jugador" /></span>
             </div>
 
             {/* Player rows */}
@@ -268,6 +294,7 @@ function ScoreboardTab({ match, duskWon, dawnWon, isAram, editingPlayerId, editi
                 teamColor={key === 'dusk' ? 'var(--accent-teal-bright)' : 'var(--accent-loss)'}
                 maxDamage={maxDamage}
                 teamKills={teamKills}
+                matchDuration={match.duration}
                 isEditing={editingPlayerId === p.playerId}
                 editingValue={editingValue}
                 onStartEdit={onStartEdit}
@@ -283,8 +310,8 @@ function ScoreboardTab({ match, duskWon, dawnWon, isAram, editingPlayerId, editi
   );
 }
 
-function PlayerRow({ player, isAram, teamColor, maxDamage, teamKills, isEditing, editingValue, onStartEdit, onSaveEdit, onCancelEdit, onEditValueChange }: {
-  player: MatchPlayerDetail; isAram: boolean; teamColor: string; maxDamage: number; teamKills: number;
+function PlayerRow({ player, isAram, teamColor, maxDamage, teamKills, matchDuration, isEditing, editingValue, onStartEdit, onSaveEdit, onCancelEdit, onEditValueChange }: {
+  player: MatchPlayerDetail; isAram: boolean; teamColor: string; maxDamage: number; teamKills: number; matchDuration: number;
   isEditing: boolean; editingValue: string;
   onStartEdit: (playerId: string, current: string) => void;
   onSaveEdit: (playerId: string) => void;
@@ -388,7 +415,7 @@ function PlayerRow({ player, isAram, teamColor, maxDamage, teamKills, isEditing,
       </div>
 
       {/* Damage bar */}
-      <div style={{ flex: '1 1 140px', minWidth: 0 }}>
+      <div style={{ flex: '1 1 120px', minWidth: 0 }}>
         {player.heroDamage !== null ? (
           <div>
             <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.75rem', textAlign: 'right', marginBottom: '0.2rem' }}>
@@ -406,7 +433,14 @@ function PlayerRow({ player, isAram, teamColor, maxDamage, teamKills, isEditing,
         ) : <span style={{ color: 'var(--text-muted)', fontSize: '0.78rem' }}>—</span>}
       </div>
 
-      {/* Gold */}
+      {/* GPM */}
+      <div style={{ flex: '0 0 56px', textAlign: 'center', fontFamily: 'var(--font-mono)', fontSize: '0.78rem', color: 'var(--accent-prime)' }}>
+        {player.gold !== null && matchDuration > 0
+          ? Math.round(player.gold / (matchDuration / 60))
+          : '—'}
+      </div>
+
+      {/* Gold total */}
       <div style={{ flex: '0 0 76px', textAlign: 'center', fontFamily: 'var(--font-mono)', fontSize: '0.78rem', color: 'var(--accent-prime)' }}>
         {player.gold !== null ? `${(player.gold / 1000).toFixed(1)}k` : '—'}
       </div>
