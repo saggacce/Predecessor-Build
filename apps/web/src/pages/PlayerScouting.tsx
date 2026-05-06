@@ -698,13 +698,13 @@ function MatchesSection({
           <div style={{
             display: 'grid',
             gridTemplateColumns: '3fr 1.6fr 1.3fr 0.9fr 1.1fr 2fr 1fr 1fr 1fr 40px',
-            width: '100%', padding: '0.4rem 0.85rem',
+            width: '100%', padding: '0.4rem 0',
             fontSize: '0.62rem', fontWeight: 700, color: 'var(--text-muted)',
             textTransform: 'uppercase', letterSpacing: '0.07em',
             borderBottom: '1px solid var(--border-color)',
             background: 'rgba(255,255,255,0.015)',
           }}>
-            <span>Hero</span>
+            <span style={{ paddingLeft: '0.75rem' }}>Hero</span>
             {['Date','Type','Role','Result','K / D / A','GPM','DPM','Time'].map((h) => (
               <span key={h} style={{ display: 'flex', justifyContent: 'center', alignItems: 'center' }}>{h}</span>
             ))}
@@ -779,7 +779,7 @@ function MatchRow({
       borderLeft: `3px solid ${borderColor}`,
     }}>
       {/* Hero */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', minWidth: 0, padding: '0.7rem 0.5rem 0.7rem 0.75rem' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', minWidth: 0, padding: '0.7rem 0 0.7rem 0.75rem' }}>
         <HeroAvatarWithTooltip slug={hero.slug} name={hero.name} imageUrl={hero.imageUrl} meta={rowHeroMeta} size={52} rounded={10} />
         <div style={{ minWidth: 0 }}>
           <div style={{ fontWeight: 700, fontSize: '0.9rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
