@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useParams, useNavigate } from 'react-router';
+import { useParams, useNavigate, useLocation } from 'react-router';
 import { ArrowLeft, Trophy, Skull, Clock, RefreshCw, Pencil, Check, X, Monitor, Gamepad2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { apiClient, type MatchDetail as MatchDetailData, type MatchPlayerDetail, ApiErrorResponse } from '../api/client';
@@ -7,6 +7,8 @@ import { apiClient, type MatchDetail as MatchDetailData, type MatchPlayerDetail,
 export default function MatchDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
+  const fromState = location.state as { fromPlayerId?: string; fromPlayerName?: string } | null;
   const [match, setMatch] = useState<MatchDetailData | null>(null);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<'scoreboard' | 'statistics' | 'timeline' | 'analysis'>('scoreboard');
@@ -73,10 +75,14 @@ export default function MatchDetail() {
     <div>
       <header className="header" style={{ marginBottom: '1rem' }}>
         <button
-          onClick={() => navigate(-1)}
+          onClick={() => fromState?.fromPlayerId
+            ? navigate('/players', { state: { autoLoadPlayerId: fromState.fromPlayerId } })
+            : navigate(-1)
+          }
           style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: '0.875rem', marginBottom: '0.75rem', padding: 0 }}
         >
-          <ArrowLeft size={16} /> Back
+          <ArrowLeft size={16} />
+          {fromState?.fromPlayerName ? `Back to ${fromState.fromPlayerName}` : 'Back'}
         </button>
         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.5rem' }}>
           <div>
@@ -287,6 +293,7 @@ function PlayerRow({ player, isAram, teamColor, maxDamage, isEditing, editingVal
     : player.kills + player.assists > 0 ? 'Perfect' : '0.00';
 
   const [imgErr, setImgErr] = useState(false);
+  const navigate = useNavigate();
   const displayedName = player.customName ?? player.playerName;
 
   return (
@@ -296,7 +303,11 @@ function PlayerRow({ player, isAram, teamColor, maxDamage, isEditing, editingVal
       background: 'rgba(255,255,255,0.01)', flexWrap: 'wrap',
     }}>
       {/* Hero + player */}
-      <div style={{ flex: '2 1 180px', display: 'flex', alignItems: 'center', gap: '0.6rem', minWidth: 0 }}>
+      <div
+        onClick={() => player.playerId && navigate('/players', { state: { autoLoadPlayerId: player.playerId } })}
+        style={{ flex: '2 1 180px', display: 'flex', alignItems: 'center', gap: '0.6rem', minWidth: 0, cursor: player.playerId ? 'pointer' : 'default' }}
+        title={player.playerId ? `View ${displayedName}'s profile` : undefined}
+      >
         <div style={{ width: 36, height: 36, borderRadius: 8, overflow: 'hidden', flexShrink: 0, background: 'var(--bg-dark)', border: '1px solid var(--border-color)' }}>
           {!imgErr && player.heroImageUrl
             ? <img src={player.heroImageUrl} alt={player.heroSlug} style={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={() => setImgErr(true)} />

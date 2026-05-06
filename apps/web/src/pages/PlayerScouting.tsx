@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useNavigate, useLocation } from 'react-router';
 import {
   Activity,
   AlertCircle,
@@ -43,10 +44,21 @@ type ProfilePhase =
 
 export default function PlayerScouting() {
   const { authenticated } = useAuth();
+  const location = useLocation();
   const [query, setQuery] = useState('');
   const [phase, setPhase] = useState<Phase>({ tag: 'idle' });
   const [profilePhase, setProfilePhase] = useState<ProfilePhase>({ tag: 'idle' });
   const [platformFilter, setPlatformFilter] = useState<'all' | 'pc' | 'console'>('all');
+
+  // Auto-open player profile when navigated back from match detail
+  useEffect(() => {
+    const state = location.state as { autoLoadPlayerId?: string } | null;
+    if (state?.autoLoadPlayerId) {
+      void handleSelectPlayer(state.autoLoadPlayerId);
+      window.history.replaceState({}, ''); // clear state so refresh doesn't re-trigger
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   async function handleSearch(e: React.FormEvent) {
     e.preventDefault();
@@ -528,7 +540,12 @@ function PlayerProfilePanel({
         </section>
 
         <section>
-          <MatchesSection matches={profile.recentMatches} heroBySlug={heroBySlug} />
+          <MatchesSection
+            matches={profile.recentMatches}
+            heroBySlug={heroBySlug}
+            fromPlayerId={profile.id}
+            fromPlayerName={profile.customName ?? profile.displayName}
+          />
         </section>
       </div>
     </div>
@@ -609,9 +626,13 @@ function gameModeLabel(mode: string): string {
 function MatchesSection({
   matches,
   heroBySlug,
+  fromPlayerId,
+  fromPlayerName,
 }: {
   matches: PlayerProfile['recentMatches'];
   heroBySlug: Map<string, { heroData: { name: string; imageUrl?: string | null } }>;
+  fromPlayerId: string;
+  fromPlayerName: string;
 }) {
   const [activeMode, setActiveMode] = React.useState<string>('ALL');
 
@@ -658,6 +679,8 @@ function MatchesSection({
                   name: match.heroName ?? hero?.heroData.name ?? match.heroSlug,
                   imageUrl: match.heroImageUrl ?? hero?.heroData.imageUrl ?? null,
                 }}
+                fromPlayerId={fromPlayerId}
+                fromPlayerName={fromPlayerName}
               />
             );
           })}
@@ -672,10 +695,15 @@ function MatchesSection({
 function MatchRow({
   match,
   hero,
+  fromPlayerId,
+  fromPlayerName,
 }: {
   match: PlayerProfile['recentMatches'][number];
   hero: { slug: string; name: string; imageUrl?: string | null };
+  fromPlayerId: string;
+  fromPlayerName: string;
 }) {
+  const navigate = useNavigate();
   const minutes = match.duration > 0 ? match.duration / 60 : 0;
   const gpm = minutes > 0 && match.gold !== null ? Math.round(match.gold / minutes) : null;
   const dpm = minutes > 0 && match.heroDamage !== null ? Math.round(match.heroDamage / minutes) : null;
@@ -752,15 +780,15 @@ function MatchRow({
 
       {/* View button */}
       <div style={{ padding: '0 0.65rem 0 0' }}>
-        <a
-          href={`/matches/${match.matchId}`}
+        <button
+          onClick={() => navigate(`/matches/${match.matchId}`, { state: { fromPlayerId, fromPlayerName } })}
           title="View match detail"
-          style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', textDecoration: 'none', padding: '0.35rem', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-color)', background: 'rgba(255,255,255,0.03)' }}
+          style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', padding: '0.35rem', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-color)', background: 'rgba(255,255,255,0.03)', cursor: 'pointer' }}
           onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.color = 'var(--accent-blue)'; (e.currentTarget as HTMLElement).style.borderColor = 'var(--accent-blue)'; }}
           onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.color = 'var(--text-muted)'; (e.currentTarget as HTMLElement).style.borderColor = 'var(--border-color)'; }}
         >
           <ChevronRight size={15} />
-        </a>
+        </button>
       </div>
     </div>
   );
