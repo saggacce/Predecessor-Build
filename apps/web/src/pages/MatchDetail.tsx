@@ -255,7 +255,7 @@ function ScoreboardTab({ match, duskWon, dawnWon, isAram, editingPlayerId, editi
               <span style={{ flex: '1 1 90px', textAlign: 'center' }}>K / D / A</span>
               <span style={{ flex: '1 1 90px', textAlign: 'right' }}>DMG to heroes</span>
               <span style={{ flex: '0 0 56px', textAlign: 'right' }}>Gold total</span>
-              {!isAram && <span className="hide-mobile" style={{ flex: '0 0 48px', textAlign: 'right' }}>Wards</span>}
+              {!isAram && <span className="hide-mobile" style={{ flex: '0 0 48px', textAlign: 'center' }}>Wards</span>}
               <span className="hide-mobile" style={{ flex: '0 0 180px' }}>Items</span>
             </div>
 
@@ -394,7 +394,7 @@ function PlayerRow({ player, isAram, teamColor, maxDamage, isEditing, editingVal
 
       {/* Wards (non-ARAM only) */}
       {!isAram && (
-        <div className="hide-mobile" style={{ flex: '0 0 48px', textAlign: 'right', fontFamily: 'var(--font-mono)', fontSize: '0.78rem', color: 'var(--text-muted)' }}>
+        <div className="hide-mobile" style={{ flex: '0 0 48px', textAlign: 'center', fontFamily: 'var(--font-mono)', fontSize: '0.78rem', color: 'var(--text-muted)' }}>
           {player.wardsPlaced ?? '—'}
         </div>
       )}
