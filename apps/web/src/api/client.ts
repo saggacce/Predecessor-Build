@@ -120,6 +120,7 @@ export interface TeamProfile {
 export interface MatchPlayerDetail {
   id: string;
   playerId: string | null;
+  predggPlayerUuid: string | null;
   playerName: string;
   customName: string | null;
   team: string;

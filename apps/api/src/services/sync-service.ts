@@ -809,6 +809,7 @@ export async function resyncMatch(db: PrismaClient, predggUuid: string, userToke
       data: {
         matchId: match.id,
         playerId,
+        predggPlayerUuid: mp.player?.id ?? null,
         playerName: mp.name ?? mp.player?.name ?? 'HIDDEN',
         team: mp.team,
         role: mp.role,
@@ -837,13 +838,20 @@ export async function syncIncompleteMatches(db: PrismaClient): Promise<{ synced:
     select: { id: true, predggUuid: true, _count: { select: { matchPlayers: true } } },
   });
 
-  // Also get matches that exist but have < 10 players
   const allMatches = await db.match.findMany({
     select: { id: true, predggUuid: true, _count: { select: { matchPlayers: true } } },
     where: { matchPlayers: { some: {} } },
   });
 
-  const toResync = [...incomplete, ...allMatches.filter((m) => m._count.matchPlayers < 10)];
+  // Also include matches with HIDDEN players that are missing their predgg UUID
+  const missingUuid = await db.match.findMany({
+    where: { matchPlayers: { some: { playerName: 'HIDDEN', predggPlayerUuid: null } } },
+    select: { id: true, predggUuid: true, _count: { select: { matchPlayers: true } } },
+  });
+
+  const seen = new Set<string>();
+  const toResync = [...incomplete, ...allMatches.filter((m) => m._count.matchPlayers < 10), ...missingUuid]
+    .filter((m) => { if (seen.has(m.id)) return false; seen.add(m.id); return true; });
 
   logger.info({ count: toResync.length }, 'incomplete matches found — resyncing');
 

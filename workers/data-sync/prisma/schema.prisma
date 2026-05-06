@@ -95,12 +95,13 @@ model Match {
 }
 
 model MatchPlayer {
-  id             String  @id @default(cuid())
-  matchId        String
-  match          Match   @relation(fields: [matchId], references: [id])
-  playerId       String?
-  player         Player? @relation(fields: [playerId], references: [id])
-  playerName     String
+  id              String  @id @default(cuid())
+  matchId         String
+  match           Match   @relation(fields: [matchId], references: [id])
+  playerId        String?
+  player          Player? @relation(fields: [playerId], references: [id])
+  predggPlayerUuid String?
+  playerName      String
   team           String
   role           String?
   heroSlug       String

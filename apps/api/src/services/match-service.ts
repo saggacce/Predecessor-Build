@@ -4,6 +4,7 @@ import { AppError } from '../middleware/error-handler.js';
 export interface MatchPlayerDetail {
   id: string;
   playerId: string | null;
+  predggPlayerUuid: string | null;
   playerName: string;
   customName: string | null;
   team: string;
@@ -83,13 +84,21 @@ export async function getMatchDetail(matchId: string): Promise<MatchDetail> {
     }
   }
 
+  function resolvePlayerName(playerName: string, predggPlayerUuid: string | null): string {
+    if (playerName !== 'HIDDEN') return playerName;
+    // Construct user-XXXX format from UUID (same as pred.gg website)
+    if (predggPlayerUuid) return `user-${predggPlayerUuid.replace(/-/g, '').slice(0, 8)}`;
+    return 'HIDDEN';
+  }
+
   function toDetail(mp: (typeof match.matchPlayers)[number]): MatchPlayerDetail {
     const snap = mp.player?.snapshots[0] ?? null;
     const hero = heroMeta.get(mp.heroSlug);
     return {
       id: mp.id,
       playerId: mp.playerId,
-      playerName: mp.playerName,
+      predggPlayerUuid: mp.predggPlayerUuid,
+      playerName: resolvePlayerName(mp.playerName, mp.predggPlayerUuid),
       customName: mp.player?.customName ?? null,
       team: mp.team,
       role: mp.role,
