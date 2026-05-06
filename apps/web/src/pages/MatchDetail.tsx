@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react';
-import { useParams, useNavigate } from 'react-router';
+import { useParams, useNavigate, useLocation } from 'react-router';
+import { HeroAvatarWithTooltip } from '../components/HeroAvatar';
+import { useHeroMeta } from '../hooks/useHeroMeta';
 import { ArrowLeft, Trophy, Skull, Clock, RefreshCw, Pencil, Check, X, Monitor, Gamepad2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { apiClient, type MatchDetail as MatchDetailData, type MatchPlayerDetail, ApiErrorResponse } from '../api/client';
@@ -7,6 +9,9 @@ import { apiClient, type MatchDetail as MatchDetailData, type MatchPlayerDetail,
 export default function MatchDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
+  const fromState = location.state as { fromPlayerId?: string; fromPlayerName?: string } | null;
+  const heroMeta = useHeroMeta();
   const [match, setMatch] = useState<MatchDetailData | null>(null);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<'scoreboard' | 'statistics' | 'timeline' | 'analysis'>('scoreboard');
@@ -73,10 +78,14 @@ export default function MatchDetail() {
     <div>
       <header className="header" style={{ marginBottom: '1rem' }}>
         <button
-          onClick={() => navigate(-1)}
+          onClick={() => fromState?.fromPlayerId
+            ? navigate('/players', { state: { autoLoadPlayerId: fromState.fromPlayerId } })
+            : navigate(-1)
+          }
           style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: '0.875rem', marginBottom: '0.75rem', padding: 0 }}
         >
-          <ArrowLeft size={16} /> Back
+          <ArrowLeft size={16} />
+          {fromState?.fromPlayerName ? `Back to ${fromState.fromPlayerName}` : 'Back'}
         </button>
         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.5rem' }}>
           <div>
@@ -138,6 +147,7 @@ export default function MatchDetail() {
       {tab === 'scoreboard' && (
         <ScoreboardTab
           match={match} duskWon={duskWon} dawnWon={dawnWon} isAram={isAram}
+          heroMeta={heroMeta}
           editingPlayerId={editingPlayerId} editingValue={editingValue}
           onStartEdit={(playerId, current) => { setEditingPlayerId(playerId); setEditingValue(current); }}
           onSaveEdit={handleSaveCustomName}
@@ -164,7 +174,7 @@ function TeamScoreBanner({ match, duskWon, dawnWon }: { match: MatchDetailData; 
           <div style={{ fontWeight: 700, fontSize: '0.8rem', color: 'var(--accent-teal-bright)', letterSpacing: '0.08em' }}>DUSK</div>
           <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>{(duskGold / 1000).toFixed(1)}k gold</div>
         </div>
-        <div style={{ fontSize: '0.72rem', fontWeight: 700, color: duskWon ? 'var(--accent-win)' : 'var(--text-muted)', fontFamily: 'var(--font-mono)', background: duskWon ? 'rgba(74,222,128,0.1)' : 'rgba(255,255,255,0.04)', border: `1px solid ${duskWon ? 'rgba(74,222,128,0.3)' : 'var(--border-color)'}`, borderRadius: '4px', padding: '0.15rem 0.5rem' }}>
+        <div style={{ fontSize: '0.72rem', fontWeight: 700, color: duskWon ? 'var(--accent-win)' : 'var(--accent-loss)', fontFamily: 'var(--font-mono)', background: duskWon ? 'rgba(74,222,128,0.1)' : 'rgba(248,113,113,0.1)', border: `1px solid ${duskWon ? 'rgba(74,222,128,0.3)' : 'rgba(248,113,113,0.35)'}`, borderRadius: '4px', padding: '0.15rem 0.5rem' }}>
           {duskWon ? 'VICTORY' : 'DEFEAT'}
         </div>
       </div>
@@ -180,25 +190,51 @@ function TeamScoreBanner({ match, duskWon, dawnWon }: { match: MatchDetailData; 
       </div>
 
       {/* DAWN side */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flex: 1, justifyContent: 'flex-end', flexDirection: 'row-reverse' }}>
-        <div style={{ width: 4, height: 36, borderRadius: 999, background: dawnWon ? 'var(--accent-win)' : 'var(--accent-loss)', flexShrink: 0 }} />
+      <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flex: 1, justifyContent: 'flex-end' }}>
+        <div style={{ fontSize: '0.72rem', fontWeight: 700, color: dawnWon ? 'var(--accent-win)' : 'var(--accent-loss)', fontFamily: 'var(--font-mono)', background: dawnWon ? 'rgba(74,222,128,0.1)' : 'rgba(248,113,113,0.1)', border: `1px solid ${dawnWon ? 'rgba(74,222,128,0.3)' : 'rgba(248,113,113,0.35)'}`, borderRadius: '4px', padding: '0.15rem 0.5rem' }}>
+          {dawnWon ? 'VICTORY' : 'DEFEAT'}
+        </div>
         <div style={{ textAlign: 'right' }}>
           <div style={{ fontWeight: 700, fontSize: '0.8rem', color: 'var(--accent-loss)', letterSpacing: '0.08em' }}>DAWN</div>
           <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>{(dawnGold / 1000).toFixed(1)}k gold</div>
         </div>
-        <div style={{ fontSize: '0.72rem', fontWeight: 700, color: dawnWon ? 'var(--accent-win)' : 'var(--text-muted)', fontFamily: 'var(--font-mono)', background: dawnWon ? 'rgba(74,222,128,0.1)' : 'rgba(255,255,255,0.04)', border: `1px solid ${dawnWon ? 'rgba(74,222,128,0.3)' : 'var(--border-color)'}`, borderRadius: '4px', padding: '0.15rem 0.5rem' }}>
-          {dawnWon ? 'VICTORY' : 'DEFEAT'}
-        </div>
+        <div style={{ width: 4, height: 36, borderRadius: 999, background: dawnWon ? 'var(--accent-win)' : 'var(--accent-loss)', flexShrink: 0 }} />
       </div>
     </div>
   );
 }
 
-function ScoreboardTab({ match, duskWon, dawnWon, isAram, editingPlayerId, editingValue, onStartEdit, onSaveEdit, onCancelEdit, onEditValueChange }: {
+function HeaderTooltip({ label, tip, style }: { label: string; tip: string; style?: React.CSSProperties }) {
+  const [show, setShow] = useState(false);
+  return (
+    <span
+      style={{ position: 'relative', cursor: 'help', ...style }}
+      onMouseEnter={() => setShow(true)}
+      onMouseLeave={() => setShow(false)}
+    >
+      {label}
+      {show && (
+        <div style={{
+          position: 'absolute', bottom: 'calc(100% + 6px)', left: '50%', transform: 'translateX(-50%)',
+          zIndex: 200, background: 'var(--bg-card)', border: '1px solid var(--border-color)',
+          borderRadius: '6px', padding: '0.5rem 0.8rem', fontSize: '0.72rem',
+          color: 'var(--text-secondary)', fontWeight: 400, textTransform: 'none',
+          letterSpacing: 'normal', whiteSpace: 'nowrap',
+          boxShadow: '0 4px 20px rgba(0,0,0,0.5)', pointerEvents: 'none',
+        }}>
+          {tip}
+        </div>
+      )}
+    </span>
+  );
+}
+
+function ScoreboardTab({ match, duskWon, dawnWon, isAram, heroMeta, editingPlayerId, editingValue, onStartEdit, onSaveEdit, onCancelEdit, onEditValueChange }: {
   match: MatchDetailData;
   duskWon: boolean;
   dawnWon: boolean;
   isAram: boolean;
+  heroMeta: Map<string, import('../api/client').HeroMeta>;
   editingPlayerId: string | null;
   editingValue: string;
   onStartEdit: (playerId: string, current: string) => void;
@@ -218,6 +254,7 @@ function ScoreboardTab({ match, duskWon, dawnWon, isAram, editingPlayerId, editi
         const totalGold = players.reduce((s, p) => s + (p.gold ?? 0), 0);
         const totalDamage = players.reduce((s, p) => s + (p.heroDamage ?? 0), 0);
         const maxDamage = Math.max(...players.map((p) => p.heroDamage ?? 0), 1);
+        const teamKills = Math.max(totalKills, 1);
 
         return (
           <div key={key} className="glass-card" style={{ padding: 0, overflow: 'hidden' }}>
@@ -238,20 +275,22 @@ function ScoreboardTab({ match, duskWon, dawnWon, isAram, editingPlayerId, editi
               </div>
               <div style={{ display: 'flex', gap: '1.5rem', fontFamily: 'var(--font-mono)', fontSize: '0.78rem', color: 'var(--text-muted)' }}>
                 <span><span style={{ color: 'var(--text-secondary)', fontWeight: 600 }}>{totalKills}</span> kills</span>
-                <span><span style={{ color: 'var(--text-secondary)', fontWeight: 600 }}>{(totalGold / 1000).toFixed(1)}k</span> gold</span>
-                <span><span style={{ color: 'var(--text-secondary)', fontWeight: 600 }}>{(totalDamage / 1000).toFixed(1)}k</span> dmg</span>
+                <span><span style={{ color: 'var(--text-secondary)', fontWeight: 600 }}>{(totalGold / 1000).toFixed(1)}k</span> gold total</span>
+                <span><span style={{ color: 'var(--text-secondary)', fontWeight: 600 }}>{(totalDamage / 1000).toFixed(1)}k</span> hero dmg</span>
               </div>
             </div>
 
             {/* Column headers */}
             <div style={headerRowStyle}>
-              <span style={{ flex: '2 1 180px' }}>Player</span>
-              <span style={{ flex: '1 1 90px', textAlign: 'center' }}>K / D / A</span>
-              <span style={{ flex: '1 1 90px', textAlign: 'right' }}>Damage</span>
-              <span style={{ flex: '0 0 56px', textAlign: 'right' }}>Gold</span>
-              <span style={{ flex: '0 0 40px', textAlign: 'right' }}>CS</span>
-              {!isAram && <span className="hide-mobile" style={{ flex: '0 0 48px', textAlign: 'right' }}>Wards</span>}
-              <span className="hide-mobile" style={{ flex: '0 0 180px' }}>Items</span>
+              <span style={{ flex: '0 0 210px' }}>Player</span>
+              <span className="hide-mobile" style={{ flex: '0 0 52px', display: 'flex', justifyContent: 'center' }}><HeaderTooltip label="Role" tip="Rol desempeñado en la partida" /></span>
+              <HeaderTooltip label="K / D / A" tip="Kills / Deaths / Assists" style={{ flex: '0 0 110px', display: 'flex', justifyContent: 'center' }} />
+              <HeaderTooltip label="KP%" tip="Kill Participation — % de kills del equipo en que participó (kills + assists)" style={{ flex: '0 0 56px', display: 'flex', justifyContent: 'center' }} />
+              <HeaderTooltip label="DMG to heroes" tip="Daño total infligido a héroes rivales durante la partida" style={{ flex: '1 1 100px', display: 'flex', justifyContent: 'center' }} />
+              <HeaderTooltip label="GPM" tip="Gold Per Minute — ritmo de farmeo y progresión económica" style={{ flex: '0 0 56px', display: 'flex', justifyContent: 'center' }} />
+              <HeaderTooltip label="Gold total" tip="Oro total acumulado al final de la partida" style={{ flex: '0 0 76px', display: 'flex', justifyContent: 'center' }} />
+              {!isAram && <span className="hide-mobile" style={{ flex: '0 0 80px', display: 'flex', justifyContent: 'center' }}><HeaderTooltip label="Wards" tip="Guardianes colocados / destruidos durante la partida" /></span>}
+              <span className="hide-mobile" style={{ flex: '0 0 196px', display: 'flex', justifyContent: 'center' }}><HeaderTooltip label="Items" tip="Inventario final del jugador" /></span>
             </div>
 
             {/* Player rows */}
@@ -260,6 +299,9 @@ function ScoreboardTab({ match, duskWon, dawnWon, isAram, editingPlayerId, editi
                 key={p.id} player={p} isAram={isAram}
                 teamColor={key === 'dusk' ? 'var(--accent-teal-bright)' : 'var(--accent-loss)'}
                 maxDamage={maxDamage}
+                teamKills={teamKills}
+                matchDuration={match.duration}
+                heroMeta={heroMeta}
                 isEditing={editingPlayerId === p.playerId}
                 editingValue={editingValue}
                 onStartEdit={onStartEdit}
@@ -275,8 +317,9 @@ function ScoreboardTab({ match, duskWon, dawnWon, isAram, editingPlayerId, editi
   );
 }
 
-function PlayerRow({ player, isAram, teamColor, maxDamage, isEditing, editingValue, onStartEdit, onSaveEdit, onCancelEdit, onEditValueChange }: {
-  player: MatchPlayerDetail; isAram: boolean; teamColor: string; maxDamage: number;
+function PlayerRow({ player, isAram, teamColor, maxDamage, teamKills, matchDuration, heroMeta, isEditing, editingValue, onStartEdit, onSaveEdit, onCancelEdit, onEditValueChange }: {
+  player: MatchPlayerDetail; isAram: boolean; teamColor: string; maxDamage: number; teamKills: number; matchDuration: number;
+  heroMeta: Map<string, import('../api/client').HeroMeta>;
   isEditing: boolean; editingValue: string;
   onStartEdit: (playerId: string, current: string) => void;
   onSaveEdit: (playerId: string) => void;
@@ -287,8 +330,14 @@ function PlayerRow({ player, isAram, teamColor, maxDamage, isEditing, editingVal
     ? ((player.kills + player.assists) / player.deaths).toFixed(2)
     : player.kills + player.assists > 0 ? 'Perfect' : '0.00';
 
-  const [imgErr, setImgErr] = useState(false);
+  const navigate = useNavigate();
   const displayedName = player.customName ?? player.playerName;
+  const roleSlug = player.role?.toLowerCase().replace('mid_lane', 'midlane') ?? null;
+  const roleLabel = player.role
+    ? player.role.charAt(0) + player.role.slice(1).toLowerCase().replace('_', ' ')
+    : null;
+  const meta = heroMeta.get(player.heroSlug) ?? null;
+  const heroDisplayName = meta?.displayName ?? player.heroName ?? player.heroSlug;
 
   return (
     <div style={{
@@ -296,45 +345,53 @@ function PlayerRow({ player, isAram, teamColor, maxDamage, isEditing, editingVal
       padding: '0.6rem 1rem', borderBottom: '1px solid var(--border-color)',
       background: 'rgba(255,255,255,0.01)', flexWrap: 'wrap',
     }}>
-      {/* Hero + player */}
-      <div style={{ flex: '2 1 180px', display: 'flex', alignItems: 'center', gap: '0.6rem', minWidth: 0 }}>
-        <div style={{ width: 36, height: 36, borderRadius: 8, overflow: 'hidden', flexShrink: 0, background: 'var(--bg-dark)', border: '1px solid var(--border-color)' }}>
-          {!imgErr && player.heroImageUrl
-            ? <img src={player.heroImageUrl} alt={player.heroSlug} style={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={() => setImgErr(true)} />
-            : <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.65rem', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
-                {player.heroSlug.slice(0, 2).toUpperCase()}
-              </div>
-          }
-        </div>
-        <div style={{ minWidth: 0, flex: 1 }}>
-          <div style={{ fontWeight: 700, fontSize: '0.82rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            {player.heroName ?? player.heroSlug}
+      {/* Player column: hero avatar + text */}
+      <div
+        onClick={() => player.playerId && navigate('/players', { state: { autoLoadPlayerId: player.playerId } })}
+        style={{ flex: '0 0 210px', display: 'flex', alignItems: 'center', gap: '0.55rem', minWidth: 0, cursor: player.playerId ? 'pointer' : 'default' }}
+      >
+        <HeroAvatarWithTooltip
+          slug={player.heroSlug}
+          name={player.heroName}
+          imageUrl={player.heroImageUrl}
+          meta={meta}
+          size={44}
+          rounded={10}
+        />
+
+        <div style={{ minWidth: 0, flex: 1, display: 'flex', flexDirection: 'column', gap: '0.1rem' }}>
+          {/* Row 1: Hero name */}
+          <div style={{ display: 'flex', alignItems: 'center', overflow: 'hidden' }}>
+            <span style={{ fontWeight: 700, fontSize: '0.82rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {heroDisplayName}
+            </span>
           </div>
+
+          {/* Row 2: Player name + platform + edit */}
           {isEditing && player.playerId ? (
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', marginTop: '0.1rem' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
               <input
                 autoFocus
                 value={editingValue}
                 onChange={(e) => onEditValueChange(e.target.value)}
                 onKeyDown={(e) => { if (e.key === 'Enter') onSaveEdit(player.playerId!); if (e.key === 'Escape') onCancelEdit(); }}
                 placeholder={player.playerName}
-                style={{ fontSize: '0.72rem', padding: '0.15rem 0.4rem', background: 'var(--bg-dark)', border: '1px solid var(--accent-blue)', borderRadius: '4px', color: 'var(--text-primary)', width: '120px' }}
+                style={{ fontSize: '0.72rem', padding: '0.15rem 0.4rem', background: 'var(--bg-dark)', border: '1px solid var(--accent-blue)', borderRadius: '4px', color: 'var(--text-primary)', width: '100px' }}
               />
               <button onClick={() => onSaveEdit(player.playerId!)} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--accent-win)', display: 'flex' }}><Check size={13} /></button>
               <button onClick={onCancelEdit} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', display: 'flex' }}><X size={13} /></button>
             </div>
           ) : (
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', fontSize: '0.72rem', color: 'var(--text-muted)' }}>
-              <span style={{ color: teamColor, fontWeight: 600, fontFamily: 'var(--font-mono)', fontSize: '0.65rem' }}>{player.rankLabel ?? ''}</span>
-              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{displayedName}</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', fontSize: '0.72rem', color: 'var(--text-muted)', overflow: 'hidden' }}>
+              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0, flex: '0 1 auto' }}>{displayedName}</span>
               {player.isConsole
-                ? <Gamepad2 size={11} title="Console player" style={{ flexShrink: 0, color: 'var(--accent-violet)' }} />
-                : <Monitor size={11} title="PC player" style={{ flexShrink: 0, color: 'var(--text-muted)', opacity: 0.5 }} />
+                ? <Gamepad2 size={11} title="Console" style={{ flexShrink: 0, color: 'var(--accent-violet)' }} />
+                : <Monitor size={11} title="PC" style={{ flexShrink: 0, color: 'var(--text-muted)', opacity: 0.4 }} />
               }
-              {player.customName && <span style={{ fontSize: '0.62rem', color: 'var(--accent-violet)', fontFamily: 'var(--font-mono)' }}>custom</span>}
+              {player.customName && <span style={{ fontSize: '0.6rem', color: 'var(--accent-violet)', fontFamily: 'var(--font-mono)', flexShrink: 0 }}>custom</span>}
               {player.playerId && (
                 <button
-                  onClick={() => onStartEdit(player.playerId!, player.customName ?? '')}
+                  onClick={(e) => { e.stopPropagation(); onStartEdit(player.playerId!, player.customName ?? ''); }}
                   title="Set custom name"
                   style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', display: 'flex', padding: 0, flexShrink: 0 }}
                 >
@@ -343,11 +400,25 @@ function PlayerRow({ player, isAram, teamColor, maxDamage, isEditing, editingVal
               )}
             </div>
           )}
+
+          {/* Row 3: Rank + level */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.65rem', fontFamily: 'var(--font-mono)', whiteSpace: 'nowrap' }}>
+            {player.rankLabel && <span style={{ color: teamColor, fontWeight: 600 }}>{player.rankLabel}</span>}
+            {player.level && <span style={{ color: 'var(--text-muted)' }}>Lvl {player.level}</span>}
+          </div>
         </div>
       </div>
 
+      {/* Role */}
+      <div className="hide-mobile" style={{ flex: '0 0 52px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        {roleSlug
+          ? <img src={`/icons/roles/${roleSlug}.png`} alt={roleLabel ?? ''} title={roleLabel ?? ''} style={{ width: 22, height: 22, objectFit: 'contain', opacity: 0.9 }} />
+          : <span style={{ color: 'var(--text-muted)', fontSize: '0.72rem' }}>—</span>
+        }
+      </div>
+
       {/* K/D/A */}
-      <div style={{ flex: '1 1 90px', textAlign: 'center', fontFamily: 'var(--font-mono)', fontSize: '0.82rem' }}>
+      <div style={{ flex: '0 0 110px', textAlign: 'center', fontFamily: 'var(--font-mono)', fontSize: '0.82rem' }}>
         <div>
           <span style={{ color: 'var(--accent-win)' }}>{player.kills}</span>
           <span style={{ color: 'var(--text-muted)' }}> / </span>
@@ -358,8 +429,16 @@ function PlayerRow({ player, isAram, teamColor, maxDamage, isEditing, editingVal
         <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)', marginTop: '0.1rem' }}>{kda} KDA</div>
       </div>
 
+      {/* KP% */}
+      <div style={{ flex: '0 0 56px', textAlign: 'center', fontFamily: 'var(--font-mono)', fontSize: '0.82rem' }}>
+        <div style={{ color: 'var(--text-primary)', fontWeight: 600 }}>
+          {Math.round((player.kills + player.assists) / teamKills * 100)}%
+        </div>
+        <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)', marginTop: '0.1rem' }}>KP</div>
+      </div>
+
       {/* Damage bar */}
-      <div style={{ flex: '1 1 110px', minWidth: 0 }}>
+      <div style={{ flex: '1 1 100px', minWidth: 0 }}>
         {player.heroDamage !== null ? (
           <div>
             <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.75rem', textAlign: 'right', marginBottom: '0.2rem' }}>
@@ -377,26 +456,30 @@ function PlayerRow({ player, isAram, teamColor, maxDamage, isEditing, editingVal
         ) : <span style={{ color: 'var(--text-muted)', fontSize: '0.78rem' }}>—</span>}
       </div>
 
-      {/* Gold */}
-      <div style={{ flex: '0 0 56px', textAlign: 'right', fontFamily: 'var(--font-mono)', fontSize: '0.78rem', color: 'var(--accent-prime)' }}>
-        {player.gold !== null ? `${(player.gold / 1000).toFixed(1)}k` : '—'}
+      {/* GPM */}
+      <div style={{ flex: '0 0 56px', textAlign: 'center', fontFamily: 'var(--font-mono)', fontSize: '0.78rem', color: 'var(--accent-prime)' }}>
+        {player.gold !== null && matchDuration > 0
+          ? Math.round(player.gold / (matchDuration / 60))
+          : '—'}
       </div>
 
-      {/* CS — wards placed used as CS approximation since we track wardsPlaced, not CS directly */}
-      <div style={{ flex: '0 0 40px', textAlign: 'right', fontFamily: 'var(--font-mono)', fontSize: '0.78rem' }}>
-        —
+      {/* Gold total */}
+      <div style={{ flex: '0 0 76px', textAlign: 'center', fontFamily: 'var(--font-mono)', fontSize: '0.78rem', color: 'var(--accent-prime)' }}>
+        {player.gold !== null ? `${(player.gold / 1000).toFixed(1)}k` : '—'}
       </div>
 
       {/* Wards (non-ARAM only) */}
       {!isAram && (
-        <div className="hide-mobile" style={{ flex: '0 0 48px', textAlign: 'right', fontFamily: 'var(--font-mono)', fontSize: '0.78rem', color: 'var(--text-muted)' }}>
-          {player.wardsPlaced ?? '—'}
+        <div className="hide-mobile" style={{ flex: '0 0 80px', textAlign: 'center', fontFamily: 'var(--font-mono)', fontSize: '0.78rem' }}>
+          <span style={{ color: 'var(--text-secondary)' }}>{player.wardsPlaced ?? '—'}</span>
+          <span style={{ color: 'var(--text-muted)', margin: '0 0.2rem' }}>/</span>
+          <span style={{ color: 'var(--accent-loss)', opacity: 0.8 }}>{player.wardsDestroyed ?? '—'}</span>
         </div>
       )}
 
       {/* Items */}
-      <div className="hide-mobile" style={{ flex: '0 0 180px', display: 'flex', gap: '3px', flexWrap: 'wrap', alignContent: 'flex-start' }}>
-        {player.inventoryItems.filter(Boolean).slice(0, 6).map((slug, i) => (
+      <div className="hide-mobile" style={{ flex: '0 0 196px', display: 'flex', gap: '4px', flexWrap: 'nowrap', alignItems: 'center', justifyContent: 'center' }}>
+        {player.inventoryItems.filter((s) => s && s.length > 0).slice(0, 6).map((slug, i) => (
           <ItemIcon key={i} slug={slug} />
         ))}
       </div>
@@ -411,12 +494,10 @@ function formatItemName(slug: string): string {
 function ItemIcon({ slug }: { slug: string }) {
   const [err, setErr] = useState(false);
   const label = formatItemName(slug);
+  if (err) return null;
   return (
     <div title={label} style={{ width: 28, height: 28, borderRadius: 4, overflow: 'hidden', background: 'var(--bg-dark)', border: '1px solid var(--border-color)', flexShrink: 0, cursor: 'default' }}>
-      {!err
-        ? <img src={`/items/${slug}.webp`} alt={label} style={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={() => setErr(true)} />
-        : <div style={{ width: '100%', height: '100%', background: 'rgba(255,255,255,0.04)' }} />
-      }
+      <img src={`/items/${slug}.webp`} alt={label} style={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={() => setErr(true)} />
     </div>
   );
 }

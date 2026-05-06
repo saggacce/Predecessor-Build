@@ -1,4 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useNavigate, useLocation } from 'react-router';
+import { HeroAvatarWithTooltip } from '../components/HeroAvatar';
+import { RankIcon, getRankColor } from '../components/RankIcon';
+import { useHeroMeta } from '../hooks/useHeroMeta';
 import {
   Activity,
   AlertCircle,
@@ -43,10 +47,22 @@ type ProfilePhase =
 
 export default function PlayerScouting() {
   const { authenticated } = useAuth();
+  const heroMeta = useHeroMeta();
+  const location = useLocation();
   const [query, setQuery] = useState('');
   const [phase, setPhase] = useState<Phase>({ tag: 'idle' });
   const [profilePhase, setProfilePhase] = useState<ProfilePhase>({ tag: 'idle' });
   const [platformFilter, setPlatformFilter] = useState<'all' | 'pc' | 'console'>('all');
+
+  // Auto-open player profile when navigated back from match detail
+  useEffect(() => {
+    const state = location.state as { autoLoadPlayerId?: string } | null;
+    if (state?.autoLoadPlayerId) {
+      void handleSelectPlayer(state.autoLoadPlayerId);
+      window.history.replaceState({}, ''); // clear state so refresh doesn't re-trigger
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   async function handleSearch(e: React.FormEvent) {
     e.preventDefault();
@@ -406,6 +422,11 @@ function PlayerCard({
   );
 }
 
+const REGION_FLAGS: Record<string, string> = {
+  EUROPE: '🇪🇺', NA: '🇺🇸', LATAM: '🌎', OCE: '🇦🇺',
+  ASIA: '🌏', BR: '🇧🇷', SEA: '🌏', ME: '🌍',
+};
+
 function PlayerProfilePanel({
   profile,
   onClose,
@@ -424,6 +445,16 @@ function PlayerProfilePanel({
   const winRate = getGeneralNumber(profile.generalStats, 'winRate');
   const kda = getGeneralNumber(profile.generalStats, 'kda');
   const heroDamage = getGeneralNumber(profile.generalStats, 'heroDamage');
+
+  const [seasons, setSeasons] = React.useState<import('../api/client').SeasonRating[]>([]);
+  const [favRegion, setFavRegion] = React.useState<string | null>(null);
+
+  React.useEffect(() => {
+    void apiClient.players.seasons(profile.id).then((data) => {
+      setSeasons(data.ratings ?? []);
+      setFavRegion(data.favRegion ?? null);
+    }).catch(() => { /* silent */ });
+  }, [profile.id]);
 
   return (
     <div className="glass-card" style={{ padding: 0, overflow: 'hidden' }}>
@@ -464,32 +495,57 @@ function PlayerProfilePanel({
           />
 
           <div style={{ minWidth: 0, flex: '1 1 18rem' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap', marginBottom: '0.5rem' }}>
+            {/* Name row */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', flexWrap: 'wrap', marginBottom: '0.35rem' }}>
               <h2 style={{ margin: 0, color: 'var(--text-primary)', fontSize: '2rem', lineHeight: 1.05 }}>{profile.customName ?? profile.displayName}</h2>
+              {(favRegion ?? profile.inferredRegion) && (
+                <span style={{ fontSize: '1.4rem', lineHeight: 1 }} title={favRegion ?? profile.inferredRegion ?? ''}>
+                  {REGION_FLAGS[favRegion ?? profile.inferredRegion ?? ''] ?? '🌐'}
+                </span>
+              )}
               {primaryRole && <RoleBadge role={primaryRole} size="large" />}
               {profile.isConsole
                 ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem', fontSize: '0.72rem', fontWeight: 700, color: 'var(--accent-violet)', background: 'rgba(167,139,250,0.12)', border: '1px solid rgba(167,139,250,0.3)', borderRadius: '4px', padding: '0.15rem 0.5rem' }}><Gamepad2 size={12} /> Console</span>
                 : <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem', fontSize: '0.72rem', fontWeight: 700, color: 'var(--text-muted)', background: 'rgba(255,255,255,0.04)', border: '1px solid var(--border-color)', borderRadius: '4px', padding: '0.15rem 0.5rem' }}><Monitor size={12} /> PC</span>
               }
             </div>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.75rem', color: 'var(--text-secondary)', fontSize: '0.875rem' }}>
+
+            {/* Season badges */}
+            {seasons.length > 0 && (
+              <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap', marginBottom: '0.4rem' }}>
+                {seasons.map((s) => {
+                  const color = getRankColor(s.rank.tierName);
+                  return (
+                    <span key={s.rating.group} title={`${s.rating.name}: ${s.rank.name} — ${s.points} VP`} style={{
+                      fontSize: '0.68rem', fontWeight: 700, fontFamily: 'var(--font-mono)',
+                      color, background: `color-mix(in srgb, ${color} 12%, transparent)`,
+                      border: `1px solid color-mix(in srgb, ${color} 35%, transparent)`,
+                      borderRadius: '4px', padding: '0.15rem 0.45rem', whiteSpace: 'nowrap', cursor: 'default',
+                    }}>
+                      {s.rating.group} · {s.rank.name}
+                    </span>
+                  );
+                })}
+              </div>
+            )}
+
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.6rem', color: 'var(--text-secondary)', fontSize: '0.82rem' }}>
               <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}>
-                <MapPin size={14} /> {profile.inferredRegion ?? 'Region unknown'}
+                <MapPin size={13} /> {profile.inferredRegion ?? 'Region unknown'}
               </span>
               <span>Last synced {new Date(profile.lastSynced).toLocaleString()}</span>
               <span>{profile.isPrivate ? 'Private profile' : 'Public profile'}</span>
             </div>
           </div>
 
-          <div style={{ textAlign: 'right', minWidth: '8.5rem', flex: '0 1 8.5rem' }}>
-            <div style={{ color: 'var(--text-dim)', fontSize: '0.67rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '0.25rem' }}>Rank</div>
-            <div style={{ color: 'var(--accent-win)', fontWeight: 700, fontSize: '0.95rem' }}>
-              {profile.rating?.rankLabel ?? 'Unranked'}
-            </div>
-            {profile.rating?.ratingPoints !== null && profile.rating?.ratingPoints !== undefined && (
-              <div style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-muted)', fontSize: '0.75rem', marginTop: '0.15rem' }}>{Math.round(profile.rating.ratingPoints)} VP</div>
-            )}
-          </div>
+          {/* Rank icon — pred.gg style */}
+          {profile.rating?.rankLabel && (
+            <RankIcon
+              rankLabel={profile.rating.rankLabel}
+              ratingPoints={profile.rating.ratingPoints !== undefined ? Math.round(profile.rating.ratingPoints) : null}
+              size={90}
+            />
+          )}
         </div>
 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '0.75rem', marginTop: '1.25rem' }}>
@@ -528,7 +584,12 @@ function PlayerProfilePanel({
         </section>
 
         <section>
-          <MatchesSection matches={profile.recentMatches} heroBySlug={heroBySlug} />
+          <MatchesSection
+            matches={profile.recentMatches}
+            heroBySlug={heroBySlug}
+            fromPlayerId={profile.id}
+            fromPlayerName={profile.customName ?? profile.displayName}
+          />
         </section>
       </div>
     </div>
@@ -545,6 +606,8 @@ function SummaryMetric({ label, value }: { label: string; value: string }) {
 }
 
 function HeroStatCard({ hero }: { hero: PlayerProfile['heroStats'][number] }) {
+  const heroMeta = useHeroMeta();
+  const meta = heroMeta.get(hero.heroData.slug ?? '') ?? null;
   const matches = hero.matches ?? hero.wins + hero.losses;
   const winrate = typeof hero.winRate === 'number' ? hero.winRate : matches > 0 ? Math.round((hero.wins / matches) * 1000) / 10 : 0;
   const deaths = Math.max(hero.deaths, 1);
@@ -553,9 +616,9 @@ function HeroStatCard({ hero }: { hero: PlayerProfile['heroStats'][number] }) {
   return (
     <div style={{ border: '1px solid var(--border-color)', borderRadius: 'var(--radius-sm)', padding: '0.85rem', background: 'rgba(255,255,255,0.03)' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.75rem' }}>
-        <HeroAvatar hero={hero.heroData} size={54} rounded={12} />
+        <HeroAvatarWithTooltip slug={hero.heroData.slug} name={hero.heroData.name} imageUrl={hero.heroData.imageUrl} meta={meta} size={54} rounded={12} />
         <div style={{ minWidth: 0 }}>
-          <div style={{ fontWeight: 700, fontSize: '0.88rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{hero.heroData.name}</div>
+          <div style={{ fontWeight: 700, fontSize: '0.88rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{meta?.displayName ?? hero.heroData.name}</div>
           <div style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-muted)', fontSize: '0.72rem' }}>{matches} games</div>
         </div>
       </div>
@@ -578,16 +641,37 @@ function RoleStatCard({ role }: { role: PlayerProfile['roleStats'][number] }) {
     ? (role.kills + role.assists) / Math.max(role.deaths, 1)
     : null;
 
+  const meta = getRoleMeta(role.role);
+
   return (
-    <div style={{ border: '1px solid var(--border-color)', borderRadius: 'var(--radius-sm)', padding: '0.85rem', background: 'rgba(255,255,255,0.03)' }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.75rem', marginBottom: '0.75rem' }}>
-        <RoleBadge role={role.role} />
-        <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-muted)', fontSize: '0.72rem' }}>{role.matches} games</span>
+    <div style={{ border: '1px solid var(--border-color)', borderRadius: 'var(--radius-sm)', padding: '1rem 0.85rem 0.85rem', background: 'rgba(255,255,255,0.03)' }}>
+      {/* Row 1: icon + role name centered */}
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.45rem', marginBottom: '1rem' }}>
+        <div style={{ width: 36, height: 36, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          {roleIcon(meta.key, 36)}
+        </div>
+        <span style={{ fontWeight: 700, fontSize: '0.85rem', color: meta.color, letterSpacing: '0.02em' }}>
+          {meta.label}
+        </span>
       </div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.5rem', fontSize: '0.8rem' }}>
-        <MiniMetric label="WR" value={`${winrate.toFixed(1)}%`} />
-        <MiniMetric label="W/L" value={`${role.wins}/${role.losses}`} />
-        <MiniMetric label="KDA" value={kda !== null ? kda.toFixed(2) : '-'} />
+
+      {/* Row 2: Games · WR · W/L · KDA — headers and values centered */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '0.3rem' }}>
+        {[
+          { label: 'Games', value: String(role.matches) },
+          { label: 'WR', value: `${winrate.toFixed(1)}%` },
+          { label: 'W/L', value: `${role.wins}/${role.losses}` },
+          { label: 'KDA', value: kda !== null ? kda.toFixed(2) : '—' },
+        ].map(({ label, value }) => (
+          <div key={label} style={{ textAlign: 'center' }}>
+            <div style={{ fontSize: '0.6rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: '0.25rem' }}>
+              {label}
+            </div>
+            <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.78rem', fontWeight: 600, color: 'var(--text-primary)' }}>
+              {value}
+            </div>
+          </div>
+        ))}
       </div>
     </div>
   );
@@ -609,9 +693,13 @@ function gameModeLabel(mode: string): string {
 function MatchesSection({
   matches,
   heroBySlug,
+  fromPlayerId,
+  fromPlayerName,
 }: {
   matches: PlayerProfile['recentMatches'];
   heroBySlug: Map<string, { heroData: { name: string; imageUrl?: string | null } }>;
+  fromPlayerId: string;
+  fromPlayerName: string;
 }) {
   const [activeMode, setActiveMode] = React.useState<string>('ALL');
 
@@ -647,6 +735,22 @@ function MatchesSection({
       </div>
       {filtered.length > 0 ? (
         <div style={{ border: '1px solid var(--border-color)', borderRadius: 'var(--radius-sm)', overflowX: 'auto', overflowY: 'hidden' }}>
+          {/* Column headers */}
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: '2fr 1.9fr 1.4fr 0.9fr 1.1fr 2.3fr 1fr 1fr 1fr 40px',
+            width: '100%', padding: '0.45rem 0',
+            fontSize: '0.73rem', fontWeight: 700, color: 'var(--text-secondary)',
+            textTransform: 'uppercase', letterSpacing: '0.07em',
+            borderBottom: '1px solid var(--border-color)',
+            background: 'rgba(255,255,255,0.015)',
+          }}>
+            <span style={{ paddingLeft: '0.75rem' }}>Hero</span>
+            {['Date','Type','Role','Result','K / D / A','GPM','DPM','Time'].map((h) => (
+              <span key={h} style={{ display: 'flex', justifyContent: 'center', alignItems: 'center' }}>{h}</span>
+            ))}
+            <span />
+          </div>
           {filtered.map((match) => {
             const hero = heroBySlug.get(match.heroSlug);
             return (
@@ -658,6 +762,8 @@ function MatchesSection({
                   name: match.heroName ?? hero?.heroData.name ?? match.heroSlug,
                   imageUrl: match.heroImageUrl ?? hero?.heroData.imageUrl ?? null,
                 }}
+                fromPlayerId={fromPlayerId}
+                fromPlayerName={fromPlayerName}
               />
             );
           })}
@@ -669,13 +775,26 @@ function MatchesSection({
   );
 }
 
+const MODE_COLOR: Record<string, string> = {
+  RANKED: 'var(--accent-violet)',
+  ARAM: 'var(--accent-prime)',
+  BRAWL: 'var(--accent-prime)',
+};
+
 function MatchRow({
   match,
   hero,
+  fromPlayerId,
+  fromPlayerName,
 }: {
   match: PlayerProfile['recentMatches'][number];
   hero: { slug: string; name: string; imageUrl?: string | null };
+  fromPlayerId: string;
+  fromPlayerName: string;
 }) {
+  const navigate = useNavigate();
+  const heroMetaMap = useHeroMeta();
+  const rowHeroMeta = heroMetaMap.get(hero.slug) ?? null;
   const minutes = match.duration > 0 ? match.duration / 60 : 0;
   const gpm = minutes > 0 && match.gold !== null ? Math.round(match.gold / minutes) : null;
   const dpm = minutes > 0 && match.heroDamage !== null ? Math.round(match.heroDamage / minutes) : null;
@@ -684,83 +803,114 @@ function MatchRow({
   const isLoss = match.result === 'loss';
   const borderColor = isWin ? 'var(--accent-win)' : isLoss ? 'var(--accent-loss)' : 'var(--border-color)';
   const bgColor = isWin ? 'rgba(74,222,128,0.03)' : isLoss ? 'rgba(248,113,113,0.03)' : 'rgba(255,255,255,0.01)';
+  const modeColor = MODE_COLOR[match.gameMode] ?? 'var(--accent-blue)';
+  const roleMeta = match.role ? getRoleMeta(match.role) : null;
+  const kda = match.deaths > 0
+    ? ((match.kills + match.assists) / match.deaths).toFixed(2)
+    : match.kills + match.assists > 0 ? 'Perfect' : '—';
 
   return (
     <div style={{
       display: 'grid',
-      gridTemplateColumns: 'minmax(160px, 1.5fr) 72px minmax(96px, 0.8fr) minmax(72px, 0.6fr) minmax(72px, 0.6fr) minmax(66px, 0.5fr) 36px',
+      gridTemplateColumns: '2fr 1.9fr 1.4fr 0.9fr 1.1fr 2.3fr 1fr 1fr 1fr 40px',
       alignItems: 'center',
-      minWidth: '600px',
+      width: '100%',
       borderBottom: '1px solid var(--border-color)',
       background: bgColor,
-      fontSize: '0.84rem',
       borderLeft: `3px solid ${borderColor}`,
     }}>
-      {/* Hero + date */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', minWidth: 0, padding: '0.65rem 0.75rem 0.65rem 0.85rem' }}>
-        <HeroAvatar hero={hero} size={40} rounded={8} />
+      {/* Hero */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', minWidth: 0, padding: '0.7rem 0 0.7rem 0.75rem' }}>
+        <HeroAvatarWithTooltip slug={hero.slug} name={hero.name} imageUrl={hero.imageUrl} meta={rowHeroMeta} size={52} rounded={10} />
         <div style={{ minWidth: 0 }}>
-          <div style={{ fontWeight: 700, fontSize: '0.875rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{hero.name}</div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.68rem', color: 'var(--text-muted)', marginTop: '0.1rem' }}>
-            <span>{matchDate.toLocaleDateString()}</span>
-            <span style={{ fontFamily: 'var(--font-mono)' }}>{matchDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-            <span style={{ fontFamily: 'var(--font-mono)', background: 'rgba(255,255,255,0.06)', border: '1px solid var(--border-color)', borderRadius: '3px', padding: '0.02rem 0.3rem', fontSize: '0.6rem', fontWeight: 600 }}>
-              {gameModeLabel(match.gameMode)}
-            </span>
+          <div style={{ fontWeight: 700, fontSize: '0.9rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {rowHeroMeta?.displayName ?? hero.name}
           </div>
+          {rowHeroMeta?.classes && rowHeroMeta.classes.length > 0 && (
+            <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)', marginTop: '0.1rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {rowHeroMeta.classes.map((c) => c.charAt(0) + c.slice(1).toLowerCase()).join(' · ')}
+            </div>
+          )}
         </div>
       </div>
 
-      {/* Role */}
-      <div style={{ padding: '0 0.5rem' }}>
-        {match.role ? <RoleBadge role={match.role} compact /> : <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>—</span>}
+      {/* Date */}
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', fontSize: '0.75rem', color: 'var(--text-muted)', lineHeight: 1.5 }}>
+        <div>{matchDate.toLocaleDateString()}</div>
+        <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.68rem' }}>{matchDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
       </div>
 
-      {/* KDA — colored K/D/A */}
-      <div style={{ padding: '0 0.5rem' }}>
-        <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.88rem', fontWeight: 700 }}>
+      {/* Game type badge */}
+      <div style={{ display: 'flex', justifyContent: 'center' }}>
+        <span style={{
+          fontSize: '0.72rem', fontWeight: 700, fontFamily: 'var(--font-mono)',
+          color: modeColor, background: `color-mix(in srgb, ${modeColor} 12%, transparent)`,
+          border: `1px solid color-mix(in srgb, ${modeColor} 35%, transparent)`,
+          borderRadius: '5px', padding: '0.25rem 0.55rem', whiteSpace: 'nowrap',
+        }}>
+          {gameModeLabel(match.gameMode)}
+        </span>
+      </div>
+
+      {/* Role icon */}
+      <div style={{ display: 'flex', justifyContent: 'center' }}>
+        {roleMeta
+          ? <div title={roleMeta.label}>{roleIcon(roleMeta.key, 30)}</div>
+          : <span style={{ color: 'var(--text-muted)', fontSize: '0.82rem' }}>—</span>
+        }
+      </div>
+
+      {/* Result */}
+      <div style={{ display: 'flex', justifyContent: 'center' }}>
+        <span style={{
+          fontSize: '0.72rem', fontWeight: 700, fontFamily: 'var(--font-mono)',
+          color: isWin ? 'var(--accent-win)' : isLoss ? 'var(--accent-loss)' : 'var(--text-muted)',
+          background: isWin ? 'rgba(74,222,128,0.1)' : isLoss ? 'rgba(248,113,113,0.1)' : 'rgba(255,255,255,0.04)',
+          border: `1px solid ${isWin ? 'rgba(74,222,128,0.3)' : isLoss ? 'rgba(248,113,113,0.3)' : 'var(--border-color)'}`,
+          borderRadius: '5px', padding: '0.25rem 0.55rem',
+        }}>
+          {isWin ? 'WIN' : isLoss ? 'LOSS' : '—'}
+        </span>
+      </div>
+
+      {/* K/D/A */}
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', fontFamily: 'var(--font-mono)' }}>
+        <div style={{ fontSize: '0.95rem', fontWeight: 700 }}>
           <span style={{ color: 'var(--accent-win)' }}>{match.kills}</span>
           <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}> / </span>
           <span style={{ color: 'var(--accent-loss)' }}>{match.deaths}</span>
           <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}> / </span>
           <span>{match.assists}</span>
         </div>
-        <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', marginTop: '0.1rem' }}>
-          {match.deaths > 0
-            ? `${((match.kills + match.assists) / match.deaths).toFixed(2)} KDA`
-            : match.kills + match.assists > 0 ? 'Perfect' : '—'}
-        </div>
+        <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)', marginTop: '0.12rem' }}>{kda}{kda !== 'Perfect' && kda !== '—' ? ' KDA' : ''}</div>
       </div>
 
       {/* GPM */}
-      <div className="hide-mobile" style={{ padding: '0 0.5rem' }}>
-        <div style={{ fontSize: '0.65rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.1rem' }}>GPM</div>
-        <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.82rem', color: 'var(--accent-prime)' }}>{gpm ?? '—'}</div>
+      <div style={{ display: 'flex', justifyContent: 'center', fontFamily: 'var(--font-mono)', fontSize: '0.9rem', color: 'var(--accent-prime)' }}>
+        {gpm ?? '—'}
       </div>
 
       {/* DPM */}
-      <div className="hide-mobile" style={{ padding: '0 0.5rem' }}>
-        <div style={{ fontSize: '0.65rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.1rem' }}>DPM</div>
-        <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.82rem' }}>{dpm ?? '—'}</div>
+      <div style={{ display: 'flex', justifyContent: 'center', fontFamily: 'var(--font-mono)', fontSize: '0.9rem' }}>
+        {dpm ?? '—'}
       </div>
 
       {/* Duration */}
-      <div style={{ padding: '0 0.5rem' }}>
-        <div style={{ fontSize: '0.65rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.1rem' }}>TIME</div>
-        <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.82rem' }}>{formatDuration(match.duration)}</div>
+      <div style={{ display: 'flex', justifyContent: 'center', fontFamily: 'var(--font-mono)', fontSize: '0.9rem' }}>
+        {formatDuration(match.duration)}
       </div>
 
       {/* View button */}
-      <div style={{ padding: '0 0.65rem 0 0' }}>
-        <a
-          href={`/matches/${match.matchId}`}
+      <div style={{ padding: '0 0.5rem 0 0' }}>
+        <button
+          onClick={() => navigate(`/matches/${match.matchId}`, { state: { fromPlayerId, fromPlayerName } })}
           title="View match detail"
-          style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', textDecoration: 'none', padding: '0.35rem', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-color)', background: 'rgba(255,255,255,0.03)' }}
+          style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', padding: '0.3rem', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-color)', background: 'rgba(255,255,255,0.03)', cursor: 'pointer' }}
           onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.color = 'var(--accent-blue)'; (e.currentTarget as HTMLElement).style.borderColor = 'var(--accent-blue)'; }}
           onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.color = 'var(--text-muted)'; (e.currentTarget as HTMLElement).style.borderColor = 'var(--border-color)'; }}
         >
-          <ChevronRight size={15} />
-        </a>
+          <ChevronRight size={14} />
+        </button>
       </div>
     </div>
   );
@@ -848,8 +998,12 @@ function HeroAvatar({
   size: number;
   rounded: number;
 }) {
-  const [failed, setFailed] = useState(false);
-  const src = !failed ? normalizeHeroAsset(hero?.imageUrl) : null;
+  const [localFailed, setLocalFailed] = useState(false);
+  const [cdnFailed, setCdnFailed] = useState(false);
+  const localSrc = hero?.slug ? `/heroes/${hero.slug}.webp` : null;
+  const cdnSrc = normalizeHeroAsset(hero?.imageUrl);
+  const src = !localFailed && localSrc ? localSrc : (!cdnFailed ? cdnSrc : null);
+  const failed = localFailed && cdnFailed;
   const label = hero?.name ?? hero?.slug ?? 'Hero';
   const initials = label
     .split(/[\s_-]+/)
@@ -881,7 +1035,7 @@ function HeroAvatar({
         <img
           src={src}
           alt={label}
-          onError={() => setFailed(true)}
+          onError={() => { if (!localFailed && src === localSrc) setLocalFailed(true); else setCdnFailed(true); }}
           style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
         />
       ) : (
@@ -951,12 +1105,14 @@ function getRoleMeta(role: string): { key: string; label: string; color: string 
   return { key, ...(map[key] ?? { label: formatRoleLabel(role), color: '#38bdf8' }) };
 }
 
+const ROLE_ICON_SLUG: Record<string, string> = {
+  CARRY: 'carry', SUPPORT: 'support', JUNGLE: 'jungle',
+  OFFLANE: 'offlane', MIDLANE: 'midlane', MID_LANE: 'midlane',
+};
+
 function roleIcon(roleKey: string, size: number): React.ReactNode {
-  if (roleKey === 'CARRY') return <Target size={size} />;
-  if (roleKey === 'SUPPORT') return <Shield size={size} />;
-  if (roleKey === 'JUNGLE') return <Activity size={size} />;
-  if (roleKey === 'OFFLANE') return <Swords size={size} />;
-  if (roleKey === 'MIDLANE' || roleKey === 'MID_LANE') return <Trophy size={size} />;
+  const slug = ROLE_ICON_SLUG[roleKey];
+  if (slug) return <img src={`/icons/roles/${slug}.png`} alt={roleKey} style={{ width: size, height: size, objectFit: 'contain', display: 'block' }} />;
   return <User size={size} />;
 }
 

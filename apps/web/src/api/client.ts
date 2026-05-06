@@ -119,6 +119,25 @@ export interface TeamProfile {
   aggregateStats: { totalMatches: number; averageKDA: number };
 }
 
+export interface SeasonRating {
+  rank: { name: string; tierName: string; icon: string };
+  points: number;
+  rating: { name: string; group: string };
+}
+
+export interface PlayerSeasons {
+  favRegion: string | null;
+  ratings: SeasonRating[];
+}
+
+export interface HeroMeta {
+  slug: string;
+  displayName: string;
+  classes: string[];
+  roles: string[];
+  icon: string | null;
+}
+
 export interface MatchPlayerDetail {
   id: string;
   playerId: string | null;
@@ -138,6 +157,8 @@ export interface MatchPlayerDetail {
   totalDamage: number | null;
   gold: number | null;
   wardsPlaced: number | null;
+  wardsDestroyed: number | null;
+  level: number | null;
   inventoryItems: string[];
   perkSlug: string | null;
   rankLabel: string | null;
@@ -236,6 +257,7 @@ export const apiClient = {
         method: 'POST',
         body: JSON.stringify({ playerIdA, playerIdB }),
       }),
+    seasons: (id: string) => fetchApi<PlayerSeasons>(`/players/${id}/seasons`),
     setCustomName: (id: string, customName: string | null) =>
       fetchApi<{ player: { id: string; customName: string | null; displayName: string } }>(`/players/${id}/name`, {
         method: 'PATCH',
@@ -261,6 +283,10 @@ export const apiClient = {
       fetchApi<{ id: string }>(`/teams/${teamId}/roster/${rosterId}`, { method: 'PATCH', body: JSON.stringify({ role }) }),
     removePlayer: (teamId: string, rosterId: string) =>
       fetchApi<{ ok: boolean }>(`/teams/${teamId}/roster/${rosterId}`, { method: 'DELETE' }),
+  },
+
+  heroes: {
+    meta: () => fetchApi<{ heroes: HeroMeta[] }>('/hero-meta'),
   },
 
   matches: {
