@@ -244,7 +244,7 @@ function ScoreboardTab({ match, duskWon, dawnWon, isAram, editingPlayerId, editi
               </div>
               <div style={{ display: 'flex', gap: '1.5rem', fontFamily: 'var(--font-mono)', fontSize: '0.78rem', color: 'var(--text-muted)' }}>
                 <span><span style={{ color: 'var(--text-secondary)', fontWeight: 600 }}>{totalKills}</span> kills</span>
-                <span><span style={{ color: 'var(--text-secondary)', fontWeight: 600 }}>{(totalGold / 1000).toFixed(1)}k</span> gold</span>
+                <span><span style={{ color: 'var(--text-secondary)', fontWeight: 600 }}>{(totalGold / 1000).toFixed(1)}k</span> gold total</span>
                 <span><span style={{ color: 'var(--text-secondary)', fontWeight: 600 }}>{(totalDamage / 1000).toFixed(1)}k</span> hero dmg</span>
               </div>
             </div>
@@ -254,7 +254,7 @@ function ScoreboardTab({ match, duskWon, dawnWon, isAram, editingPlayerId, editi
               <span style={{ flex: '2 1 180px' }}>Player</span>
               <span style={{ flex: '1 1 90px', textAlign: 'center' }}>K / D / A</span>
               <span style={{ flex: '1 1 90px', textAlign: 'right' }}>DMG to heroes</span>
-              <span style={{ flex: '0 0 56px', textAlign: 'right' }}>Gold</span>
+              <span style={{ flex: '0 0 56px', textAlign: 'right' }}>Gold total</span>
               {!isAram && <span className="hide-mobile" style={{ flex: '0 0 48px', textAlign: 'right' }}>Wards</span>}
               <span className="hide-mobile" style={{ flex: '0 0 180px' }}>Items</span>
             </div>
