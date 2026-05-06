@@ -347,9 +347,19 @@ function PlayerRow({ player, isAram, teamColor, maxDamage, teamKills, matchDurat
           }
         </div>
         <div style={{ minWidth: 0, flex: 1, display: 'flex', flexDirection: 'column', gap: '0.1rem' }}>
-          {/* Row 1: Hero name */}
-          <div style={{ fontWeight: 700, fontSize: '0.82rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            {player.heroName ?? player.heroSlug}
+          {/* Row 1: Hero name + role icon */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', overflow: 'hidden' }}>
+            {player.role && (
+              <img
+                src={`/icons/roles/${player.role.toLowerCase().replace('mid_lane', 'midlane')}.png`}
+                alt={player.role}
+                title={player.role}
+                style={{ width: 14, height: 14, objectFit: 'contain', flexShrink: 0, opacity: 0.85 }}
+              />
+            )}
+            <span style={{ fontWeight: 700, fontSize: '0.82rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {player.heroName ?? player.heroSlug}
+            </span>
           </div>
 
           {/* Row 2: Player name + platform + edit */}

@@ -876,8 +876,12 @@ function HeroAvatar({
   size: number;
   rounded: number;
 }) {
-  const [failed, setFailed] = useState(false);
-  const src = !failed ? normalizeHeroAsset(hero?.imageUrl) : null;
+  const [localFailed, setLocalFailed] = useState(false);
+  const [cdnFailed, setCdnFailed] = useState(false);
+  const localSrc = hero?.slug ? `/heroes/${hero.slug}.webp` : null;
+  const cdnSrc = normalizeHeroAsset(hero?.imageUrl);
+  const src = !localFailed && localSrc ? localSrc : (!cdnFailed ? cdnSrc : null);
+  const failed = localFailed && cdnFailed;
   const label = hero?.name ?? hero?.slug ?? 'Hero';
   const initials = label
     .split(/[\s_-]+/)
@@ -909,7 +913,7 @@ function HeroAvatar({
         <img
           src={src}
           alt={label}
-          onError={() => setFailed(true)}
+          onError={() => { if (!localFailed && src === localSrc) setLocalFailed(true); else setCdnFailed(true); }}
           style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
         />
       ) : (
@@ -979,12 +983,14 @@ function getRoleMeta(role: string): { key: string; label: string; color: string 
   return { key, ...(map[key] ?? { label: formatRoleLabel(role), color: '#38bdf8' }) };
 }
 
+const ROLE_ICON_SLUG: Record<string, string> = {
+  CARRY: 'carry', SUPPORT: 'support', JUNGLE: 'jungle',
+  OFFLANE: 'offlane', MIDLANE: 'midlane', MID_LANE: 'midlane',
+};
+
 function roleIcon(roleKey: string, size: number): React.ReactNode {
-  if (roleKey === 'CARRY') return <Target size={size} />;
-  if (roleKey === 'SUPPORT') return <Shield size={size} />;
-  if (roleKey === 'JUNGLE') return <Activity size={size} />;
-  if (roleKey === 'OFFLANE') return <Swords size={size} />;
-  if (roleKey === 'MIDLANE' || roleKey === 'MID_LANE') return <Trophy size={size} />;
+  const slug = ROLE_ICON_SLUG[roleKey];
+  if (slug) return <img src={`/icons/roles/${slug}.png`} alt={roleKey} style={{ width: size, height: size, objectFit: 'contain', display: 'block' }} />;
   return <User size={size} />;
 }
 
