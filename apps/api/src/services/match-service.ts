@@ -20,6 +20,7 @@ export interface MatchPlayerDetail {
   totalDamage: number | null;
   gold: number | null;
   wardsPlaced: number | null;
+  wardsDestroyed: number | null;
   level: number | null;
   inventoryItems: string[];
   perkSlug: string | null;
@@ -115,6 +116,7 @@ export async function getMatchDetail(matchId: string): Promise<MatchDetail> {
       totalDamage: mp.totalDamage,
       gold: mp.gold,
       wardsPlaced: mp.wardsPlaced,
+      wardsDestroyed: mp.wardsDestroyed,
       level: mp.level,
       inventoryItems: Array.isArray(mp.inventoryItems) ? (mp.inventoryItems as string[]) : [],
       perkSlug: mp.perkSlug,

@@ -280,10 +280,10 @@ function ScoreboardTab({ match, duskWon, dawnWon, isAram, editingPlayerId, editi
               <span style={{ flex: '0 0 200px' }}>Player</span>
               <HeaderTooltip label="K / D / A" tip="Kills / Deaths / Assists" style={{ flex: '0 0 110px', display: 'flex', justifyContent: 'center' }} />
               <HeaderTooltip label="KP%" tip="Kill Participation — % de kills del equipo en que participó (kills + assists)" style={{ flex: '0 0 56px', display: 'flex', justifyContent: 'center' }} />
-              <HeaderTooltip label="DMG to heroes" tip="Daño total infligido a héroes rivales durante la partida" style={{ flex: '1 1 120px', display: 'flex', justifyContent: 'center' }} />
+              <HeaderTooltip label="DMG to heroes" tip="Daño total infligido a héroes rivales durante la partida" style={{ flex: '1 1 100px', display: 'flex', justifyContent: 'center' }} />
               <HeaderTooltip label="GPM" tip="Gold Per Minute — ritmo de farmeo y progresión económica" style={{ flex: '0 0 56px', display: 'flex', justifyContent: 'center' }} />
               <HeaderTooltip label="Gold total" tip="Oro total acumulado al final de la partida" style={{ flex: '0 0 76px', display: 'flex', justifyContent: 'center' }} />
-              {!isAram && <span className="hide-mobile" style={{ flex: '0 0 52px', display: 'flex', justifyContent: 'center' }}><HeaderTooltip label="Wards" tip="Guardianes colocados durante la partida" /></span>}
+              {!isAram && <span className="hide-mobile" style={{ flex: '0 0 80px', display: 'flex', justifyContent: 'center' }}><HeaderTooltip label="Wards" tip="Guardianes colocados / destruidos durante la partida" /></span>}
               <span className="hide-mobile" style={{ flex: '0 0 196px', display: 'flex', justifyContent: 'center' }}><HeaderTooltip label="Items" tip="Inventario final del jugador" /></span>
             </div>
 
@@ -415,7 +415,7 @@ function PlayerRow({ player, isAram, teamColor, maxDamage, teamKills, matchDurat
       </div>
 
       {/* Damage bar */}
-      <div style={{ flex: '1 1 120px', minWidth: 0 }}>
+      <div style={{ flex: '1 1 100px', minWidth: 0 }}>
         {player.heroDamage !== null ? (
           <div>
             <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.75rem', textAlign: 'right', marginBottom: '0.2rem' }}>
@@ -447,8 +447,10 @@ function PlayerRow({ player, isAram, teamColor, maxDamage, teamKills, matchDurat
 
       {/* Wards (non-ARAM only) */}
       {!isAram && (
-        <div className="hide-mobile" style={{ flex: '0 0 52px', textAlign: 'center', fontFamily: 'var(--font-mono)', fontSize: '0.78rem', color: 'var(--text-muted)' }}>
-          {player.wardsPlaced ?? '—'}
+        <div className="hide-mobile" style={{ flex: '0 0 80px', textAlign: 'center', fontFamily: 'var(--font-mono)', fontSize: '0.78rem' }}>
+          <span style={{ color: 'var(--text-secondary)' }}>{player.wardsPlaced ?? '—'}</span>
+          <span style={{ color: 'var(--text-muted)', margin: '0 0.2rem' }}>/</span>
+          <span style={{ color: 'var(--accent-loss)', opacity: 0.8 }}>{player.wardsDestroyed ?? '—'}</span>
         </div>
       )}
 
