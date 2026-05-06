@@ -783,63 +783,63 @@ function MatchRow({
       borderLeft: `3px solid ${borderColor}`,
     }}>
       {/* Hero */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', minWidth: 0, padding: '0.55rem 0.5rem 0.55rem 0.75rem' }}>
-        <HeroAvatarWithTooltip slug={hero.slug} name={hero.name} imageUrl={hero.imageUrl} meta={rowHeroMeta} size={36} rounded={7} />
-        <span style={{ fontWeight: 700, fontSize: '0.82rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', minWidth: 0, padding: '0.7rem 0.5rem 0.7rem 0.75rem' }}>
+        <HeroAvatarWithTooltip slug={hero.slug} name={hero.name} imageUrl={hero.imageUrl} meta={rowHeroMeta} size={44} rounded={9} />
+        <span style={{ fontWeight: 700, fontSize: '0.88rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
           {rowHeroMeta?.displayName ?? hero.name}
         </span>
       </div>
 
       {/* Date */}
-      <div style={{ padding: '0 0.4rem', fontSize: '0.7rem', color: 'var(--text-muted)', lineHeight: 1.4, textAlign: 'center' }}>
+      <div style={{ padding: '0 0.4rem', fontSize: '0.75rem', color: 'var(--text-muted)', lineHeight: 1.5, textAlign: 'center' }}>
         <div>{matchDate.toLocaleDateString()}</div>
-        <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.65rem' }}>{matchDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
+        <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.68rem' }}>{matchDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
       </div>
 
       {/* Game type badge */}
       <div style={{ display: 'flex', justifyContent: 'center', padding: '0 0.3rem' }}>
         <span style={{
-          fontSize: '0.62rem', fontWeight: 700, fontFamily: 'var(--font-mono)',
+          fontSize: '0.68rem', fontWeight: 700, fontFamily: 'var(--font-mono)',
           color: modeColor, background: `color-mix(in srgb, ${modeColor} 12%, transparent)`,
           border: `1px solid color-mix(in srgb, ${modeColor} 35%, transparent)`,
-          borderRadius: '4px', padding: '0.15rem 0.4rem', whiteSpace: 'nowrap',
+          borderRadius: '4px', padding: '0.2rem 0.5rem', whiteSpace: 'nowrap',
         }}>
           {gameModeLabel(match.gameMode)}
         </span>
       </div>
 
-      {/* Role icon — bigger */}
+      {/* Role icon */}
       <div style={{ display: 'flex', justifyContent: 'center' }}>
         {roleMeta
-          ? <div title={roleMeta.label}>{roleIcon(roleMeta.key, 22)}</div>
-          : <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>—</span>
+          ? <div title={roleMeta.label}>{roleIcon(roleMeta.key, 26)}</div>
+          : <span style={{ color: 'var(--text-muted)', fontSize: '0.82rem' }}>—</span>
         }
       </div>
 
       {/* K/D/A — centered, KDA ratio centered below */}
       <div style={{ textAlign: 'center', fontFamily: 'var(--font-mono)', padding: '0 0.3rem' }}>
-        <div style={{ fontSize: '0.88rem', fontWeight: 700 }}>
+        <div style={{ fontSize: '0.95rem', fontWeight: 700 }}>
           <span style={{ color: 'var(--accent-win)' }}>{match.kills}</span>
           <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}> / </span>
           <span style={{ color: 'var(--accent-loss)' }}>{match.deaths}</span>
           <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}> / </span>
           <span>{match.assists}</span>
         </div>
-        <div style={{ fontSize: '0.62rem', color: 'var(--text-muted)', marginTop: '0.1rem' }}>{kda}{kda !== 'Perfect' && kda !== '—' ? ' KDA' : ''}</div>
+        <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)', marginTop: '0.12rem' }}>{kda}{kda !== 'Perfect' && kda !== '—' ? ' KDA' : ''}</div>
       </div>
 
       {/* GPM */}
-      <div style={{ textAlign: 'center', fontFamily: 'var(--font-mono)', fontSize: '0.82rem', color: 'var(--accent-prime)' }}>
+      <div style={{ textAlign: 'center', fontFamily: 'var(--font-mono)', fontSize: '0.88rem', color: 'var(--accent-prime)' }}>
         {gpm ?? '—'}
       </div>
 
       {/* DPM */}
-      <div style={{ textAlign: 'center', fontFamily: 'var(--font-mono)', fontSize: '0.82rem' }}>
+      <div style={{ textAlign: 'center', fontFamily: 'var(--font-mono)', fontSize: '0.88rem' }}>
         {dpm ?? '—'}
       </div>
 
       {/* Duration */}
-      <div style={{ textAlign: 'center', fontFamily: 'var(--font-mono)', fontSize: '0.82rem' }}>
+      <div style={{ textAlign: 'center', fontFamily: 'var(--font-mono)', fontSize: '0.88rem' }}>
         {formatDuration(match.duration)}
       </div>
 
