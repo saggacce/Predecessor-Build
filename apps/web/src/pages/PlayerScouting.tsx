@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router';
 import { HeroAvatarWithTooltip } from '../components/HeroAvatar';
-import { RankIcon } from '../components/RankIcon';
+import { RankIcon, getRankColor } from '../components/RankIcon';
 import { useHeroMeta } from '../hooks/useHeroMeta';
 import {
   Activity,
@@ -422,6 +422,11 @@ function PlayerCard({
   );
 }
 
+const REGION_FLAGS: Record<string, string> = {
+  EUROPE: '🇪🇺', NA: '🇺🇸', LATAM: '🌎', OCE: '🇦🇺',
+  ASIA: '🌏', BR: '🇧🇷', SEA: '🌏', ME: '🌍',
+};
+
 function PlayerProfilePanel({
   profile,
   onClose,
@@ -440,6 +445,16 @@ function PlayerProfilePanel({
   const winRate = getGeneralNumber(profile.generalStats, 'winRate');
   const kda = getGeneralNumber(profile.generalStats, 'kda');
   const heroDamage = getGeneralNumber(profile.generalStats, 'heroDamage');
+
+  const [seasons, setSeasons] = React.useState<import('../api/client').SeasonRating[]>([]);
+  const [favRegion, setFavRegion] = React.useState<string | null>(null);
+
+  React.useEffect(() => {
+    void apiClient.players.seasons(profile.id).then((data) => {
+      setSeasons(data.ratings ?? []);
+      setFavRegion(data.favRegion ?? null);
+    }).catch(() => { /* silent */ });
+  }, [profile.id]);
 
   return (
     <div className="glass-card" style={{ padding: 0, overflow: 'hidden' }}>
@@ -480,38 +495,57 @@ function PlayerProfilePanel({
           />
 
           <div style={{ minWidth: 0, flex: '1 1 18rem' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap', marginBottom: '0.5rem' }}>
+            {/* Name row */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', flexWrap: 'wrap', marginBottom: '0.35rem' }}>
               <h2 style={{ margin: 0, color: 'var(--text-primary)', fontSize: '2rem', lineHeight: 1.05 }}>{profile.customName ?? profile.displayName}</h2>
+              {(favRegion ?? profile.inferredRegion) && (
+                <span style={{ fontSize: '1.4rem', lineHeight: 1 }} title={favRegion ?? profile.inferredRegion ?? ''}>
+                  {REGION_FLAGS[favRegion ?? profile.inferredRegion ?? ''] ?? '🌐'}
+                </span>
+              )}
               {primaryRole && <RoleBadge role={primaryRole} size="large" />}
               {profile.isConsole
                 ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem', fontSize: '0.72rem', fontWeight: 700, color: 'var(--accent-violet)', background: 'rgba(167,139,250,0.12)', border: '1px solid rgba(167,139,250,0.3)', borderRadius: '4px', padding: '0.15rem 0.5rem' }}><Gamepad2 size={12} /> Console</span>
                 : <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem', fontSize: '0.72rem', fontWeight: 700, color: 'var(--text-muted)', background: 'rgba(255,255,255,0.04)', border: '1px solid var(--border-color)', borderRadius: '4px', padding: '0.15rem 0.5rem' }}><Monitor size={12} /> PC</span>
               }
             </div>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.75rem', color: 'var(--text-secondary)', fontSize: '0.875rem' }}>
+
+            {/* Season badges */}
+            {seasons.length > 0 && (
+              <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap', marginBottom: '0.4rem' }}>
+                {seasons.map((s) => {
+                  const color = getRankColor(s.rank.tierName);
+                  return (
+                    <span key={s.rating.group} title={`${s.rating.name}: ${s.rank.name} — ${s.points} VP`} style={{
+                      fontSize: '0.68rem', fontWeight: 700, fontFamily: 'var(--font-mono)',
+                      color, background: `color-mix(in srgb, ${color} 12%, transparent)`,
+                      border: `1px solid color-mix(in srgb, ${color} 35%, transparent)`,
+                      borderRadius: '4px', padding: '0.15rem 0.45rem', whiteSpace: 'nowrap', cursor: 'default',
+                    }}>
+                      {s.rating.group} · {s.rank.name}
+                    </span>
+                  );
+                })}
+              </div>
+            )}
+
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.6rem', color: 'var(--text-secondary)', fontSize: '0.82rem' }}>
               <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}>
-                <MapPin size={14} /> {profile.inferredRegion ?? 'Region unknown'}
+                <MapPin size={13} /> {profile.inferredRegion ?? 'Region unknown'}
               </span>
               <span>Last synced {new Date(profile.lastSynced).toLocaleString()}</span>
               <span>{profile.isPrivate ? 'Private profile' : 'Public profile'}</span>
             </div>
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flex: '0 0 auto' }}>
-            <div style={{ textAlign: 'right' }}>
-              <div style={{ color: 'var(--text-secondary)', fontSize: '0.72rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.09em' }}>Rank</div>
-              <div style={{ color: 'var(--accent-win)', fontWeight: 800, fontSize: '1.05rem', marginTop: '0.1rem' }}>
-                {profile.rating?.rankLabel ?? 'Unranked'}
-              </div>
-            </div>
-            {profile.rating?.rankLabel && (
-              <RankIcon
-                rankLabel={profile.rating.rankLabel}
-                ratingPoints={profile.rating.ratingPoints !== undefined ? Math.round(profile.rating.ratingPoints) : null}
-                size={68}
-              />
-            )}
-          </div>
+          {/* Rank icon — pred.gg style */}
+          {profile.rating?.rankLabel && (
+            <RankIcon
+              rankLabel={profile.rating.rankLabel}
+              ratingPoints={profile.rating.ratingPoints !== undefined ? Math.round(profile.rating.ratingPoints) : null}
+              size={90}
+            />
+          )}
         </div>
 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '0.75rem', marginTop: '1.25rem' }}>

@@ -119,6 +119,17 @@ export interface TeamProfile {
   aggregateStats: { totalMatches: number; averageKDA: number };
 }
 
+export interface SeasonRating {
+  rank: { name: string; tierName: string; icon: string };
+  points: number;
+  rating: { name: string; group: string };
+}
+
+export interface PlayerSeasons {
+  favRegion: string | null;
+  ratings: SeasonRating[];
+}
+
 export interface HeroMeta {
   slug: string;
   displayName: string;
@@ -246,6 +257,7 @@ export const apiClient = {
         method: 'POST',
         body: JSON.stringify({ playerIdA, playerIdB }),
       }),
+    seasons: (id: string) => fetchApi<PlayerSeasons>(`/players/${id}/seasons`),
     setCustomName: (id: string, customName: string | null) =>
       fetchApi<{ player: { id: string; customName: string | null; displayName: string } }>(`/players/${id}/name`, {
         method: 'PATCH',
