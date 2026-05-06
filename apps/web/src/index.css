@@ -210,7 +210,7 @@ textarea:focus-visible {
   outline-offset: 2px;
 }
 
-/* ── Responsive ──────────────────────────────────────────────────────── */
+/* ── Responsive — tablet (920px) ─────────────────────────────────────── */
 @media (max-width: 920px) {
   .app-container {
     flex-direction: column;
@@ -222,5 +222,45 @@ textarea:focus-visible {
 
   .header-title {
     font-size: 1.5rem;
+  }
+}
+
+/* ── Mobile-only visibility helpers ──────────────────────────────────── */
+.hide-mobile { display: revert; }
+
+@media (max-width: 640px) {
+  .hide-mobile { display: none !important; }
+}
+
+/* ── Responsive — mobile (640px) ─────────────────────────────────────── */
+@media (max-width: 640px) {
+  .main-content {
+    padding: 0.85rem;
+  }
+
+  .header-title {
+    font-size: 1.3rem;
+  }
+
+  .header-title::after {
+    width: 2rem;
+  }
+
+  .glass-card {
+    padding: 0.9rem;
+  }
+
+  .workspace-header {
+    padding: 0.5rem 0.75rem;
+    margin-bottom: 1rem;
+  }
+
+  .workspace-subtitle {
+    display: none;
+  }
+
+  /* Scrim Report team grid: 1 column on mobile */
+  .scrim-team-grid {
+    grid-template-columns: 1fr !important;
   }
 }

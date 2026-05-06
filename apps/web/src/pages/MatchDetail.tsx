@@ -111,6 +111,9 @@ export default function MatchDetail() {
         </div>
       </header>
 
+      {/* Team score banner */}
+      <TeamScoreBanner match={match} duskWon={duskWon} dawnWon={dawnWon} />
+
       {/* Tabs */}
       <div style={{ display: 'flex', gap: '0.25rem', borderBottom: '1px solid var(--border-color)', marginBottom: '1.5rem' }}>
         {tabs.map((t) => (
@@ -146,6 +149,51 @@ export default function MatchDetail() {
   );
 }
 
+function TeamScoreBanner({ match, duskWon, dawnWon }: { match: MatchDetailData; duskWon: boolean; dawnWon: boolean }) {
+  const duskKills = match.dusk.reduce((s, p) => s + p.kills, 0);
+  const dawnKills = match.dawn.reduce((s, p) => s + p.kills, 0);
+  const duskGold = match.dusk.reduce((s, p) => s + (p.gold ?? 0), 0);
+  const dawnGold = match.dawn.reduce((s, p) => s + (p.gold ?? 0), 0);
+
+  return (
+    <div className="glass-card" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.75rem 1.25rem', marginBottom: '1rem', gap: '1rem' }}>
+      {/* DUSK side */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flex: 1 }}>
+        <div style={{ width: 4, height: 36, borderRadius: 999, background: duskWon ? 'var(--accent-win)' : 'var(--accent-loss)', flexShrink: 0 }} />
+        <div>
+          <div style={{ fontWeight: 700, fontSize: '0.8rem', color: 'var(--accent-teal-bright)', letterSpacing: '0.08em' }}>DUSK</div>
+          <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>{(duskGold / 1000).toFixed(1)}k gold</div>
+        </div>
+        <div style={{ fontSize: '0.72rem', fontWeight: 700, color: duskWon ? 'var(--accent-win)' : 'var(--text-muted)', fontFamily: 'var(--font-mono)', background: duskWon ? 'rgba(74,222,128,0.1)' : 'rgba(255,255,255,0.04)', border: `1px solid ${duskWon ? 'rgba(74,222,128,0.3)' : 'var(--border-color)'}`, borderRadius: '4px', padding: '0.15rem 0.5rem' }}>
+          {duskWon ? 'VICTORY' : 'DEFEAT'}
+        </div>
+      </div>
+
+      {/* Score */}
+      <div style={{ textAlign: 'center', flexShrink: 0 }}>
+        <div style={{ fontFamily: 'var(--font-mono)', fontWeight: 800, fontSize: '2rem', letterSpacing: '-0.02em', lineHeight: 1 }}>
+          <span style={{ color: duskWon ? 'var(--accent-win)' : 'var(--accent-loss)' }}>{duskKills}</span>
+          <span style={{ color: 'var(--text-muted)', margin: '0 0.5rem', fontSize: '1.4rem' }}>—</span>
+          <span style={{ color: dawnWon ? 'var(--accent-win)' : 'var(--accent-loss)' }}>{dawnKills}</span>
+        </div>
+        <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)', marginTop: '0.2rem', fontFamily: 'var(--font-mono)', letterSpacing: '0.05em' }}>KILLS</div>
+      </div>
+
+      {/* DAWN side */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flex: 1, justifyContent: 'flex-end', flexDirection: 'row-reverse' }}>
+        <div style={{ width: 4, height: 36, borderRadius: 999, background: dawnWon ? 'var(--accent-win)' : 'var(--accent-loss)', flexShrink: 0 }} />
+        <div style={{ textAlign: 'right' }}>
+          <div style={{ fontWeight: 700, fontSize: '0.8rem', color: 'var(--accent-loss)', letterSpacing: '0.08em' }}>DAWN</div>
+          <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>{(dawnGold / 1000).toFixed(1)}k gold</div>
+        </div>
+        <div style={{ fontSize: '0.72rem', fontWeight: 700, color: dawnWon ? 'var(--accent-win)' : 'var(--text-muted)', fontFamily: 'var(--font-mono)', background: dawnWon ? 'rgba(74,222,128,0.1)' : 'rgba(255,255,255,0.04)', border: `1px solid ${dawnWon ? 'rgba(74,222,128,0.3)' : 'var(--border-color)'}`, borderRadius: '4px', padding: '0.15rem 0.5rem' }}>
+          {dawnWon ? 'VICTORY' : 'DEFEAT'}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function ScoreboardTab({ match, duskWon, dawnWon, isAram, editingPlayerId, editingValue, onStartEdit, onSaveEdit, onCancelEdit, onEditValueChange }: {
   match: MatchDetailData;
   duskWon: boolean;
@@ -169,6 +217,7 @@ function ScoreboardTab({ match, duskWon, dawnWon, isAram, editingPlayerId, editi
         const totalKills = players.reduce((s, p) => s + p.kills, 0);
         const totalGold = players.reduce((s, p) => s + (p.gold ?? 0), 0);
         const totalDamage = players.reduce((s, p) => s + (p.heroDamage ?? 0), 0);
+        const maxDamage = Math.max(...players.map((p) => p.heroDamage ?? 0), 1);
 
         return (
           <div key={key} className="glass-card" style={{ padding: 0, overflow: 'hidden' }}>
@@ -201,8 +250,8 @@ function ScoreboardTab({ match, duskWon, dawnWon, isAram, editingPlayerId, editi
               <span style={{ flex: '1 1 90px', textAlign: 'right' }}>Damage</span>
               <span style={{ flex: '0 0 56px', textAlign: 'right' }}>Gold</span>
               <span style={{ flex: '0 0 40px', textAlign: 'right' }}>CS</span>
-              {!isAram && <span style={{ flex: '0 0 48px', textAlign: 'right' }}>Wards</span>}
-              <span style={{ flex: '0 0 130px' }}>Items</span>
+              {!isAram && <span className="hide-mobile" style={{ flex: '0 0 48px', textAlign: 'right' }}>Wards</span>}
+              <span className="hide-mobile" style={{ flex: '0 0 180px' }}>Items</span>
             </div>
 
             {/* Player rows */}
@@ -210,6 +259,7 @@ function ScoreboardTab({ match, duskWon, dawnWon, isAram, editingPlayerId, editi
               <PlayerRow
                 key={p.id} player={p} isAram={isAram}
                 teamColor={key === 'dusk' ? 'var(--accent-teal-bright)' : 'var(--accent-loss)'}
+                maxDamage={maxDamage}
                 isEditing={editingPlayerId === p.playerId}
                 editingValue={editingValue}
                 onStartEdit={onStartEdit}
@@ -225,8 +275,8 @@ function ScoreboardTab({ match, duskWon, dawnWon, isAram, editingPlayerId, editi
   );
 }
 
-function PlayerRow({ player, isAram, teamColor, isEditing, editingValue, onStartEdit, onSaveEdit, onCancelEdit, onEditValueChange }: {
-  player: MatchPlayerDetail; isAram: boolean; teamColor: string;
+function PlayerRow({ player, isAram, teamColor, maxDamage, isEditing, editingValue, onStartEdit, onSaveEdit, onCancelEdit, onEditValueChange }: {
+  player: MatchPlayerDetail; isAram: boolean; teamColor: string; maxDamage: number;
   isEditing: boolean; editingValue: string;
   onStartEdit: (playerId: string, current: string) => void;
   onSaveEdit: (playerId: string) => void;
@@ -309,11 +359,22 @@ function PlayerRow({ player, isAram, teamColor, isEditing, editingValue, onStart
       </div>
 
       {/* Damage bar */}
-      <div style={{ flex: '1 1 90px', textAlign: 'right' }}>
-        {player.heroDamage !== null
-          ? <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.78rem' }}>{player.heroDamage.toLocaleString()}</div>
-          : <span style={{ color: 'var(--text-muted)', fontSize: '0.78rem' }}>—</span>
-        }
+      <div style={{ flex: '1 1 110px', minWidth: 0 }}>
+        {player.heroDamage !== null ? (
+          <div>
+            <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.75rem', textAlign: 'right', marginBottom: '0.2rem' }}>
+              {player.heroDamage.toLocaleString()}
+            </div>
+            <div style={{ height: 4, borderRadius: 999, background: 'rgba(255,255,255,0.07)', overflow: 'hidden' }}>
+              <div style={{
+                height: '100%', borderRadius: 999,
+                width: `${Math.round((player.heroDamage / maxDamage) * 100)}%`,
+                background: 'linear-gradient(90deg, var(--accent-blue), var(--accent-teal-bright))',
+                transition: 'width 0.3s ease',
+              }} />
+            </div>
+          </div>
+        ) : <span style={{ color: 'var(--text-muted)', fontSize: '0.78rem' }}>—</span>}
       </div>
 
       {/* Gold */}
@@ -328,14 +389,14 @@ function PlayerRow({ player, isAram, teamColor, isEditing, editingValue, onStart
 
       {/* Wards (non-ARAM only) */}
       {!isAram && (
-        <div style={{ flex: '0 0 48px', textAlign: 'right', fontFamily: 'var(--font-mono)', fontSize: '0.78rem', color: 'var(--text-muted)' }}>
+        <div className="hide-mobile" style={{ flex: '0 0 48px', textAlign: 'right', fontFamily: 'var(--font-mono)', fontSize: '0.78rem', color: 'var(--text-muted)' }}>
           {player.wardsPlaced ?? '—'}
         </div>
       )}
 
       {/* Items */}
-      <div style={{ flex: '0 0 130px', display: 'flex', gap: '2px', flexWrap: 'wrap' }}>
-        {player.inventoryItems.slice(0, 6).map((slug, i) => (
+      <div className="hide-mobile" style={{ flex: '0 0 180px', display: 'flex', gap: '3px', flexWrap: 'wrap', alignContent: 'flex-start' }}>
+        {player.inventoryItems.filter(Boolean).slice(0, 6).map((slug, i) => (
           <ItemIcon key={i} slug={slug} />
         ))}
       </div>
@@ -343,13 +404,18 @@ function PlayerRow({ player, isAram, teamColor, isEditing, editingValue, onStart
   );
 }
 
+function formatItemName(slug: string): string {
+  return slug.replace(/([a-z])([A-Z])/g, '$1 $2').replace(/^./, (c) => c.toUpperCase());
+}
+
 function ItemIcon({ slug }: { slug: string }) {
   const [err, setErr] = useState(false);
+  const label = formatItemName(slug);
   return (
-    <div style={{ width: 20, height: 20, borderRadius: 3, overflow: 'hidden', background: 'var(--bg-dark)', border: '1px solid var(--border-color)', flexShrink: 0 }}>
+    <div title={label} style={{ width: 28, height: 28, borderRadius: 4, overflow: 'hidden', background: 'var(--bg-dark)', border: '1px solid var(--border-color)', flexShrink: 0, cursor: 'default' }}>
       {!err
-        ? <img src={`/items/${slug}.webp`} alt={slug} title={slug} style={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={() => setErr(true)} />
-        : <div style={{ width: '100%', height: '100%', background: 'rgba(255,255,255,0.04)' }} title={slug} />
+        ? <img src={`/items/${slug}.webp`} alt={label} style={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={() => setErr(true)} />
+        : <div style={{ width: '100%', height: '100%', background: 'rgba(255,255,255,0.04)' }} />
       }
     </div>
   );
