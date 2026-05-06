@@ -138,6 +138,7 @@ export interface MatchPlayerDetail {
   totalDamage: number | null;
   gold: number | null;
   wardsPlaced: number | null;
+  level: number | null;
   inventoryItems: string[];
   perkSlug: string | null;
   rankLabel: string | null;

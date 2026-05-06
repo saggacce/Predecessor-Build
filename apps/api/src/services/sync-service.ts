@@ -739,7 +739,7 @@ const MATCH_DETAIL_QUERY = `
       version { id }
       matchPlayers {
         name team role kills deaths assists heroDamage totalDamageDealt
-        gold wardsPlaced
+        gold wardsPlaced level
         hero { slug }
         inventoryItemData { name }
         player { id name isNameConsole }
@@ -768,6 +768,7 @@ interface PredggMatchDetail {
     totalDamageDealt: number | null;
     gold: number | null;
     wardsPlaced: number | null;
+    level: number | null;
     hero: { slug: string } | null;
     inventoryItemData: Array<{ name: string } | null>;
     player: { id: string; name: string | null; isNameConsole: boolean } | null;
@@ -838,6 +839,7 @@ export async function resyncMatch(db: PrismaClient, predggUuid: string, userToke
         totalDamage: mp.totalDamageDealt,
         gold: mp.gold,
         wardsPlaced: mp.wardsPlaced,
+        level: mp.level ?? null,
         inventoryItems: mp.inventoryItemData.filter(Boolean).map((i) => i!.name.toLowerCase()),
         perkSlug: null,
         abilityOrder: [],

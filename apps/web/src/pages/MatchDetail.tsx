@@ -316,35 +316,37 @@ function PlayerRow({ player, isAram, teamColor, maxDamage, isEditing, editingVal
               </div>
           }
         </div>
-        <div style={{ minWidth: 0, flex: 1 }}>
+        <div style={{ minWidth: 0, flex: 1, display: 'flex', flexDirection: 'column', gap: '0.1rem' }}>
+          {/* Row 1: Hero name */}
           <div style={{ fontWeight: 700, fontSize: '0.82rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {player.heroName ?? player.heroSlug}
           </div>
+
+          {/* Row 2: Player name + platform + edit */}
           {isEditing && player.playerId ? (
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', marginTop: '0.1rem' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
               <input
                 autoFocus
                 value={editingValue}
                 onChange={(e) => onEditValueChange(e.target.value)}
                 onKeyDown={(e) => { if (e.key === 'Enter') onSaveEdit(player.playerId!); if (e.key === 'Escape') onCancelEdit(); }}
                 placeholder={player.playerName}
-                style={{ fontSize: '0.72rem', padding: '0.15rem 0.4rem', background: 'var(--bg-dark)', border: '1px solid var(--accent-blue)', borderRadius: '4px', color: 'var(--text-primary)', width: '120px' }}
+                style={{ fontSize: '0.72rem', padding: '0.15rem 0.4rem', background: 'var(--bg-dark)', border: '1px solid var(--accent-blue)', borderRadius: '4px', color: 'var(--text-primary)', width: '100px' }}
               />
               <button onClick={() => onSaveEdit(player.playerId!)} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--accent-win)', display: 'flex' }}><Check size={13} /></button>
               <button onClick={onCancelEdit} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', display: 'flex' }}><X size={13} /></button>
             </div>
           ) : (
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', fontSize: '0.72rem', color: 'var(--text-muted)' }}>
-              <span style={{ color: teamColor, fontWeight: 600, fontFamily: 'var(--font-mono)', fontSize: '0.65rem' }}>{player.rankLabel ?? ''}</span>
-              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{displayedName}</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', fontSize: '0.72rem', color: 'var(--text-muted)', overflow: 'hidden' }}>
+              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0, flex: '0 1 auto' }}>{displayedName}</span>
               {player.isConsole
-                ? <Gamepad2 size={11} title="Console player" style={{ flexShrink: 0, color: 'var(--accent-violet)' }} />
-                : <Monitor size={11} title="PC player" style={{ flexShrink: 0, color: 'var(--text-muted)', opacity: 0.5 }} />
+                ? <Gamepad2 size={11} title="Console" style={{ flexShrink: 0, color: 'var(--accent-violet)' }} />
+                : <Monitor size={11} title="PC" style={{ flexShrink: 0, color: 'var(--text-muted)', opacity: 0.4 }} />
               }
-              {player.customName && <span style={{ fontSize: '0.62rem', color: 'var(--accent-violet)', fontFamily: 'var(--font-mono)' }}>custom</span>}
+              {player.customName && <span style={{ fontSize: '0.6rem', color: 'var(--accent-violet)', fontFamily: 'var(--font-mono)', flexShrink: 0 }}>custom</span>}
               {player.playerId && (
                 <button
-                  onClick={() => onStartEdit(player.playerId!, player.customName ?? '')}
+                  onClick={(e) => { e.stopPropagation(); onStartEdit(player.playerId!, player.customName ?? ''); }}
                   title="Set custom name"
                   style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', display: 'flex', padding: 0, flexShrink: 0 }}
                 >
@@ -353,6 +355,12 @@ function PlayerRow({ player, isAram, teamColor, maxDamage, isEditing, editingVal
               )}
             </div>
           )}
+
+          {/* Row 3: Rank + level */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.65rem', fontFamily: 'var(--font-mono)', whiteSpace: 'nowrap' }}>
+            {player.rankLabel && <span style={{ color: teamColor, fontWeight: 600 }}>{player.rankLabel}</span>}
+            {player.level && <span style={{ color: 'var(--text-muted)' }}>Lvl {player.level}</span>}
+          </div>
         </div>
       </div>
 
@@ -401,7 +409,7 @@ function PlayerRow({ player, isAram, teamColor, maxDamage, isEditing, editingVal
 
       {/* Items */}
       <div className="hide-mobile" style={{ flex: '0 0 196px', display: 'flex', gap: '4px', flexWrap: 'nowrap', alignItems: 'center', justifyContent: 'center' }}>
-        {player.inventoryItems.filter(Boolean).slice(0, 6).map((slug, i) => (
+        {player.inventoryItems.filter((s) => s && s.length > 0).slice(0, 6).map((slug, i) => (
           <ItemIcon key={i} slug={slug} />
         ))}
       </div>

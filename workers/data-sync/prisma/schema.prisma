@@ -113,6 +113,7 @@ model MatchPlayer {
   totalDamage    Int?
   gold           Int?
   wardsPlaced    Int?
+  level          Int?
   inventoryItems Json
   perkSlug       String?
   abilityOrder   Json?
