@@ -705,7 +705,7 @@ function MatchesSection({
             background: 'rgba(255,255,255,0.015)',
           }}>
             <span>Hero</span>
-            <span>Date</span>
+            <span style={{ textAlign: 'center' }}>Date</span>
             <span style={{ textAlign: 'center' }}>Type</span>
             <span style={{ textAlign: 'center' }}>Role</span>
             <span style={{ textAlign: 'center' }}>K / D / A</span>
@@ -791,7 +791,7 @@ function MatchRow({
       </div>
 
       {/* Date */}
-      <div style={{ padding: '0 0.4rem', fontSize: '0.7rem', color: 'var(--text-muted)', lineHeight: 1.4 }}>
+      <div style={{ padding: '0 0.4rem', fontSize: '0.7rem', color: 'var(--text-muted)', lineHeight: 1.4, textAlign: 'center' }}>
         <div>{matchDate.toLocaleDateString()}</div>
         <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.65rem' }}>{matchDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
       </div>
