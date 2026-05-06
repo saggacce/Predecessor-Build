@@ -55,8 +55,22 @@ Tablero simple de tareas generales y subtareas.
   - [x] UI: icono de edición (Pencil) junto al nombre en roster — inline edit con Enter/Escape, badge "custom" si hay nombre personalizado.
   - [ ] Sync worker: al procesar event stream, crear registro `Player` para todos los UUIDs encontrados aunque no tengan nombre (prerequisito: Fase 2 event stream activo).
 
-## Tarea 6 — Event stream y métricas de Fase 2
-*Prerequisito: completar Tarea 5 primero. Ver `docs/primesight_indicators_catalog.csv` para detalle de indicadores y fases.*
+## Tarea 6 — Event stream, match detail y métricas de Fase 2
+*Ver `docs/primesight_indicators_catalog.csv` para detalle de indicadores y fases.*
+
+### 6A — Match detail: Scoreboard
+- [x] `GET /matches/:id` endpoint con todos los MatchPlayers agrupados por equipo
+- [x] Hero assets servidos como static desde API (`/heroes/:slug.webp`, `/items/:slug.webp`, `/icons/`)
+- [x] Proxy Vite para `/heroes`, `/items`, `/icons`
+- [x] Página `/matches/:id` con Scoreboard tab (ambos equipos, stats por jugador, items)
+- [x] PlayerScouting match cards: hora en la fecha + botón "→" a match detail
+- [x] Tabs Statistics / Timeline / Analysis preparados (disabled — se activan en 6B-6E)
+
+### 6B — Match Statistics tab (pendiente)
+### 6C — Event stream sync (pendiente)
+### 6D — Timeline tab (pendiente)
+### 6E — Analysis tab + métricas Fase 2 (pendiente)
+
 - [ ] Extender sync worker para capturar event stream completo por partida:
   - [ ] `heroKills` {gameTime, location x/y/z, killerTeam, killedTeam, killerHero, killedHero}
   - [ ] `objectiveKills` {gameTime, killedEntityType, killerTeam, killerPlayer, location}

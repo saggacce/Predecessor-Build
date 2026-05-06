@@ -13,8 +13,10 @@ import cors from 'cors';
 import helmet from 'helmet';
 import cookieParser from 'cookie-parser';
 import pinoHttp from 'pino-http';
+import { join } from 'path';
 import { playersRouter } from './routes/players.js';
 import { teamsRouter } from './routes/teams.js';
+import { matchesRouter } from './routes/matches.js';
 import { reportsRouter } from './routes/reports.js';
 import { patchesRouter } from './routes/patches.js';
 import { adminRouter } from './routes/admin.js';
@@ -37,6 +39,12 @@ app.use(pinoHttp({
   autoLogging: { ignore: (req) => req.url === '/health' },
 }));
 
+// Serve local hero/item/role assets — avoids dependency on pred.gg CDN
+const assetsRoot = join(fileURLToPath(import.meta.url), '../../../../assets');
+app.use('/heroes', express.static(join(assetsRoot, 'heroes')));
+app.use('/items', express.static(join(assetsRoot, 'items')));
+app.use('/icons', express.static(join(assetsRoot, 'icons')));
+
 app.get('/health', (_req, res) => {
   res.json({ status: 'ok', timestamp: new Date() });
 });
@@ -44,6 +52,7 @@ app.get('/health', (_req, res) => {
 app.use('/auth', authRouter);
 app.use('/players', playersRouter);
 app.use('/teams', teamsRouter);
+app.use('/matches', matchesRouter);
 app.use('/reports', reportsRouter);
 app.use('/patches', patchesRouter);
 app.use('/admin', adminRouter);

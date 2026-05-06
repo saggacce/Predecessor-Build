@@ -5,6 +5,7 @@ import {
   ArrowLeft,
   Calendar,
   CheckCircle,
+  ChevronRight,
   Clock,
   Coins,
   LogIn,
@@ -632,15 +633,16 @@ function MatchRow({
   const minutes = match.duration > 0 ? match.duration / 60 : 0;
   const gpm = minutes > 0 && match.gold !== null ? Math.round(match.gold / minutes) : null;
   const dpm = minutes > 0 && match.heroDamage !== null ? Math.round(match.heroDamage / minutes) : null;
+  const matchDate = new Date(match.date);
 
   return (
     <div
       style={{
         display: 'grid',
-        gridTemplateColumns: 'minmax(190px, 1.4fr) minmax(94px, 0.7fr) repeat(5, minmax(74px, 0.55fr))',
+        gridTemplateColumns: 'minmax(190px, 1.4fr) minmax(94px, 0.7fr) repeat(5, minmax(74px, 0.55fr)) 40px',
         gap: '0.75rem',
         alignItems: 'center',
-        minWidth: '760px',
+        minWidth: '820px',
         padding: '0.8rem 0.9rem',
         borderBottom: '1px solid var(--border-color)',
         background: 'rgba(255,255,255,0.02)',
@@ -652,7 +654,8 @@ function MatchRow({
         <div style={{ minWidth: 0 }}>
           <div style={{ fontWeight: 800, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{hero.name}</div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.74rem', color: 'var(--text-muted)' }}>
-            <span>{new Date(match.date).toLocaleDateString()}</span>
+            <span>{matchDate.toLocaleDateString()}</span>
+            <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.62rem' }}>{matchDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
             <span style={{ fontFamily: 'var(--font-mono)', background: 'rgba(255,255,255,0.06)', border: '1px solid var(--border-color)', borderRadius: '4px', padding: '0.05rem 0.35rem', fontSize: '0.62rem', fontWeight: 500 }}>
               {gameModeLabel(match.gameMode)}
             </span>
@@ -666,6 +669,15 @@ function MatchRow({
       <MatchMetric icon={<Coins size={13} />} label="GPM" value={gpm !== null ? String(gpm) : '-'} />
       <MatchMetric icon={<Target size={13} />} label="DPM" value={dpm !== null ? String(dpm) : '-'} />
       <MatchMetric icon={<Clock size={13} />} label="Time" value={formatDuration(match.duration)} />
+      <a
+        href={`/matches/${match.matchId}`}
+        title="View match detail"
+        style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', textDecoration: 'none', padding: '0.3rem', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-color)', background: 'rgba(255,255,255,0.03)' }}
+        onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.color = 'var(--accent-blue)'; (e.currentTarget as HTMLElement).style.borderColor = 'var(--accent-blue)'; }}
+        onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.color = 'var(--text-muted)'; (e.currentTarget as HTMLElement).style.borderColor = 'var(--border-color)'; }}
+      >
+        <ChevronRight size={16} />
+      </a>
     </div>
   );
 }

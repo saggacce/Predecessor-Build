@@ -25,6 +25,7 @@ export interface PlayerProfile {
   roleStats: unknown[];
   recentMatches: Array<{
     matchId: string;
+    matchUuid: string;
     heroSlug: string;
     role: string | null;
     kills: number;
@@ -90,6 +91,7 @@ export async function getPlayerProfile(playerId: string): Promise<PlayerProfile>
 
     return {
       matchId: mp.match.id,
+      matchUuid: mp.match.predggUuid,
       heroSlug: mp.heroSlug,
       role: mp.role,
       kills: mp.kills,

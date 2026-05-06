@@ -59,6 +59,7 @@ export interface RoleStat {
 
 export interface RecentMatch {
   matchId: string;
+  matchUuid: string;
   heroSlug: string;
   role: string | null;
   kills: number;
@@ -114,6 +115,42 @@ export interface TeamProfile {
   createdAt: string;
   roster: RosterMember[];
   aggregateStats: { totalMatches: number; averageKDA: number };
+}
+
+export interface MatchPlayerDetail {
+  id: string;
+  playerId: string | null;
+  playerName: string;
+  customName: string | null;
+  team: string;
+  role: string | null;
+  heroSlug: string;
+  heroName: string | null;
+  heroImageUrl: string | null;
+  kills: number;
+  deaths: number;
+  assists: number;
+  heroDamage: number | null;
+  totalDamage: number | null;
+  gold: number | null;
+  wardsPlaced: number | null;
+  inventoryItems: string[];
+  perkSlug: string | null;
+  rankLabel: string | null;
+  ratingPoints: number | null;
+}
+
+export interface MatchDetail {
+  id: string;
+  predggUuid: string;
+  startTime: string;
+  duration: number;
+  gameMode: string;
+  region: string | null;
+  winningTeam: string | null;
+  version: string | null;
+  dusk: MatchPlayerDetail[];
+  dawn: MatchPlayerDetail[];
 }
 
 export interface ScrimReport {
@@ -220,6 +257,10 @@ export const apiClient = {
       fetchApi<{ id: string }>(`/teams/${teamId}/roster/${rosterId}`, { method: 'PATCH', body: JSON.stringify({ role }) }),
     removePlayer: (teamId: string, rosterId: string) =>
       fetchApi<{ ok: boolean }>(`/teams/${teamId}/roster/${rosterId}`, { method: 'DELETE' }),
+  },
+
+  matches: {
+    getDetail: (id: string) => fetchApi<MatchDetail>(`/matches/${id}`),
   },
 
   reports: {
