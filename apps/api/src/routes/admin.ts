@@ -2,7 +2,7 @@ import { Router, Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import { db } from '../db.js';
 import { logger } from '../logger.js';
-import { syncVersionsFromPredgg, syncStalePlayers } from '../services/sync-service.js';
+import { syncVersionsFromPredgg, syncStalePlayers, syncIncompleteMatches } from '../services/sync-service.js';
 import { getValidToken } from './auth.js';
 
 export const adminRouter = Router();
@@ -61,6 +61,23 @@ const logsQuerySchema = z.object({
   limit: z.coerce.number().int().positive().max(500).default(50),
   entity: z.string().optional(),
   status: z.enum(['ok', 'error', 'skipped']).optional(),
+});
+
+/**
+ * POST /admin/sync-incomplete-matches
+ * Re-fetches all matches that have fewer than 10 MatchPlayers.
+ */
+adminRouter.post('/sync-incomplete-matches', async (_req, res, next) => {
+  try {
+    const start = Date.now();
+    logger.info('admin: sync-incomplete-matches started');
+    const result = await syncIncompleteMatches(db);
+    const elapsed = Date.now() - start;
+    logger.info({ ...result, elapsed }, 'admin: sync-incomplete-matches complete');
+    res.json({ ...result, elapsed, timestamp: new Date() });
+  } catch (err) {
+    next(err);
+  }
 });
 
 /**

@@ -731,3 +731,126 @@ export async function syncVersionsFromPredgg(db: PrismaClient): Promise<number> 
   logger.info({ upserted, elapsed: Date.now() - start }, 'versions sync complete');
   return upserted;
 }
+
+const MATCH_DETAIL_QUERY = `
+  query GetMatch($uuid: String!) {
+    match(by: { id: $uuid }) {
+      id uuid startTime duration gameMode region winningTeam
+      version { id }
+      matchPlayers {
+        name team role kills deaths assists heroDamage totalDamageDealt
+        gold wardsPlaced
+        hero { slug }
+        inventoryItemData { name }
+        player { id name }
+      }
+    }
+  }
+`;
+
+interface PredggMatchDetail {
+  id: string;
+  uuid: string;
+  startTime: string;
+  duration: number;
+  gameMode: string;
+  region: string | null;
+  winningTeam: string | null;
+  version: { id: string } | null;
+  matchPlayers: Array<{
+    name: string | null;
+    team: string;
+    role: string | null;
+    kills: number;
+    deaths: number;
+    assists: number;
+    heroDamage: number | null;
+    totalDamageDealt: number | null;
+    gold: number | null;
+    wardsPlaced: number | null;
+    hero: { slug: string } | null;
+    inventoryItemData: Array<{ name: string } | null>;
+    player: { id: string; name: string | null } | null;
+  }>;
+}
+
+export async function syncIncompleteMatches(db: PrismaClient): Promise<{ synced: number; errors: number }> {
+  const start = Date.now();
+
+  // Find matches with fewer than 10 MatchPlayers (incomplete roster)
+  const incomplete = await db.match.findMany({
+    where: { matchPlayers: { none: { id: { gt: '' } } } },
+    select: { id: true, predggUuid: true, _count: { select: { matchPlayers: true } } },
+  });
+
+  // Also get matches that exist but have < 10 players
+  const allMatches = await db.match.findMany({
+    select: { id: true, predggUuid: true, _count: { select: { matchPlayers: true } } },
+    where: { matchPlayers: { some: {} } },
+  });
+
+  const toResync = [...incomplete, ...allMatches.filter((m) => m._count.matchPlayers < 10)];
+
+  logger.info({ count: toResync.length }, 'incomplete matches found — resyncing');
+
+  let synced = 0;
+  let errors = 0;
+
+  for (const match of toResync) {
+    try {
+      const data = await predggQuery<{ match: PredggMatchDetail | null }>(
+        MATCH_DETAIL_QUERY,
+        { uuid: match.predggUuid },
+      );
+      if (!data.match || !data.match.matchPlayers.length) { errors++; continue; }
+
+      // Delete existing incomplete MatchPlayers and re-create
+      await db.matchPlayer.deleteMany({ where: { matchId: match.id } });
+
+      const version = data.match.version
+        ? await db.version.findUnique({ where: { predggId: data.match.version.id } })
+        : null;
+
+      await db.match.update({
+        where: { id: match.id },
+        data: { syncedAt: new Date(), versionId: version?.id ?? undefined },
+      });
+
+      for (const mp of data.match.matchPlayers) {
+        let playerId: string | null = null;
+        if (mp.player?.id) {
+          const dbPlayer = await db.player.findUnique({ where: { predggId: mp.player.id } });
+          playerId = dbPlayer?.id ?? null;
+        }
+        await db.matchPlayer.create({
+          data: {
+            matchId: match.id,
+            playerId,
+            playerName: mp.name ?? 'HIDDEN',
+            team: mp.team,
+            role: mp.role,
+            heroSlug: mp.hero?.slug ?? 'unknown',
+            kills: mp.kills,
+            deaths: mp.deaths,
+            assists: mp.assists,
+            heroDamage: mp.heroDamage,
+            totalDamage: mp.totalDamageDealt,
+            gold: mp.gold,
+            wardsPlaced: mp.wardsPlaced,
+            inventoryItems: mp.inventoryItemData.filter(Boolean).map((i) => i!.name.toLowerCase()),
+            perkSlug: null,
+            abilityOrder: [],
+          },
+        });
+      }
+
+      synced++;
+    } catch (err) {
+      logger.warn({ matchId: match.id, err }, 'failed to resync incomplete match');
+      errors++;
+    }
+  }
+
+  logger.info({ synced, errors, elapsed: Date.now() - start }, 'incomplete matches resync complete');
+  return { synced, errors };
+}
