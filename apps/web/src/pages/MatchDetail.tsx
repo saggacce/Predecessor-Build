@@ -251,12 +251,12 @@ function ScoreboardTab({ match, duskWon, dawnWon, isAram, editingPlayerId, editi
 
             {/* Column headers */}
             <div style={headerRowStyle}>
-              <span style={{ flex: '2 1 180px' }}>Player</span>
-              <span style={{ flex: '1 1 90px', display: 'flex', justifyContent: 'center' }}>K / D / A</span>
-              <span style={{ flex: '1 1 90px', display: 'flex', justifyContent: 'center' }}>DMG to heroes</span>
-              <span style={{ flex: '0 0 56px', display: 'flex', justifyContent: 'center' }}>Gold total</span>
-              {!isAram && <span className="hide-mobile" style={{ flex: '0 0 48px', display: 'flex', justifyContent: 'center' }}>Wards</span>}
-              <span className="hide-mobile" style={{ flex: '0 0 180px', display: 'flex', justifyContent: 'center' }}>Items</span>
+              <span style={{ flex: '0 0 200px' }}>Player</span>
+              <span style={{ flex: '0 0 110px', display: 'flex', justifyContent: 'center' }}>K / D / A</span>
+              <span style={{ flex: '1 1 180px', display: 'flex', justifyContent: 'center' }}>DMG to heroes</span>
+              <span style={{ flex: '0 0 76px', display: 'flex', justifyContent: 'center' }}>Gold total</span>
+              {!isAram && <span className="hide-mobile" style={{ flex: '0 0 52px', display: 'flex', justifyContent: 'center' }}>Wards</span>}
+              <span className="hide-mobile" style={{ flex: '0 0 196px', display: 'flex', justifyContent: 'center' }}>Items</span>
             </div>
 
             {/* Player rows */}
@@ -305,10 +305,10 @@ function PlayerRow({ player, isAram, teamColor, maxDamage, isEditing, editingVal
       {/* Hero + player */}
       <div
         onClick={() => player.playerId && navigate('/players', { state: { autoLoadPlayerId: player.playerId } })}
-        style={{ flex: '2 1 180px', display: 'flex', alignItems: 'center', gap: '0.6rem', minWidth: 0, cursor: player.playerId ? 'pointer' : 'default' }}
+        style={{ flex: '0 0 200px', display: 'flex', alignItems: 'center', gap: '0.6rem', minWidth: 0, cursor: player.playerId ? 'pointer' : 'default' }}
         title={player.playerId ? `View ${displayedName}'s profile` : undefined}
       >
-        <div style={{ width: 36, height: 36, borderRadius: 8, overflow: 'hidden', flexShrink: 0, background: 'var(--bg-dark)', border: '1px solid var(--border-color)' }}>
+        <div style={{ width: 44, height: 44, borderRadius: 10, overflow: 'hidden', flexShrink: 0, background: 'var(--bg-dark)', border: '1px solid var(--border-color)' }}>
           {!imgErr && player.heroImageUrl
             ? <img src={player.heroImageUrl} alt={player.heroSlug} style={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={() => setImgErr(true)} />
             : <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.65rem', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
@@ -357,7 +357,7 @@ function PlayerRow({ player, isAram, teamColor, maxDamage, isEditing, editingVal
       </div>
 
       {/* K/D/A */}
-      <div style={{ flex: '1 1 90px', textAlign: 'center', fontFamily: 'var(--font-mono)', fontSize: '0.82rem' }}>
+      <div style={{ flex: '0 0 110px', textAlign: 'center', fontFamily: 'var(--font-mono)', fontSize: '0.82rem' }}>
         <div>
           <span style={{ color: 'var(--accent-win)' }}>{player.kills}</span>
           <span style={{ color: 'var(--text-muted)' }}> / </span>
@@ -369,7 +369,7 @@ function PlayerRow({ player, isAram, teamColor, maxDamage, isEditing, editingVal
       </div>
 
       {/* Damage bar */}
-      <div style={{ flex: '1 1 90px', minWidth: 0 }}>
+      <div style={{ flex: '1 1 180px', minWidth: 0 }}>
         {player.heroDamage !== null ? (
           <div>
             <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.75rem', textAlign: 'right', marginBottom: '0.2rem' }}>
@@ -388,19 +388,19 @@ function PlayerRow({ player, isAram, teamColor, maxDamage, isEditing, editingVal
       </div>
 
       {/* Gold */}
-      <div style={{ flex: '0 0 56px', textAlign: 'center', fontFamily: 'var(--font-mono)', fontSize: '0.78rem', color: 'var(--accent-prime)' }}>
+      <div style={{ flex: '0 0 76px', textAlign: 'center', fontFamily: 'var(--font-mono)', fontSize: '0.78rem', color: 'var(--accent-prime)' }}>
         {player.gold !== null ? `${(player.gold / 1000).toFixed(1)}k` : '—'}
       </div>
 
       {/* Wards (non-ARAM only) */}
       {!isAram && (
-        <div className="hide-mobile" style={{ flex: '0 0 48px', textAlign: 'center', fontFamily: 'var(--font-mono)', fontSize: '0.78rem', color: 'var(--text-muted)' }}>
+        <div className="hide-mobile" style={{ flex: '0 0 52px', textAlign: 'center', fontFamily: 'var(--font-mono)', fontSize: '0.78rem', color: 'var(--text-muted)' }}>
           {player.wardsPlaced ?? '—'}
         </div>
       )}
 
       {/* Items */}
-      <div className="hide-mobile" style={{ flex: '0 0 180px', display: 'grid', gridTemplateColumns: 'repeat(3, 28px)', gap: '3px', justifyContent: 'center', alignContent: 'center' }}>
+      <div className="hide-mobile" style={{ flex: '0 0 196px', display: 'flex', gap: '4px', flexWrap: 'nowrap', alignItems: 'center', justifyContent: 'center' }}>
         {player.inventoryItems.filter(Boolean).slice(0, 6).map((slug, i) => (
           <ItemIcon key={i} slug={slug} />
         ))}
