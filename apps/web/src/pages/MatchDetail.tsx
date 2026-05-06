@@ -252,11 +252,11 @@ function ScoreboardTab({ match, duskWon, dawnWon, isAram, editingPlayerId, editi
             {/* Column headers */}
             <div style={headerRowStyle}>
               <span style={{ flex: '2 1 180px' }}>Player</span>
-              <span style={{ flex: '1 1 90px', textAlign: 'center' }}>K / D / A</span>
-              <span style={{ flex: '1 1 90px', textAlign: 'center' }}>DMG to heroes</span>
-              <span style={{ flex: '0 0 56px', textAlign: 'center' }}>Gold total</span>
-              {!isAram && <span className="hide-mobile" style={{ flex: '0 0 48px', textAlign: 'center' }}>Wards</span>}
-              <span className="hide-mobile" style={{ flex: '0 0 180px', textAlign: 'center' }}>Items</span>
+              <span style={{ flex: '1 1 90px', display: 'flex', justifyContent: 'center' }}>K / D / A</span>
+              <span style={{ flex: '1 1 90px', display: 'flex', justifyContent: 'center' }}>DMG to heroes</span>
+              <span style={{ flex: '0 0 56px', display: 'flex', justifyContent: 'center' }}>Gold total</span>
+              {!isAram && <span className="hide-mobile" style={{ flex: '0 0 48px', display: 'flex', justifyContent: 'center' }}>Wards</span>}
+              <span className="hide-mobile" style={{ flex: '0 0 180px', display: 'flex', justifyContent: 'center' }}>Items</span>
             </div>
 
             {/* Player rows */}
@@ -400,7 +400,7 @@ function PlayerRow({ player, isAram, teamColor, maxDamage, isEditing, editingVal
       )}
 
       {/* Items */}
-      <div className="hide-mobile" style={{ flex: '0 0 180px', display: 'flex', gap: '3px', flexWrap: 'wrap', alignContent: 'flex-start' }}>
+      <div className="hide-mobile" style={{ flex: '0 0 180px', display: 'flex', gap: '3px', flexWrap: 'wrap', alignContent: 'center', justifyContent: 'center' }}>
         {player.inventoryItems.filter(Boolean).slice(0, 6).map((slug, i) => (
           <ItemIcon key={i} slug={slug} />
         ))}
