@@ -688,9 +688,9 @@ function MatchRow({
   return (
     <div style={{
       display: 'grid',
-      gridTemplateColumns: 'minmax(180px, 1.5fr) 80px minmax(100px, 0.8fr) minmax(80px, 0.6fr) minmax(80px, 0.6fr) minmax(70px, 0.5fr) 40px',
+      gridTemplateColumns: 'minmax(160px, 1.5fr) 72px minmax(96px, 0.8fr) minmax(72px, 0.6fr) minmax(72px, 0.6fr) minmax(66px, 0.5fr) 36px',
       alignItems: 'center',
-      minWidth: '760px',
+      minWidth: '600px',
       borderBottom: '1px solid var(--border-color)',
       background: bgColor,
       fontSize: '0.84rem',
@@ -733,13 +733,13 @@ function MatchRow({
       </div>
 
       {/* GPM */}
-      <div style={{ padding: '0 0.5rem' }}>
+      <div className="hide-mobile" style={{ padding: '0 0.5rem' }}>
         <div style={{ fontSize: '0.65rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.1rem' }}>GPM</div>
         <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.82rem', color: 'var(--accent-prime)' }}>{gpm ?? '—'}</div>
       </div>
 
       {/* DPM */}
-      <div style={{ padding: '0 0.5rem' }}>
+      <div className="hide-mobile" style={{ padding: '0 0.5rem' }}>
         <div style={{ fontSize: '0.65rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.1rem' }}>DPM</div>
         <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.82rem' }}>{dpm ?? '—'}</div>
       </div>

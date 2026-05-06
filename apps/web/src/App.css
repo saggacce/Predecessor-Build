@@ -353,7 +353,7 @@
   100% { transform: rotate(360deg); }
 }
 
-/* ── Responsive ──────────────────────────────────────────────────────── */
+/* ── Responsive — tablet (920px) ─────────────────────────────────────── */
 @media (max-width: 920px) {
   .sidebar {
     position: static;
@@ -397,5 +397,68 @@
 
   .workspace-meta {
     justify-content: flex-start;
+  }
+}
+
+/* ── Responsive — mobile (640px) ─────────────────────────────────────── */
+@media (max-width: 640px) {
+  .sidebar {
+    padding: 0.6rem 0.75rem;
+    gap: 0;
+  }
+
+  .sidebar-brand {
+    margin-bottom: 0;
+    padding-bottom: 0;
+    border-bottom: none;
+  }
+
+  .sidebar-subtitle {
+    display: none;
+  }
+
+  /* Only show the favicon, hide text in brand */
+  .logo-name {
+    display: none;
+  }
+
+  .sidebar-nav {
+    flex: unset;
+    gap: 0.1rem;
+  }
+
+  /* Nav links: icons only */
+  .nav-link span {
+    display: none;
+  }
+
+  .nav-link {
+    padding: 0.5rem 0.6rem;
+    border-radius: var(--radius-sm);
+    gap: 0;
+    justify-content: center;
+    min-width: 2.4rem;
+  }
+
+  .nav-link.active {
+    background: rgba(56, 212, 200, 0.1);
+  }
+
+  .sidebar-auth {
+    margin-top: 0;
+    padding-top: 0;
+    border-top: none;
+  }
+
+  /* Auth buttons: icon only */
+  .btn-auth span,
+  .sidebar-note {
+    display: none;
+  }
+
+  .btn-auth {
+    padding: 0.5rem 0.6rem;
+    min-width: 2.4rem;
+    justify-content: center;
   }
 }

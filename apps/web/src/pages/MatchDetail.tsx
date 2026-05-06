@@ -250,8 +250,8 @@ function ScoreboardTab({ match, duskWon, dawnWon, isAram, editingPlayerId, editi
               <span style={{ flex: '1 1 90px', textAlign: 'right' }}>Damage</span>
               <span style={{ flex: '0 0 56px', textAlign: 'right' }}>Gold</span>
               <span style={{ flex: '0 0 40px', textAlign: 'right' }}>CS</span>
-              {!isAram && <span style={{ flex: '0 0 48px', textAlign: 'right' }}>Wards</span>}
-              <span style={{ flex: '0 0 180px' }}>Items</span>
+              {!isAram && <span className="hide-mobile" style={{ flex: '0 0 48px', textAlign: 'right' }}>Wards</span>}
+              <span className="hide-mobile" style={{ flex: '0 0 180px' }}>Items</span>
             </div>
 
             {/* Player rows */}
@@ -389,13 +389,13 @@ function PlayerRow({ player, isAram, teamColor, maxDamage, isEditing, editingVal
 
       {/* Wards (non-ARAM only) */}
       {!isAram && (
-        <div style={{ flex: '0 0 48px', textAlign: 'right', fontFamily: 'var(--font-mono)', fontSize: '0.78rem', color: 'var(--text-muted)' }}>
+        <div className="hide-mobile" style={{ flex: '0 0 48px', textAlign: 'right', fontFamily: 'var(--font-mono)', fontSize: '0.78rem', color: 'var(--text-muted)' }}>
           {player.wardsPlaced ?? '—'}
         </div>
       )}
 
       {/* Items */}
-      <div style={{ flex: '0 0 180px', display: 'flex', gap: '3px', flexWrap: 'wrap', alignContent: 'flex-start' }}>
+      <div className="hide-mobile" style={{ flex: '0 0 180px', display: 'flex', gap: '3px', flexWrap: 'wrap', alignContent: 'flex-start' }}>
         {player.inventoryItems.filter(Boolean).slice(0, 6).map((slug, i) => (
           <ItemIcon key={i} slug={slug} />
         ))}
