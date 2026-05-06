@@ -253,10 +253,10 @@ function ScoreboardTab({ match, duskWon, dawnWon, isAram, editingPlayerId, editi
             <div style={headerRowStyle}>
               <span style={{ flex: '2 1 180px' }}>Player</span>
               <span style={{ flex: '1 1 90px', textAlign: 'center' }}>K / D / A</span>
-              <span style={{ flex: '1 1 90px', textAlign: 'right' }}>DMG to heroes</span>
-              <span style={{ flex: '0 0 56px', textAlign: 'right' }}>Gold total</span>
+              <span style={{ flex: '1 1 90px', textAlign: 'center' }}>DMG to heroes</span>
+              <span style={{ flex: '0 0 56px', textAlign: 'center' }}>Gold total</span>
               {!isAram && <span className="hide-mobile" style={{ flex: '0 0 48px', textAlign: 'center' }}>Wards</span>}
-              <span className="hide-mobile" style={{ flex: '0 0 180px' }}>Items</span>
+              <span className="hide-mobile" style={{ flex: '0 0 180px', textAlign: 'center' }}>Items</span>
             </div>
 
             {/* Player rows */}
@@ -388,7 +388,7 @@ function PlayerRow({ player, isAram, teamColor, maxDamage, isEditing, editingVal
       </div>
 
       {/* Gold */}
-      <div style={{ flex: '0 0 56px', textAlign: 'right', fontFamily: 'var(--font-mono)', fontSize: '0.78rem', color: 'var(--accent-prime)' }}>
+      <div style={{ flex: '0 0 56px', textAlign: 'center', fontFamily: 'var(--font-mono)', fontSize: '0.78rem', color: 'var(--accent-prime)' }}>
         {player.gold !== null ? `${(player.gold / 1000).toFixed(1)}k` : '—'}
       </div>
 
