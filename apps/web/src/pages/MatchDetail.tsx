@@ -369,7 +369,7 @@ function PlayerRow({ player, isAram, teamColor, maxDamage, isEditing, editingVal
       </div>
 
       {/* Damage bar */}
-      <div style={{ flex: '1 1 110px', minWidth: 0 }}>
+      <div style={{ flex: '1 1 90px', minWidth: 0 }}>
         {player.heroDamage !== null ? (
           <div>
             <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.75rem', textAlign: 'right', marginBottom: '0.2rem' }}>
@@ -400,7 +400,7 @@ function PlayerRow({ player, isAram, teamColor, maxDamage, isEditing, editingVal
       )}
 
       {/* Items */}
-      <div className="hide-mobile" style={{ flex: '0 0 180px', display: 'flex', gap: '3px', flexWrap: 'wrap', alignContent: 'center', justifyContent: 'center' }}>
+      <div className="hide-mobile" style={{ flex: '0 0 180px', display: 'grid', gridTemplateColumns: 'repeat(3, 28px)', gap: '3px', justifyContent: 'center', alignContent: 'center' }}>
         {player.inventoryItems.filter(Boolean).slice(0, 6).map((slug, i) => (
           <ItemIcon key={i} slug={slug} />
         ))}
