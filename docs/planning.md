@@ -58,15 +58,24 @@ Tablero simple de tareas generales y subtareas.
 ## Tarea 6 — Event stream, match detail y métricas de Fase 2
 *Ver `docs/primesight_indicators_catalog.csv` para detalle de indicadores y fases.*
 
-### 6A — Match detail: Scoreboard
-- [x] `GET /matches/:id` endpoint con todos los MatchPlayers agrupados por equipo
-- [x] Hero assets servidos como static desde API (`/heroes/:slug.webp`, `/items/:slug.webp`, `/icons/`)
-- [x] Proxy Vite para `/heroes`, `/items`, `/icons`
-- [x] Página `/matches/:id` con Scoreboard tab (ambos equipos, stats por jugador, items)
-- [x] PlayerScouting match cards: hora en la fecha + botón "→" a match detail
-- [x] Tabs Statistics / Timeline / Analysis preparados (disabled — se activan en 6B-6E)
+### [x] 6A — Match detail: Scoreboard + mejoras UI
+- [x] `GET /matches/:id` + `POST /matches/:id/sync` endpoints
+- [x] Hero/item/icon assets como static desde API, proxy Vite extendido
+- [x] Página `/matches/:id` con Scoreboard tab (ambos equipos, stats, items, barras de daño)
+- [x] Team score banner (kills, gold, VICTORY/DEFEAT por equipo)
+- [x] Barras de daño relativas por equipo (gradiente azul→teal)
+- [x] Items 28px con tooltip de nombre formateado
+- [x] PlayerScouting match cards rediseñadas: borde win/loss, KDA colorizado, KDA ratio
+- [x] Filtro PC/Console en resultados de búsqueda de jugadores
+- [x] Responsive 640px: sidebar icon-only, `.hide-mobile`, match cards adaptadas
+- [x] Nombres `user-XXXX` para jugadores anónimos (desde predggPlayerUuid)
+- [x] Botón "Fetch player names" con Bearer token
+- [x] `isConsole` desde `isNameConsole` pred.gg → badge Gamepad2/Monitor en UI
+- [x] Edición de nombre (customName) desde match detail Scoreboard
+- [x] Búsqueda por customName en Player Scouting
+- [x] `POST /admin/sync-incomplete-matches` para backfill de rosters
 
-### 6B — Match Statistics tab (pendiente)
+### 6B — Match Statistics tab (pendiente — datos verificados disponibles en pred.gg)
 ### 6C — Event stream sync (pendiente)
 ### 6D — Timeline tab (pendiente)
 ### 6E — Analysis tab + métricas Fase 2 (pendiente)
