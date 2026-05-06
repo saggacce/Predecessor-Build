@@ -261,6 +261,7 @@ export const apiClient = {
 
   matches: {
     getDetail: (id: string) => fetchApi<MatchDetail>(`/matches/${id}`),
+    syncPlayers: (id: string) => fetchApi<MatchDetail>(`/matches/${id}/sync`, { method: 'POST' }),
   },
 
   reports: {

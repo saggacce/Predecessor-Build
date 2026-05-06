@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router';
-import { ArrowLeft, Trophy, Skull, Clock, Swords } from 'lucide-react';
+import { ArrowLeft, Trophy, Skull, Clock, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
 import { apiClient, type MatchDetail as MatchDetailData, type MatchPlayerDetail, ApiErrorResponse } from '../api/client';
 
@@ -10,6 +10,7 @@ export default function MatchDetail() {
   const [match, setMatch] = useState<MatchDetailData | null>(null);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<'scoreboard' | 'statistics' | 'timeline' | 'analysis'>('scoreboard');
+  const [syncing, setSyncing] = useState(false);
 
   useEffect(() => {
     if (!id) return;
@@ -25,12 +26,28 @@ export default function MatchDetail() {
     })();
   }, [id]);
 
+  async function handleSyncPlayers() {
+    if (!id) return;
+    setSyncing(true);
+    const toastId = toast.loading('Fetching player names from pred.gg…');
+    try {
+      const updated = await apiClient.matches.syncPlayers(id);
+      setMatch(updated);
+      toast.success('Player names updated', { id: toastId });
+    } catch (err) {
+      toast.error(err instanceof ApiErrorResponse ? err.error.message : 'Failed to fetch players.', { id: toastId });
+    } finally {
+      setSyncing(false);
+    }
+  }
+
   if (loading) return <div style={{ padding: '2rem', color: 'var(--text-muted)' }}>Loading match…</div>;
   if (!match) return <div style={{ padding: '2rem', color: 'var(--accent-loss)' }}>Match not found.</div>;
 
   const isAram = match.gameMode === 'ARAM' || match.gameMode === 'BRAWL';
   const duskWon = match.winningTeam === 'DUSK';
   const dawnWon = match.winningTeam === 'DAWN';
+  const hasHidden = [...match.dusk, ...match.dawn].some((p) => p.playerName === 'HIDDEN');
 
   const tabs: { key: typeof tab; label: string; disabled?: boolean }[] = [
     { key: 'scoreboard', label: 'Scoreboard' },
@@ -57,6 +74,16 @@ export default function MatchDetail() {
               </span>
               <GameModeBadge mode={match.gameMode} />
               {match.region && <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', fontWeight: 600 }}>{match.region.toUpperCase()}</span>}
+              {hasHidden && (
+                <button
+                  onClick={() => void handleSyncPlayers()}
+                  disabled={syncing}
+                  style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.72rem', fontWeight: 600, padding: '0.2rem 0.6rem', borderRadius: '4px', cursor: syncing ? 'not-allowed' : 'pointer', border: '1px solid var(--accent-blue)', background: 'rgba(91,156,246,0.1)', color: 'var(--accent-blue)', opacity: syncing ? 0.6 : 1 }}
+                >
+                  <RefreshCw size={11} style={{ animation: syncing ? 'spin 1s linear infinite' : 'none' }} />
+                  {syncing ? 'Fetching…' : 'Fetch player names'}
+                </button>
+              )}
             </div>
           </div>
           <div style={{ textAlign: 'right' }}>
