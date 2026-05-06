@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router';
+import { HeroAvatarWithTooltip } from '../components/HeroAvatar';
+import { useHeroMeta } from '../hooks/useHeroMeta';
 import { ArrowLeft, Trophy, Skull, Clock, RefreshCw, Pencil, Check, X, Monitor, Gamepad2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { apiClient, type MatchDetail as MatchDetailData, type MatchPlayerDetail, ApiErrorResponse } from '../api/client';
@@ -9,6 +11,7 @@ export default function MatchDetail() {
   const navigate = useNavigate();
   const location = useLocation();
   const fromState = location.state as { fromPlayerId?: string; fromPlayerName?: string } | null;
+  const heroMeta = useHeroMeta();
   const [match, setMatch] = useState<MatchDetailData | null>(null);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<'scoreboard' | 'statistics' | 'timeline' | 'analysis'>('scoreboard');
@@ -144,6 +147,7 @@ export default function MatchDetail() {
       {tab === 'scoreboard' && (
         <ScoreboardTab
           match={match} duskWon={duskWon} dawnWon={dawnWon} isAram={isAram}
+          heroMeta={heroMeta}
           editingPlayerId={editingPlayerId} editingValue={editingValue}
           onStartEdit={(playerId, current) => { setEditingPlayerId(playerId); setEditingValue(current); }}
           onSaveEdit={handleSaveCustomName}
@@ -225,11 +229,12 @@ function HeaderTooltip({ label, tip, style }: { label: string; tip: string; styl
   );
 }
 
-function ScoreboardTab({ match, duskWon, dawnWon, isAram, editingPlayerId, editingValue, onStartEdit, onSaveEdit, onCancelEdit, onEditValueChange }: {
+function ScoreboardTab({ match, duskWon, dawnWon, isAram, heroMeta, editingPlayerId, editingValue, onStartEdit, onSaveEdit, onCancelEdit, onEditValueChange }: {
   match: MatchDetailData;
   duskWon: boolean;
   dawnWon: boolean;
   isAram: boolean;
+  heroMeta: Map<string, import('../api/client').HeroMeta>;
   editingPlayerId: string | null;
   editingValue: string;
   onStartEdit: (playerId: string, current: string) => void;
@@ -277,7 +282,8 @@ function ScoreboardTab({ match, duskWon, dawnWon, isAram, editingPlayerId, editi
 
             {/* Column headers */}
             <div style={headerRowStyle}>
-              <span style={{ flex: '0 0 220px' }}>Player</span>
+              <span style={{ flex: '0 0 210px' }}>Player</span>
+              <span className="hide-mobile" style={{ flex: '0 0 52px', display: 'flex', justifyContent: 'center' }}><HeaderTooltip label="Role" tip="Rol desempeñado en la partida" /></span>
               <HeaderTooltip label="K / D / A" tip="Kills / Deaths / Assists" style={{ flex: '0 0 110px', display: 'flex', justifyContent: 'center' }} />
               <HeaderTooltip label="KP%" tip="Kill Participation — % de kills del equipo en que participó (kills + assists)" style={{ flex: '0 0 56px', display: 'flex', justifyContent: 'center' }} />
               <HeaderTooltip label="DMG to heroes" tip="Daño total infligido a héroes rivales durante la partida" style={{ flex: '1 1 100px', display: 'flex', justifyContent: 'center' }} />
@@ -295,6 +301,7 @@ function ScoreboardTab({ match, duskWon, dawnWon, isAram, editingPlayerId, editi
                 maxDamage={maxDamage}
                 teamKills={teamKills}
                 matchDuration={match.duration}
+                heroMeta={heroMeta}
                 isEditing={editingPlayerId === p.playerId}
                 editingValue={editingValue}
                 onStartEdit={onStartEdit}
@@ -310,8 +317,9 @@ function ScoreboardTab({ match, duskWon, dawnWon, isAram, editingPlayerId, editi
   );
 }
 
-function PlayerRow({ player, isAram, teamColor, maxDamage, teamKills, matchDuration, isEditing, editingValue, onStartEdit, onSaveEdit, onCancelEdit, onEditValueChange }: {
+function PlayerRow({ player, isAram, teamColor, maxDamage, teamKills, matchDuration, heroMeta, isEditing, editingValue, onStartEdit, onSaveEdit, onCancelEdit, onEditValueChange }: {
   player: MatchPlayerDetail; isAram: boolean; teamColor: string; maxDamage: number; teamKills: number; matchDuration: number;
+  heroMeta: Map<string, import('../api/client').HeroMeta>;
   isEditing: boolean; editingValue: string;
   onStartEdit: (playerId: string, current: string) => void;
   onSaveEdit: (playerId: string) => void;
@@ -322,14 +330,14 @@ function PlayerRow({ player, isAram, teamColor, maxDamage, teamKills, matchDurat
     ? ((player.kills + player.assists) / player.deaths).toFixed(2)
     : player.kills + player.assists > 0 ? 'Perfect' : '0.00';
 
-  const [imgErr, setImgErr] = useState(false);
-  const [showHeroTip, setShowHeroTip] = useState(false);
   const navigate = useNavigate();
   const displayedName = player.customName ?? player.playerName;
   const roleSlug = player.role?.toLowerCase().replace('mid_lane', 'midlane') ?? null;
   const roleLabel = player.role
     ? player.role.charAt(0) + player.role.slice(1).toLowerCase().replace('_', ' ')
     : null;
+  const meta = heroMeta.get(player.heroSlug) ?? null;
+  const heroDisplayName = meta?.displayName ?? player.heroName ?? player.heroSlug;
 
   return (
     <div style={{
@@ -337,63 +345,25 @@ function PlayerRow({ player, isAram, teamColor, maxDamage, teamKills, matchDurat
       padding: '0.6rem 1rem', borderBottom: '1px solid var(--border-color)',
       background: 'rgba(255,255,255,0.01)', flexWrap: 'wrap',
     }}>
-      {/* Player column: role icon | hero avatar | text */}
+      {/* Player column: hero avatar + text */}
       <div
         onClick={() => player.playerId && navigate('/players', { state: { autoLoadPlayerId: player.playerId } })}
-        style={{ flex: '0 0 220px', display: 'flex', alignItems: 'center', gap: '0.55rem', minWidth: 0, cursor: player.playerId ? 'pointer' : 'default' }}
+        style={{ flex: '0 0 210px', display: 'flex', alignItems: 'center', gap: '0.55rem', minWidth: 0, cursor: player.playerId ? 'pointer' : 'default' }}
       >
-        {/* Role icon — left of avatar */}
-        <div style={{ width: 22, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          {roleSlug
-            ? <img src={`/icons/roles/${roleSlug}.png`} alt={roleLabel ?? ''} title={roleLabel ?? ''} style={{ width: 20, height: 20, objectFit: 'contain', opacity: 0.9 }} />
-            : <div style={{ width: 20 }} />
-          }
-        </div>
-
-        {/* Hero avatar with tooltip */}
-        <div
-          style={{ position: 'relative', flexShrink: 0 }}
-          onMouseEnter={() => setShowHeroTip(true)}
-          onMouseLeave={() => setShowHeroTip(false)}
-        >
-          <div style={{ width: 44, height: 44, borderRadius: 10, overflow: 'hidden', background: 'var(--bg-dark)', border: '1px solid var(--border-color)' }}>
-            {!imgErr && player.heroImageUrl
-              ? <img src={player.heroImageUrl} alt={player.heroSlug} style={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={() => setImgErr(true)} />
-              : <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.65rem', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
-                  {player.heroSlug.slice(0, 2).toUpperCase()}
-                </div>
-            }
-          </div>
-          {showHeroTip && (
-            <div style={{
-              position: 'absolute', bottom: 'calc(100% + 8px)', left: '50%', transform: 'translateX(-50%)',
-              zIndex: 200, background: 'var(--bg-card)', border: '1px solid var(--border-color)',
-              borderRadius: '8px', padding: '0.6rem 0.85rem', minWidth: '130px',
-              boxShadow: '0 4px 20px rgba(0,0,0,0.5)', pointerEvents: 'none',
-            }}>
-              <div style={{ fontWeight: 700, fontSize: '0.82rem', color: 'var(--text-primary)', marginBottom: '0.35rem' }}>
-                {player.heroName ?? player.heroSlug}
-              </div>
-              {roleSlug && (
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.72rem', color: 'var(--text-muted)' }}>
-                  <img src={`/icons/roles/${roleSlug}.png`} alt="" style={{ width: 13, height: 13, objectFit: 'contain' }} />
-                  {roleLabel}
-                </div>
-              )}
-              {player.level && (
-                <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)', marginTop: '0.25rem', fontFamily: 'var(--font-mono)' }}>
-                  Level {player.level}
-                </div>
-              )}
-            </div>
-          )}
-        </div>
+        <HeroAvatarWithTooltip
+          slug={player.heroSlug}
+          name={player.heroName}
+          imageUrl={player.heroImageUrl}
+          meta={meta}
+          size={44}
+          rounded={10}
+        />
 
         <div style={{ minWidth: 0, flex: 1, display: 'flex', flexDirection: 'column', gap: '0.1rem' }}>
           {/* Row 1: Hero name */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', overflow: 'hidden' }}>
+          <div style={{ display: 'flex', alignItems: 'center', overflow: 'hidden' }}>
             <span style={{ fontWeight: 700, fontSize: '0.82rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {player.heroName ?? player.heroSlug}
+              {heroDisplayName}
             </span>
           </div>
 
@@ -437,6 +407,14 @@ function PlayerRow({ player, isAram, teamColor, maxDamage, teamKills, matchDurat
             {player.level && <span style={{ color: 'var(--text-muted)' }}>Lvl {player.level}</span>}
           </div>
         </div>
+      </div>
+
+      {/* Role */}
+      <div className="hide-mobile" style={{ flex: '0 0 52px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        {roleSlug
+          ? <img src={`/icons/roles/${roleSlug}.png`} alt={roleLabel ?? ''} title={roleLabel ?? ''} style={{ width: 22, height: 22, objectFit: 'contain', opacity: 0.9 }} />
+          : <span style={{ color: 'var(--text-muted)', fontSize: '0.72rem' }}>—</span>
+        }
       </div>
 
       {/* K/D/A */}

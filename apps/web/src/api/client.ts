@@ -119,6 +119,14 @@ export interface TeamProfile {
   aggregateStats: { totalMatches: number; averageKDA: number };
 }
 
+export interface HeroMeta {
+  slug: string;
+  displayName: string;
+  classes: string[];
+  roles: string[];
+  icon: string | null;
+}
+
 export interface MatchPlayerDetail {
   id: string;
   playerId: string | null;
@@ -263,6 +271,10 @@ export const apiClient = {
       fetchApi<{ id: string }>(`/teams/${teamId}/roster/${rosterId}`, { method: 'PATCH', body: JSON.stringify({ role }) }),
     removePlayer: (teamId: string, rosterId: string) =>
       fetchApi<{ ok: boolean }>(`/teams/${teamId}/roster/${rosterId}`, { method: 'DELETE' }),
+  },
+
+  heroes: {
+    meta: () => fetchApi<{ heroes: HeroMeta[] }>('/hero-meta'),
   },
 
   matches: {

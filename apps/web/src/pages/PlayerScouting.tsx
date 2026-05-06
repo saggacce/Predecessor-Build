@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router';
+import { HeroAvatarWithTooltip } from '../components/HeroAvatar';
+import { useHeroMeta } from '../hooks/useHeroMeta';
 import {
   Activity,
   AlertCircle,
@@ -44,6 +46,7 @@ type ProfilePhase =
 
 export default function PlayerScouting() {
   const { authenticated } = useAuth();
+  const heroMeta = useHeroMeta();
   const location = useLocation();
   const [query, setQuery] = useState('');
   const [phase, setPhase] = useState<Phase>({ tag: 'idle' });
@@ -562,6 +565,8 @@ function SummaryMetric({ label, value }: { label: string; value: string }) {
 }
 
 function HeroStatCard({ hero }: { hero: PlayerProfile['heroStats'][number] }) {
+  const heroMeta = useHeroMeta();
+  const meta = heroMeta.get(hero.heroData.slug ?? '') ?? null;
   const matches = hero.matches ?? hero.wins + hero.losses;
   const winrate = typeof hero.winRate === 'number' ? hero.winRate : matches > 0 ? Math.round((hero.wins / matches) * 1000) / 10 : 0;
   const deaths = Math.max(hero.deaths, 1);
@@ -570,9 +575,9 @@ function HeroStatCard({ hero }: { hero: PlayerProfile['heroStats'][number] }) {
   return (
     <div style={{ border: '1px solid var(--border-color)', borderRadius: 'var(--radius-sm)', padding: '0.85rem', background: 'rgba(255,255,255,0.03)' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.75rem' }}>
-        <HeroAvatar hero={hero.heroData} size={54} rounded={12} />
+        <HeroAvatarWithTooltip slug={hero.heroData.slug} name={hero.heroData.name} imageUrl={hero.heroData.imageUrl} meta={meta} size={54} rounded={12} />
         <div style={{ minWidth: 0 }}>
-          <div style={{ fontWeight: 700, fontSize: '0.88rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{hero.heroData.name}</div>
+          <div style={{ fontWeight: 700, fontSize: '0.88rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{meta?.displayName ?? hero.heroData.name}</div>
           <div style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-muted)', fontSize: '0.72rem' }}>{matches} games</div>
         </div>
       </div>
@@ -704,6 +709,8 @@ function MatchRow({
   fromPlayerName: string;
 }) {
   const navigate = useNavigate();
+  const heroMetaMap = useHeroMeta();
+  const rowHeroMeta = heroMetaMap.get(hero.slug) ?? null;
   const minutes = match.duration > 0 ? match.duration / 60 : 0;
   const gpm = minutes > 0 && match.gold !== null ? Math.round(match.gold / minutes) : null;
   const dpm = minutes > 0 && match.heroDamage !== null ? Math.round(match.heroDamage / minutes) : null;
@@ -726,9 +733,9 @@ function MatchRow({
     }}>
       {/* Hero + date */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', minWidth: 0, padding: '0.65rem 0.75rem 0.65rem 0.85rem' }}>
-        <HeroAvatar hero={hero} size={40} rounded={8} />
+        <HeroAvatarWithTooltip slug={hero.slug} name={hero.name} imageUrl={hero.imageUrl} meta={rowHeroMeta} size={40} rounded={8} />
         <div style={{ minWidth: 0 }}>
-          <div style={{ fontWeight: 700, fontSize: '0.875rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{hero.name}</div>
+          <div style={{ fontWeight: 700, fontSize: '0.875rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{rowHeroMeta?.displayName ?? hero.name}</div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.68rem', color: 'var(--text-muted)', marginTop: '0.1rem' }}>
             <span>{matchDate.toLocaleDateString()}</span>
             <span style={{ fontFamily: 'var(--font-mono)' }}>{matchDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>

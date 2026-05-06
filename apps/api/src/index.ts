@@ -17,6 +17,7 @@ import { join } from 'path';
 import { playersRouter } from './routes/players.js';
 import { teamsRouter } from './routes/teams.js';
 import { matchesRouter } from './routes/matches.js';
+import { heroMetaRouter } from './routes/hero-meta.js';
 import { reportsRouter } from './routes/reports.js';
 import { patchesRouter } from './routes/patches.js';
 import { adminRouter } from './routes/admin.js';
@@ -38,6 +39,8 @@ app.use(pinoHttp({
   logger,
   autoLogging: { ignore: (req) => req.url === '/health' },
 }));
+
+app.use('/hero-meta', heroMetaRouter);
 
 // Serve local hero/item/role assets — avoids dependency on pred.gg CDN
 const assetsRoot = join(fileURLToPath(import.meta.url), '../../../../assets');
