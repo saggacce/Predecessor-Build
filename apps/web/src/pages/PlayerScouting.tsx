@@ -600,16 +600,37 @@ function RoleStatCard({ role }: { role: PlayerProfile['roleStats'][number] }) {
     ? (role.kills + role.assists) / Math.max(role.deaths, 1)
     : null;
 
+  const meta = getRoleMeta(role.role);
+
   return (
-    <div style={{ border: '1px solid var(--border-color)', borderRadius: 'var(--radius-sm)', padding: '0.85rem', background: 'rgba(255,255,255,0.03)' }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.75rem', marginBottom: '0.75rem' }}>
-        <RoleBadge role={role.role} />
-        <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-muted)', fontSize: '0.72rem' }}>{role.matches} games</span>
+    <div style={{ border: '1px solid var(--border-color)', borderRadius: 'var(--radius-sm)', padding: '1rem 0.85rem 0.85rem', background: 'rgba(255,255,255,0.03)' }}>
+      {/* Row 1: icon + role name centered */}
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.45rem', marginBottom: '1rem' }}>
+        <div style={{ width: 36, height: 36, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          {roleIcon(meta.key, 36)}
+        </div>
+        <span style={{ fontWeight: 700, fontSize: '0.85rem', color: meta.color, letterSpacing: '0.02em' }}>
+          {meta.label}
+        </span>
       </div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.5rem', fontSize: '0.8rem' }}>
-        <MiniMetric label="WR" value={`${winrate.toFixed(1)}%`} />
-        <MiniMetric label="W/L" value={`${role.wins}/${role.losses}`} />
-        <MiniMetric label="KDA" value={kda !== null ? kda.toFixed(2) : '-'} />
+
+      {/* Row 2: Games · WR · W/L · KDA — headers and values centered */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '0.3rem' }}>
+        {[
+          { label: 'Games', value: String(role.matches) },
+          { label: 'WR', value: `${winrate.toFixed(1)}%` },
+          { label: 'W/L', value: `${role.wins}/${role.losses}` },
+          { label: 'KDA', value: kda !== null ? kda.toFixed(2) : '—' },
+        ].map(({ label, value }) => (
+          <div key={label} style={{ textAlign: 'center' }}>
+            <div style={{ fontSize: '0.6rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: '0.25rem' }}>
+              {label}
+            </div>
+            <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.78rem', fontWeight: 600, color: 'var(--text-primary)' }}>
+              {value}
+            </div>
+          </div>
+        ))}
       </div>
     </div>
   );
