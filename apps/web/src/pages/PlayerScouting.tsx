@@ -697,22 +697,17 @@ function MatchesSection({
           {/* Column headers */}
           <div style={{
             display: 'grid',
-            gridTemplateColumns: '190px 96px 80px 60px 68px 120px 64px 72px 68px 36px',
-            minWidth: '858px', padding: '0.35rem 0.85rem',
+            gridTemplateColumns: '3fr 1.6fr 1.3fr 0.9fr 1.1fr 2fr 1fr 1fr 1fr 40px',
+            width: '100%', padding: '0.4rem 0.85rem',
             fontSize: '0.62rem', fontWeight: 700, color: 'var(--text-muted)',
             textTransform: 'uppercase', letterSpacing: '0.07em',
             borderBottom: '1px solid var(--border-color)',
             background: 'rgba(255,255,255,0.015)',
           }}>
             <span>Hero</span>
-            <span style={{ textAlign: 'center' }}>Date</span>
-            <span style={{ textAlign: 'center' }}>Type</span>
-            <span style={{ textAlign: 'center' }}>Role</span>
-            <span style={{ textAlign: 'center' }}>Result</span>
-            <span style={{ textAlign: 'center' }}>K / D / A</span>
-            <span style={{ textAlign: 'center' }}>GPM</span>
-            <span style={{ textAlign: 'center' }}>DPM</span>
-            <span style={{ textAlign: 'center' }}>Time</span>
+            {['Date','Type','Role','Result','K / D / A','GPM','DPM','Time'].map((h) => (
+              <span key={h} style={{ display: 'flex', justifyContent: 'center', alignItems: 'center' }}>{h}</span>
+            ))}
             <span />
           </div>
           {filtered.map((match) => {
@@ -776,9 +771,9 @@ function MatchRow({
   return (
     <div style={{
       display: 'grid',
-      gridTemplateColumns: '190px 96px 80px 60px 68px 120px 64px 72px 68px 36px',
+      gridTemplateColumns: '3fr 1.6fr 1.3fr 0.9fr 1.1fr 2fr 1fr 1fr 1fr 40px',
       alignItems: 'center',
-      minWidth: '858px',
+      width: '100%',
       borderBottom: '1px solid var(--border-color)',
       background: bgColor,
       borderLeft: `3px solid ${borderColor}`,
@@ -799,13 +794,13 @@ function MatchRow({
       </div>
 
       {/* Date */}
-      <div style={{ padding: '0 0.4rem', fontSize: '0.75rem', color: 'var(--text-muted)', lineHeight: 1.5, textAlign: 'center' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', fontSize: '0.75rem', color: 'var(--text-muted)', lineHeight: 1.5 }}>
         <div>{matchDate.toLocaleDateString()}</div>
         <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.68rem' }}>{matchDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
       </div>
 
       {/* Game type badge */}
-      <div style={{ display: 'flex', justifyContent: 'center', padding: '0 0.3rem' }}>
+      <div style={{ display: 'flex', justifyContent: 'center' }}>
         <span style={{
           fontSize: '0.72rem', fontWeight: 700, fontFamily: 'var(--font-mono)',
           color: modeColor, background: `color-mix(in srgb, ${modeColor} 12%, transparent)`,
@@ -838,7 +833,7 @@ function MatchRow({
       </div>
 
       {/* K/D/A */}
-      <div style={{ textAlign: 'center', fontFamily: 'var(--font-mono)', padding: '0 0.3rem' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', fontFamily: 'var(--font-mono)' }}>
         <div style={{ fontSize: '0.95rem', fontWeight: 700 }}>
           <span style={{ color: 'var(--accent-win)' }}>{match.kills}</span>
           <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}> / </span>
@@ -850,17 +845,17 @@ function MatchRow({
       </div>
 
       {/* GPM */}
-      <div style={{ textAlign: 'center', fontFamily: 'var(--font-mono)', fontSize: '0.9rem', color: 'var(--accent-prime)' }}>
+      <div style={{ display: 'flex', justifyContent: 'center', fontFamily: 'var(--font-mono)', fontSize: '0.9rem', color: 'var(--accent-prime)' }}>
         {gpm ?? '—'}
       </div>
 
       {/* DPM */}
-      <div style={{ textAlign: 'center', fontFamily: 'var(--font-mono)', fontSize: '0.9rem' }}>
+      <div style={{ display: 'flex', justifyContent: 'center', fontFamily: 'var(--font-mono)', fontSize: '0.9rem' }}>
         {dpm ?? '—'}
       </div>
 
       {/* Duration */}
-      <div style={{ textAlign: 'center', fontFamily: 'var(--font-mono)', fontSize: '0.9rem' }}>
+      <div style={{ display: 'flex', justifyContent: 'center', fontFamily: 'var(--font-mono)', fontSize: '0.9rem' }}>
         {formatDuration(match.duration)}
       </div>
 
