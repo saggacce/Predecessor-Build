@@ -81,8 +81,16 @@ const PLAYER_MATCHES_QUERY = `
 `;
 
 export async function syncMatch(db: PrismaClient, uuid: string): Promise<string | null> {
-  const existing = await db.match.findUnique({ where: { predggUuid: uuid } });
-  if (existing) return existing.id;
+  const existing = await db.match.findUnique({
+    where: { predggUuid: uuid },
+    include: { _count: { select: { matchPlayers: true } } },
+  });
+  // Skip re-sync only if match has a full roster (≥10 players across both teams)
+  if (existing && existing._count.matchPlayers >= 10) return existing.id;
+  // Incomplete match — delete existing MatchPlayers and re-sync
+  if (existing) {
+    await db.matchPlayer.deleteMany({ where: { matchId: existing.id } });
+  }
 
   const data = await gql<{ match: PredggMatch | null }>(MATCH_QUERY, { uuid });
   if (!data.match) return null;
@@ -94,8 +102,9 @@ export async function syncMatch(db: PrismaClient, uuid: string): Promise<string 
     ? await db.version.findUnique({ where: { predggId: m.version.id } })
     : null;
 
-  const match = await db.match.create({
-    data: {
+  const match = await db.match.upsert({
+    where: { predggUuid: m.uuid },
+    create: {
       predggUuid: m.uuid,
       startTime: new Date(m.startTime),
       duration: m.duration,
@@ -105,6 +114,7 @@ export async function syncMatch(db: PrismaClient, uuid: string): Promise<string 
       versionId: version?.id ?? null,
       syncedAt: now,
     },
+    update: { syncedAt: now },
   });
 
   for (const mp of m.matchPlayers) {

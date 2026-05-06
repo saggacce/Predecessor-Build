@@ -17,6 +17,9 @@ export default defineConfig({
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api/, ''),
       },
+      '/heroes': { target: 'http://localhost:3001', changeOrigin: true },
+      '/items': { target: 'http://localhost:3001', changeOrigin: true },
+      '/icons': { target: 'http://localhost:3001', changeOrigin: true },
     },
   },
 })

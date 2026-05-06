@@ -7,6 +7,7 @@ import Dashboard from './pages/Dashboard';
 import PlayerScouting from './pages/PlayerScouting';
 import TeamAnalysis from './pages/TeamAnalysis';
 import ScrimReport from './pages/ScrimReport';
+import MatchDetail from './pages/MatchDetail';
 import { useAuth } from './hooks/useAuth';
 import { apiClient } from './api/client';
 import './App.css';
@@ -132,6 +133,7 @@ export default function App() {
             <Route path="/players" element={<PlayerScouting />} />
             <Route path="/teams" element={<TeamAnalysis />} />
             <Route path="/scrims" element={<ScrimReport />} />
+            <Route path="/matches/:id" element={<MatchDetail />} />
           </Routes>
         </main>
       </div>

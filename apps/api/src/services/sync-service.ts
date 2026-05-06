@@ -731,3 +731,160 @@ export async function syncVersionsFromPredgg(db: PrismaClient): Promise<number> 
   logger.info({ upserted, elapsed: Date.now() - start }, 'versions sync complete');
   return upserted;
 }
+
+const MATCH_DETAIL_QUERY = `
+  query GetMatch($uuid: String!) {
+    match(by: { id: $uuid }) {
+      id uuid startTime duration gameMode region winningTeam
+      version { id }
+      matchPlayers {
+        name team role kills deaths assists heroDamage totalDamageDealt
+        gold wardsPlaced
+        hero { slug }
+        inventoryItemData { name }
+        player { id name isNameConsole }
+      }
+    }
+  }
+`;
+
+interface PredggMatchDetail {
+  id: string;
+  uuid: string;
+  startTime: string;
+  duration: number;
+  gameMode: string;
+  region: string | null;
+  winningTeam: string | null;
+  version: { id: string } | null;
+  matchPlayers: Array<{
+    name: string | null;
+    team: string;
+    role: string | null;
+    kills: number;
+    deaths: number;
+    assists: number;
+    heroDamage: number | null;
+    totalDamageDealt: number | null;
+    gold: number | null;
+    wardsPlaced: number | null;
+    hero: { slug: string } | null;
+    inventoryItemData: Array<{ name: string } | null>;
+    player: { id: string; name: string | null; isNameConsole: boolean } | null;
+  }>;
+}
+
+export async function resyncMatch(db: PrismaClient, predggUuid: string, userToken?: string): Promise<void> {
+  const data = await predggQuery<{ match: PredggMatchDetail | null }>(
+    MATCH_DETAIL_QUERY,
+    { uuid: predggUuid },
+    userToken,
+  );
+
+  if (!data.match || !data.match.matchPlayers.length) {
+    throw new Error(`Match ${predggUuid} not found or has no players on pred.gg`);
+  }
+
+  const match = await db.match.findUnique({ where: { predggUuid } });
+  if (!match) throw new Error(`Match ${predggUuid} not in local DB`);
+
+  await db.matchPlayer.deleteMany({ where: { matchId: match.id } });
+
+  const version = data.match.version
+    ? await db.version.findUnique({ where: { predggId: data.match.version.id } })
+    : null;
+
+  await db.match.update({
+    where: { id: match.id },
+    data: { syncedAt: new Date(), versionId: version?.id ?? undefined },
+  });
+
+  const now = new Date();
+  for (const mp of data.match.matchPlayers) {
+    let playerId: string | null = null;
+    if (mp.player?.id) {
+      const isConsole = mp.player.isNameConsole ?? false;
+      const displayName = mp.name && mp.name !== 'HIDDEN'
+        ? mp.name
+        : `user-${mp.player.id.replace(/-/g, '').slice(0, 8)}`;
+      // Upsert Player for ALL match participants so customName can be set on any player
+      const dbPlayer = await db.player.upsert({
+        where: { predggId: mp.player.id },
+        create: {
+          predggId: mp.player.id,
+          predggUuid: mp.player.id,
+          displayName,
+          isPrivate: false,
+          isConsole,
+          lastSynced: now,
+        },
+        update: { isConsole, lastSynced: now },
+      });
+      playerId = dbPlayer.id;
+    }
+    await db.matchPlayer.create({
+      data: {
+        matchId: match.id,
+        playerId,
+        predggPlayerUuid: mp.player?.id ?? null,
+        playerName: mp.name ?? mp.player?.name ?? 'HIDDEN',
+        team: mp.team,
+        role: mp.role,
+        heroSlug: mp.hero?.slug ?? 'unknown',
+        kills: mp.kills,
+        deaths: mp.deaths,
+        assists: mp.assists,
+        heroDamage: mp.heroDamage,
+        totalDamage: mp.totalDamageDealt,
+        gold: mp.gold,
+        wardsPlaced: mp.wardsPlaced,
+        inventoryItems: mp.inventoryItemData.filter(Boolean).map((i) => i!.name.toLowerCase()),
+        perkSlug: null,
+        abilityOrder: [],
+      },
+    });
+  }
+}
+
+export async function syncIncompleteMatches(db: PrismaClient): Promise<{ synced: number; errors: number }> {
+  const start = Date.now();
+
+  // Find matches with fewer than 10 MatchPlayers (incomplete roster)
+  const incomplete = await db.match.findMany({
+    where: { matchPlayers: { none: { id: { gt: '' } } } },
+    select: { id: true, predggUuid: true, _count: { select: { matchPlayers: true } } },
+  });
+
+  const allMatches = await db.match.findMany({
+    select: { id: true, predggUuid: true, _count: { select: { matchPlayers: true } } },
+    where: { matchPlayers: { some: {} } },
+  });
+
+  // Also include matches with players that have a UUID but no linked Player record
+  const missingUuid = await db.match.findMany({
+    where: { matchPlayers: { some: { predggPlayerUuid: { not: null }, playerId: null } } },
+    select: { id: true, predggUuid: true, _count: { select: { matchPlayers: true } } },
+  });
+
+  const seen = new Set<string>();
+  const toResync = [...incomplete, ...allMatches.filter((m) => m._count.matchPlayers < 10), ...missingUuid]
+    .filter((m) => { if (seen.has(m.id)) return false; seen.add(m.id); return true; });
+
+  logger.info({ count: toResync.length }, 'incomplete matches found — resyncing');
+
+  let synced = 0;
+  let errors = 0;
+
+  for (const match of toResync) {
+    try {
+      await resyncMatch(db, match.predggUuid);
+      synced++;
+    } catch (err) {
+      logger.warn({ matchId: match.id, err }, 'failed to resync incomplete match');
+      errors++;
+    }
+  }
+
+  logger.info({ synced, errors, elapsed: Date.now() - start }, 'incomplete matches resync complete');
+  return { synced, errors };
+}

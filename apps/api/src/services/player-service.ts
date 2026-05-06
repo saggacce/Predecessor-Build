@@ -12,7 +12,9 @@ function safeNumber(val: unknown): number {
 export interface PlayerProfile {
   id: string;
   displayName: string;
+  customName: string | null;
   isPrivate: boolean;
+  isConsole: boolean;
   inferredRegion: string | null;
   firstSeen: Date;
   lastSynced: Date;
@@ -25,6 +27,7 @@ export interface PlayerProfile {
   roleStats: unknown[];
   recentMatches: Array<{
     matchId: string;
+    matchUuid: string;
     heroSlug: string;
     role: string | null;
     kills: number;
@@ -90,6 +93,7 @@ export async function getPlayerProfile(playerId: string): Promise<PlayerProfile>
 
     return {
       matchId: mp.match.id,
+      matchUuid: mp.match.predggUuid,
       heroSlug: mp.heroSlug,
       role: mp.role,
       kills: mp.kills,
@@ -109,7 +113,9 @@ export async function getPlayerProfile(playerId: string): Promise<PlayerProfile>
   return {
     id: player.id,
     displayName: player.displayName,
+    customName: player.customName,
     isPrivate: player.isPrivate,
+    isConsole: player.isConsole,
     inferredRegion: player.inferredRegion,
     firstSeen: player.firstSeen,
     lastSynced: player.lastSynced,
@@ -172,17 +178,19 @@ export async function comparePlayers(
 export async function searchPlayers(query: string, limit = 20) {
   return db.player.findMany({
     where: {
-      displayName: {
-        contains: query,
-        mode: 'insensitive',
-      },
+      OR: [
+        { displayName: { contains: query, mode: 'insensitive' } },
+        { customName: { contains: query, mode: 'insensitive' } },
+      ],
     },
     orderBy: { lastSynced: 'desc' },
     take: limit,
     select: {
       id: true,
       displayName: true,
+      customName: true,
       isPrivate: true,
+      isConsole: true,
       inferredRegion: true,
       lastSynced: true,
     },
