@@ -697,8 +697,8 @@ function MatchesSection({
           {/* Column headers */}
           <div style={{
             display: 'grid',
-            gridTemplateColumns: 'minmax(120px,1.2fr) 88px 70px 48px minmax(96px,0.9fr) 56px 64px 60px 36px',
-            minWidth: '640px', padding: '0.35rem 0.85rem',
+            gridTemplateColumns: '190px 96px 80px 60px 68px 120px 64px 72px 68px 36px',
+            minWidth: '858px', padding: '0.35rem 0.85rem',
             fontSize: '0.62rem', fontWeight: 700, color: 'var(--text-muted)',
             textTransform: 'uppercase', letterSpacing: '0.07em',
             borderBottom: '1px solid var(--border-color)',
@@ -708,6 +708,7 @@ function MatchesSection({
             <span style={{ textAlign: 'center' }}>Date</span>
             <span style={{ textAlign: 'center' }}>Type</span>
             <span style={{ textAlign: 'center' }}>Role</span>
+            <span style={{ textAlign: 'center' }}>Result</span>
             <span style={{ textAlign: 'center' }}>K / D / A</span>
             <span style={{ textAlign: 'center' }}>GPM</span>
             <span style={{ textAlign: 'center' }}>DPM</span>
@@ -775,19 +776,26 @@ function MatchRow({
   return (
     <div style={{
       display: 'grid',
-      gridTemplateColumns: 'minmax(120px,1.2fr) 88px 70px 48px minmax(96px,0.9fr) 56px 64px 60px 36px',
+      gridTemplateColumns: '190px 96px 80px 60px 68px 120px 64px 72px 68px 36px',
       alignItems: 'center',
-      minWidth: '640px',
+      minWidth: '858px',
       borderBottom: '1px solid var(--border-color)',
       background: bgColor,
       borderLeft: `3px solid ${borderColor}`,
     }}>
       {/* Hero */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', minWidth: 0, padding: '0.7rem 0.5rem 0.7rem 0.75rem' }}>
-        <HeroAvatarWithTooltip slug={hero.slug} name={hero.name} imageUrl={hero.imageUrl} meta={rowHeroMeta} size={44} rounded={9} />
-        <span style={{ fontWeight: 700, fontSize: '0.88rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-          {rowHeroMeta?.displayName ?? hero.name}
-        </span>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', minWidth: 0, padding: '0.7rem 0.5rem 0.7rem 0.75rem' }}>
+        <HeroAvatarWithTooltip slug={hero.slug} name={hero.name} imageUrl={hero.imageUrl} meta={rowHeroMeta} size={52} rounded={10} />
+        <div style={{ minWidth: 0 }}>
+          <div style={{ fontWeight: 700, fontSize: '0.9rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {rowHeroMeta?.displayName ?? hero.name}
+          </div>
+          {rowHeroMeta?.classes && rowHeroMeta.classes.length > 0 && (
+            <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)', marginTop: '0.1rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {rowHeroMeta.classes.map((c) => c.charAt(0) + c.slice(1).toLowerCase()).join(' · ')}
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Date */}
@@ -799,10 +807,10 @@ function MatchRow({
       {/* Game type badge */}
       <div style={{ display: 'flex', justifyContent: 'center', padding: '0 0.3rem' }}>
         <span style={{
-          fontSize: '0.68rem', fontWeight: 700, fontFamily: 'var(--font-mono)',
+          fontSize: '0.72rem', fontWeight: 700, fontFamily: 'var(--font-mono)',
           color: modeColor, background: `color-mix(in srgb, ${modeColor} 12%, transparent)`,
           border: `1px solid color-mix(in srgb, ${modeColor} 35%, transparent)`,
-          borderRadius: '4px', padding: '0.2rem 0.5rem', whiteSpace: 'nowrap',
+          borderRadius: '5px', padding: '0.25rem 0.55rem', whiteSpace: 'nowrap',
         }}>
           {gameModeLabel(match.gameMode)}
         </span>
@@ -811,12 +819,25 @@ function MatchRow({
       {/* Role icon */}
       <div style={{ display: 'flex', justifyContent: 'center' }}>
         {roleMeta
-          ? <div title={roleMeta.label}>{roleIcon(roleMeta.key, 26)}</div>
+          ? <div title={roleMeta.label}>{roleIcon(roleMeta.key, 30)}</div>
           : <span style={{ color: 'var(--text-muted)', fontSize: '0.82rem' }}>—</span>
         }
       </div>
 
-      {/* K/D/A — centered, KDA ratio centered below */}
+      {/* Result */}
+      <div style={{ display: 'flex', justifyContent: 'center' }}>
+        <span style={{
+          fontSize: '0.72rem', fontWeight: 700, fontFamily: 'var(--font-mono)',
+          color: isWin ? 'var(--accent-win)' : isLoss ? 'var(--accent-loss)' : 'var(--text-muted)',
+          background: isWin ? 'rgba(74,222,128,0.1)' : isLoss ? 'rgba(248,113,113,0.1)' : 'rgba(255,255,255,0.04)',
+          border: `1px solid ${isWin ? 'rgba(74,222,128,0.3)' : isLoss ? 'rgba(248,113,113,0.3)' : 'var(--border-color)'}`,
+          borderRadius: '5px', padding: '0.25rem 0.55rem',
+        }}>
+          {isWin ? 'WIN' : isLoss ? 'LOSS' : '—'}
+        </span>
+      </div>
+
+      {/* K/D/A */}
       <div style={{ textAlign: 'center', fontFamily: 'var(--font-mono)', padding: '0 0.3rem' }}>
         <div style={{ fontSize: '0.95rem', fontWeight: 700 }}>
           <span style={{ color: 'var(--accent-win)' }}>{match.kills}</span>
@@ -829,17 +850,17 @@ function MatchRow({
       </div>
 
       {/* GPM */}
-      <div style={{ textAlign: 'center', fontFamily: 'var(--font-mono)', fontSize: '0.88rem', color: 'var(--accent-prime)' }}>
+      <div style={{ textAlign: 'center', fontFamily: 'var(--font-mono)', fontSize: '0.9rem', color: 'var(--accent-prime)' }}>
         {gpm ?? '—'}
       </div>
 
       {/* DPM */}
-      <div style={{ textAlign: 'center', fontFamily: 'var(--font-mono)', fontSize: '0.88rem' }}>
+      <div style={{ textAlign: 'center', fontFamily: 'var(--font-mono)', fontSize: '0.9rem' }}>
         {dpm ?? '—'}
       </div>
 
       {/* Duration */}
-      <div style={{ textAlign: 'center', fontFamily: 'var(--font-mono)', fontSize: '0.88rem' }}>
+      <div style={{ textAlign: 'center', fontFamily: 'var(--font-mono)', fontSize: '0.9rem' }}>
         {formatDuration(match.duration)}
       </div>
 
