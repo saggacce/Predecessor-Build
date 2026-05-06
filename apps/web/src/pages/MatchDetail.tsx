@@ -164,7 +164,7 @@ function TeamScoreBanner({ match, duskWon, dawnWon }: { match: MatchDetailData; 
           <div style={{ fontWeight: 700, fontSize: '0.8rem', color: 'var(--accent-teal-bright)', letterSpacing: '0.08em' }}>DUSK</div>
           <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>{(duskGold / 1000).toFixed(1)}k gold</div>
         </div>
-        <div style={{ fontSize: '0.72rem', fontWeight: 700, color: duskWon ? 'var(--accent-win)' : 'var(--text-muted)', fontFamily: 'var(--font-mono)', background: duskWon ? 'rgba(74,222,128,0.1)' : 'rgba(255,255,255,0.04)', border: `1px solid ${duskWon ? 'rgba(74,222,128,0.3)' : 'var(--border-color)'}`, borderRadius: '4px', padding: '0.15rem 0.5rem' }}>
+        <div style={{ fontSize: '0.72rem', fontWeight: 700, color: duskWon ? 'var(--accent-win)' : 'var(--accent-loss)', fontFamily: 'var(--font-mono)', background: duskWon ? 'rgba(74,222,128,0.1)' : 'rgba(248,113,113,0.1)', border: `1px solid ${duskWon ? 'rgba(74,222,128,0.3)' : 'rgba(248,113,113,0.35)'}`, borderRadius: '4px', padding: '0.15rem 0.5rem' }}>
           {duskWon ? 'VICTORY' : 'DEFEAT'}
         </div>
       </div>
@@ -180,15 +180,15 @@ function TeamScoreBanner({ match, duskWon, dawnWon }: { match: MatchDetailData; 
       </div>
 
       {/* DAWN side */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flex: 1, justifyContent: 'flex-end', flexDirection: 'row-reverse' }}>
-        <div style={{ width: 4, height: 36, borderRadius: 999, background: dawnWon ? 'var(--accent-win)' : 'var(--accent-loss)', flexShrink: 0 }} />
+      <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flex: 1, justifyContent: 'flex-end' }}>
+        <div style={{ fontSize: '0.72rem', fontWeight: 700, color: dawnWon ? 'var(--accent-win)' : 'var(--accent-loss)', fontFamily: 'var(--font-mono)', background: dawnWon ? 'rgba(74,222,128,0.1)' : 'rgba(248,113,113,0.1)', border: `1px solid ${dawnWon ? 'rgba(74,222,128,0.3)' : 'rgba(248,113,113,0.35)'}`, borderRadius: '4px', padding: '0.15rem 0.5rem' }}>
+          {dawnWon ? 'VICTORY' : 'DEFEAT'}
+        </div>
         <div style={{ textAlign: 'right' }}>
           <div style={{ fontWeight: 700, fontSize: '0.8rem', color: 'var(--accent-loss)', letterSpacing: '0.08em' }}>DAWN</div>
           <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>{(dawnGold / 1000).toFixed(1)}k gold</div>
         </div>
-        <div style={{ fontSize: '0.72rem', fontWeight: 700, color: dawnWon ? 'var(--accent-win)' : 'var(--text-muted)', fontFamily: 'var(--font-mono)', background: dawnWon ? 'rgba(74,222,128,0.1)' : 'rgba(255,255,255,0.04)', border: `1px solid ${dawnWon ? 'rgba(74,222,128,0.3)' : 'var(--border-color)'}`, borderRadius: '4px', padding: '0.15rem 0.5rem' }}>
-          {dawnWon ? 'VICTORY' : 'DEFEAT'}
-        </div>
+        <div style={{ width: 4, height: 36, borderRadius: 999, background: dawnWon ? 'var(--accent-win)' : 'var(--accent-loss)', flexShrink: 0 }} />
       </div>
     </div>
   );
@@ -247,9 +247,8 @@ function ScoreboardTab({ match, duskWon, dawnWon, isAram, editingPlayerId, editi
             <div style={headerRowStyle}>
               <span style={{ flex: '2 1 180px' }}>Player</span>
               <span style={{ flex: '1 1 90px', textAlign: 'center' }}>K / D / A</span>
-              <span style={{ flex: '1 1 90px', textAlign: 'right' }}>Damage</span>
-              <span style={{ flex: '0 0 56px', textAlign: 'right' }}>Gold</span>
-              <span style={{ flex: '0 0 40px', textAlign: 'right' }}>CS</span>
+              <span style={{ flex: '1 1 90px', textAlign: 'right' }}>Hero Dmg</span>
+              <span style={{ flex: '0 0 56px', textAlign: 'right' }}>Gold total</span>
               {!isAram && <span className="hide-mobile" style={{ flex: '0 0 48px', textAlign: 'right' }}>Wards</span>}
               <span className="hide-mobile" style={{ flex: '0 0 180px' }}>Items</span>
             </div>
@@ -380,11 +379,6 @@ function PlayerRow({ player, isAram, teamColor, maxDamage, isEditing, editingVal
       {/* Gold */}
       <div style={{ flex: '0 0 56px', textAlign: 'right', fontFamily: 'var(--font-mono)', fontSize: '0.78rem', color: 'var(--accent-prime)' }}>
         {player.gold !== null ? `${(player.gold / 1000).toFixed(1)}k` : '—'}
-      </div>
-
-      {/* CS — wards placed used as CS approximation since we track wardsPlaced, not CS directly */}
-      <div style={{ flex: '0 0 40px', textAlign: 'right', fontFamily: 'var(--font-mono)', fontSize: '0.78rem' }}>
-        —
       </div>
 
       {/* Wards (non-ARAM only) */}
