@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router';
 import { ArrowLeft, Trophy, Skull, Clock, Swords } from 'lucide-react';
 import { toast } from 'sonner';
 import { apiClient, type MatchDetail as MatchDetailData, type MatchPlayerDetail, ApiErrorResponse } from '../api/client';
