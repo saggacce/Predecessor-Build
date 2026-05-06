@@ -46,6 +46,7 @@ export default function PlayerScouting() {
   const [query, setQuery] = useState('');
   const [phase, setPhase] = useState<Phase>({ tag: 'idle' });
   const [profilePhase, setProfilePhase] = useState<ProfilePhase>({ tag: 'idle' });
+  const [platformFilter, setPlatformFilter] = useState<'all' | 'pc' | 'console'>('all');
 
   async function handleSearch(e: React.FormEvent) {
     e.preventDefault();
@@ -209,18 +210,49 @@ export default function PlayerScouting() {
       )}
 
       {/* Phase: results */}
-      {phase.tag === 'results' && (
-        <>
-          <p style={{ color: 'var(--text-muted)', marginBottom: '1rem', fontSize: '0.875rem' }}>
-            {phase.players.length} player{phase.players.length !== 1 ? 's' : ''} found in local database
-          </p>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: '1rem' }}>
-            {phase.players.map((p) => (
-              <PlayerCard key={p.id} player={p} onSelect={() => void handleSelectPlayer(p.id)} />
-            ))}
-          </div>
-        </>
-      )}
+      {phase.tag === 'results' && (() => {
+        const filtered = phase.players.filter((p) =>
+          platformFilter === 'all' ? true : platformFilter === 'console' ? p.isConsole : !p.isConsole
+        );
+        const platformOptions: Array<{ key: typeof platformFilter; label: string }> = [
+          { key: 'all', label: 'All' },
+          { key: 'pc', label: 'PC' },
+          { key: 'console', label: 'Console' },
+        ];
+        return (
+          <>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem' }}>
+              <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem', margin: 0 }}>
+                {filtered.length} player{filtered.length !== 1 ? 's' : ''} found
+                {platformFilter !== 'all' && <span style={{ color: 'var(--accent-violet)' }}> · {platformFilter}</span>}
+              </p>
+              <div style={{ display: 'flex', gap: '0.35rem' }}>
+                {platformOptions.map(({ key, label }) => (
+                  <button
+                    key={key}
+                    onClick={() => setPlatformFilter(key)}
+                    style={{
+                      fontSize: '0.72rem', fontWeight: 600, padding: '0.2rem 0.55rem',
+                      borderRadius: '999px', cursor: 'pointer',
+                      border: platformFilter === key ? '1px solid var(--accent-violet)' : '1px solid var(--border-color)',
+                      background: platformFilter === key ? 'rgba(167,139,250,0.14)' : 'rgba(255,255,255,0.03)',
+                      color: platformFilter === key ? 'var(--accent-violet)' : 'var(--text-muted)',
+                      fontFamily: 'var(--font-mono)',
+                    }}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: '1rem' }}>
+              {filtered.map((p) => (
+                <PlayerCard key={p.id} player={p} onSelect={() => void handleSelectPlayer(p.id)} />
+              ))}
+            </div>
+          </>
+        );
+      })()}
 
       {/* Phase: empty — player not in local DB */}
       {phase.tag === 'empty' && (
@@ -648,50 +680,88 @@ function MatchRow({
   const gpm = minutes > 0 && match.gold !== null ? Math.round(match.gold / minutes) : null;
   const dpm = minutes > 0 && match.heroDamage !== null ? Math.round(match.heroDamage / minutes) : null;
   const matchDate = new Date(match.date);
+  const isWin = match.result === 'win';
+  const isLoss = match.result === 'loss';
+  const borderColor = isWin ? 'var(--accent-win)' : isLoss ? 'var(--accent-loss)' : 'var(--border-color)';
+  const bgColor = isWin ? 'rgba(74,222,128,0.03)' : isLoss ? 'rgba(248,113,113,0.03)' : 'rgba(255,255,255,0.01)';
 
   return (
-    <div
-      style={{
-        display: 'grid',
-        gridTemplateColumns: 'minmax(190px, 1.4fr) minmax(94px, 0.7fr) repeat(5, minmax(74px, 0.55fr)) 40px',
-        gap: '0.75rem',
-        alignItems: 'center',
-        minWidth: '820px',
-        padding: '0.8rem 0.9rem',
-        borderBottom: '1px solid var(--border-color)',
-        background: 'rgba(255,255,255,0.02)',
-        fontSize: '0.84rem',
-      }}
-    >
-      <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', minWidth: 0 }}>
-        <HeroAvatar hero={hero} size={44} rounded={10} />
+    <div style={{
+      display: 'grid',
+      gridTemplateColumns: 'minmax(180px, 1.5fr) 80px minmax(100px, 0.8fr) minmax(80px, 0.6fr) minmax(80px, 0.6fr) minmax(70px, 0.5fr) 40px',
+      alignItems: 'center',
+      minWidth: '760px',
+      borderBottom: '1px solid var(--border-color)',
+      background: bgColor,
+      fontSize: '0.84rem',
+      borderLeft: `3px solid ${borderColor}`,
+    }}>
+      {/* Hero + date */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', minWidth: 0, padding: '0.65rem 0.75rem 0.65rem 0.85rem' }}>
+        <HeroAvatar hero={hero} size={40} rounded={8} />
         <div style={{ minWidth: 0 }}>
-          <div style={{ fontWeight: 800, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{hero.name}</div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.74rem', color: 'var(--text-muted)' }}>
+          <div style={{ fontWeight: 700, fontSize: '0.875rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{hero.name}</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.68rem', color: 'var(--text-muted)', marginTop: '0.1rem' }}>
             <span>{matchDate.toLocaleDateString()}</span>
-            <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.62rem' }}>{matchDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-            <span style={{ fontFamily: 'var(--font-mono)', background: 'rgba(255,255,255,0.06)', border: '1px solid var(--border-color)', borderRadius: '4px', padding: '0.05rem 0.35rem', fontSize: '0.62rem', fontWeight: 500 }}>
+            <span style={{ fontFamily: 'var(--font-mono)' }}>{matchDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+            <span style={{ fontFamily: 'var(--font-mono)', background: 'rgba(255,255,255,0.06)', border: '1px solid var(--border-color)', borderRadius: '3px', padding: '0.02rem 0.3rem', fontSize: '0.6rem', fontWeight: 600 }}>
               {gameModeLabel(match.gameMode)}
             </span>
           </div>
         </div>
       </div>
 
-      <div>{match.role ? <RoleBadge role={match.role} compact /> : <span style={{ color: 'var(--text-muted)' }}>No role</span>}</div>
-      <ResultPill result={match.result} />
-      <MatchMetric label="KDA" value={`${match.kills}/${match.deaths}/${match.assists}`} />
-      <MatchMetric icon={<Coins size={13} />} label="GPM" value={gpm !== null ? String(gpm) : '-'} />
-      <MatchMetric icon={<Target size={13} />} label="DPM" value={dpm !== null ? String(dpm) : '-'} />
-      <MatchMetric icon={<Clock size={13} />} label="Time" value={formatDuration(match.duration)} />
-      <a
-        href={`/matches/${match.matchId}`}
-        title="View match detail"
-        style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', textDecoration: 'none', padding: '0.3rem', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-color)', background: 'rgba(255,255,255,0.03)' }}
-        onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.color = 'var(--accent-blue)'; (e.currentTarget as HTMLElement).style.borderColor = 'var(--accent-blue)'; }}
-        onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.color = 'var(--text-muted)'; (e.currentTarget as HTMLElement).style.borderColor = 'var(--border-color)'; }}
-      >
-        <ChevronRight size={16} />
-      </a>
+      {/* Role */}
+      <div style={{ padding: '0 0.5rem' }}>
+        {match.role ? <RoleBadge role={match.role} compact /> : <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>—</span>}
+      </div>
+
+      {/* KDA — colored K/D/A */}
+      <div style={{ padding: '0 0.5rem' }}>
+        <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.88rem', fontWeight: 700 }}>
+          <span style={{ color: 'var(--accent-win)' }}>{match.kills}</span>
+          <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}> / </span>
+          <span style={{ color: 'var(--accent-loss)' }}>{match.deaths}</span>
+          <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}> / </span>
+          <span>{match.assists}</span>
+        </div>
+        <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', marginTop: '0.1rem' }}>
+          {match.deaths > 0
+            ? `${((match.kills + match.assists) / match.deaths).toFixed(2)} KDA`
+            : match.kills + match.assists > 0 ? 'Perfect' : '—'}
+        </div>
+      </div>
+
+      {/* GPM */}
+      <div style={{ padding: '0 0.5rem' }}>
+        <div style={{ fontSize: '0.65rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.1rem' }}>GPM</div>
+        <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.82rem', color: 'var(--accent-prime)' }}>{gpm ?? '—'}</div>
+      </div>
+
+      {/* DPM */}
+      <div style={{ padding: '0 0.5rem' }}>
+        <div style={{ fontSize: '0.65rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.1rem' }}>DPM</div>
+        <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.82rem' }}>{dpm ?? '—'}</div>
+      </div>
+
+      {/* Duration */}
+      <div style={{ padding: '0 0.5rem' }}>
+        <div style={{ fontSize: '0.65rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.1rem' }}>TIME</div>
+        <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.82rem' }}>{formatDuration(match.duration)}</div>
+      </div>
+
+      {/* View button */}
+      <div style={{ padding: '0 0.65rem 0 0' }}>
+        <a
+          href={`/matches/${match.matchId}`}
+          title="View match detail"
+          style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', textDecoration: 'none', padding: '0.35rem', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-color)', background: 'rgba(255,255,255,0.03)' }}
+          onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.color = 'var(--accent-blue)'; (e.currentTarget as HTMLElement).style.borderColor = 'var(--accent-blue)'; }}
+          onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.color = 'var(--text-muted)'; (e.currentTarget as HTMLElement).style.borderColor = 'var(--border-color)'; }}
+        >
+          <ChevronRight size={15} />
+        </a>
+      </div>
     </div>
   );
 }
