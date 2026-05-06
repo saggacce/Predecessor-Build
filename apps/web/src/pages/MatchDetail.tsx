@@ -224,6 +224,7 @@ function ScoreboardTab({ match, duskWon, dawnWon, isAram, editingPlayerId, editi
         const totalGold = players.reduce((s, p) => s + (p.gold ?? 0), 0);
         const totalDamage = players.reduce((s, p) => s + (p.heroDamage ?? 0), 0);
         const maxDamage = Math.max(...players.map((p) => p.heroDamage ?? 0), 1);
+        const teamKills = Math.max(totalKills, 1);
 
         return (
           <div key={key} className="glass-card" style={{ padding: 0, overflow: 'hidden' }}>
@@ -253,7 +254,8 @@ function ScoreboardTab({ match, duskWon, dawnWon, isAram, editingPlayerId, editi
             <div style={headerRowStyle}>
               <span style={{ flex: '0 0 200px' }}>Player</span>
               <span style={{ flex: '0 0 110px', display: 'flex', justifyContent: 'center' }}>K / D / A</span>
-              <span style={{ flex: '1 1 180px', display: 'flex', justifyContent: 'center' }}>DMG to heroes</span>
+              <span style={{ flex: '0 0 56px', display: 'flex', justifyContent: 'center' }}>KP%</span>
+              <span style={{ flex: '1 1 140px', display: 'flex', justifyContent: 'center' }}>DMG to heroes</span>
               <span style={{ flex: '0 0 76px', display: 'flex', justifyContent: 'center' }}>Gold total</span>
               {!isAram && <span className="hide-mobile" style={{ flex: '0 0 52px', display: 'flex', justifyContent: 'center' }}>Wards</span>}
               <span className="hide-mobile" style={{ flex: '0 0 196px', display: 'flex', justifyContent: 'center' }}>Items</span>
@@ -265,6 +267,7 @@ function ScoreboardTab({ match, duskWon, dawnWon, isAram, editingPlayerId, editi
                 key={p.id} player={p} isAram={isAram}
                 teamColor={key === 'dusk' ? 'var(--accent-teal-bright)' : 'var(--accent-loss)'}
                 maxDamage={maxDamage}
+                teamKills={teamKills}
                 isEditing={editingPlayerId === p.playerId}
                 editingValue={editingValue}
                 onStartEdit={onStartEdit}
@@ -280,8 +283,8 @@ function ScoreboardTab({ match, duskWon, dawnWon, isAram, editingPlayerId, editi
   );
 }
 
-function PlayerRow({ player, isAram, teamColor, maxDamage, isEditing, editingValue, onStartEdit, onSaveEdit, onCancelEdit, onEditValueChange }: {
-  player: MatchPlayerDetail; isAram: boolean; teamColor: string; maxDamage: number;
+function PlayerRow({ player, isAram, teamColor, maxDamage, teamKills, isEditing, editingValue, onStartEdit, onSaveEdit, onCancelEdit, onEditValueChange }: {
+  player: MatchPlayerDetail; isAram: boolean; teamColor: string; maxDamage: number; teamKills: number;
   isEditing: boolean; editingValue: string;
   onStartEdit: (playerId: string, current: string) => void;
   onSaveEdit: (playerId: string) => void;
@@ -376,8 +379,16 @@ function PlayerRow({ player, isAram, teamColor, maxDamage, isEditing, editingVal
         <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)', marginTop: '0.1rem' }}>{kda} KDA</div>
       </div>
 
+      {/* KP% */}
+      <div style={{ flex: '0 0 56px', textAlign: 'center', fontFamily: 'var(--font-mono)', fontSize: '0.82rem' }}>
+        <div style={{ color: 'var(--text-primary)', fontWeight: 600 }}>
+          {Math.round((player.kills + player.assists) / teamKills * 100)}%
+        </div>
+        <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)', marginTop: '0.1rem' }}>KP</div>
+      </div>
+
       {/* Damage bar */}
-      <div style={{ flex: '1 1 180px', minWidth: 0 }}>
+      <div style={{ flex: '1 1 140px', minWidth: 0 }}>
         {player.heroDamage !== null ? (
           <div>
             <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.75rem', textAlign: 'right', marginBottom: '0.2rem' }}>
@@ -424,12 +435,10 @@ function formatItemName(slug: string): string {
 function ItemIcon({ slug }: { slug: string }) {
   const [err, setErr] = useState(false);
   const label = formatItemName(slug);
+  if (err) return null;
   return (
     <div title={label} style={{ width: 28, height: 28, borderRadius: 4, overflow: 'hidden', background: 'var(--bg-dark)', border: '1px solid var(--border-color)', flexShrink: 0, cursor: 'default' }}>
-      {!err
-        ? <img src={`/items/${slug}.webp`} alt={label} style={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={() => setErr(true)} />
-        : <div style={{ width: '100%', height: '100%', background: 'rgba(255,255,255,0.04)' }} />
-      }
+      <img src={`/items/${slug}.webp`} alt={label} style={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={() => setErr(true)} />
     </div>
   );
 }
