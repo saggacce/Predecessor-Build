@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type ChangeEvent, type CSSProperties, type ReactNode, type KeyboardEvent } from 'react';
+import { RankIcon } from '../components/RankIcon';
 import {
   Users,
   Shield,
@@ -464,7 +465,7 @@ export default function TeamAnalysis() {
                             </button>
                           </div>
                         )}
-                        <RankEmblem rating={member.rating} />
+                        <RankIcon rankLabel={member.rating?.rankLabel ?? null} ratingPoints={member.rating?.ratingPoints !== undefined && member.rating?.ratingPoints !== null ? Math.round(member.rating.ratingPoints) : null} size={42} />
                         <select
                           className="input"
                           value={member.role ?? ''}

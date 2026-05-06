@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router';
 import { HeroAvatarWithTooltip } from '../components/HeroAvatar';
+import { RankIcon } from '../components/RankIcon';
 import { useHeroMeta } from '../hooks/useHeroMeta';
 import {
   Activity,
@@ -496,13 +497,19 @@ function PlayerProfilePanel({
             </div>
           </div>
 
-          <div style={{ textAlign: 'right', minWidth: '8.5rem', flex: '0 1 8.5rem' }}>
-            <div style={{ color: 'var(--text-dim)', fontSize: '0.67rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '0.25rem' }}>Rank</div>
-            <div style={{ color: 'var(--accent-win)', fontWeight: 700, fontSize: '0.95rem' }}>
-              {profile.rating?.rankLabel ?? 'Unranked'}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flex: '0 0 auto' }}>
+            <div style={{ textAlign: 'right' }}>
+              <div style={{ color: 'var(--text-secondary)', fontSize: '0.72rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.09em' }}>Rank</div>
+              <div style={{ color: 'var(--accent-win)', fontWeight: 800, fontSize: '1.05rem', marginTop: '0.1rem' }}>
+                {profile.rating?.rankLabel ?? 'Unranked'}
+              </div>
             </div>
-            {profile.rating?.ratingPoints !== null && profile.rating?.ratingPoints !== undefined && (
-              <div style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-muted)', fontSize: '0.75rem', marginTop: '0.15rem' }}>{Math.round(profile.rating.ratingPoints)} VP</div>
+            {profile.rating?.rankLabel && (
+              <RankIcon
+                rankLabel={profile.rating.rankLabel}
+                ratingPoints={profile.rating.ratingPoints !== undefined ? Math.round(profile.rating.ratingPoints) : null}
+                size={68}
+              />
             )}
           </div>
         </div>

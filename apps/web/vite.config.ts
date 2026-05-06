@@ -20,6 +20,7 @@ export default defineConfig({
       '/heroes': { target: 'http://localhost:3001', changeOrigin: true },
       '/items': { target: 'http://localhost:3001', changeOrigin: true },
       '/icons': { target: 'http://localhost:3001', changeOrigin: true },
+      '/ranks': { target: 'http://localhost:3001', changeOrigin: true },
     },
   },
 })

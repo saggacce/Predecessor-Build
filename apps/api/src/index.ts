@@ -47,6 +47,7 @@ const assetsRoot = join(fileURLToPath(import.meta.url), '../../../../assets');
 app.use('/heroes', express.static(join(assetsRoot, 'heroes')));
 app.use('/items', express.static(join(assetsRoot, 'items')));
 app.use('/icons', express.static(join(assetsRoot, 'icons')));
+app.use('/ranks', express.static(join(assetsRoot, 'ranks')));
 
 app.get('/health', (_req, res) => {
   res.json({ status: 'ok', timestamp: new Date() });
