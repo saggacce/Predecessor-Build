@@ -8,8 +8,10 @@ import {
   ChevronRight,
   Clock,
   Coins,
+  Gamepad2,
   LogIn,
   MapPin,
+  Monitor,
   RefreshCw,
   Search,
   Shield,
@@ -280,7 +282,9 @@ export default function PlayerScouting() {
             player={{
               id: phase.player.id,
               displayName: phase.player.displayName,
+              customName: null,
               isPrivate: phase.player.isPrivate,
+              isConsole: false,
               inferredRegion: phase.player.inferredRegion,
               lastSynced: phase.player.lastSynced.toString(),
             }}
@@ -323,7 +327,7 @@ function PlayerCard({
   player,
   onSelect,
 }: {
-  player: { id: string; displayName: string; isPrivate: boolean; inferredRegion: string | null; lastSynced: string };
+  player: { id: string; displayName: string; customName: string | null; isPrivate: boolean; isConsole: boolean; inferredRegion: string | null; lastSynced: string };
   onSelect?: () => void;
 }) {
   return (
@@ -353,6 +357,12 @@ function PlayerCard({
               private
             </span>
           )}
+          <span style={{ marginLeft: '0.4rem', verticalAlign: 'middle' }} title={player.isConsole ? 'Console player' : 'PC player'}>
+            {player.isConsole
+              ? <Gamepad2 size={13} color="var(--accent-violet)" />
+              : <Monitor size={13} color="var(--text-muted)" style={{ opacity: 0.5 }} />
+            }
+          </span>
         </div>
         <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '0.15rem' }}>
           {player.inferredRegion ?? 'Region unknown'}
@@ -425,6 +435,10 @@ function PlayerProfilePanel({
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap', marginBottom: '0.5rem' }}>
               <h2 style={{ margin: 0, color: 'var(--text-primary)', fontSize: '2rem', lineHeight: 1.05 }}>{profile.customName ?? profile.displayName}</h2>
               {primaryRole && <RoleBadge role={primaryRole} size="large" />}
+              {profile.isConsole
+                ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem', fontSize: '0.72rem', fontWeight: 700, color: 'var(--accent-violet)', background: 'rgba(167,139,250,0.12)', border: '1px solid rgba(167,139,250,0.3)', borderRadius: '4px', padding: '0.15rem 0.5rem' }}><Gamepad2 size={12} /> Console</span>
+                : <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem', fontSize: '0.72rem', fontWeight: 700, color: 'var(--text-muted)', background: 'rgba(255,255,255,0.04)', border: '1px solid var(--border-color)', borderRadius: '4px', padding: '0.15rem 0.5rem' }}><Monitor size={12} /> PC</span>
+              }
             </div>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.75rem', color: 'var(--text-secondary)', fontSize: '0.875rem' }}>
               <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}>

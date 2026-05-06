@@ -27,6 +27,7 @@ export interface PlayerSearchResult {
   displayName: string;
   customName: string | null;
   isPrivate: boolean;
+  isConsole: boolean;
   inferredRegion: string | null;
   lastSynced: string;
 }
@@ -80,6 +81,7 @@ export interface PlayerProfile {
   displayName: string;
   customName: string | null;
   isPrivate: boolean;
+  isConsole: boolean;
   inferredRegion: string | null;
   firstSeen: string;
   lastSynced: string;
@@ -128,6 +130,7 @@ export interface MatchPlayerDetail {
   heroSlug: string;
   heroName: string | null;
   heroImageUrl: string | null;
+  isConsole: boolean;
   kills: number;
   deaths: number;
   assists: number;

@@ -25,6 +25,7 @@ model Player {
   predggUuid     String   @unique
   displayName    String
   isPrivate      Boolean  @default(false)
+  isConsole      Boolean  @default(false)
   inferredRegion String?
   firstSeen      DateTime @default(now())
   lastSynced     DateTime

@@ -12,6 +12,7 @@ export interface MatchPlayerDetail {
   heroSlug: string;
   heroName: string | null;
   heroImageUrl: string | null;
+  isConsole: boolean;
   kills: number;
   deaths: number;
   assists: number;
@@ -105,6 +106,7 @@ export async function getMatchDetail(matchId: string): Promise<MatchDetail> {
       heroSlug: mp.heroSlug,
       heroName: hero?.name ?? mp.heroSlug,
       heroImageUrl: `/heroes/${mp.heroSlug}.webp`,
+      isConsole: mp.player?.isConsole ?? false,
       kills: mp.kills,
       deaths: mp.deaths,
       assists: mp.assists,

@@ -742,7 +742,7 @@ const MATCH_DETAIL_QUERY = `
         gold wardsPlaced
         hero { slug }
         inventoryItemData { name }
-        player { id name }
+        player { id name isNameConsole }
       }
     }
   }
@@ -770,7 +770,7 @@ interface PredggMatchDetail {
     wardsPlaced: number | null;
     hero: { slug: string } | null;
     inventoryItemData: Array<{ name: string } | null>;
-    player: { id: string; name: string | null } | null;
+    player: { id: string; name: string | null; isNameConsole: boolean } | null;
   }>;
 }
 
@@ -799,11 +799,28 @@ export async function resyncMatch(db: PrismaClient, predggUuid: string, userToke
     data: { syncedAt: new Date(), versionId: version?.id ?? undefined },
   });
 
+  const now = new Date();
   for (const mp of data.match.matchPlayers) {
     let playerId: string | null = null;
     if (mp.player?.id) {
-      const dbPlayer = await db.player.findUnique({ where: { predggId: mp.player.id } });
-      playerId = dbPlayer?.id ?? null;
+      const isConsole = mp.player.isNameConsole ?? false;
+      const displayName = mp.name && mp.name !== 'HIDDEN'
+        ? mp.name
+        : `user-${mp.player.id.replace(/-/g, '').slice(0, 8)}`;
+      // Upsert Player for ALL match participants so customName can be set on any player
+      const dbPlayer = await db.player.upsert({
+        where: { predggId: mp.player.id },
+        create: {
+          predggId: mp.player.id,
+          predggUuid: mp.player.id,
+          displayName,
+          isPrivate: false,
+          isConsole,
+          lastSynced: now,
+        },
+        update: { isConsole, lastSynced: now },
+      });
+      playerId = dbPlayer.id;
     }
     await db.matchPlayer.create({
       data: {
@@ -843,9 +860,9 @@ export async function syncIncompleteMatches(db: PrismaClient): Promise<{ synced:
     where: { matchPlayers: { some: {} } },
   });
 
-  // Also include matches with HIDDEN players that are missing their predgg UUID
+  // Also include matches with players that have a UUID but no linked Player record
   const missingUuid = await db.match.findMany({
-    where: { matchPlayers: { some: { playerName: 'HIDDEN', predggPlayerUuid: null } } },
+    where: { matchPlayers: { some: { predggPlayerUuid: { not: null }, playerId: null } } },
     select: { id: true, predggUuid: true, _count: { select: { matchPlayers: true } } },
   });
 

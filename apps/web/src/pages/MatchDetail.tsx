@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router';
-import { ArrowLeft, Trophy, Skull, Clock, RefreshCw } from 'lucide-react';
+import { ArrowLeft, Trophy, Skull, Clock, RefreshCw, Pencil, Check, X, Monitor, Gamepad2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { apiClient, type MatchDetail as MatchDetailData, type MatchPlayerDetail, ApiErrorResponse } from '../api/client';
 
@@ -11,6 +11,8 @@ export default function MatchDetail() {
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<'scoreboard' | 'statistics' | 'timeline' | 'analysis'>('scoreboard');
   const [syncing, setSyncing] = useState(false);
+  const [editingPlayerId, setEditingPlayerId] = useState<string | null>(null);
+  const [editingValue, setEditingValue] = useState('');
 
   useEffect(() => {
     if (!id) return;
@@ -25,6 +27,17 @@ export default function MatchDetail() {
       }
     })();
   }, [id]);
+
+  async function handleSaveCustomName(playerId: string) {
+    try {
+      await apiClient.players.setCustomName(playerId, editingValue.trim() || null);
+      setEditingPlayerId(null);
+      const updated = await apiClient.matches.getDetail(id!);
+      setMatch(updated);
+    } catch (err) {
+      toast.error(err instanceof ApiErrorResponse ? err.error.message : 'Failed to save name.');
+    }
+  }
 
   async function handleSyncPlayers() {
     if (!id) return;
@@ -120,17 +133,30 @@ export default function MatchDetail() {
       </div>
 
       {tab === 'scoreboard' && (
-        <ScoreboardTab match={match} duskWon={duskWon} dawnWon={dawnWon} isAram={isAram} />
+        <ScoreboardTab
+          match={match} duskWon={duskWon} dawnWon={dawnWon} isAram={isAram}
+          editingPlayerId={editingPlayerId} editingValue={editingValue}
+          onStartEdit={(playerId, current) => { setEditingPlayerId(playerId); setEditingValue(current); }}
+          onSaveEdit={handleSaveCustomName}
+          onCancelEdit={() => setEditingPlayerId(null)}
+          onEditValueChange={setEditingValue}
+        />
       )}
     </div>
   );
 }
 
-function ScoreboardTab({ match, duskWon, dawnWon, isAram }: {
+function ScoreboardTab({ match, duskWon, dawnWon, isAram, editingPlayerId, editingValue, onStartEdit, onSaveEdit, onCancelEdit, onEditValueChange }: {
   match: MatchDetailData;
   duskWon: boolean;
   dawnWon: boolean;
   isAram: boolean;
+  editingPlayerId: string | null;
+  editingValue: string;
+  onStartEdit: (playerId: string, current: string) => void;
+  onSaveEdit: (playerId: string) => void;
+  onCancelEdit: () => void;
+  onEditValueChange: (v: string) => void;
 }) {
   const teams: Array<{ key: 'dusk' | 'dawn'; label: string; players: MatchPlayerDetail[]; won: boolean }> = [
     { key: 'dusk', label: 'Dusk', players: match.dusk, won: duskWon },
@@ -181,7 +207,16 @@ function ScoreboardTab({ match, duskWon, dawnWon, isAram }: {
 
             {/* Player rows */}
             {players.map((p) => (
-              <PlayerRow key={p.id} player={p} isAram={isAram} teamColor={key === 'dusk' ? 'var(--accent-teal-bright)' : 'var(--accent-loss)'} />
+              <PlayerRow
+                key={p.id} player={p} isAram={isAram}
+                teamColor={key === 'dusk' ? 'var(--accent-teal-bright)' : 'var(--accent-loss)'}
+                isEditing={editingPlayerId === p.playerId}
+                editingValue={editingValue}
+                onStartEdit={onStartEdit}
+                onSaveEdit={onSaveEdit}
+                onCancelEdit={onCancelEdit}
+                onEditValueChange={onEditValueChange}
+              />
             ))}
           </div>
         );
@@ -190,19 +225,26 @@ function ScoreboardTab({ match, duskWon, dawnWon, isAram }: {
   );
 }
 
-function PlayerRow({ player, isAram, teamColor }: { player: MatchPlayerDetail; isAram: boolean; teamColor: string }) {
+function PlayerRow({ player, isAram, teamColor, isEditing, editingValue, onStartEdit, onSaveEdit, onCancelEdit, onEditValueChange }: {
+  player: MatchPlayerDetail; isAram: boolean; teamColor: string;
+  isEditing: boolean; editingValue: string;
+  onStartEdit: (playerId: string, current: string) => void;
+  onSaveEdit: (playerId: string) => void;
+  onCancelEdit: () => void;
+  onEditValueChange: (v: string) => void;
+}) {
   const kda = player.deaths > 0
     ? ((player.kills + player.assists) / player.deaths).toFixed(2)
     : player.kills + player.assists > 0 ? 'Perfect' : '0.00';
 
   const [imgErr, setImgErr] = useState(false);
+  const displayedName = player.customName ?? player.playerName;
 
   return (
     <div style={{
       display: 'flex', alignItems: 'center', gap: '0.75rem',
       padding: '0.6rem 1rem', borderBottom: '1px solid var(--border-color)',
-      background: 'rgba(255,255,255,0.01)',
-      flexWrap: 'wrap',
+      background: 'rgba(255,255,255,0.01)', flexWrap: 'wrap',
     }}>
       {/* Hero + player */}
       <div style={{ flex: '2 1 180px', display: 'flex', alignItems: 'center', gap: '0.6rem', minWidth: 0 }}>
@@ -214,16 +256,43 @@ function PlayerRow({ player, isAram, teamColor }: { player: MatchPlayerDetail; i
               </div>
           }
         </div>
-        <div style={{ minWidth: 0 }}>
+        <div style={{ minWidth: 0, flex: 1 }}>
           <div style={{ fontWeight: 700, fontSize: '0.82rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {player.heroName ?? player.heroSlug}
           </div>
-          <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            <span style={{ color: teamColor, fontWeight: 600, marginRight: '0.35rem', fontFamily: 'var(--font-mono)', fontSize: '0.65rem' }}>
-              {player.rankLabel ?? ''}
-            </span>
-            {player.customName ?? player.playerName}
-          </div>
+          {isEditing && player.playerId ? (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', marginTop: '0.1rem' }}>
+              <input
+                autoFocus
+                value={editingValue}
+                onChange={(e) => onEditValueChange(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') onSaveEdit(player.playerId!); if (e.key === 'Escape') onCancelEdit(); }}
+                placeholder={player.playerName}
+                style={{ fontSize: '0.72rem', padding: '0.15rem 0.4rem', background: 'var(--bg-dark)', border: '1px solid var(--accent-blue)', borderRadius: '4px', color: 'var(--text-primary)', width: '120px' }}
+              />
+              <button onClick={() => onSaveEdit(player.playerId!)} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--accent-win)', display: 'flex' }}><Check size={13} /></button>
+              <button onClick={onCancelEdit} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', display: 'flex' }}><X size={13} /></button>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', fontSize: '0.72rem', color: 'var(--text-muted)' }}>
+              <span style={{ color: teamColor, fontWeight: 600, fontFamily: 'var(--font-mono)', fontSize: '0.65rem' }}>{player.rankLabel ?? ''}</span>
+              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{displayedName}</span>
+              {player.isConsole
+                ? <Gamepad2 size={11} title="Console player" style={{ flexShrink: 0, color: 'var(--accent-violet)' }} />
+                : <Monitor size={11} title="PC player" style={{ flexShrink: 0, color: 'var(--text-muted)', opacity: 0.5 }} />
+              }
+              {player.customName && <span style={{ fontSize: '0.62rem', color: 'var(--accent-violet)', fontFamily: 'var(--font-mono)' }}>custom</span>}
+              {player.playerId && (
+                <button
+                  onClick={() => onStartEdit(player.playerId!, player.customName ?? '')}
+                  title="Set custom name"
+                  style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', display: 'flex', padding: 0, flexShrink: 0 }}
+                >
+                  <Pencil size={10} />
+                </button>
+              )}
+            </div>
+          )}
         </div>
       </div>
 
