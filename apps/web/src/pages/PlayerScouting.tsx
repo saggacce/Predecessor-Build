@@ -694,6 +694,26 @@ function MatchesSection({
       </div>
       {filtered.length > 0 ? (
         <div style={{ border: '1px solid var(--border-color)', borderRadius: 'var(--radius-sm)', overflowX: 'auto', overflowY: 'hidden' }}>
+          {/* Column headers */}
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: 'minmax(120px,1.2fr) 88px 70px 48px minmax(96px,0.9fr) 56px 64px 60px 36px',
+            minWidth: '640px', padding: '0.35rem 0.85rem',
+            fontSize: '0.62rem', fontWeight: 700, color: 'var(--text-muted)',
+            textTransform: 'uppercase', letterSpacing: '0.07em',
+            borderBottom: '1px solid var(--border-color)',
+            background: 'rgba(255,255,255,0.015)',
+          }}>
+            <span>Hero</span>
+            <span>Date</span>
+            <span style={{ textAlign: 'center' }}>Type</span>
+            <span style={{ textAlign: 'center' }}>Role</span>
+            <span style={{ textAlign: 'center' }}>K / D / A</span>
+            <span style={{ textAlign: 'center' }}>GPM</span>
+            <span style={{ textAlign: 'center' }}>DPM</span>
+            <span style={{ textAlign: 'center' }}>Time</span>
+            <span />
+          </div>
           {filtered.map((match) => {
             const hero = heroBySlug.get(match.heroSlug);
             return (
@@ -718,6 +738,12 @@ function MatchesSection({
   );
 }
 
+const MODE_COLOR: Record<string, string> = {
+  RANKED: 'var(--accent-violet)',
+  ARAM: 'var(--accent-prime)',
+  BRAWL: 'var(--accent-prime)',
+};
+
 function MatchRow({
   match,
   hero,
@@ -740,82 +766,93 @@ function MatchRow({
   const isLoss = match.result === 'loss';
   const borderColor = isWin ? 'var(--accent-win)' : isLoss ? 'var(--accent-loss)' : 'var(--border-color)';
   const bgColor = isWin ? 'rgba(74,222,128,0.03)' : isLoss ? 'rgba(248,113,113,0.03)' : 'rgba(255,255,255,0.01)';
+  const modeColor = MODE_COLOR[match.gameMode] ?? 'var(--accent-blue)';
+  const roleMeta = match.role ? getRoleMeta(match.role) : null;
+  const kda = match.deaths > 0
+    ? ((match.kills + match.assists) / match.deaths).toFixed(2)
+    : match.kills + match.assists > 0 ? 'Perfect' : '—';
 
   return (
     <div style={{
       display: 'grid',
-      gridTemplateColumns: 'minmax(160px, 1.5fr) 72px minmax(96px, 0.8fr) minmax(72px, 0.6fr) minmax(72px, 0.6fr) minmax(66px, 0.5fr) 36px',
+      gridTemplateColumns: 'minmax(120px,1.2fr) 88px 70px 48px minmax(96px,0.9fr) 56px 64px 60px 36px',
       alignItems: 'center',
-      minWidth: '600px',
+      minWidth: '640px',
       borderBottom: '1px solid var(--border-color)',
       background: bgColor,
-      fontSize: '0.84rem',
       borderLeft: `3px solid ${borderColor}`,
     }}>
-      {/* Hero + date */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', minWidth: 0, padding: '0.65rem 0.75rem 0.65rem 0.85rem' }}>
-        <HeroAvatarWithTooltip slug={hero.slug} name={hero.name} imageUrl={hero.imageUrl} meta={rowHeroMeta} size={40} rounded={8} />
-        <div style={{ minWidth: 0 }}>
-          <div style={{ fontWeight: 700, fontSize: '0.875rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{rowHeroMeta?.displayName ?? hero.name}</div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.68rem', color: 'var(--text-muted)', marginTop: '0.1rem' }}>
-            <span>{matchDate.toLocaleDateString()}</span>
-            <span style={{ fontFamily: 'var(--font-mono)' }}>{matchDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-            <span style={{ fontFamily: 'var(--font-mono)', background: 'rgba(255,255,255,0.06)', border: '1px solid var(--border-color)', borderRadius: '3px', padding: '0.02rem 0.3rem', fontSize: '0.6rem', fontWeight: 600 }}>
-              {gameModeLabel(match.gameMode)}
-            </span>
-          </div>
-        </div>
+      {/* Hero */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', minWidth: 0, padding: '0.55rem 0.5rem 0.55rem 0.75rem' }}>
+        <HeroAvatarWithTooltip slug={hero.slug} name={hero.name} imageUrl={hero.imageUrl} meta={rowHeroMeta} size={36} rounded={7} />
+        <span style={{ fontWeight: 700, fontSize: '0.82rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {rowHeroMeta?.displayName ?? hero.name}
+        </span>
       </div>
 
-      {/* Role */}
-      <div style={{ padding: '0 0.5rem' }}>
-        {match.role ? <RoleBadge role={match.role} compact /> : <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>—</span>}
+      {/* Date */}
+      <div style={{ padding: '0 0.4rem', fontSize: '0.7rem', color: 'var(--text-muted)', lineHeight: 1.4 }}>
+        <div>{matchDate.toLocaleDateString()}</div>
+        <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.65rem' }}>{matchDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
       </div>
 
-      {/* KDA — colored K/D/A */}
-      <div style={{ padding: '0 0.5rem' }}>
-        <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.88rem', fontWeight: 700 }}>
+      {/* Game type badge */}
+      <div style={{ display: 'flex', justifyContent: 'center', padding: '0 0.3rem' }}>
+        <span style={{
+          fontSize: '0.62rem', fontWeight: 700, fontFamily: 'var(--font-mono)',
+          color: modeColor, background: `color-mix(in srgb, ${modeColor} 12%, transparent)`,
+          border: `1px solid color-mix(in srgb, ${modeColor} 35%, transparent)`,
+          borderRadius: '4px', padding: '0.15rem 0.4rem', whiteSpace: 'nowrap',
+        }}>
+          {gameModeLabel(match.gameMode)}
+        </span>
+      </div>
+
+      {/* Role icon — bigger */}
+      <div style={{ display: 'flex', justifyContent: 'center' }}>
+        {roleMeta
+          ? <div title={roleMeta.label}>{roleIcon(roleMeta.key, 22)}</div>
+          : <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>—</span>
+        }
+      </div>
+
+      {/* K/D/A — centered, KDA ratio centered below */}
+      <div style={{ textAlign: 'center', fontFamily: 'var(--font-mono)', padding: '0 0.3rem' }}>
+        <div style={{ fontSize: '0.88rem', fontWeight: 700 }}>
           <span style={{ color: 'var(--accent-win)' }}>{match.kills}</span>
           <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}> / </span>
           <span style={{ color: 'var(--accent-loss)' }}>{match.deaths}</span>
           <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}> / </span>
           <span>{match.assists}</span>
         </div>
-        <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', marginTop: '0.1rem' }}>
-          {match.deaths > 0
-            ? `${((match.kills + match.assists) / match.deaths).toFixed(2)} KDA`
-            : match.kills + match.assists > 0 ? 'Perfect' : '—'}
-        </div>
+        <div style={{ fontSize: '0.62rem', color: 'var(--text-muted)', marginTop: '0.1rem' }}>{kda}{kda !== 'Perfect' && kda !== '—' ? ' KDA' : ''}</div>
       </div>
 
       {/* GPM */}
-      <div className="hide-mobile" style={{ padding: '0 0.5rem' }}>
-        <div style={{ fontSize: '0.65rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.1rem' }}>GPM</div>
-        <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.82rem', color: 'var(--accent-prime)' }}>{gpm ?? '—'}</div>
+      <div style={{ textAlign: 'center', fontFamily: 'var(--font-mono)', fontSize: '0.82rem', color: 'var(--accent-prime)' }}>
+        {gpm ?? '—'}
       </div>
 
       {/* DPM */}
-      <div className="hide-mobile" style={{ padding: '0 0.5rem' }}>
-        <div style={{ fontSize: '0.65rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.1rem' }}>DPM</div>
-        <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.82rem' }}>{dpm ?? '—'}</div>
+      <div style={{ textAlign: 'center', fontFamily: 'var(--font-mono)', fontSize: '0.82rem' }}>
+        {dpm ?? '—'}
       </div>
 
       {/* Duration */}
-      <div style={{ padding: '0 0.5rem' }}>
-        <div style={{ fontSize: '0.65rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.1rem' }}>TIME</div>
-        <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.82rem' }}>{formatDuration(match.duration)}</div>
+      <div style={{ textAlign: 'center', fontFamily: 'var(--font-mono)', fontSize: '0.82rem' }}>
+        {formatDuration(match.duration)}
       </div>
 
       {/* View button */}
-      <div style={{ padding: '0 0.65rem 0 0' }}>
+      <div style={{ padding: '0 0.5rem 0 0' }}>
         <button
           onClick={() => navigate(`/matches/${match.matchId}`, { state: { fromPlayerId, fromPlayerName } })}
           title="View match detail"
-          style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', padding: '0.35rem', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-color)', background: 'rgba(255,255,255,0.03)', cursor: 'pointer' }}
+          style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', padding: '0.3rem', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-color)', background: 'rgba(255,255,255,0.03)', cursor: 'pointer' }}
           onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.color = 'var(--accent-blue)'; (e.currentTarget as HTMLElement).style.borderColor = 'var(--accent-blue)'; }}
           onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.color = 'var(--text-muted)'; (e.currentTarget as HTMLElement).style.borderColor = 'var(--border-color)'; }}
         >
-          <ChevronRight size={15} />
+          <ChevronRight size={14} />
         </button>
       </div>
     </div>
