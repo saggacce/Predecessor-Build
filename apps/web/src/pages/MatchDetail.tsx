@@ -247,8 +247,8 @@ function ScoreboardTab({ match, duskWon, dawnWon, isAram, editingPlayerId, editi
             <div style={headerRowStyle}>
               <span style={{ flex: '2 1 180px' }}>Player</span>
               <span style={{ flex: '1 1 90px', textAlign: 'center' }}>K / D / A</span>
-              <span style={{ flex: '1 1 90px', textAlign: 'right' }}>Hero Dmg</span>
-              <span style={{ flex: '0 0 56px', textAlign: 'right' }}>Gold total</span>
+              <span style={{ flex: '1 1 90px', textAlign: 'right' }}>Damage</span>
+              <span style={{ flex: '0 0 56px', textAlign: 'right' }}>Gold</span>
               {!isAram && <span className="hide-mobile" style={{ flex: '0 0 48px', textAlign: 'right' }}>Wards</span>}
               <span className="hide-mobile" style={{ flex: '0 0 180px' }}>Items</span>
             </div>
