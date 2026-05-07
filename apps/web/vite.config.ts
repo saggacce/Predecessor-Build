@@ -21,6 +21,7 @@ export default defineConfig({
       '/items': { target: 'http://localhost:3001', changeOrigin: true },
       '/icons': { target: 'http://localhost:3001', changeOrigin: true },
       '/ranks': { target: 'http://localhost:3001', changeOrigin: true },
+      '/maps': { target: 'http://localhost:3001', changeOrigin: true },
     },
   },
 })

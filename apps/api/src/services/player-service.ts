@@ -38,8 +38,16 @@ export interface PlayerProfile {
     result: 'win' | 'loss' | 'unknown';
     date: Date;
     duration: number;
+    gameMode: string;
     heroName: string | null;
     heroImageUrl: string | null;
+    wardsPlaced: number | null;
+    wardsDestroyed: number | null;
+    level: number | null;
+    laneMinionsKilled: number | null;
+    totalDamageDealtToStructures: number | null;
+    totalDamageDealtToObjectives: number | null;
+    totalHealingDone: number | null;
   }>;
 }
 
@@ -107,6 +115,13 @@ export async function getPlayerProfile(playerId: string): Promise<PlayerProfile>
       gameMode: mp.match.gameMode,
       heroName: hero?.name ?? null,
       heroImageUrl: hero?.imageUrl ?? null,
+      wardsPlaced: mp.wardsPlaced,
+      wardsDestroyed: mp.wardsDestroyed,
+      level: mp.level,
+      laneMinionsKilled: mp.laneMinionsKilled,
+      totalDamageDealtToStructures: mp.totalDamageDealtToStructures,
+      totalDamageDealtToObjectives: mp.totalDamageDealtToObjectives,
+      totalHealingDone: mp.totalHealingDone,
     };
   });
 
