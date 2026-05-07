@@ -16,7 +16,7 @@ import {
   Trophy,
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { apiClient, type TeamProfile, type TeamRole, type PlayerSearchResult, ApiErrorResponse } from '../api/client';
+import { apiClient, type TeamProfile, type TeamRole, type PlayerSearchResult, type TeamAnalysis, type TeamObjectiveControl, ApiErrorResponse } from '../api/client';
 
 const ROLES: TeamRole[] = ['carry', 'jungle', 'midlane', 'offlane', 'support'];
 
@@ -53,6 +53,10 @@ export default function TeamAnalysis() {
   const [selected, setSelected] = useState<TeamProfile | null>(null);
   const [loading, setLoading] = useState(true);
 
+  const [detailTab, setDetailTab] = useState<'roster' | 'performance'>('roster');
+  const [analysis, setAnalysis] = useState<TeamAnalysis | null>(null);
+  const [loadingAnalysis, setLoadingAnalysis] = useState(false);
+
   const [formMode, setFormMode] = useState<'create' | 'edit' | null>(null);
   const [form, setForm] = useState<TeamFormData>(emptyForm());
   const [saving, setSaving] = useState(false);
@@ -78,7 +82,29 @@ export default function TeamAnalysis() {
 
   useEffect(() => { void loadTeams(); }, []);
 
+  async function loadAnalysis(teamId: string) {
+    setLoadingAnalysis(true);
+    setAnalysis(null);
+    try {
+      const data = await apiClient.teams.getAnalysis(teamId);
+      setAnalysis(data);
+    } catch {
+      // silent — show empty state
+    } finally {
+      setLoadingAnalysis(false);
+    }
+  }
+
+  function handleTabChange(tab: 'roster' | 'performance') {
+    setDetailTab(tab);
+    if (tab === 'performance' && selected && !analysis) {
+      void loadAnalysis(selected.id);
+    }
+  }
+
   async function handleSelectTeam(id: string) {
+    setDetailTab('roster');
+    setAnalysis(null);
     try {
       const profile = await apiClient.teams.getProfile(id);
       setSelected(profile);
@@ -356,10 +382,29 @@ export default function TeamAnalysis() {
                   <StatBox label="Total Matches" value={selected.aggregateStats.totalMatches} />
                   <StatBox label="Avg KDA" value={selected.aggregateStats.averageKDA.toFixed(2)} />
                 </div>
+
+                {/* Tabs */}
+                <div style={{ display: 'flex', gap: '0.25rem', borderBottom: '1px solid var(--border-color)', marginTop: '1.5rem' }}>
+                  {(['roster', 'performance'] as const).map((t) => (
+                    <button key={t} onClick={() => handleTabChange(t)} style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: '0.55rem 1rem', fontSize: '0.875rem', fontWeight: 600, color: detailTab === t ? 'var(--accent-blue)' : 'var(--text-muted)', borderBottom: detailTab === t ? '2px solid var(--accent-blue)' : '2px solid transparent', transition: 'color 0.15s', textTransform: 'capitalize' }}>
+                      {t === 'roster' ? 'Roster' : 'Performance'}
+                    </button>
+                  ))}
+                </div>
               </div>
             )}
 
-            <div className="glass-card">
+            {/* Performance Tab */}
+            {detailTab === 'performance' && selected && (
+              <PerformanceTab
+                teamId={selected.id}
+                analysis={analysis}
+                loading={loadingAnalysis}
+                onRefresh={() => void loadAnalysis(selected.id)}
+              />
+            )}
+
+            <div className="glass-card" style={{ display: detailTab === 'roster' ? undefined : 'none' }}>
               <h3 style={{ color: 'var(--text-primary)', marginBottom: '1rem' }}>Active Roster</h3>
 
               <div style={{ marginBottom: '1rem' }}>
@@ -491,6 +536,211 @@ export default function TeamAnalysis() {
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+// ── Performance Tab ───────────────────────────────────────────────────────────
+
+const OBJ_COLORS: Record<string, string> = {
+  FANGTOOTH: '#ef4444', PRIMAL_FANGTOOTH: '#b91c1c',
+  ORB_PRIME: '#7c3aed', MINI_PRIME: '#a78bfa',
+  SHAPER: '#c084fc',
+  RED_BUFF: '#f97316', BLUE_BUFF: '#3b82f6',
+  CYAN_BUFF: '#06b6d4', GOLD_BUFF: '#f0b429',
+  RIVER: '#38d4c8', SEEDLING: '#22c55e',
+};
+
+const OBJ_LABELS: Record<string, string> = {
+  FANGTOOTH: 'Fangtooth', PRIMAL_FANGTOOTH: 'Primal Fangtooth',
+  ORB_PRIME: 'Orb Prime', MINI_PRIME: 'Mini Prime', SHAPER: 'Shaper',
+  RED_BUFF: 'Red Buff', BLUE_BUFF: 'Blue Buff',
+  CYAN_BUFF: 'Cyan Buff', GOLD_BUFF: 'Gold Buff',
+  RIVER: 'River', SEEDLING: 'Seedling',
+};
+
+function PerformanceTab({ analysis, loading, onRefresh }: {
+  teamId: string; analysis: TeamAnalysis | null; loading: boolean; onRefresh: () => void;
+}) {
+  const [sortKey, setSortKey] = useState<'winRate' | 'kda' | 'avgGPM' | 'avgDPM' | 'avgCS' | 'matches'>('winRate');
+
+  if (loading) return <div className="glass-card" style={{ padding: '2rem', color: 'var(--text-muted)', fontSize: '0.85rem' }}>Loading analysis…</div>;
+
+  if (!analysis || analysis.playerStats.length === 0) {
+    return (
+      <div className="glass-card" style={{ padding: '2rem', textAlign: 'center' }}>
+        <div style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', fontWeight: 600, marginBottom: '0.5rem' }}>No performance data yet</div>
+        <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '1.25rem' }}>Sync the roster players to load their stats.</div>
+        <button onClick={onRefresh} style={{ fontSize: '0.8rem', fontWeight: 600, padding: '0.4rem 0.9rem', borderRadius: '6px', cursor: 'pointer', border: '1px solid var(--accent-blue)', background: 'rgba(91,156,246,0.1)', color: 'var(--accent-blue)' }}>Retry</button>
+      </div>
+    );
+  }
+
+  const sorted = [...analysis.playerStats].sort((a, b) => (b[sortKey] ?? 0) - (a[sortKey] ?? 0));
+  const teamWR = analysis.teamMatches.length > 0 ? Math.round((analysis.teamWins / analysis.teamMatches.length) * 100) : null;
+
+  const SORT_COLS: Array<{ key: typeof sortKey; label: string }> = [
+    { key: 'matches', label: 'Matches' },
+    { key: 'winRate', label: 'WR %' },
+    { key: 'kda', label: 'KDA' },
+    { key: 'avgGPM', label: 'GPM' },
+    { key: 'avgDPM', label: 'DPM' },
+    { key: 'avgCS', label: 'CS' },
+  ];
+
+  // Major objectives only for control display
+  const majorObjs = analysis.objectiveControl.filter((o) =>
+    ['FANGTOOTH', 'PRIMAL_FANGTOOTH', 'ORB_PRIME', 'MINI_PRIME', 'SHAPER'].includes(o.entityType)
+  );
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+
+      {/* Team form summary */}
+      {analysis.teamMatches.length > 0 && (
+        <div className="glass-card" style={{ padding: '1rem 1.25rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem', flexWrap: 'wrap' }}>
+            <div>
+              <div style={{ fontSize: '0.65rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: '0.25rem' }}>Team Matches</div>
+              <div style={{ fontFamily: 'var(--font-mono)', fontSize: '1.3rem', fontWeight: 700 }}>{analysis.teamMatches.length}</div>
+              <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>3+ players together</div>
+            </div>
+            <div>
+              <div style={{ fontSize: '0.65rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: '0.25rem' }}>Team Win Rate</div>
+              <div style={{ fontFamily: 'var(--font-mono)', fontSize: '1.3rem', fontWeight: 700, color: teamWR !== null && teamWR >= 50 ? 'var(--accent-win)' : 'var(--accent-loss)' }}>{teamWR ?? '—'}%</div>
+              <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>{analysis.teamWins}W · {analysis.teamLosses}L</div>
+            </div>
+            {/* Recent form dots */}
+            <div style={{ marginLeft: 'auto' }}>
+              <div style={{ fontSize: '0.65rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: '0.4rem' }}>Recent Form</div>
+              <div style={{ display: 'flex', gap: '0.3rem' }}>
+                {analysis.teamMatches.slice(0, 10).map((m, i) => (
+                  <div key={i} title={m.gameMode + ' · ' + (m.won === true ? 'Win' : m.won === false ? 'Loss' : '?')} style={{ width: 10, height: 10, borderRadius: '50%', background: m.won === true ? 'var(--accent-win)' : m.won === false ? 'var(--accent-loss)' : 'var(--border-color)' }} />
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Player comparison table */}
+      <div className="glass-card" style={{ padding: 0, overflow: 'hidden' }}>
+        <div style={{ padding: '0.75rem 1rem', borderBottom: '1px solid var(--border-color)', background: 'rgba(255,255,255,0.02)', display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+          <span style={{ fontWeight: 700, fontSize: '0.85rem', color: 'var(--text-primary)', marginRight: '0.5rem' }}>Player Comparison</span>
+          <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>Sort by:</span>
+          {SORT_COLS.map(({ key, label }) => (
+            <button key={key} onClick={() => setSortKey(key)} style={{ fontSize: '0.68rem', fontWeight: 700, padding: '0.15rem 0.5rem', borderRadius: '4px', cursor: 'pointer', border: `1px solid ${sortKey === key ? 'var(--accent-blue)' : 'var(--border-color)'}`, background: sortKey === key ? 'rgba(91,156,246,0.12)' : 'transparent', color: sortKey === key ? 'var(--accent-blue)' : 'var(--text-muted)', transition: 'all 0.15s' }}>
+              {label}
+            </button>
+          ))}
+        </div>
+
+        {/* Header */}
+        <div style={{ display: 'grid', gridTemplateColumns: '180px 60px 80px 70px 70px 70px 70px 70px', padding: '0.35rem 1rem', fontSize: '0.62rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', borderBottom: '1px solid var(--border-color)', background: 'rgba(255,255,255,0.01)' }}>
+          <span>Player</span>
+          {SORT_COLS.map(({ key, label }) => (
+            <span key={key} style={{ textAlign: 'center', color: sortKey === key ? 'var(--accent-blue)' : undefined }}>{label}</span>
+          ))}
+        </div>
+
+        {sorted.map((p) => {
+          const recentTotal = p.recentWins + p.recentLosses;
+          const recentWR = recentTotal > 0 ? Math.round((p.recentWins / recentTotal) * 100) : null;
+          const roleSlug = p.role?.toLowerCase().replace('mid_lane', 'midlane') ?? null;
+          return (
+            <div key={p.playerId} style={{ display: 'grid', gridTemplateColumns: '180px 60px 80px 70px 70px 70px 70px 70px', padding: '0.6rem 1rem', borderBottom: '1px solid var(--border-color)', alignItems: 'center' }}>
+              {/* Player */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', minWidth: 0 }}>
+                {roleSlug && <img src={`/icons/roles/${roleSlug}.png`} alt={p.role ?? ''} style={{ width: 18, height: 18, objectFit: 'contain', opacity: 0.85, flexShrink: 0 }} />}
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontSize: '0.78rem', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.customName ?? p.displayName}</div>
+                  {p.rankLabel && <div style={{ fontSize: '0.62rem', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>{p.rankLabel}</div>}
+                </div>
+              </div>
+              {/* Stats */}
+              <PerfCell value={p.matches} />
+              <div style={{ textAlign: 'center', fontFamily: 'var(--font-mono)', fontSize: '0.75rem' }}>
+                <span style={{ color: p.winRate >= 55 ? 'var(--accent-win)' : p.winRate < 45 ? 'var(--accent-loss)' : 'var(--text-primary)', fontWeight: 700 }}>{p.winRate.toFixed(1)}%</span>
+                {recentWR !== null && recentTotal >= 5 && (
+                  <div style={{ fontSize: '0.6rem', color: 'var(--text-muted)' }}>last {recentTotal}: {recentWR}%</div>
+                )}
+              </div>
+              <PerfCell value={p.kda > 0 ? p.kda.toFixed(2) : '—'} highlight={p.kda >= 3} />
+              <PerfCell value={p.avgGPM ?? '—'} />
+              <PerfCell value={p.avgDPM ?? '—'} />
+              <PerfCell value={p.avgCS ?? '—'} />
+              <PerfCell value={p.avgWardsPlaced !== null ? p.avgWardsPlaced.toFixed(1) : '—'} />
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Objective Control */}
+      {majorObjs.length > 0 && (
+        <div className="glass-card" style={{ padding: '1rem 1.25rem' }}>
+          <div style={{ fontWeight: 700, fontSize: '0.85rem', color: 'var(--text-primary)', marginBottom: '1rem' }}>
+            Objective Control
+            <span style={{ fontWeight: 400, fontSize: '0.68rem', color: 'var(--text-muted)', marginLeft: '0.5rem' }}>from {analysis.teamMatches.filter((m) => m.won !== null).length} team matches with event stream</span>
+          </div>
+          <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+            {majorObjs.map((o) => {
+              const color = OBJ_COLORS[o.entityType] ?? '#64748b';
+              const label = OBJ_LABELS[o.entityType] ?? o.entityType;
+              return (
+                <div key={o.entityType} style={{ flex: '1 1 140px', border: '1px solid var(--border-color)', borderRadius: '6px', padding: '0.75rem 1rem', background: 'rgba(255,255,255,0.02)' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', marginBottom: '0.5rem' }}>
+                    <div style={{ width: 8, height: 8, borderRadius: '50%', background: color, flexShrink: 0 }} />
+                    <span style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--text-secondary)' }}>{label}</span>
+                  </div>
+                  <div style={{ height: 5, borderRadius: 999, background: 'rgba(255,255,255,0.07)', overflow: 'hidden', display: 'flex', marginBottom: '0.4rem' }}>
+                    <div style={{ width: `${o.controlPct}%`, background: color, borderRadius: '999px 0 0 999px' }} />
+                    <div style={{ width: `${100 - o.controlPct}%`, background: 'rgba(248,113,113,0.4)', borderRadius: '0 999px 999px 0' }} />
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.68rem', fontFamily: 'var(--font-mono)' }}>
+                    <span style={{ color, fontWeight: 700 }}>{o.teamCaptures} ({o.controlPct}%)</span>
+                    <span style={{ color: 'var(--accent-loss)' }}>{o.rivalCaptures}</span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Top hero pool per player */}
+      <div className="glass-card" style={{ padding: '1rem 1.25rem' }}>
+        <div style={{ fontWeight: 700, fontSize: '0.85rem', color: 'var(--text-primary)', marginBottom: '1rem' }}>Hero Pool</div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+          {sorted.map((p) => (
+            <div key={p.playerId} style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+              <div style={{ width: 120, fontSize: '0.75rem', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--text-secondary)', flexShrink: 0 }}>
+                {p.customName ?? p.displayName}
+              </div>
+              <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
+                {p.topHeroes.map((h) => (
+                  <div key={h.slug} title={`${h.name} · ${h.matches} games · ${h.winRate.toFixed(1)}% WR`} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.2rem' }}>
+                    <div style={{ width: 32, height: 32, borderRadius: 6, overflow: 'hidden', border: '1px solid var(--border-color)', background: 'var(--bg-dark)' }}>
+                      <img src={`/heroes/${h.slug}.webp`} alt={h.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    </div>
+                    <div style={{ fontSize: '0.55rem', fontFamily: 'var(--font-mono)', color: h.winRate >= 55 ? 'var(--accent-win)' : h.winRate < 45 ? 'var(--accent-loss)' : 'var(--text-muted)' }}>
+                      {h.winRate.toFixed(0)}%
+                    </div>
+                  </div>
+                ))}
+                {p.topHeroes.length === 0 && <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>No hero data</span>}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function PerfCell({ value, highlight }: { value: string | number | null; highlight?: boolean }) {
+  return (
+    <div style={{ textAlign: 'center', fontFamily: 'var(--font-mono)', fontSize: '0.75rem', color: highlight ? 'var(--accent-win)' : value === '—' || value === null ? 'var(--text-muted)' : 'var(--text-secondary)', fontWeight: highlight ? 700 : 400 }}>
+      {value ?? '—'}
     </div>
   );
 }

@@ -110,6 +110,36 @@ Tablero simple de tareas generales y subtareas.
 - [ ] Añadir comparación entre builds del mismo héroe.
 - [ ] Integrar visualización de deltas y spikes.
 
+## Tarea 8 — Analyst (rule-based, sin LLM)
+Motor de detección de patrones que genera mensajes e insights predefinidos basados en umbrales y reglas fijas. No requiere IA — todo determinista y gratuito.
+
+### Fuentes de datos ya disponibles
+- Deaths Before Objectives (event stream)
+- Objective Control % por tipo (event stream)
+- Gold Diff timeline + throw/comeback detection
+- Hero pool depth y ban vulnerability (basic_stats)
+- Player consistency / slump detection (multi-match)
+
+### Alertas planificadas
+- [ ] **Macro discipline**: muertes antes de Fangtooth/Prime > umbral configurable
+- [ ] **Objective priority**: control rate < X% en objetivos clave
+- [ ] **Throw pattern**: ventaja gold > 3k convertida en derrota
+- [ ] **Player slump**: KDA < umbral en últimas N partidas
+- [ ] **Ban vulnerability**: jugador con pool < 2 héroes viables
+- [ ] **Vision gaps**: wards/min por debajo de media del equipo
+- [ ] **Positive reinforcement**: highlights cuando métricas superan umbral
+
+### Arquitectura
+- Endpoint `GET /analysis/team/:id` — calcula y devuelve lista de insights estructurados
+- Cada insight: `{ severity, category, title, evidence[], recommendation }`
+- Panel "Analyst" en Team Analysis y en Player Scouting
+
+## Tarea 9 — Analyst LLM (Claude API)
+Extensión de Tarea 8: los insights estructurados de la capa de reglas se pasan a Claude para síntesis en lenguaje natural, contextualización y recomendaciones accionables.
+- Prompt caching para contexto de juego (system prompt fijo)
+- Streaming SSE al frontend
+- Coste estimado: < $0.01 por análisis de partida con claude-sonnet-4-6
+
 ---
 
 ## Referencias
