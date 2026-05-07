@@ -548,11 +548,28 @@ function PlayerProfilePanel({
           )}
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '0.75rem', marginTop: '1.25rem' }}>
+        {/* Core stats */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(115px, 1fr))', gap: '0.65rem', marginTop: '1.25rem' }}>
           <SummaryMetric label="Matches" value={matches !== null ? formatCompactNumber(matches) : '-'} />
           <SummaryMetric label="Win Rate" value={winRate !== null ? `${winRate.toFixed(1)}%` : '-'} />
           <SummaryMetric label="KDA" value={kda !== null ? kda.toFixed(2) : '-'} />
           <SummaryMetric label="Hero Damage" value={heroDamage !== null ? formatCompactNumber(heroDamage) : '-'} />
+          {(() => {
+            const gs = profile.generalStats as Record<string, unknown>;
+            const avgGpm = profile.recentMatches.length > 0
+              ? Math.round(profile.recentMatches.reduce((s, m) => s + (m.duration > 0 && m.gold !== null ? m.gold / (m.duration / 60) : 0), 0) / profile.recentMatches.filter((m) => m.gold !== null && m.duration > 0).length)
+              : null;
+            const csMatches = profile.recentMatches.filter((m) => m.laneMinionsKilled !== null);
+            const avgCs = csMatches.length > 0 ? Math.round(csMatches.reduce((s, m) => s + (m.laneMinionsKilled ?? 0), 0) / csMatches.length) : null;
+            return (<>
+              {avgGpm !== null && !isNaN(avgGpm) && <SummaryMetric label="Avg GPM" value={String(avgGpm)} highlight />}
+              {avgCs !== null && <SummaryMetric label="Avg CS" value={String(avgCs)} />}
+              {typeof gs.doubleKills === 'number' && gs.doubleKills > 0 && <SummaryMetric label="Double Kills" value={String(gs.doubleKills)} />}
+              {typeof gs.tripleKills === 'number' && gs.tripleKills > 0 && <SummaryMetric label="Triple Kills" value={String(gs.tripleKills)} highlight />}
+              {typeof gs.quadraKills === 'number' && gs.quadraKills > 0 && <SummaryMetric label="Quadra Kills" value={String(gs.quadraKills)} highlight />}
+              {typeof gs.pentaKills === 'number' && gs.pentaKills > 0 && <SummaryMetric label="Penta Kills" value={String(gs.pentaKills)} highlight />}
+            </>);
+          })()}
         </div>
       </div>
 
@@ -596,11 +613,11 @@ function PlayerProfilePanel({
   );
 }
 
-function SummaryMetric({ label, value }: { label: string; value: string }) {
+function SummaryMetric({ label, value, highlight }: { label: string; value: string; highlight?: boolean }) {
   return (
-    <div style={{ border: '1px solid var(--border-color)', borderRadius: 'var(--radius-sm)', padding: '0.75rem 0.8rem', background: 'rgba(10,12,16,0.5)' }}>
+    <div style={{ border: `1px solid ${highlight ? 'rgba(240,179,41,0.3)' : 'var(--border-color)'}`, borderRadius: 'var(--radius-sm)', padding: '0.75rem 0.8rem', background: highlight ? 'rgba(240,179,41,0.05)' : 'rgba(10,12,16,0.5)' }}>
       <div style={{ color: 'var(--text-dim)', fontSize: '0.67rem', fontWeight: 700, marginBottom: '0.3rem', textTransform: 'uppercase', letterSpacing: '0.07em' }}>{label}</div>
-      <div style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-primary)', fontWeight: 500, fontSize: '1.1rem', letterSpacing: '-0.01em' }}>{value}</div>
+      <div style={{ fontFamily: 'var(--font-mono)', color: highlight ? 'var(--accent-prime)' : 'var(--text-primary)', fontWeight: 500, fontSize: '1.1rem', letterSpacing: '-0.01em' }}>{value}</div>
     </div>
   );
 }
@@ -626,6 +643,12 @@ function HeroStatCard({ hero }: { hero: PlayerProfile['heroStats'][number] }) {
         <MiniMetric label="WR" value={`${winrate.toFixed(1)}%`} />
         <MiniMetric label="W/L" value={`${hero.wins}/${hero.losses}`} />
         <MiniMetric label="KDA" value={kda.toFixed(2)} />
+        {matches > 0 && typeof hero.heroDamage === 'number' && (
+          <MiniMetric label="DMG/game" value={formatCompactNumber(Math.round(hero.heroDamage / matches))} />
+        )}
+        {matches > 0 && typeof hero.gold === 'number' && hero.gold > 0 && (
+          <MiniMetric label="Gold/game" value={formatCompactNumber(Math.round(hero.gold / matches))} />
+        )}
       </div>
     </div>
   );
@@ -655,13 +678,15 @@ function RoleStatCard({ role }: { role: PlayerProfile['roleStats'][number] }) {
         </span>
       </div>
 
-      {/* Row 2: Games · WR · W/L · KDA — headers and values centered */}
+      {/* Row 2: Games · WR · W/L · KDA · DMG/game · Gold/game */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '0.3rem' }}>
         {[
           { label: 'Games', value: String(role.matches) },
           { label: 'WR', value: `${winrate.toFixed(1)}%` },
           { label: 'W/L', value: `${role.wins}/${role.losses}` },
           { label: 'KDA', value: kda !== null ? kda.toFixed(2) : '—' },
+          ...(role.matches > 0 && typeof role.heroDamage === 'number' ? [{ label: 'DMG/g', value: formatCompactNumber(Math.round(role.heroDamage / role.matches)) }] : []),
+          ...(role.matches > 0 && typeof role.gold === 'number' && role.gold > 0 ? [{ label: 'Gold/g', value: formatCompactNumber(Math.round(role.gold / role.matches)) }] : []),
         ].map(({ label, value }) => (
           <div key={label} style={{ textAlign: 'center' }}>
             <div style={{ fontSize: '0.6rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: '0.25rem' }}>
@@ -738,7 +763,7 @@ function MatchesSection({
           {/* Column headers */}
           <div style={{
             display: 'grid',
-            gridTemplateColumns: '2fr 1.9fr 1.4fr 0.9fr 1.1fr 2.3fr 1fr 1fr 1fr 40px',
+            gridTemplateColumns: '2fr 1.9fr 1.4fr 0.9fr 1.1fr 2.3fr 1fr 1fr 1fr 1fr 40px',
             width: '100%', padding: '0.45rem 0',
             fontSize: '0.73rem', fontWeight: 700, color: 'var(--text-secondary)',
             textTransform: 'uppercase', letterSpacing: '0.07em',
@@ -746,7 +771,7 @@ function MatchesSection({
             background: 'rgba(255,255,255,0.015)',
           }}>
             <span style={{ paddingLeft: '0.75rem' }}>Hero</span>
-            {['Date','Type','Role','Result','K / D / A','GPM','DPM','Time'].map((h) => (
+            {['Date','Type','Role','Result','K / D / A','GPM','DPM','CS','Wards P/D','Time'].map((h) => (
               <span key={h} style={{ display: 'flex', justifyContent: 'center', alignItems: 'center' }}>{h}</span>
             ))}
             <span />
@@ -812,7 +837,7 @@ function MatchRow({
   return (
     <div style={{
       display: 'grid',
-      gridTemplateColumns: '2fr 1.9fr 1.4fr 0.9fr 1.1fr 2.3fr 1fr 1fr 1fr 40px',
+      gridTemplateColumns: '2fr 1.9fr 1.4fr 0.9fr 1.1fr 2.3fr 1fr 1fr 1fr 1fr 40px',
       alignItems: 'center',
       width: '100%',
       borderBottom: '1px solid var(--border-color)',
@@ -893,6 +918,22 @@ function MatchRow({
       {/* DPM */}
       <div style={{ display: 'flex', justifyContent: 'center', fontFamily: 'var(--font-mono)', fontSize: '0.9rem' }}>
         {dpm ?? '—'}
+      </div>
+
+      {/* CS */}
+      <div style={{ display: 'flex', justifyContent: 'center', fontFamily: 'var(--font-mono)', fontSize: '0.9rem', color: 'var(--text-secondary)' }}>
+        {match.laneMinionsKilled ?? '—'}
+      </div>
+
+      {/* Wards P/D */}
+      <div style={{ display: 'flex', justifyContent: 'center', fontFamily: 'var(--font-mono)', fontSize: '0.85rem', gap: '0.15rem' }}>
+        {match.wardsPlaced !== null || match.wardsDestroyed !== null ? (
+          <>
+            <span style={{ color: 'var(--accent-blue)' }}>{match.wardsPlaced ?? '—'}</span>
+            <span style={{ color: 'var(--text-muted)' }}>/</span>
+            <span style={{ color: 'var(--accent-loss)', opacity: 0.8 }}>{match.wardsDestroyed ?? '—'}</span>
+          </>
+        ) : '—'}
       </div>
 
       {/* Duration */}
