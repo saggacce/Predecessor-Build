@@ -8,7 +8,9 @@ import { logger } from '../logger.js';
 
 const GQL_URL = process.env.PRED_GG_GQL_URL ?? 'https://pred.gg/gql';
 const API_KEY = process.env.PRED_GG_CLIENT_SECRET;
-const STALE_THRESHOLD_MS = 60 * 60 * 1000; // 1 hour
+const STALE_THRESHOLD_MS = 24 * 60 * 60 * 1000; // 24 hours
+const STALE_SYNC_BATCH   = 30;   // max players per "Sync Players" click
+const STALE_CONCURRENCY  = 5;    // concurrent pred.gg calls within the batch
 
 async function predggQuery<T>(
   query: string,
@@ -126,6 +128,8 @@ interface PredggMatchStat {
   heroDamage?: number | null;
   totalDamageDealt?: number | null;
   wardsPlaced?: number | null;
+  wardsDestroyed?: number | null;
+  laneMinionsKilled?: number | null;
   hero?: {
     slug?: string | null;
     name?: string | null;
@@ -278,6 +282,8 @@ const PLAYER_DETAIL_QUERY = `
           heroDamage
           totalDamageDealt
           wardsPlaced
+          wardsDestroyed
+          laneMinionsKilled
           hero {
             slug
             name
@@ -471,34 +477,44 @@ async function persistRecentMatches(
   matches: PredggMatchStat[],
   syncedAt: Date,
 ): Promise<void> {
+  // Delete existing records for this player so new fields (CS, wards, etc.) are always fresh
   await db.matchPlayer.deleteMany({ where: { playerId } });
 
-  for (const item of matches) {
+  // Cache version IDs to avoid one DB round-trip per match for the same patch
+  const versionCache = new Map<string, string>();
+
+  // Process all matches concurrently (DB upserts are safe in parallel)
+  await Promise.allSettled(matches.map(async (item) => {
     const match = item.match;
     const predggUuid = safeString(match?.id);
     const startTime = safeString(match?.startTime);
-    if (!predggUuid || !startTime) continue;
+    if (!predggUuid || !startTime) return;
 
     let versionId: string | null = null;
     const version = match?.version;
     if (version?.id) {
-      const releaseDate = safeString(version.releaseDate);
-      const savedVersion = await db.version.upsert({
-        where: { predggId: version.id },
-        update: {
-          name: version.name ?? version.gameString ?? 'Unknown',
-          patchType: version.patchType ?? 'UNKNOWN',
-          syncedAt,
-        },
-        create: {
-          predggId: version.id,
-          name: version.name ?? version.gameString ?? 'Unknown',
-          releaseDate: releaseDate ? new Date(releaseDate) : new Date(0),
-          patchType: version.patchType ?? 'UNKNOWN',
-          syncedAt,
-        },
-      });
-      versionId = savedVersion.id;
+      if (versionCache.has(version.id)) {
+        versionId = versionCache.get(version.id)!;
+      } else {
+        const releaseDate = safeString(version.releaseDate);
+        const savedVersion = await db.version.upsert({
+          where: { predggId: version.id },
+          update: {
+            name: version.name ?? version.gameString ?? 'Unknown',
+            patchType: version.patchType ?? 'UNKNOWN',
+            syncedAt,
+          },
+          create: {
+            predggId: version.id,
+            name: version.name ?? version.gameString ?? 'Unknown',
+            releaseDate: releaseDate ? new Date(releaseDate) : new Date(0),
+            patchType: version.patchType ?? 'UNKNOWN',
+            syncedAt,
+          },
+        });
+        versionId = savedVersion.id;
+        versionCache.set(version.id, versionId);
+      }
     }
 
     const savedMatch = await db.match.upsert({
@@ -524,26 +540,32 @@ async function persistRecentMatches(
       },
     });
 
-    await db.matchPlayer.create({
-      data: {
-        matchId: savedMatch.id,
-        playerId,
-        playerName,
-        team: item.team ?? 'UNKNOWN',
-        role: item.role ?? null,
-        heroSlug: item.hero?.slug ?? 'unknown',
-        kills: safeNumber(item.kills),
-        deaths: safeNumber(item.deaths),
-        assists: safeNumber(item.assists),
-        heroDamage: item.heroDamage ?? null,
-        totalDamage: item.totalDamageDealt ?? null,
-        gold: item.gold ?? null,
-        wardsPlaced: item.wardsPlaced ?? null,
-        inventoryItems: [],
-        perkSlug: null,
-      },
-    });
-  }
+    try {
+      await db.matchPlayer.create({
+        data: {
+          matchId: savedMatch.id,
+          playerId,
+          playerName,
+          team: item.team ?? 'UNKNOWN',
+          role: item.role ?? null,
+          heroSlug: item.hero?.slug ?? 'unknown',
+          kills: safeNumber(item.kills),
+          deaths: safeNumber(item.deaths),
+          assists: safeNumber(item.assists),
+          heroDamage: item.heroDamage ?? null,
+          totalDamage: item.totalDamageDealt ?? null,
+          gold: item.gold ?? null,
+          wardsPlaced: item.wardsPlaced ?? null,
+          wardsDestroyed: item.wardsDestroyed ?? null,
+          laneMinionsKilled: item.laneMinionsKilled ?? null,
+          inventoryItems: [],
+          perkSlug: null,
+        },
+      });
+    } catch (err: unknown) {
+      if ((err as { code?: string }).code !== 'P2002') throw err;
+    }
+  }));
 }
 
 /**
@@ -662,24 +684,34 @@ export async function syncPlayerByName(
 }
 
 /**
- * Re-syncs all players whose lastSynced is older than STALE_THRESHOLD_MS.
+ * Re-syncs up to STALE_SYNC_BATCH players whose lastSynced is older than STALE_THRESHOLD_MS.
+ * Runs STALE_CONCURRENCY syncs in parallel to keep total time under ~30s.
  */
-export async function syncStalePlayers(db: PrismaClient, userToken?: string): Promise<SyncResult> {
+export async function syncStalePlayers(db: PrismaClient, userToken?: string): Promise<SyncResult & { total: number }> {
   const staleThreshold = new Date(Date.now() - STALE_THRESHOLD_MS);
   const stalePlayers = await db.player.findMany({
-    where: { lastSynced: { lt: staleThreshold } },
+    where: { lastSynced: { lt: staleThreshold }, displayName: { not: 'HIDDEN' } },
     select: { displayName: true },
+    orderBy: { lastSynced: 'asc' }, // oldest first
+    take: STALE_SYNC_BATCH,
   });
 
-  const result: SyncResult = { synced: 0, skipped: 0, errors: 0 };
+  const total = await db.player.count({ where: { lastSynced: { lt: staleThreshold } } });
+  const result: SyncResult & { total: number } = { synced: 0, skipped: 0, errors: 0, total };
 
-  for (const player of stalePlayers) {
-    try {
-      const synced = await syncPlayerByName(db, player.displayName, userToken);
-      if (synced) result.synced++;
-      else result.skipped++;
-    } catch {
-      result.errors++;
+  // Process in chunks of STALE_CONCURRENCY
+  for (let i = 0; i < stalePlayers.length; i += STALE_CONCURRENCY) {
+    const chunk = stalePlayers.slice(i, i + STALE_CONCURRENCY);
+    const outcomes = await Promise.allSettled(
+      chunk.map((p) => syncPlayerByName(db, p.displayName, userToken))
+    );
+    for (const outcome of outcomes) {
+      if (outcome.status === 'fulfilled') {
+        if (outcome.value) result.synced++;
+        else result.skipped++;
+      } else {
+        result.errors++;
+      }
     }
   }
 
@@ -740,6 +772,12 @@ const MATCH_DETAIL_QUERY = `
       matchPlayers {
         name team role kills deaths assists heroDamage totalDamageDealt
         gold wardsPlaced wardsDestroyed level
+        physicalDamageDealtToHeroes magicalDamageDealtToHeroes trueDamageDealtToHeroes
+        heroDamageTaken totalDamageTaken totalHealingDone
+        totalDamageDealtToStructures totalDamageDealtToObjectives
+        largestCriticalStrike laneMinionsKilled goldSpent
+        largestKillingSpree multiKill
+        physicalDamageDealt magicalDamageDealt trueDamageDealt
         hero { slug }
         inventoryItemData { name }
         player { id name isNameConsole }
@@ -770,13 +808,45 @@ interface PredggMatchDetail {
     wardsPlaced: number | null;
     wardsDestroyed: number | null;
     level: number | null;
+    physicalDamageDealtToHeroes: number | null;
+    magicalDamageDealtToHeroes: number | null;
+    trueDamageDealtToHeroes: number | null;
+    heroDamageTaken: number | null;
+    totalDamageTaken: number | null;
+    totalHealingDone: number | null;
+    totalDamageDealtToStructures: number | null;
+    totalDamageDealtToObjectives: number | null;
+    largestCriticalStrike: number | null;
+    laneMinionsKilled: number | null;
+    goldSpent: number | null;
+    largestKillingSpree: number | null;
+    multiKill: number | null;
+    physicalDamageDealt: number | null;
+    magicalDamageDealt: number | null;
+    trueDamageDealt: number | null;
     hero: { slug: string } | null;
     inventoryItemData: Array<{ name: string } | null>;
     player: { id: string; name: string | null; isNameConsole: boolean } | null;
   }>;
 }
 
-export async function resyncMatch(db: PrismaClient, predggUuid: string, userToken?: string): Promise<void> {
+export async function resyncMatch(
+  db: PrismaClient,
+  predggUuid: string,
+  userToken?: string,
+  forceRoster = false,
+): Promise<void> {
+  const existing = await db.match.findUnique({ where: { predggUuid }, select: { id: true, rosterSynced: true, eventStreamSynced: true } });
+
+  // If fully synced and not forced, only run event stream sync if still pending
+  if (existing?.rosterSynced && !forceRoster) {
+    if (!existing.eventStreamSynced && userToken) {
+      await syncMatchEventStream(db, existing.id, predggUuid, userToken);
+    }
+    logger.info({ predggUuid }, 'match already roster-synced — skipping basic resync');
+    return;
+  }
+
   const data = await predggQuery<{ match: PredggMatchDetail | null }>(
     MATCH_DETAIL_QUERY,
     { uuid: predggUuid },
@@ -824,6 +894,7 @@ export async function resyncMatch(db: PrismaClient, predggUuid: string, userToke
       });
       playerId = dbPlayer.id;
     }
+    try {
     await db.matchPlayer.create({
       data: {
         matchId: match.id,
@@ -842,12 +913,334 @@ export async function resyncMatch(db: PrismaClient, predggUuid: string, userToke
         wardsPlaced: mp.wardsPlaced,
         wardsDestroyed: mp.wardsDestroyed ?? null,
         level: mp.level ?? null,
+        physicalDamageDealtToHeroes: mp.physicalDamageDealtToHeroes ?? null,
+        magicalDamageDealtToHeroes: mp.magicalDamageDealtToHeroes ?? null,
+        trueDamageDealtToHeroes: mp.trueDamageDealtToHeroes ?? null,
+        heroDamageTaken: mp.heroDamageTaken ?? null,
+        totalDamageTaken: mp.totalDamageTaken ?? null,
+        totalHealingDone: mp.totalHealingDone ?? null,
+        totalDamageDealtToStructures: mp.totalDamageDealtToStructures ?? null,
+        totalDamageDealtToObjectives: mp.totalDamageDealtToObjectives ?? null,
+        largestCriticalStrike: mp.largestCriticalStrike ?? null,
+        laneMinionsKilled: mp.laneMinionsKilled ?? null,
+        goldSpent: mp.goldSpent ?? null,
+        largestKillingSpree: mp.largestKillingSpree ?? null,
+        multiKill: mp.multiKill ?? null,
+        physicalDamageDealt: mp.physicalDamageDealt ?? null,
+        magicalDamageDealt: mp.magicalDamageDealt ?? null,
+        trueDamageDealt: mp.trueDamageDealt ?? null,
         inventoryItems: mp.inventoryItemData.filter(Boolean).map((i) => i!.name.toLowerCase()),
         perkSlug: null,
         abilityOrder: [],
       },
     });
+    } catch (err: unknown) {
+      // Skip unique constraint violations from concurrent syncs
+      if ((err as { code?: string }).code !== 'P2002') throw err;
+    }
   }
+
+  // Mark roster as synced
+  await db.match.update({ where: { id: match.id }, data: { rosterSynced: true } });
+
+  // Sync event stream when Bearer token is available
+  if (userToken) {
+    try {
+      await syncMatchEventStream(db, match.id, predggUuid, userToken);
+    } catch (err) {
+      logger.warn({ matchId: match.id, err }, 'event stream sync failed — basic resync succeeded');
+    }
+  }
+}
+
+// ── Event stream sync ─────────────────────────────────────────────────────────
+
+const MATCH_EVENT_STREAM_QUERY = `
+  query GetMatchEventStream($uuid: String!) {
+    match(by: { id: $uuid }) {
+      heroKills {
+        gameTime
+        location { x y z }
+        killerTeam
+        killedTeam
+        killerHero { slug }
+        killedHero { slug }
+        killerPlayer { id }
+        killedPlayer { id }
+      }
+      objectiveKills {
+        gameTime
+        killedEntityType
+        killerTeam
+        killerPlayer { id }
+        location { x y z }
+      }
+      structureDestructions {
+        gameTime
+        structureEntityType
+        destructionTeam
+        location { x y z }
+      }
+      heroBans {
+        hero { slug }
+        team
+      }
+      matchPlayers {
+        player { id }
+        team
+        goldEarnedAtInterval
+        wardPlacements {
+          gameTime
+          type
+          location { x y z }
+        }
+        wardDestructions {
+          gameTime
+          type
+          location { x y z }
+        }
+        transactions {
+          gameTime
+          transactionType
+          itemData { name }
+        }
+      }
+    }
+  }
+`;
+
+interface EventStreamLocation {
+  x?: number | null;
+  y?: number | null;
+  z?: number | null;
+}
+
+interface EventStreamMatchData {
+  heroKills: Array<{
+    gameTime: number;
+    location?: EventStreamLocation | null;
+    killerTeam?: string | null;
+    killedTeam?: string | null;
+    killerHero?: { slug?: string | null } | null;
+    killedHero?: { slug?: string | null } | null;
+    killerPlayer?: { id?: string | null } | null;
+    killedPlayer?: { id?: string | null } | null;
+  }>;
+  objectiveKills: Array<{
+    gameTime: number;
+    killedEntityType?: string | null;
+    killerTeam?: string | null;
+    killerPlayer?: { id?: string | null } | null;
+    location?: EventStreamLocation | null;
+  }>;
+  structureDestructions: Array<{
+    gameTime: number;
+    structureEntityType?: string | null;
+    destructionTeam?: string | null;
+    location?: EventStreamLocation | null;
+  }>;
+  heroBans: Array<{
+    hero?: { slug?: string | null } | null;
+    team?: string | null;
+  }>;
+  matchPlayers: Array<{
+    player?: { id?: string | null } | null;
+    team?: string | null;
+    goldEarnedAtInterval?: number[] | null;
+    wardPlacements?: Array<{
+      gameTime: number;
+      type?: string | null;
+      location?: EventStreamLocation | null;
+    }> | null;
+    wardDestructions?: Array<{
+      gameTime: number;
+      type?: string | null;
+      location?: EventStreamLocation | null;
+    }> | null;
+    transactions?: Array<{
+      gameTime: number;
+      transactionType?: string | null;
+      itemData?: { name?: string | null } | null;
+    }> | null;
+  }>;
+}
+
+export async function syncMatchEventStream(
+  db: PrismaClient,
+  matchId: string,
+  predggUuid: string,
+  userToken: string,
+  force = false,
+): Promise<void> {
+  // Skip if already synced unless forced, to prevent double-insertion
+  if (!force) {
+    const existing = await db.match.findUnique({ where: { id: matchId }, select: { eventStreamSynced: true } });
+    if (existing?.eventStreamSynced) {
+      logger.info({ matchId }, 'event stream already synced — skipping');
+      return;
+    }
+  }
+
+  const data = await predggQuery<{ match: EventStreamMatchData | null }>(
+    MATCH_EVENT_STREAM_QUERY,
+    { uuid: predggUuid },
+    userToken,
+  );
+
+  if (!data.match) throw new Error(`Event stream: match ${predggUuid} not found`);
+  const es = data.match;
+
+  // Clear existing event stream data for this match before re-inserting
+  await db.$transaction([
+    db.heroKill.deleteMany({ where: { matchId } }),
+    db.objectiveKill.deleteMany({ where: { matchId } }),
+    db.structureDestruction.deleteMany({ where: { matchId } }),
+    db.wardEvent.deleteMany({ where: { matchId } }),
+    db.transaction.deleteMany({ where: { matchId } }),
+    db.heroBan.deleteMany({ where: { matchId } }),
+  ]);
+
+  const cuid = () => Math.random().toString(36).slice(2) + Date.now().toString(36);
+
+  // Hero kills
+  if (es.heroKills?.length) {
+    await db.heroKill.createMany({
+      data: es.heroKills.map((k) => ({
+        id: cuid(),
+        matchId,
+        gameTime: k.gameTime,
+        locationX: k.location?.x ?? null,
+        locationY: k.location?.y ?? null,
+        locationZ: k.location?.z ?? null,
+        killerTeam: k.killerTeam ?? null,
+        killedTeam: k.killedTeam ?? null,
+        killerHeroSlug: k.killerHero?.slug ?? null,
+        killedHeroSlug: k.killedHero?.slug ?? null,
+        killerPlayerId: k.killerPlayer?.id ?? null,
+        killedPlayerId: k.killedPlayer?.id ?? null,
+      })),
+    });
+  }
+
+  // Objective kills
+  if (es.objectiveKills?.length) {
+    await db.objectiveKill.createMany({
+      data: es.objectiveKills.map((k) => ({
+        id: cuid(),
+        matchId,
+        gameTime: k.gameTime,
+        entityType: k.killedEntityType ?? 'UNKNOWN',
+        killerTeam: k.killerTeam ?? null,
+        killerPlayerId: k.killerPlayer?.id ?? null,
+        locationX: k.location?.x ?? null,
+        locationY: k.location?.y ?? null,
+        locationZ: k.location?.z ?? null,
+      })),
+    });
+  }
+
+  // Structure destructions
+  if (es.structureDestructions?.length) {
+    await db.structureDestruction.createMany({
+      data: es.structureDestructions.map((s) => ({
+        id: cuid(),
+        matchId,
+        gameTime: s.gameTime,
+        structureType: s.structureEntityType ?? 'UNKNOWN',
+        destructionTeam: s.destructionTeam ?? null,
+        locationX: s.location?.x ?? null,
+        locationY: s.location?.y ?? null,
+        locationZ: s.location?.z ?? null,
+      })),
+    });
+  }
+
+  // Hero bans
+  if (es.heroBans?.length) {
+    await db.heroBan.createMany({
+      data: es.heroBans
+        .filter((b) => b.hero?.slug && b.team)
+        .map((b) => ({
+          id: cuid(),
+          matchId,
+          heroSlug: b.hero!.slug!,
+          team: b.team!,
+        })),
+    });
+  }
+
+  // Per-player events: wards, transactions, gold timeline
+  for (const mp of es.matchPlayers ?? []) {
+    const playerId = mp.player?.id ?? null;
+    const team = mp.team ?? null;
+
+    // Ward placements
+    if (mp.wardPlacements?.length) {
+      await db.wardEvent.createMany({
+        data: mp.wardPlacements.map((w) => ({
+          id: cuid(),
+          matchId,
+          gameTime: w.gameTime,
+          eventType: 'PLACEMENT',
+          wardType: w.type ?? 'UNKNOWN',
+          locationX: w.location?.x ?? null,
+          locationY: w.location?.y ?? null,
+          locationZ: w.location?.z ?? null,
+          playerId,
+          team,
+        })),
+      });
+    }
+
+    // Ward destructions
+    if (mp.wardDestructions?.length) {
+      await db.wardEvent.createMany({
+        data: mp.wardDestructions.map((w) => ({
+          id: cuid(),
+          matchId,
+          gameTime: w.gameTime,
+          eventType: 'DESTRUCTION',
+          wardType: w.type ?? 'UNKNOWN',
+          locationX: w.location?.x ?? null,
+          locationY: w.location?.y ?? null,
+          locationZ: w.location?.z ?? null,
+          playerId,
+          team,
+        })),
+      });
+    }
+
+    // Transactions
+    if (mp.transactions?.length) {
+      await db.transaction.createMany({
+        data: mp.transactions.map((t) => ({
+          id: cuid(),
+          matchId,
+          gameTime: t.gameTime,
+          transactionType: t.transactionType ?? 'UNKNOWN',
+          itemName: t.itemData?.name ?? null,
+          playerId,
+          team,
+        })),
+      });
+    }
+
+    // Gold timeline — update the MatchPlayer record
+    if (mp.goldEarnedAtInterval?.length && playerId) {
+      await db.matchPlayer.updateMany({
+        where: { matchId, predggPlayerUuid: playerId },
+        data: { goldEarnedAtInterval: mp.goldEarnedAtInterval },
+      });
+    }
+  }
+
+  // Mark match as event stream synced
+  await db.match.update({
+    where: { id: matchId },
+    data: { eventStreamSynced: true },
+  });
+
+  logger.info({ matchId, predggUuid }, 'event stream synced');
 }
 
 export async function syncIncompleteMatches(db: PrismaClient): Promise<{ synced: number; errors: number }> {

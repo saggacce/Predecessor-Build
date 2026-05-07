@@ -74,6 +74,13 @@ export interface RecentMatch {
   gameMode: string;
   heroName: string | null;
   heroImageUrl: string | null;
+  wardsPlaced: number | null;
+  wardsDestroyed: number | null;
+  level: number | null;
+  laneMinionsKilled: number | null;
+  totalDamageDealtToStructures: number | null;
+  totalDamageDealtToObjectives: number | null;
+  totalHealingDone: number | null;
 }
 
 export interface PlayerProfile {
@@ -163,6 +170,77 @@ export interface MatchPlayerDetail {
   perkSlug: string | null;
   rankLabel: string | null;
   ratingPoints: number | null;
+  physicalDamageDealtToHeroes: number | null;
+  magicalDamageDealtToHeroes: number | null;
+  trueDamageDealtToHeroes: number | null;
+  heroDamageTaken: number | null;
+  totalDamageTaken: number | null;
+  totalHealingDone: number | null;
+  totalDamageDealtToStructures: number | null;
+  totalDamageDealtToObjectives: number | null;
+  largestCriticalStrike: number | null;
+  laneMinionsKilled: number | null;
+  goldSpent: number | null;
+  largestKillingSpree: number | null;
+  multiKill: number | null;
+  physicalDamageDealt: number | null;
+  magicalDamageDealt: number | null;
+  trueDamageDealt: number | null;
+  goldEarnedAtInterval: number[] | null;
+}
+
+export interface MatchEventKill {
+  gameTime: number;
+  killerTeam: string | null;
+  killedTeam: string | null;
+  killerHeroSlug: string | null;
+  killedHeroSlug: string | null;
+  killerPlayerId: string | null;
+  killedPlayerId: string | null;
+  locationX: number | null;
+  locationY: number | null;
+}
+
+export interface MatchEventObjective {
+  gameTime: number;
+  entityType: string;
+  killerTeam: string | null;
+  killerPlayerId: string | null;
+  locationX: number | null;
+  locationY: number | null;
+}
+
+export interface MatchEventStructure {
+  gameTime: number;
+  structureType: string;
+  destructionTeam: string | null;
+  locationX: number | null;
+  locationY: number | null;
+}
+
+export interface MatchEventWard {
+  gameTime: number;
+  eventType: string;
+  wardType: string;
+  team: string | null;
+  locationX: number | null;
+  locationY: number | null;
+}
+
+export interface MatchEventTransaction {
+  gameTime: number;
+  transactionType: string;
+  itemName: string | null;
+  team: string | null;
+  playerId: string | null;
+}
+
+export interface MatchEvents {
+  heroKills: MatchEventKill[];
+  objectiveKills: MatchEventObjective[];
+  structureDestructions: MatchEventStructure[];
+  wardEvents: MatchEventWard[];
+  transactions: MatchEventTransaction[];
 }
 
 export interface MatchDetail {
@@ -174,6 +252,8 @@ export interface MatchDetail {
   region: string | null;
   winningTeam: string | null;
   version: string | null;
+  rosterSynced: boolean;
+  eventStreamSynced: boolean;
   dusk: MatchPlayerDetail[];
   dawn: MatchPlayerDetail[];
 }
@@ -292,6 +372,7 @@ export const apiClient = {
   matches: {
     getDetail: (id: string) => fetchApi<MatchDetail>(`/matches/${id}`),
     syncPlayers: (id: string) => fetchApi<MatchDetail>(`/matches/${id}/sync`, { method: 'POST' }),
+    getEvents: (id: string) => fetchApi<MatchEvents>(`/matches/${id}/events`),
   },
 
   reports: {

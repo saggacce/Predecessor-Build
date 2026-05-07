@@ -74,22 +74,35 @@ Tablero simple de tareas generales y subtareas.
 - [x] Perfil jugador: icono rango circular pred.gg-style, bandera región, season badges
 - [x] GET /players/:id/seasons → historial de ratings por temporada
 
-### 6B — Match Statistics tab (pendiente — datos verificados disponibles en pred.gg)
-### 6C — Event stream sync (pendiente)
-### 6D — Timeline tab (pendiente)
-### 6E — Analysis tab + métricas Fase 2 (pendiente)
+### [x] 6B — Match Statistics tab
+- [x] 16 campos nuevos en MatchPlayer (daño físico/mágico/verdadero, daño recibido, curación, CS, goldSpent, crits, sprees, multi-kills)
+- [x] `MATCH_DETAIL_QUERY` extendida para fetchear los nuevos campos
+- [x] Tab "Statistics" habilitado con 3 secciones: Damage Output (barra tricolor P/M/T), Survivability, Farm & Highlights
+- [x] Empty state con botón "Sync match stats" cuando no hay datos extendidos
 
-- [ ] Extender sync worker para capturar event stream completo por partida:
-  - [ ] `heroKills` {gameTime, location x/y/z, killerTeam, killedTeam, killerHero, killedHero}
-  - [ ] `objectiveKills` {gameTime, killedEntityType, killerTeam, killerPlayer, location}
-  - [ ] `structureDestructions` {gameTime, structureEntityType, destructionTeam, location}
-  - [ ] `wardPlacements` / `wardDestructions` {gameTime, type, location} por jugador
-  - [ ] `goldEarnedAtInterval` (array acumulado por minuto) por jugador
-  - [ ] `transactions` {gameTime, transactionType, itemData} para item timing (IND-034)
-  - [ ] `heroBans` {hero, team} solo en partidas RANKED
-- [ ] Definir zonas tácticas del mapa (polígonos): entrada Fangtooth, zona Prime, carriles, jungla rival.
-- [ ] Métricas de Fase 2: Deaths Before Objective (IND-018), Death Zone Frequency (IND-020), Objective Control (TEAM-008 a TEAM-013), Gold Diff (TEAM-005/006/007).
-- [ ] Heatmap panel: muertes, objetivos, wards sobre imagen del mapa (`assets/maps/map.png`).
+### [x] 6C — Event stream sync
+- [x] 6 tablas nuevas: HeroKill, ObjectiveKill, StructureDestruction, WardEvent, Transaction, HeroBan
+- [x] Match.eventStreamSynced + MatchPlayer.goldEarnedAtInterval
+- [x] `syncMatchEventStream` — persiste todos los eventos; se dispara desde resyncMatch cuando hay Bearer
+- [x] Auto-sync silencioso al cargar un match con eventStreamSynced=false
+- [x] Botón "Sync match data" visible cuando !eventStreamSynced (no solo con jugadores HIDDEN)
+### [x] 6D — Timeline tab
+- [x] GET /matches/:id/events — devuelve HeroKills, ObjectiveKills, StructureDestructions, WardEvents, Transactions
+- [x] Timeline horizontal scrollable con swim lanes separadas: Kills (DUSK/DAWN), Objectives, Structures, Purchases, Wards
+- [x] Zoom ×0.5 a ×8 con botones +/−
+- [x] Tooltips con portal (no se cortan) — kill: víctima🔪 + asesino⚔️ con héroe; objetivo: equipo + héroe que lo mató
+- [x] Minimapa interactivo: hover→punto en mapa, click→pin, calibración exacta por regresión sobre 10 puntos reales
+- [x] MAP_BOUNDS calibrados: {minX:-16311, maxX:17637, minY:-16498, maxY:20026}
+- [x] Deduplicación MatchPlayer + índices únicos (matchId,playerId) y (matchId,predggPlayerUuid)
+- [x] rosterSynced / eventStreamSynced flags con guards anti-duplicado en resyncMatch
+### [x] 6E — Analysis tab + métricas Fase 2
+- [x] Objective Control cards (TEAM-008/009/010/011/012) — Fangtooth, Prime, Shaper, Buffs, River con barra DUSK/DAWN, total y primer objetivo
+- [x] Gold Diff timeline SVG (TEAM-005/006/007) — área teal/roja, marcadores de objetivos con tooltip interactivo, throw/comeback detection
+- [x] Deaths Before Objectives table (IND-018/TEAM-013) — ventanas −30/60/120s antes de Fangtooth/Prime/Shaper
+- [x] Match Heatmap con capas: kills (muerto por equipo), wards (placed/destroyed), objectives (por tipo)
+- [x] goldEarnedAtInterval en MatchPlayerDetail + regeneración Prisma client del workspace
+- [x] Re-sync manual fuerza ambos flags (forceRoster + force event stream)
+- [ ] Death Zone Frequency (IND-020) — requiere definición manual de polígonos de zonas tácticas
 
 ## Tarea 7 — Build/Stat module (fase posterior)
 - [ ] Definir contrato de inputs/outputs del motor.

@@ -45,12 +45,15 @@ export default function Dashboard() {
     setSyncState({ tag: 'running', op: 'Players' });
     try {
       const res = await apiClient.admin.syncStale();
-      const label = `${res.synced} synced · ${res.skipped} skipped · ${res.errors} errors`;
+      const remaining = (res as { total?: number }).total ?? 0;
+      const label = `${res.synced} synced · ${res.skipped} skipped · ${res.errors} errors${remaining > res.synced ? ` · ${remaining - res.synced} remaining` : ''}`;
       setSyncState({ tag: 'done', op: 'Players', result: label });
       if (res.errors > 0) {
         toast.warning('Players sync completed with errors', { description: label });
+      } else if (remaining > res.synced) {
+        toast.success(`Batch synced (${res.synced} players)`, { description: `${remaining - res.synced} more stale — click again to continue` });
       } else {
-        toast.success('Players synced', { description: label });
+        toast.success('All players synced', { description: label });
       }
     } catch (err) {
       const msg = err instanceof ApiErrorResponse ? err.error.message : 'Sync failed';

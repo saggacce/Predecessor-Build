@@ -1,6 +1,114 @@
 import { db } from '../db.js';
 import { AppError } from '../middleware/error-handler.js';
 
+export interface MatchEventKill {
+  gameTime: number;
+  killerTeam: string | null;
+  killedTeam: string | null;
+  killerHeroSlug: string | null;
+  killedHeroSlug: string | null;
+  killerPlayerId: string | null;
+  killedPlayerId: string | null;
+}
+
+export interface MatchEventObjective {
+  gameTime: number;
+  entityType: string;
+  killerTeam: string | null;
+  killerPlayerId: string | null;
+  locationX: number | null;
+  locationY: number | null;
+}
+
+export interface MatchEventStructure {
+  gameTime: number;
+  structureType: string;
+  destructionTeam: string | null;
+}
+
+export interface MatchEventWard {
+  gameTime: number;
+  eventType: string;
+  wardType: string;
+  team: string | null;
+}
+
+export interface MatchEventTransaction {
+  gameTime: number;
+  transactionType: string;
+  itemName: string | null;
+  team: string | null;
+  playerId: string | null;
+}
+
+export interface MatchEvents {
+  heroKills: MatchEventKill[];
+  objectiveKills: MatchEventObjective[];
+  structureDestructions: MatchEventStructure[];
+  wardEvents: MatchEventWard[];
+  transactions: MatchEventTransaction[];
+}
+
+export async function getMatchEvents(matchId: string): Promise<MatchEvents> {
+  const match = await db.match.findUnique({ where: { id: matchId }, select: { id: true, eventStreamSynced: true } });
+  if (!match) throw new AppError(404, `Match not found: ${matchId}`, 'MATCH_NOT_FOUND');
+
+  const [heroKills, objectiveKills, structureDestructions, wardEvents, transactions] = await Promise.all([
+    db.heroKill.findMany({ where: { matchId }, orderBy: { gameTime: 'asc' } }),
+    db.objectiveKill.findMany({ where: { matchId }, orderBy: { gameTime: 'asc' } }),
+    db.structureDestruction.findMany({ where: { matchId }, orderBy: { gameTime: 'asc' } }),
+    db.wardEvent.findMany({ where: { matchId }, orderBy: { gameTime: 'asc' } }),
+    db.transaction.findMany({
+      where: { matchId, transactionType: { in: ['BUY', 'SELL'] } },
+      orderBy: { gameTime: 'asc' },
+    }),
+  ]);
+
+  return {
+    heroKills: heroKills.map((k) => ({
+      gameTime: k.gameTime,
+      killerTeam: k.killerTeam,
+      killedTeam: k.killedTeam,
+      killerHeroSlug: k.killerHeroSlug,
+      killedHeroSlug: k.killedHeroSlug,
+      killerPlayerId: k.killerPlayerId,
+      killedPlayerId: k.killedPlayerId,
+      locationX: k.locationX,
+      locationY: k.locationY,
+    })),
+    objectiveKills: objectiveKills.map((o) => ({
+      gameTime: o.gameTime,
+      entityType: o.entityType,
+      killerTeam: o.killerTeam,
+      killerPlayerId: o.killerPlayerId,
+      locationX: o.locationX,
+      locationY: o.locationY,
+    })),
+    structureDestructions: structureDestructions.map((s) => ({
+      gameTime: s.gameTime,
+      structureType: s.structureType,
+      destructionTeam: s.destructionTeam,
+      locationX: s.locationX,
+      locationY: s.locationY,
+    })),
+    wardEvents: wardEvents.map((w) => ({
+      gameTime: w.gameTime,
+      eventType: w.eventType,
+      wardType: w.wardType,
+      team: w.team,
+      locationX: w.locationX,
+      locationY: w.locationY,
+    })),
+    transactions: transactions.map((t) => ({
+      gameTime: t.gameTime,
+      transactionType: t.transactionType,
+      itemName: t.itemName,
+      team: t.team,
+      playerId: t.playerId,
+    })),
+  };
+}
+
 export interface MatchPlayerDetail {
   id: string;
   playerId: string | null;
@@ -26,6 +134,23 @@ export interface MatchPlayerDetail {
   perkSlug: string | null;
   rankLabel: string | null;
   ratingPoints: number | null;
+  physicalDamageDealtToHeroes: number | null;
+  magicalDamageDealtToHeroes: number | null;
+  trueDamageDealtToHeroes: number | null;
+  heroDamageTaken: number | null;
+  totalDamageTaken: number | null;
+  totalHealingDone: number | null;
+  totalDamageDealtToStructures: number | null;
+  totalDamageDealtToObjectives: number | null;
+  largestCriticalStrike: number | null;
+  laneMinionsKilled: number | null;
+  goldSpent: number | null;
+  largestKillingSpree: number | null;
+  multiKill: number | null;
+  physicalDamageDealt: number | null;
+  magicalDamageDealt: number | null;
+  trueDamageDealt: number | null;
+  goldEarnedAtInterval: number[] | null;
 }
 
 export interface MatchDetail {
@@ -37,6 +162,8 @@ export interface MatchDetail {
   region: string | null;
   winningTeam: string | null;
   version: string | null;
+  rosterSynced: boolean;
+  eventStreamSynced: boolean;
   dusk: MatchPlayerDetail[];
   dawn: MatchPlayerDetail[];
 }
@@ -100,7 +227,7 @@ export async function getMatchDetail(matchId: string): Promise<MatchDetail> {
     return {
       id: mp.id,
       playerId: mp.playerId,
-      predggPlayerUuid: mp.predggPlayerUuid,
+      predggPlayerUuid: mp.predggPlayerUuid ?? mp.player?.predggId ?? null,
       playerName: resolvePlayerName(mp.playerName, mp.predggPlayerUuid),
       customName: mp.player?.customName ?? null,
       team: mp.team,
@@ -122,6 +249,23 @@ export async function getMatchDetail(matchId: string): Promise<MatchDetail> {
       perkSlug: mp.perkSlug,
       rankLabel: snap?.rankLabel ?? null,
       ratingPoints: snap?.ratingPoints ?? null,
+      physicalDamageDealtToHeroes: mp.physicalDamageDealtToHeroes,
+      magicalDamageDealtToHeroes: mp.magicalDamageDealtToHeroes,
+      trueDamageDealtToHeroes: mp.trueDamageDealtToHeroes,
+      heroDamageTaken: mp.heroDamageTaken,
+      totalDamageTaken: mp.totalDamageTaken,
+      totalHealingDone: mp.totalHealingDone,
+      totalDamageDealtToStructures: mp.totalDamageDealtToStructures,
+      totalDamageDealtToObjectives: mp.totalDamageDealtToObjectives,
+      largestCriticalStrike: mp.largestCriticalStrike,
+      laneMinionsKilled: mp.laneMinionsKilled,
+      goldSpent: mp.goldSpent,
+      largestKillingSpree: mp.largestKillingSpree,
+      multiKill: mp.multiKill,
+      physicalDamageDealt: mp.physicalDamageDealt,
+      magicalDamageDealt: mp.magicalDamageDealt,
+      trueDamageDealt: mp.trueDamageDealt,
+      goldEarnedAtInterval: Array.isArray(mp.goldEarnedAtInterval) ? (mp.goldEarnedAtInterval as number[]) : null,
     };
   }
 
@@ -138,6 +282,8 @@ export async function getMatchDetail(matchId: string): Promise<MatchDetail> {
     region: match.region,
     winningTeam: match.winningTeam,
     version: match.version?.name ?? null,
+    rosterSynced: match.rosterSynced,
+    eventStreamSynced: match.eventStreamSynced,
     dusk,
     dawn,
   };

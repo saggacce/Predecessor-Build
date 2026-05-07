@@ -90,9 +90,17 @@ model Match {
   winningTeam String?
   versionId   String?
   version     Version? @relation(fields: [versionId], references: [id])
-  syncedAt    DateTime
+  syncedAt           DateTime
+  rosterSynced       Boolean  @default(false)
+  eventStreamSynced  Boolean  @default(false)
 
-  matchPlayers MatchPlayer[]
+  matchPlayers        MatchPlayer[]
+  heroKills           HeroKill[]
+  objectiveKills      ObjectiveKill[]
+  structureDestructions StructureDestruction[]
+  wardEvents          WardEvent[]
+  transactions        Transaction[]
+  heroBans            HeroBan[]
 }
 
 model MatchPlayer {
@@ -118,6 +126,103 @@ model MatchPlayer {
   inventoryItems Json
   perkSlug       String?
   abilityOrder   Json?
+
+  // Gold timeline (event stream — Bearer required)
+  goldEarnedAtInterval         Json?
+
+  // Extended stats (populated on resync via match detail query)
+  physicalDamageDealtToHeroes  Int?
+  magicalDamageDealtToHeroes   Int?
+  trueDamageDealtToHeroes      Int?
+  heroDamageTaken              Int?
+  totalDamageTaken             Int?
+  totalHealingDone             Int?
+  totalDamageDealtToStructures Int?
+  totalDamageDealtToObjectives Int?
+  largestCriticalStrike        Int?
+  laneMinionsKilled            Int?
+  goldSpent                    Int?
+  largestKillingSpree          Int?
+  multiKill                    Int?
+  physicalDamageDealt          Int?
+  magicalDamageDealt           Int?
+  trueDamageDealt              Int?
+}
+
+// ── Event stream models ───────────────────────────────────────────────────────
+
+model HeroKill {
+  id             String  @id @default(cuid())
+  matchId        String
+  match          Match   @relation(fields: [matchId], references: [id])
+  gameTime       Int
+  locationX      Float?
+  locationY      Float?
+  locationZ      Float?
+  killerTeam     String?
+  killedTeam     String?
+  killerHeroSlug String?
+  killedHeroSlug String?
+  killerPlayerId String?
+  killedPlayerId String?
+}
+
+model ObjectiveKill {
+  id           String  @id @default(cuid())
+  matchId      String
+  match        Match   @relation(fields: [matchId], references: [id])
+  gameTime     Int
+  entityType   String
+  killerTeam   String?
+  killerPlayerId String?
+  locationX    Float?
+  locationY    Float?
+  locationZ    Float?
+}
+
+model StructureDestruction {
+  id              String  @id @default(cuid())
+  matchId         String
+  match           Match   @relation(fields: [matchId], references: [id])
+  gameTime        Int
+  structureType   String
+  destructionTeam String?
+  locationX       Float?
+  locationY       Float?
+  locationZ       Float?
+}
+
+model WardEvent {
+  id        String  @id @default(cuid())
+  matchId   String
+  match     Match   @relation(fields: [matchId], references: [id])
+  gameTime  Int
+  eventType String
+  wardType  String
+  locationX Float?
+  locationY Float?
+  locationZ Float?
+  playerId  String?
+  team      String?
+}
+
+model Transaction {
+  id              String  @id @default(cuid())
+  matchId         String
+  match           Match   @relation(fields: [matchId], references: [id])
+  gameTime        Int
+  transactionType String
+  itemName        String?
+  playerId        String?
+  team            String?
+}
+
+model HeroBan {
+  id       String @id @default(cuid())
+  matchId  String
+  match    Match  @relation(fields: [matchId], references: [id])
+  heroSlug String
+  team     String
 }
 
 model SyncLog {
