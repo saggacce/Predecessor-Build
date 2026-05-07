@@ -9,6 +9,7 @@ import {
   addRosterPlayer,
   updateRosterEntry,
   removeRosterPlayer,
+  getTeamAnalysis,
 } from '../services/team-service.js';
 
 export const teamsRouter = Router();
@@ -72,6 +73,15 @@ teamsRouter.get('/:id', async (req, res, next) => {
   try {
     const profile = await getTeamProfile(req.params.id);
     res.json(profile);
+  } catch (err) {
+    next(err);
+  }
+});
+
+teamsRouter.get('/:id/analysis', async (req, res, next) => {
+  try {
+    const analysis = await getTeamAnalysis(req.params.id);
+    res.json(analysis);
   } catch (err) {
     next(err);
   }

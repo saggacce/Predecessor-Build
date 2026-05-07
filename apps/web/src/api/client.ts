@@ -274,6 +274,55 @@ export interface SyncedPlayer {
   lastSynced: Date;
 }
 
+export interface PlayerAnalysisStat {
+  playerId: string;
+  displayName: string;
+  customName: string | null;
+  role: string | null;
+  rankLabel: string | null;
+  ratingPoints: number | null;
+  matches: number;
+  winRate: number;
+  kda: number;
+  avgGPM: number | null;
+  avgDPM: number | null;
+  avgCS: number | null;
+  avgWardsPlaced: number | null;
+  recentWins: number;
+  recentLosses: number;
+  topHeroes: Array<{ slug: string; name: string; matches: number; winRate: number; imageUrl: string | null }>;
+}
+
+export interface TeamMatch {
+  matchId: string;
+  predggUuid: string;
+  startTime: string;
+  duration: number;
+  gameMode: string;
+  teamSide: string;
+  won: boolean | null;
+  playerCount: number;
+}
+
+export interface TeamObjectiveControl {
+  entityType: string;
+  teamCaptures: number;
+  rivalCaptures: number;
+  total: number;
+  controlPct: number;
+}
+
+export interface TeamAnalysis {
+  teamId: string;
+  teamName: string;
+  teamType: string;
+  playerStats: PlayerAnalysisStat[];
+  teamMatches: TeamMatch[];
+  teamWins: number;
+  teamLosses: number;
+  objectiveControl: TeamObjectiveControl[];
+}
+
 export interface AdminSyncVersionsResult {
   synced: number;
   elapsed: number;
@@ -363,6 +412,7 @@ export const apiClient = {
       fetchApi<{ id: string }>(`/teams/${teamId}/roster/${rosterId}`, { method: 'PATCH', body: JSON.stringify({ role }) }),
     removePlayer: (teamId: string, rosterId: string) =>
       fetchApi<{ ok: boolean }>(`/teams/${teamId}/roster/${rosterId}`, { method: 'DELETE' }),
+    getAnalysis: (id: string) => fetchApi<TeamAnalysis>(`/teams/${id}/analysis`),
   },
 
   heroes: {
