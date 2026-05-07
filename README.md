@@ -17,10 +17,12 @@ Private web platform for competitive analysis of the MOBA game [Predecessor](htt
 | Team logo upload (URL or file upload, base64) | ✅ Complete |
 | Custom player names (customName, searchable) | ✅ Complete |
 | Console / PC platform badge (isConsole from pred.gg) | ✅ Complete |
-| **Match detail page — Scoreboard, damage bars, items** | ✅ Complete |
-| Player Scouting — match cards redesign, PC/Console filter | ✅ Complete |
-| Responsive mobile layout (640px breakpoint) | ✅ Complete |
-| Match Statistics tab (data available, DB storage pending) | 🔜 Next |
+| **Match detail — Scoreboard, KP%, GPM, role column, hero tooltips** | ✅ Complete |
+| Player profile — rank icon (pred.gg style), season badges, region flag | ✅ Complete |
+| Recent Matches table — headers, colored badges, role icons | ✅ Complete |
+| Hero metadata API — class, roles, normalized names | ✅ Complete |
+| Local assets — heroes, items, roles, rank icons | ✅ Complete |
+| Match Statistics tab (data available, storage strategy pending) | 🔜 Next |
 | Event stream sync (heatmaps, Fase 2 metrics) | 🔜 Planned |
 | Match Timeline + Analysis tabs | 🔜 Planned |
 | Pre-scrim report (enriched) | 🔜 Planned |
