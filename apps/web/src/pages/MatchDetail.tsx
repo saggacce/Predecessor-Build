@@ -696,7 +696,7 @@ function AnalysisTab({ match, duskWon, dawnWon, onResync, syncing }: {
       {/* ── Kill Heatmap ── */}
       <div>
         <div style={{ fontWeight: 700, fontSize: '0.88rem', color: 'var(--text-primary)', marginBottom: '0.75rem' }}>Match Heatmap</div>
-        <AnalysisHeatmap events={events} />
+        <AnalysisHeatmap events={events} match={match} />
       </div>
 
     </div>
@@ -858,11 +858,21 @@ function GoldDiffChart({ goldDiff, events, match, duskWon }: {
 
 // ── Analysis Heatmap ──────────────────────────────────────────────────────────
 
-type HeatmapLayer = 'kills' | 'wards' | 'objectives';
+type HeatmapLayer = 'kills' | 'wards' | 'objectives' | 'structures' | 'preobj-deaths' | 'prime-conv' | 'teamfights';
 
-function AnalysisHeatmap({ events }: { events: MatchEvents }) {
+function AnalysisHeatmap({ events, match }: { events: MatchEvents; match: MatchDetailData }) {
   const [layer, setLayer] = useState<HeatmapLayer>('kills');
+  const [killRoleFilter, setKillRoleFilter] = useState<string | null>(null);
   const W = 360; const H = 386;
+
+  // Role lookup from match players (HM-014)
+  const playerRoleMap = new Map<string, string>();
+  for (const p of [...match.dusk, ...match.dawn]) {
+    if (p.playerId && p.role) playerRoleMap.set(p.playerId, p.role);
+  }
+  const ROLE_COLORS: Record<string, string> = {
+    carry: '#f0b429', jungle: '#22c55e', midlane: '#a78bfa', offlane: '#f97316', support: '#38bdf8',
+  };
 
   function gameToHeat(x: number, y: number) {
     const px = ((x - MAP_BOUNDS.minX) / (MAP_BOUNDS.maxX - MAP_BOUNDS.minX)) * W;
@@ -874,7 +884,50 @@ function AnalysisHeatmap({ events }: { events: MatchEvents }) {
     { key: 'kills', label: 'Kills' },
     { key: 'wards', label: 'Wards' },
     { key: 'objectives', label: 'Objectives' },
+    { key: 'structures', label: 'Structures' },
+    { key: 'preobj-deaths', label: 'Pre-Obj Deaths' },
+    { key: 'prime-conv', label: 'Prime Conv.' },
+    { key: 'teamfights', label: 'Teamfights' },
   ];
+
+  // Pre-objective deaths: kills within 90s before a major objective (HM-002)
+  const majorObjTimes = events.objectiveKills
+    .filter((o) => ['FANGTOOTH', 'PRIMAL_FANGTOOTH', 'ORB_PRIME', 'MINI_PRIME'].includes(o.entityType))
+    .map((o) => o.gameTime);
+  const preobjDeaths = events.heroKills.filter((k) =>
+    k.locationX != null && k.locationY != null &&
+    majorObjTimes.some((t) => k.gameTime >= t - 90 && k.gameTime < t),
+  );
+
+  // Prime conversion: structures destroyed within 180s of ORB_PRIME (HM-012)
+  const orbPrimes = events.objectiveKills
+    .filter((o) => o.entityType === 'ORB_PRIME')
+    .map((o) => ({ time: o.gameTime, team: o.killerTeam }));
+  const primeConvStructures = events.structureDestructions.filter((sd) =>
+    sd.locationX != null && sd.locationY != null &&
+    orbPrimes.some((op) => sd.gameTime >= op.time && sd.gameTime <= op.time + 180 && sd.destructionTeam === op.team),
+  );
+
+  // Teamfight clusters: groups of 3+ kills within a 20s window (HM-013)
+  const sortedKills = [...events.heroKills].sort((a, b) => a.gameTime - b.gameTime);
+  const teamfightClusters: { cx: number; cy: number; count: number; winner: string | null }[] = [];
+  const usedIdx = new Set<number>();
+  for (let i = 0; i < sortedKills.length; i++) {
+    if (usedIdx.has(i)) continue;
+    const window = sortedKills.reduce<number[]>((acc, k, j) => {
+      if (!usedIdx.has(j) && Math.abs(k.gameTime - sortedKills[i].gameTime) <= 20) acc.push(j);
+      return acc;
+    }, []);
+    if (window.length < 3) continue;
+    const valid = window.filter((j) => sortedKills[j].locationX != null && sortedKills[j].locationY != null);
+    if (valid.length < 3) continue;
+    const cx = valid.reduce((s, j) => s + sortedKills[j].locationX!, 0) / valid.length;
+    const cy = valid.reduce((s, j) => s + sortedKills[j].locationY!, 0) / valid.length;
+    const dusk = valid.filter((j) => sortedKills[j].killedTeam === 'DUSK').length;
+    const dawn = valid.filter((j) => sortedKills[j].killedTeam === 'DAWN').length;
+    teamfightClusters.push({ cx, cy, count: valid.length, winner: dusk > dawn ? 'DAWN' : dawn > dusk ? 'DUSK' : null });
+    window.forEach((j) => usedIdx.add(j));
+  }
 
   return (
     <div className="glass-card" style={{ padding: '0.75rem 1rem' }}>
@@ -886,9 +939,21 @@ function AnalysisHeatmap({ events }: { events: MatchEvents }) {
           </button>
         ))}
         <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)', alignSelf: 'center', marginLeft: '0.25rem', fontFamily: 'var(--font-mono)' }}>
-          {layer === 'kills' ? `${events.heroKills.length} kills` : layer === 'wards' ? `${events.wardEvents.length} ward events` : `${events.objectiveKills.length} objectives`}
+          {layer === 'kills' ? `${events.heroKills.length} kills` : layer === 'wards' ? `${events.wardEvents.length} ward events` : layer === 'structures' ? `${events.structureDestructions.length} structures` : layer === 'preobj-deaths' ? `${preobjDeaths.length} deaths before objective` : layer === 'prime-conv' ? `${primeConvStructures.length} structures after Prime` : layer === 'teamfights' ? `${teamfightClusters.length} teamfights` : `${events.objectiveKills.length} objectives`}
         </span>
       </div>
+
+      {/* Role filter for kills layer (HM-014) */}
+      {layer === 'kills' && (
+        <div style={{ display: 'flex', gap: '0.3rem', marginBottom: '0.5rem', flexWrap: 'wrap' }}>
+          <span style={{ fontSize: '0.62rem', color: 'var(--text-muted)', alignSelf: 'center' }}>Color by role:</span>
+          {[null, 'carry', 'jungle', 'midlane', 'offlane', 'support'].map((r) => (
+            <button key={r ?? 'team'} onClick={() => setKillRoleFilter(r)} style={{ fontSize: '0.62rem', fontWeight: 600, padding: '0.12rem 0.45rem', borderRadius: '3px', cursor: 'pointer', border: `1px solid ${killRoleFilter === r ? (r ? ROLE_COLORS[r] : 'var(--accent-blue)') : 'var(--border-color)'}`, background: killRoleFilter === r ? `${r ? ROLE_COLORS[r] : 'var(--accent-blue)'}22` : 'transparent', color: killRoleFilter === r ? (r ? ROLE_COLORS[r] : 'var(--accent-blue)') : 'var(--text-muted)' }}>
+              {r ?? 'Team'}
+            </button>
+          ))}
+        </div>
+      )}
 
       {/* Map */}
       <div style={{ position: 'relative', width: W, height: H }}>
@@ -897,8 +962,35 @@ function AnalysisHeatmap({ events }: { events: MatchEvents }) {
           {layer === 'kills' && events.heroKills.map((k, i) => {
             if (k.locationX == null || k.locationY == null) return null;
             const { px, py } = gameToHeat(k.locationX, k.locationY);
-            const color = k.killedTeam === 'DUSK' ? '#f87171' : '#38d4c8';
+            let color = k.killedTeam === 'DUSK' ? '#f87171' : '#38d4c8';
+            if (killRoleFilter && k.killedPlayerId) {
+              const role = playerRoleMap.get(k.killedPlayerId);
+              if (role !== killRoleFilter) return null;
+              color = ROLE_COLORS[role] ?? color;
+            }
             return <circle key={i} cx={px} cy={py} r={4} fill={color} opacity={0.75} stroke="#000" strokeWidth={0.5} />;
+          })}
+          {layer === 'preobj-deaths' && preobjDeaths.map((k, i) => {
+            const { px, py } = gameToHeat(k.locationX!, k.locationY!);
+            const color = k.killedTeam === 'DUSK' ? '#f87171' : '#38d4c8';
+            return <circle key={i} cx={px} cy={py} r={5} fill={color} opacity={0.8} stroke="#f0b429" strokeWidth={1} />;
+          })}
+          {layer === 'prime-conv' && primeConvStructures.map((s, i) => {
+            if (s.locationX == null || s.locationY == null) return null;
+            const { px, py } = gameToHeat(s.locationX, s.locationY);
+            return <rect key={i} x={px - 6} y={py - 6} width={12} height={12} fill="#7c3aed" opacity={0.85} stroke="#a78bfa" strokeWidth={1} rx={2} />;
+          })}
+          {layer === 'teamfights' && teamfightClusters.map((tf, i) => {
+            const { px, py } = gameToHeat(tf.cx, tf.cy);
+            const r = 8 + Math.min(tf.count * 1.5, 12);
+            const color = tf.winner === 'DUSK' ? '#38d4c8' : tf.winner === 'DAWN' ? '#f87171' : '#f0b429';
+            return (
+              <g key={i}>
+                <circle cx={px} cy={py} r={r} fill={color} opacity={0.25} />
+                <circle cx={px} cy={py} r={4} fill={color} opacity={0.9} stroke="#000" strokeWidth={0.5} />
+                <text x={px} y={py + 14} textAnchor="middle" fontSize={8} fill={color} opacity={0.9}>{tf.count}</text>
+              </g>
+            );
           })}
           {layer === 'wards' && events.wardEvents.map((w, i) => {
             if (w.locationX == null || w.locationY == null) return null;
@@ -913,6 +1005,12 @@ function AnalysisHeatmap({ events }: { events: MatchEvents }) {
             const meta = OBJECTIVE_META[o.entityType] ?? { color: '#64748b' };
             return <circle key={i} cx={px} cy={py} r={6} fill={meta.color} opacity={0.85} stroke="#000" strokeWidth={1} />;
           })}
+          {layer === 'structures' && events.structureDestructions.map((s, i) => {
+            if (s.locationX == null || s.locationY == null) return null;
+            const { px, py } = gameToHeat(s.locationX, s.locationY);
+            const color = s.destructionTeam === 'DUSK' ? 'var(--accent-teal-bright)' : s.destructionTeam === 'DAWN' ? '#f87171' : '#94a3b8';
+            return <rect key={i} x={px - 5} y={py - 5} width={10} height={10} fill={color} opacity={0.85} stroke="#000" strokeWidth={0.5} rx={2} />;
+          })}
         </svg>
       </div>
 
@@ -921,6 +1019,11 @@ function AnalysisHeatmap({ events }: { events: MatchEvents }) {
         {layer === 'kills' && <><span style={{ color: '#f87171' }}>● DUSK died</span><span style={{ color: '#38d4c8' }}>● DAWN died</span></>}
         {layer === 'wards' && <><span style={{ color: '#38d4c8' }}>● DUSK placed</span><span style={{ color: '#f87171' }}>● DAWN placed</span><span style={{ color: '#f97316' }}>● Destroyed</span></>}
         {layer === 'objectives' && OBJ_GROUPS.map((g) => <span key={g.key} style={{ color: g.color }}>● {g.label}</span>)}
+        {layer === 'structures' && <><span style={{ color: 'var(--accent-teal-bright)' }}>■ DUSK destroyed</span><span style={{ color: '#f87171' }}>■ DAWN destroyed</span></>}
+        {layer === 'preobj-deaths' && <><span style={{ color: '#f87171' }}>● DUSK died</span><span style={{ color: '#38d4c8' }}>● DAWN died</span><span style={{ color: '#f0b429' }}>(within 90s of major obj)</span></>}
+        {layer === 'prime-conv' && <span style={{ color: '#a78bfa' }}>■ Structures destroyed within 3 min of Orb Prime</span>}
+        {layer === 'teamfights' && <><span style={{ color: '#38d4c8' }}>● DUSK won</span><span style={{ color: '#f87171' }}>● DAWN won</span><span style={{ color: '#f0b429' }}>● Even — number = kills in fight</span></>}
+        {layer === 'kills' && killRoleFilter && <span style={{ color: ROLE_COLORS[killRoleFilter] }}>● Deaths of {killRoleFilter} players</span>}
       </div>
     </div>
   );
@@ -1533,6 +1636,7 @@ function StatisticsTab({ match, duskWon, dawnWon, onResync, syncing }: {
   const maxHeroDmg = Math.max(...allPlayers.map((p) => p.heroDamage ?? 0), 1);
   const maxDmgTaken = Math.max(...allPlayers.map((p) => p.heroDamageTaken ?? 0), 1);
   const maxCS = Math.max(...allPlayers.map((p) => p.laneMinionsKilled ?? 0), 1);
+  const matchMinutes = Math.max(match.duration / 60, 1);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
@@ -1544,8 +1648,8 @@ function StatisticsTab({ match, duskWon, dawnWon, onResync, syncing }: {
               <span style={{ flex: '0 0 200px' }}>Player</span>
               <span style={{ flex: '1 1 160px' }}>Hero DMG breakdown</span>
               <span style={{ flex: '0 0 88px', textAlign: 'right' }}>Total DMG</span>
-              <span style={{ flex: '0 0 76px', textAlign: 'right' }}>Structures</span>
-              <span style={{ flex: '0 0 76px', textAlign: 'right' }}>Objectives</span>
+              <span style={{ flex: '0 0 76px', textAlign: 'right' }}>Struct /m</span>
+              <span style={{ flex: '0 0 76px', textAlign: 'right' }}>Obj /m</span>
             </div>
             {players.map((p) => {
               const phys = p.physicalDamageDealtToHeroes ?? 0;
@@ -1571,8 +1675,12 @@ function StatisticsTab({ match, duskWon, dawnWon, onResync, syncing }: {
                     </div>
                   </div>
                   <StatNum value={p.totalDamage} style={{ flex: '0 0 88px' }} />
-                  <StatNum value={p.totalDamageDealtToStructures} style={{ flex: '0 0 76px' }} />
-                  <StatNum value={p.totalDamageDealtToObjectives} style={{ flex: '0 0 76px' }} />
+                  <div style={{ flex: '0 0 76px', textAlign: 'right', fontFamily: 'var(--font-mono)', fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
+                    {p.totalDamageDealtToStructures !== null ? `${(p.totalDamageDealtToStructures / matchMinutes / 1000).toFixed(1)}k` : '—'}
+                  </div>
+                  <div style={{ flex: '0 0 76px', textAlign: 'right', fontFamily: 'var(--font-mono)', fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
+                    {p.totalDamageDealtToObjectives !== null ? `${(p.totalDamageDealtToObjectives / matchMinutes / 1000).toFixed(1)}k` : '—'}
+                  </div>
                 </div>
               );
             })}
@@ -1581,20 +1689,21 @@ function StatisticsTab({ match, duskWon, dawnWon, onResync, syncing }: {
       </StatSection>
 
       {/* Section 2 — Survivability */}
-      <StatSection title="Survivability" description="Damage received from heroes, total damage taken, and healing done">
+      <StatSection title="Survivability" description="Damage received from heroes, taken per minute, and healing per minute">
         {teams.map(({ key, label, players, won }) => (
           <StatTeamBlock key={key} teamKey={key} label={label} won={won}>
             <div style={statHeaderRowStyle}>
               <span style={{ flex: '0 0 200px' }}>Player</span>
-              <span style={{ flex: '1 1 140px' }}>Hero DMG taken</span>
-              <span style={{ flex: '0 0 88px', textAlign: 'right' }}>Total taken</span>
-              <span style={{ flex: '0 0 88px', textAlign: 'right' }}>Healing</span>
+              <span style={{ flex: '1 1 120px' }}>Hero DMG taken</span>
+              <span style={{ flex: '0 0 76px', textAlign: 'right' }}>Taken /m</span>
+              <span style={{ flex: '0 0 80px', textAlign: 'right' }}>Total taken</span>
+              <span style={{ flex: '0 0 72px', textAlign: 'right' }}>Heal /m</span>
               <span style={{ flex: '0 0 76px', textAlign: 'right' }}>Largest crit</span>
             </div>
             {players.map((p) => (
               <div key={p.id} style={statRowStyle}>
                 <StatPlayerCell player={p} teamColor={key === 'dusk' ? 'var(--accent-teal-bright)' : 'var(--accent-loss)'} />
-                <div style={{ flex: '1 1 140px', minWidth: 0 }}>
+                <div style={{ flex: '1 1 120px', minWidth: 0 }}>
                   <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.72rem', marginBottom: '0.25rem', color: 'var(--text-secondary)' }}>
                     {p.heroDamageTaken !== null ? p.heroDamageTaken.toLocaleString() : '—'}
                   </div>
@@ -1607,8 +1716,13 @@ function StatisticsTab({ match, duskWon, dawnWon, onResync, syncing }: {
                     }} />
                   </div>
                 </div>
-                <StatNum value={p.totalDamageTaken} style={{ flex: '0 0 88px' }} />
-                <StatNum value={p.totalHealingDone} color="var(--accent-win)" style={{ flex: '0 0 88px' }} />
+                <div style={{ flex: '0 0 76px', textAlign: 'right', fontFamily: 'var(--font-mono)', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                  {p.heroDamageTaken !== null ? Math.round(p.heroDamageTaken / matchMinutes).toLocaleString() : '—'}
+                </div>
+                <StatNum value={p.totalDamageTaken} style={{ flex: '0 0 80px' }} />
+                <div style={{ flex: '0 0 72px', textAlign: 'right', fontFamily: 'var(--font-mono)', fontSize: '0.75rem', color: 'var(--accent-win)' }}>
+                  {p.totalHealingDone !== null ? Math.round(p.totalHealingDone / matchMinutes).toLocaleString() : '—'}
+                </div>
                 <StatNum value={p.largestCriticalStrike} style={{ flex: '0 0 76px' }} />
               </div>
             ))}
@@ -1617,7 +1731,7 @@ function StatisticsTab({ match, duskWon, dawnWon, onResync, syncing }: {
       </StatSection>
 
       {/* Section 3 — Farm & Highlights */}
-      <StatSection title="Farm & Highlights" description="Creep score, gold efficiency, and multi-kill performance">
+      <StatSection title="Farm & Highlights" description="Creep score, gold efficiency, ward activity per minute, and multi-kill performance">
         {teams.map(({ key, label, players, won }) => (
           <StatTeamBlock key={key} teamKey={key} label={label} won={won}>
             <div style={statHeaderRowStyle}>
@@ -1626,6 +1740,7 @@ function StatisticsTab({ match, duskWon, dawnWon, onResync, syncing }: {
               <span style={{ flex: '0 0 80px', textAlign: 'right' }}>Gold spent</span>
               <span style={{ flex: '0 0 76px', textAlign: 'right' }}>Kill spree</span>
               <span style={{ flex: '0 0 72px', textAlign: 'right' }}>Multi-kill</span>
+              <span style={{ flex: '0 0 84px', textAlign: 'right' }}>Wards P/D /m</span>
             </div>
             {players.map((p) => (
               <div key={p.id} style={statRowStyle}>
@@ -1648,10 +1763,59 @@ function StatisticsTab({ match, duskWon, dawnWon, onResync, syncing }: {
                 </div>
                 <StatNum value={p.largestKillingSpree} style={{ flex: '0 0 76px' }} />
                 <StatNum value={p.multiKill} color="var(--accent-violet)" style={{ flex: '0 0 72px' }} />
+                <div style={{ flex: '0 0 84px', textAlign: 'right', fontFamily: 'var(--font-mono)', fontSize: '0.72rem' }}>
+                  {p.wardsPlaced !== null ? (
+                    <>
+                      <span style={{ color: 'var(--accent-blue)' }}>{(p.wardsPlaced / matchMinutes).toFixed(1)}</span>
+                      <span style={{ color: 'var(--text-muted)' }}>/</span>
+                      <span style={{ color: 'var(--accent-loss)', opacity: 0.85 }}>{p.wardsDestroyed !== null ? (p.wardsDestroyed / matchMinutes).toFixed(1) : '—'}</span>
+                    </>
+                  ) : '—'}
+                </div>
               </div>
             ))}
           </StatTeamBlock>
         ))}
+      </StatSection>
+      {/* Section 4 — Participation */}
+      <StatSection title="Participation" description="Kill share, death share, and damage share within the team">
+        {teams.map(({ key, label, players, won }) => {
+          const teamKills = Math.max(players.reduce((s, p) => s + p.kills, 0), 1);
+          const teamDeaths = Math.max(players.reduce((s, p) => s + p.deaths, 0), 1);
+          const teamHeroDmg = Math.max(players.reduce((s, p) => s + (p.heroDamage ?? 0), 0), 1);
+          return (
+            <StatTeamBlock key={key} teamKey={key} label={label} won={won}>
+              <div style={statHeaderRowStyle}>
+                <span style={{ flex: '0 0 200px' }}>Player</span>
+                <span style={{ flex: '1 1 100px' }}>Kill Share %</span>
+                <span style={{ flex: '0 0 88px', textAlign: 'right' }}>Death Share %</span>
+                <span style={{ flex: '0 0 88px', textAlign: 'right' }}>Dmg Share %</span>
+              </div>
+              {players.map((p) => {
+                const ks = Math.round((p.kills / teamKills) * 100);
+                const ds = Math.round((p.deaths / teamDeaths) * 100);
+                const dms = p.heroDamage !== null ? Math.round((p.heroDamage / teamHeroDmg) * 100) : null;
+                return (
+                  <div key={p.id} style={statRowStyle}>
+                    <StatPlayerCell player={p} teamColor={key === 'dusk' ? 'var(--accent-teal-bright)' : 'var(--accent-loss)'} />
+                    <div style={{ flex: '1 1 100px', minWidth: 0 }}>
+                      <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.72rem', marginBottom: '0.25rem', color: 'var(--accent-win)' }}>{ks}%</div>
+                      <div style={{ height: 4, borderRadius: 999, background: 'rgba(255,255,255,0.06)', overflow: 'hidden' }}>
+                        <div style={{ width: `${ks}%`, height: '100%', background: 'var(--accent-win)', borderRadius: 999 }} />
+                      </div>
+                    </div>
+                    <div style={{ flex: '0 0 88px', textAlign: 'right', fontFamily: 'var(--font-mono)', fontSize: '0.75rem', color: ds > 30 ? 'var(--accent-loss)' : 'var(--text-muted)' }}>
+                      {ds}%
+                    </div>
+                    <div style={{ flex: '0 0 88px', textAlign: 'right', fontFamily: 'var(--font-mono)', fontSize: '0.75rem', color: 'var(--accent-prime)' }}>
+                      {dms !== null ? `${dms}%` : '—'}
+                    </div>
+                  </div>
+                );
+              })}
+            </StatTeamBlock>
+          );
+        })}
       </StatSection>
     </div>
   );

@@ -477,9 +477,6 @@ async function persistRecentMatches(
   matches: PredggMatchStat[],
   syncedAt: Date,
 ): Promise<void> {
-  // Delete existing records for this player so new fields (CS, wards, etc.) are always fresh
-  await db.matchPlayer.deleteMany({ where: { playerId } });
-
   // Cache version IDs to avoid one DB round-trip per match for the same patch
   const versionCache = new Map<string, string>();
 
@@ -564,6 +561,7 @@ async function persistRecentMatches(
       });
     } catch (err: unknown) {
       if ((err as { code?: string }).code !== 'P2002') throw err;
+      // P2002 = unique constraint — match already synced for this player, skip
     }
   }));
 }

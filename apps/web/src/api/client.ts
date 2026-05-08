@@ -290,6 +290,7 @@ export interface PlayerAnalysisStat {
   avgWardsPlaced: number | null;
   recentWins: number;
   recentLosses: number;
+  earlyDeathRate: number | null;
   topHeroes: Array<{ slug: string; name: string; matches: number; winRate: number; imageUrl: string | null }>;
 }
 
@@ -302,6 +303,8 @@ export interface TeamMatch {
   teamSide: string;
   won: boolean | null;
   playerCount: number;
+  version: string | null;
+  firstTowerWon: boolean | null;
 }
 
 export interface TeamObjectiveControl {
@@ -310,6 +313,16 @@ export interface TeamObjectiveControl {
   rivalCaptures: number;
   total: number;
   controlPct: number;
+  avgGameTimeSecs: number | null;
+}
+
+export interface RivalHeroStat {
+  playerId: string;
+  heroSlug: string;
+  games: number;
+  wins: number;
+  winRate: number;
+  avgKda: number;
 }
 
 export interface TeamAnalysis {
@@ -321,6 +334,9 @@ export interface TeamAnalysis {
   teamWins: number;
   teamLosses: number;
   objectiveControl: TeamObjectiveControl[];
+  rivalHeroPool: RivalHeroStat[];
+  primeConversionRate: number | null;
+  fangtoolhConversionRate: number | null;
 }
 
 export interface AdminSyncVersionsResult {
@@ -413,6 +429,10 @@ export const apiClient = {
     removePlayer: (teamId: string, rosterId: string) =>
       fetchApi<{ ok: boolean }>(`/teams/${teamId}/roster/${rosterId}`, { method: 'DELETE' }),
     getAnalysis: (id: string) => fetchApi<TeamAnalysis>(`/teams/${id}/analysis`),
+    syncMatches: (id: string, limit = 10) =>
+      fetchApi<{ synced: number; errors: number; remaining: number }>(`/teams/${id}/sync-matches`, {
+        method: 'POST', body: JSON.stringify({ limit }),
+      }),
   },
 
   heroes: {

@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { useNavigate, useLocation } from 'react-router';
 import { HeroAvatarWithTooltip } from '../components/HeroAvatar';
 import { RankIcon, getRankColor } from '../components/RankIcon';
@@ -600,6 +601,12 @@ function PlayerProfilePanel({
           )}
         </section>
 
+        {profile.recentMatches.length >= 5 && (
+          <section>
+            <EvolutionSection matches={profile.recentMatches} />
+          </section>
+        )}
+
         <section>
           <MatchesSection
             matches={profile.recentMatches}
@@ -619,6 +626,231 @@ function SummaryMetric({ label, value, highlight }: { label: string; value: stri
       <div style={{ color: 'var(--text-dim)', fontSize: '0.67rem', fontWeight: 700, marginBottom: '0.3rem', textTransform: 'uppercase', letterSpacing: '0.07em' }}>{label}</div>
       <div style={{ fontFamily: 'var(--font-mono)', color: highlight ? 'var(--accent-prime)' : 'var(--text-primary)', fontWeight: 500, fontSize: '1.1rem', letterSpacing: '-0.01em' }}>{value}</div>
     </div>
+  );
+}
+
+// ── Evolution Section ─────────────────────────────────────────────────────────
+
+type RecentMatch = PlayerProfile['recentMatches'][number];
+
+function calcKda(m: RecentMatch) {
+  return m.deaths > 0 ? (m.kills + m.assists) / m.deaths : m.kills + m.assists > 0 ? (m.kills + m.assists) : 0;
+}
+function calcGpm(m: RecentMatch) {
+  return m.duration > 0 && m.gold !== null ? m.gold / (m.duration / 60) : null;
+}
+function calcDpm(m: RecentMatch) {
+  return m.duration > 0 && m.heroDamage !== null ? m.heroDamage / (m.duration / 60) : null;
+}
+
+function avg(arr: number[]): number {
+  return arr.length ? arr.reduce((s, v) => s + v, 0) / arr.length : 0;
+}
+
+function TrendChart({ values, color, label, format }: {
+  values: number[]; color: string; label: string; format: (v: number) => string;
+}) {
+  const [tip, setTip] = useState<{ x: number; y: number; label: string } | null>(null);
+  const W = 320; const H = 72; const PAD = { t: 8, b: 16, l: 8, r: 8 };
+  const iW = W - PAD.l - PAD.r;
+  const iH = H - PAD.t - PAD.b;
+  const n = values.length;
+  if (n < 2) return null;
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const range = max - min || 1;
+  const xS = (i: number) => PAD.l + (i / (n - 1)) * iW;
+  const yS = (v: number) => PAD.t + iH - ((v - min) / range) * iH;
+  const pts = values.map((v, i) => `${xS(i).toFixed(1)},${yS(v).toFixed(1)}`).join(' ');
+  const area = `${xS(0)},${PAD.t + iH} ` + values.map((v, i) => `${xS(i).toFixed(1)},${yS(v).toFixed(1)}`).join(' ') + ` ${xS(n - 1)},${PAD.t + iH}`;
+  // Moving average (window 5)
+  const ma = values.map((_, i) => {
+    const slice = values.slice(Math.max(0, i - 2), i + 3);
+    return slice.reduce((s, v) => s + v, 0) / slice.length;
+  });
+  const maPts = ma.map((v, i) => `${xS(i).toFixed(1)},${yS(v).toFixed(1)}`).join(' ');
+
+  return (
+    <div style={{ position: 'relative' }}>
+      <div style={{ fontSize: '0.65rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: '0.2rem' }}>{label}</div>
+      <svg width={W} height={H} style={{ display: 'block', width: '100%', height: H }}>
+        <polygon points={area} fill={`${color}18`} />
+        <polyline points={pts} fill="none" stroke={`${color}55`} strokeWidth={1} />
+        <polyline points={maPts} fill="none" stroke={color} strokeWidth={2} />
+        {values.map((v, i) => (
+          <circle key={i} cx={xS(i)} cy={yS(v)} r={4} fill={color} opacity={0}
+            style={{ cursor: 'pointer' }}
+            onMouseEnter={(e) => setTip({ x: e.clientX, y: e.clientY, label: format(v) })}
+            onMouseLeave={() => setTip(null)}
+          />
+        ))}
+        {/* Invisible wider hit area */}
+        {values.map((v, i) => (
+          <circle key={`h${i}`} cx={xS(i)} cy={yS(v)} r={8} fill="transparent"
+            style={{ cursor: 'pointer' }}
+            onMouseEnter={(e) => setTip({ x: e.clientX, y: e.clientY, label: `${label}: ${format(v)}` })}
+            onMouseLeave={() => setTip(null)}
+          />
+        ))}
+        {/* Min/max labels */}
+        <text x={PAD.l} y={H - 2} fontSize={8} fill="rgba(255,255,255,0.3)" fontFamily="monospace">{format(min)}</text>
+        <text x={W - PAD.r} y={H - 2} fontSize={8} fill="rgba(255,255,255,0.3)" fontFamily="monospace" textAnchor="end">{format(max)}</text>
+      </svg>
+      {tip && createPortal(
+        <div style={{ position: 'fixed', left: tip.x, top: tip.y - 10, transform: 'translate(-50%, -100%)', zIndex: 9999, background: '#0d1117', border: '1px solid var(--border-color)', borderRadius: '6px', padding: '0.3rem 0.6rem', fontSize: '0.72rem', fontFamily: 'var(--font-mono)', color: 'var(--text-primary)', whiteSpace: 'nowrap', boxShadow: '0 4px 16px rgba(0,0,0,0.7)', pointerEvents: 'none' }}>
+          {tip.label}
+        </div>,
+        document.body
+      )}
+    </div>
+  );
+}
+
+function DeltaBadge({ current, previous, format, label }: { current: number; previous: number; format: (v: number) => string; label: string }) {
+  const delta = current - previous;
+  const pct = previous > 0 ? ((delta / previous) * 100).toFixed(1) : null;
+  const positive = delta > 0;
+  const color = positive ? 'var(--accent-win)' : delta < 0 ? 'var(--accent-loss)' : 'var(--text-muted)';
+  return (
+    <div style={{ flex: '1 1 100px', padding: '0.6rem 0.75rem', border: '1px solid var(--border-color)', borderRadius: '6px', background: 'rgba(255,255,255,0.02)' }}>
+      <div style={{ fontSize: '0.6rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: '0.3rem' }}>{label}</div>
+      <div style={{ fontFamily: 'var(--font-mono)', fontSize: '1rem', fontWeight: 700, color }}>{format(current)}</div>
+      {delta !== 0 && (
+        <div style={{ fontSize: '0.62rem', color, marginTop: '0.15rem' }}>
+          {positive ? '▲' : '▼'} {format(Math.abs(delta))}{pct ? ` (${pct}%)` : ''}
+        </div>
+      )}
+      {delta === 0 && <div style={{ fontSize: '0.62rem', color: 'var(--text-muted)', marginTop: '0.15rem' }}>→ stable</div>}
+    </div>
+  );
+}
+
+function EvolutionSection({ matches }: { matches: RecentMatch[] }) {
+  const [modeFilter, setModeFilter] = useState<string>('ALL');
+  const modes = ['ALL', ...Array.from(new Set(matches.map((m) => m.gameMode))).sort()];
+  const filtered = modeFilter === 'ALL' ? matches : matches.filter((m) => m.gameMode === modeFilter);
+  const last20 = filtered.slice(0, 20).reverse(); // oldest first for charts
+  const last10 = filtered.slice(0, 10);
+  const prev10 = filtered.slice(10, 20);
+
+  if (last20.length < 3) return null;
+
+  // Chart data (oldest → newest)
+  const kdaValues = last20.map(calcKda);
+  const gpmValues = last20.map(calcGpm).filter((v): v is number => v !== null);
+  const dpmValues = last20.map(calcDpm).filter((v): v is number => v !== null);
+
+  // Delta metrics: last 10 vs prev 10
+  const avgKdaLast = avg(last10.map(calcKda));
+  const avgKdaPrev = avg(prev10.map(calcKda));
+  const avgGpmLast = avg(last10.map(calcGpm).filter((v): v is number => v !== null));
+  const avgGpmPrev = avg(prev10.map(calcGpm).filter((v): v is number => v !== null));
+  const wrLast = last10.filter((m) => m.result === 'win').length / Math.max(last10.length, 1) * 100;
+  const wrPrev = prev10.filter((m) => m.result === 'win').length / Math.max(prev10.length, 1) * 100;
+
+  // Hero frequency (last 20)
+  const heroCount = new Map<string, { slug: string; name: string | null; imageUrl: string | null; games: number; wins: number }>();
+  for (const m of filtered.slice(0, 20)) {
+    const e = heroCount.get(m.heroSlug) ?? { slug: m.heroSlug, name: m.heroName, imageUrl: m.heroImageUrl, games: 0, wins: 0 };
+    e.games++;
+    if (m.result === 'win') e.wins++;
+    heroCount.set(m.heroSlug, e);
+  }
+  const recentHeroes = Array.from(heroCount.values()).sort((a, b) => b.games - a.games).slice(0, 8);
+
+  // Streak
+  let streak = 0;
+  const streakType = filtered[0]?.result;
+  for (const m of filtered) {
+    if (m.result === streakType && m.result !== 'unknown') streak++;
+    else break;
+  }
+
+  return (
+    <>
+      <SectionTitle icon={<Activity size={18} />} title="Performance Evolution" />
+
+      {/* Mode filter + streak */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem', flexWrap: 'wrap' }}>
+        {modes.map((mode) => (
+          <button key={mode} onClick={() => setModeFilter(mode)} style={{ fontSize: '0.68rem', fontWeight: 700, padding: '0.15rem 0.5rem', borderRadius: '999px', cursor: 'pointer', border: `1px solid ${modeFilter === mode ? 'var(--accent-violet)' : 'var(--border-color)'}`, background: modeFilter === mode ? 'rgba(167,139,250,0.12)' : 'transparent', color: modeFilter === mode ? 'var(--accent-violet)' : 'var(--text-muted)', fontFamily: 'var(--font-mono)', transition: 'all 0.15s' }}>
+            {mode === 'ALL' ? 'All' : gameModeLabel(mode)}
+          </button>
+        ))}
+        {streak >= 3 && (
+          <span style={{ marginLeft: 'auto', fontSize: '0.72rem', fontWeight: 700, fontFamily: 'var(--font-mono)', color: streakType === 'win' ? 'var(--accent-win)' : 'var(--accent-loss)', background: streakType === 'win' ? 'rgba(74,222,128,0.1)' : 'rgba(248,113,113,0.1)', border: `1px solid ${streakType === 'win' ? 'rgba(74,222,128,0.3)' : 'rgba(248,113,113,0.3)'}`, borderRadius: '4px', padding: '0.15rem 0.5rem' }}>
+            {streak} {streakType === 'win' ? 'W' : 'L'} streak
+          </span>
+        )}
+      </div>
+
+      {/* W/L form strip */}
+      <div style={{ display: 'flex', gap: '3px', marginBottom: '1.25rem', flexWrap: 'wrap' }}>
+        {filtered.slice(0, 20).map((m, i) => {
+          const isWin = m.result === 'win';
+          const isLoss = m.result === 'loss';
+          return (
+            <div key={i} title={`${m.heroName ?? m.heroSlug} · ${isWin ? 'WIN' : isLoss ? 'LOSS' : '?'}`} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px' }}>
+              <div style={{ width: 26, height: 26, borderRadius: 5, overflow: 'hidden', border: `2px solid ${isWin ? 'var(--accent-win)' : isLoss ? 'var(--accent-loss)' : 'var(--border-color)'}`, background: 'var(--bg-dark)', opacity: i === 0 ? 1 : 1 - i * 0.02 }}>
+                <img src={m.heroImageUrl ?? `/heroes/${m.heroSlug}.webp`} alt={m.heroSlug} style={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+              </div>
+              <div style={{ width: 6, height: 6, borderRadius: '50%', background: isWin ? 'var(--accent-win)' : isLoss ? 'var(--accent-loss)' : 'var(--border-color)' }} />
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Trend charts */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1.25rem', marginBottom: '1.25rem' }}>
+        <div className="glass-card" style={{ padding: '0.85rem 1rem' }}>
+          <TrendChart values={kdaValues} color="var(--accent-teal-bright)" label="KDA" format={(v) => v.toFixed(2)} />
+        </div>
+        {gpmValues.length >= 3 && (
+          <div className="glass-card" style={{ padding: '0.85rem 1rem' }}>
+            <TrendChart values={gpmValues} color="var(--accent-prime)" label="GPM" format={(v) => Math.round(v).toString()} />
+          </div>
+        )}
+        {dpmValues.length >= 3 && (
+          <div className="glass-card" style={{ padding: '0.85rem 1rem' }}>
+            <TrendChart values={dpmValues} color="var(--accent-blue)" label="DPM" format={(v) => Math.round(v).toString()} />
+          </div>
+        )}
+      </div>
+
+      {/* Last 10 vs Prev 10 */}
+      {prev10.length >= 5 && (
+        <div style={{ marginBottom: '1.25rem' }}>
+          <div style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: '0.6rem' }}>Last 10 vs Previous 10</div>
+          <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+            <DeltaBadge label="Win Rate" current={wrLast} previous={wrPrev} format={(v) => `${v.toFixed(0)}%`} />
+            <DeltaBadge label="KDA" current={avgKdaLast} previous={avgKdaPrev} format={(v) => v.toFixed(2)} />
+            {avgGpmPrev > 0 && <DeltaBadge label="GPM" current={avgGpmLast} previous={avgGpmPrev} format={(v) => Math.round(v).toString()} />}
+          </div>
+        </div>
+      )}
+
+      {/* Recent hero pool */}
+      {recentHeroes.length > 0 && (
+        <div>
+          <div style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: '0.6rem' }}>Recent Hero Pool (last 20)</div>
+          <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+            {recentHeroes.map((h) => {
+              const wr = h.games > 0 ? Math.round((h.wins / h.games) * 100) : 0;
+              const wrColor = wr >= 55 ? 'var(--accent-win)' : wr < 45 ? 'var(--accent-loss)' : 'var(--text-muted)';
+              return (
+                <div key={h.slug} title={`${h.name ?? h.slug} — ${h.games} games, ${wr}% WR`} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.25rem' }}>
+                  <div style={{ width: 36, height: 36, borderRadius: 7, overflow: 'hidden', border: `2px solid ${wrColor}55`, background: 'var(--bg-dark)', position: 'relative' }}>
+                    <img src={h.imageUrl ?? `/heroes/${h.slug}.webp`} alt={h.name ?? h.slug} style={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                    <div style={{ position: 'absolute', bottom: 0, right: 0, background: 'rgba(0,0,0,0.75)', fontSize: '0.5rem', fontFamily: 'var(--font-mono)', fontWeight: 700, color: wrColor, padding: '0 2px', lineHeight: 1.4 }}>{h.games}</div>
+                  </div>
+                  <div style={{ fontSize: '0.6rem', fontFamily: 'var(--font-mono)', color: wrColor, fontWeight: 700 }}>{wr}%</div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </>
   );
 }
 
@@ -771,7 +1003,7 @@ function MatchesSection({
             background: 'rgba(255,255,255,0.015)',
           }}>
             <span style={{ paddingLeft: '0.75rem' }}>Hero</span>
-            {['Date','Type','Role','Result','K / D / A','GPM','DPM','CS','Wards P/D','Time'].map((h) => (
+            {['Date','Type','Role','Result','K / D / A','GPM','DPM','CS','Wards /m','Time'].map((h) => (
               <span key={h} style={{ display: 'flex', justifyContent: 'center', alignItems: 'center' }}>{h}</span>
             ))}
             <span />
@@ -925,13 +1157,13 @@ function MatchRow({
         {match.laneMinionsKilled ?? '—'}
       </div>
 
-      {/* Wards P/D */}
+      {/* Wards /m */}
       <div style={{ display: 'flex', justifyContent: 'center', fontFamily: 'var(--font-mono)', fontSize: '0.85rem', gap: '0.15rem' }}>
-        {match.wardsPlaced !== null || match.wardsDestroyed !== null ? (
+        {match.wardsPlaced !== null && minutes > 0 ? (
           <>
-            <span style={{ color: 'var(--accent-blue)' }}>{match.wardsPlaced ?? '—'}</span>
+            <span style={{ color: 'var(--accent-blue)' }}>{(match.wardsPlaced / minutes).toFixed(1)}</span>
             <span style={{ color: 'var(--text-muted)' }}>/</span>
-            <span style={{ color: 'var(--accent-loss)', opacity: 0.8 }}>{match.wardsDestroyed ?? '—'}</span>
+            <span style={{ color: 'var(--accent-loss)', opacity: 0.8 }}>{match.wardsDestroyed !== null ? (match.wardsDestroyed / minutes).toFixed(1) : '—'}</span>
           </>
         ) : '—'}
       </div>

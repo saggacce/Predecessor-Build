@@ -1,5 +1,9 @@
 import { Router } from 'express';
 import { z } from 'zod';
+import { db } from '../db.js';
+import { resyncMatch, syncPlayerByName } from '../services/sync-service.js';
+import { logger } from '../logger.js';
+import { getValidToken } from './auth.js';
 import {
   getTeamProfile,
   listTeams,
@@ -110,7 +114,21 @@ teamsRouter.post('/:id/roster', async (req, res, next) => {
   try {
     const { playerId, role } = addRosterSchema.parse(req.body);
     const entry = await addRosterPlayer(req.params.id, playerId, role);
+
+    // Get token before sending response (needed for pred.gg auth)
+    let userToken: string | null = null;
+    try { userToken = await getValidToken(req, res); } catch { /* no session — sync without auth */ }
+
     res.status(201).json(entry);
+
+    // Background sync — fire and forget, don't block the response
+    db.player.findUnique({ where: { id: playerId }, select: { displayName: true } })
+      .then((player) => {
+        if (!player) return;
+        return syncPlayerByName(db, player.displayName, userToken ?? undefined);
+      })
+      .catch((err) => logger.warn({ playerId, err }, 'background sync after roster add failed'));
+
   } catch (err) {
     next(err);
   }
@@ -130,6 +148,63 @@ teamsRouter.delete('/:id/roster/:rosterId', async (req, res, next) => {
   try {
     await removeRosterPlayer(req.params.id, req.params.rosterId);
     res.json({ ok: true });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * POST /teams/:id/sync-matches
+ * Syncs event stream for up to `limit` unsynced matches of roster players.
+ * Requires Bearer token. Returns { synced, errors, remaining }.
+ */
+teamsRouter.post('/:id/sync-matches', async (req, res, next) => {
+  try {
+    const limit = Math.min(Number(req.body?.limit ?? 10), 20);
+    const userToken = await getValidToken(req, res);
+
+    // Get roster player IDs
+    const roster = await db.teamRoster.findMany({
+      where: { teamId: req.params.id, activeTo: null },
+      select: { playerId: true },
+    });
+    const playerIds = roster.map((r) => r.playerId);
+    if (playerIds.length === 0) { res.json({ synced: 0, errors: 0, remaining: 0 }); return; }
+
+    // Find matches with players in this team that lack event stream
+    const pending = await db.match.findMany({
+      where: {
+        eventStreamSynced: false,
+        matchPlayers: { some: { playerId: { in: playerIds } } },
+      },
+      select: { id: true, predggUuid: true },
+      orderBy: { startTime: 'desc' },
+      take: limit,
+    });
+
+    const total = await db.match.count({
+      where: {
+        eventStreamSynced: false,
+        matchPlayers: { some: { playerId: { in: playerIds } } },
+      },
+    });
+
+    let synced = 0;
+    let errors = 0;
+
+    // Sync in groups of 3 concurrently
+    for (let i = 0; i < pending.length; i += 3) {
+      const chunk = pending.slice(i, i + 3);
+      const results = await Promise.allSettled(
+        chunk.map((m) => resyncMatch(db, m.predggUuid, userToken ?? undefined, true))
+      );
+      for (const r of results) {
+        if (r.status === 'fulfilled') synced++;
+        else errors++;
+      }
+    }
+
+    res.json({ synced, errors, remaining: Math.max(0, total - synced) });
   } catch (err) {
     next(err);
   }

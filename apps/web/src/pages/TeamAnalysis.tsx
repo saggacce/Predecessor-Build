@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState, type ChangeEvent, type CSSProperties, type ReactNode, type KeyboardEvent } from 'react';
+import { useEffect, useRef, useState, type ChangeEvent, type CSSProperties, type ReactNode, type KeyboardEvent, type MouseEvent } from 'react';
+import { createPortal } from 'react-dom';
 import { RankIcon } from '../components/RankIcon';
 import {
   Users,
@@ -16,7 +17,7 @@ import {
   Trophy,
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { apiClient, type TeamProfile, type TeamRole, type PlayerSearchResult, type TeamAnalysis, type TeamObjectiveControl, ApiErrorResponse } from '../api/client';
+import { apiClient, type TeamProfile, type TeamRole, type PlayerSearchResult, type TeamAnalysis, type TeamObjectiveControl, type RivalHeroStat, type PlayerAnalysisStat, ApiErrorResponse } from '../api/client';
 
 const ROLES: TeamRole[] = ['carry', 'jungle', 'midlane', 'offlane', 'support'];
 
@@ -385,11 +386,15 @@ export default function TeamAnalysis() {
 
                 {/* Tabs */}
                 <div style={{ display: 'flex', gap: '0.25rem', borderBottom: '1px solid var(--border-color)', marginTop: '1.5rem' }}>
-                  {(['roster', 'performance'] as const).map((t) => (
-                    <button key={t} onClick={() => handleTabChange(t)} style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: '0.55rem 1rem', fontSize: '0.875rem', fontWeight: 600, color: detailTab === t ? 'var(--accent-blue)' : 'var(--text-muted)', borderBottom: detailTab === t ? '2px solid var(--accent-blue)' : '2px solid transparent', transition: 'color 0.15s', textTransform: 'capitalize' }}>
-                      {t === 'roster' ? 'Roster' : 'Performance'}
-                    </button>
-                  ))}
+                  <button onClick={() => handleTabChange('roster')} style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: '0.55rem 1rem', fontSize: '0.875rem', fontWeight: 600, color: detailTab === 'roster' ? 'var(--accent-blue)' : 'var(--text-muted)', borderBottom: detailTab === 'roster' ? '2px solid var(--accent-blue)' : '2px solid transparent', transition: 'color 0.15s' }}>
+                    Roster
+                  </button>
+                  <PerformanceTabButton
+                    active={detailTab === 'performance'}
+                    hasTeamMatches={analysis ? analysis.teamMatches.length > 0 : null}
+                    rosterSize={selected?.roster.length ?? 0}
+                    onClick={() => handleTabChange('performance')}
+                  />
                 </div>
               </div>
             )}
@@ -559,9 +564,25 @@ const OBJ_LABELS: Record<string, string> = {
   RIVER: 'River', SEEDLING: 'Seedling',
 };
 
-function PerformanceTab({ analysis, loading, onRefresh }: {
+function PerformanceTab({ teamId, analysis, loading, onRefresh }: {
   teamId: string; analysis: TeamAnalysis | null; loading: boolean; onRefresh: () => void;
 }) {
+  const [syncingMatches, setSyncingMatches] = useState(false);
+  const [syncResult, setSyncResult] = useState<{ synced: number; remaining: number } | null>(null);
+
+  async function handleSyncMatches() {
+    setSyncingMatches(true);
+    try {
+      const res = await apiClient.teams.syncMatches(teamId, 10);
+      setSyncResult({ synced: res.synced, remaining: res.remaining });
+      toast.success(`${res.synced} matches synced${res.remaining > 0 ? ` · ${res.remaining} remaining` : ''}`);
+      onRefresh();
+    } catch {
+      toast.error('Sync failed — make sure you are logged in.');
+    } finally {
+      setSyncingMatches(false);
+    }
+  }
   const [sortKey, setSortKey] = useState<'winRate' | 'kda' | 'avgGPM' | 'avgDPM' | 'avgCS' | 'matches'>('winRate');
 
   if (loading) return <div className="glass-card" style={{ padding: '2rem', color: 'var(--text-muted)', fontSize: '0.85rem' }}>Loading analysis…</div>;
@@ -578,6 +599,34 @@ function PerformanceTab({ analysis, loading, onRefresh }: {
 
   const sorted = [...analysis.playerStats].sort((a, b) => (b[sortKey] ?? 0) - (a[sortKey] ?? 0));
   const teamWR = analysis.teamMatches.length > 0 ? Math.round((analysis.teamWins / analysis.teamMatches.length) * 100) : null;
+
+  const winMatches = analysis.teamMatches.filter((m) => m.won === true);
+  const lossMatches = analysis.teamMatches.filter((m) => m.won === false);
+
+  const duskMatches = analysis.teamMatches.filter((m) => m.teamSide === 'DUSK');
+  const dawnMatches = analysis.teamMatches.filter((m) => m.teamSide === 'DAWN');
+  const duskWR = duskMatches.length > 0 ? Math.round((duskMatches.filter((m) => m.won).length / duskMatches.length) * 100) : null;
+  const dawnWR = dawnMatches.length > 0 ? Math.round((dawnMatches.filter((m) => m.won).length / dawnMatches.length) * 100) : null;
+  const avgWinDuration = winMatches.length > 0 ? Math.round(winMatches.reduce((s, m) => s + m.duration, 0) / winMatches.length / 60) : null;
+  const avgLossDuration = lossMatches.length > 0 ? Math.round(lossMatches.reduce((s, m) => s + m.duration, 0) / lossMatches.length / 60) : null;
+
+  const ftMatches = analysis.teamMatches.filter((m) => m.firstTowerWon !== null);
+  const ftWon = ftMatches.filter((m) => m.firstTowerWon === true).length;
+  const firstTowerRate = ftMatches.length > 0 ? Math.round((ftWon / ftMatches.length) * 100) : null;
+
+  const patchStats = (() => {
+    const map = new Map<string, { wins: number; losses: number }>();
+    for (const m of analysis.teamMatches) {
+      const key = m.version ?? 'Unknown';
+      const entry = map.get(key) ?? { wins: 0, losses: 0 };
+      if (m.won === true) entry.wins++;
+      else if (m.won === false) entry.losses++;
+      map.set(key, entry);
+    }
+    return [...map.entries()]
+      .map(([patch, { wins, losses }]) => ({ patch, wins, losses, total: wins + losses, wr: Math.round((wins / Math.max(wins + losses, 1)) * 100) }))
+      .sort((a, b) => b.patch.localeCompare(a.patch));
+  })();
 
   const SORT_COLS: Array<{ key: typeof sortKey; label: string }> = [
     { key: 'matches', label: 'Matches' },
@@ -596,31 +645,139 @@ function PerformanceTab({ analysis, loading, onRefresh }: {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
 
-      {/* Team form summary */}
-      {analysis.teamMatches.length > 0 && (
-        <div className="glass-card" style={{ padding: '1rem 1.25rem' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem', flexWrap: 'wrap' }}>
-            <div>
-              <div style={{ fontSize: '0.65rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: '0.25rem' }}>Team Matches</div>
-              <div style={{ fontFamily: 'var(--font-mono)', fontSize: '1.3rem', fontWeight: 700 }}>{analysis.teamMatches.length}</div>
-              <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>3+ players together</div>
-            </div>
-            <div>
-              <div style={{ fontSize: '0.65rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: '0.25rem' }}>Team Win Rate</div>
-              <div style={{ fontFamily: 'var(--font-mono)', fontSize: '1.3rem', fontWeight: 700, color: teamWR !== null && teamWR >= 50 ? 'var(--accent-win)' : 'var(--accent-loss)' }}>{teamWR ?? '—'}%</div>
-              <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>{analysis.teamWins}W · {analysis.teamLosses}L</div>
-            </div>
-            {/* Recent form dots */}
-            <div style={{ marginLeft: 'auto' }}>
-              <div style={{ fontSize: '0.65rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: '0.4rem' }}>Recent Form</div>
-              <div style={{ display: 'flex', gap: '0.3rem' }}>
-                {analysis.teamMatches.slice(0, 10).map((m, i) => (
-                  <div key={i} title={m.gameMode + ' · ' + (m.won === true ? 'Win' : m.won === false ? 'Loss' : '?')} style={{ width: 10, height: 10, borderRadius: '50%', background: m.won === true ? 'var(--accent-win)' : m.won === false ? 'var(--accent-loss)' : 'var(--border-color)' }} />
-                ))}
+      {/* Team form summary — always visible */}
+      {(() => {
+        const hasData = analysis.teamMatches.length > 0;
+        const statLabel = (text: string) => (
+          <div style={{ fontSize: '0.65rem', fontWeight: 700, color: hasData ? 'var(--text-muted)' : 'rgba(148,163,184,0.4)', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: '0.25rem' }}>{text}</div>
+        );
+        const statValue = (content: React.ReactNode) => (
+          <div style={{ opacity: hasData ? 1 : 0.3 }}>{content}</div>
+        );
+
+        return (
+          <div className="glass-card" style={{ padding: 0, overflow: 'hidden', opacity: hasData ? 1 : 0.75 }}>
+            {!hasData && (
+              <div style={{ padding: '0.55rem 1.25rem', background: 'rgba(251,191,36,0.06)', borderBottom: '1px solid rgba(251,191,36,0.2)', display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                <span style={{ fontSize: '0.72rem', color: 'rgba(251,191,36,0.8)', fontWeight: 600 }}>Team Form requires 3+ roster players appearing together in the same match.</span>
+                <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>Sync each player's profile so the system can detect shared matches.</span>
+              </div>
+            )}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem', flexWrap: 'wrap', padding: '1rem 1.25rem' }}>
+              <div>
+                {statLabel('Team Matches')}
+                {statValue(<div style={{ fontFamily: 'var(--font-mono)', fontSize: '1.3rem', fontWeight: 700 }}>{hasData ? analysis.teamMatches.length : '—'}</div>)}
+                <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>3+ players together</div>
+              </div>
+              <div>
+                {statLabel('Team Win Rate')}
+                {statValue(
+                  <div style={{ fontFamily: 'var(--font-mono)', fontSize: '1.3rem', fontWeight: 700, color: hasData && teamWR !== null && teamWR >= 50 ? 'var(--accent-win)' : hasData ? 'var(--accent-loss)' : 'var(--text-muted)' }}>
+                    {hasData ? `${teamWR ?? '—'}%` : '—'}
+                  </div>
+                )}
+                <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>{hasData ? `${analysis.teamWins}W · ${analysis.teamLosses}L` : 'no data yet'}</div>
+              </div>
+              <div>
+                {statLabel('Avg Duration')}
+                {statValue(
+                  <>
+                    <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.9rem', fontWeight: 700, color: 'var(--accent-win)' }}>{avgWinDuration !== null ? `${avgWinDuration}m` : '—'} <span style={{ fontWeight: 400, fontSize: '0.68rem', color: 'var(--text-muted)' }}>wins</span></div>
+                    <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.9rem', fontWeight: 700, color: 'var(--accent-loss)' }}>{avgLossDuration !== null ? `${avgLossDuration}m` : '—'} <span style={{ fontWeight: 400, fontSize: '0.68rem', color: 'var(--text-muted)' }}>losses</span></div>
+                  </>
+                )}
+              </div>
+              <div>
+                {statLabel('First Tower')}
+                {hasData ? (
+                  firstTowerRate !== null ? (
+                    <>
+                      <div style={{ fontFamily: 'var(--font-mono)', fontSize: '1.3rem', fontWeight: 700, color: firstTowerRate >= 50 ? 'var(--accent-win)' : 'var(--accent-loss)' }}>{firstTowerRate}%</div>
+                      <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>{ftWon}/{ftMatches.length} matches</div>
+                    </>
+                  ) : (
+                    <>
+                      <div style={{ fontFamily: 'var(--font-mono)', fontSize: '1.1rem', color: 'var(--text-muted)' }}>—</div>
+                      <div style={{ fontSize: '0.62rem', color: 'var(--text-muted)' }}>Sync event stream</div>
+                    </>
+                  )
+                ) : statValue(<div style={{ fontFamily: 'var(--font-mono)', fontSize: '1.1rem', color: 'var(--text-muted)' }}>—</div>)}
+              </div>
+              <div>
+                {statLabel('By Side')}
+                {statValue(
+                  <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.82rem' }}>
+                    <div><span style={{ color: 'var(--accent-teal-bright)', fontWeight: 700 }}>DUSK</span> <span style={{ color: duskWR !== null && duskWR >= 50 ? 'var(--accent-win)' : 'var(--accent-loss)' }}>{duskWR !== null ? `${duskWR}%` : '—'}</span> <span style={{ color: 'var(--text-muted)', fontSize: '0.68rem' }}>({duskMatches.length}g)</span></div>
+                    <div><span style={{ color: '#f87171', fontWeight: 700 }}>DAWN</span> <span style={{ color: dawnWR !== null && dawnWR >= 50 ? 'var(--accent-win)' : 'var(--accent-loss)' }}>{dawnWR !== null ? `${dawnWR}%` : '—'}</span> <span style={{ color: 'var(--text-muted)', fontSize: '0.68rem' }}>({dawnMatches.length}g)</span></div>
+                  </div>
+                )}
+              </div>
+              <div style={{ marginLeft: 'auto' }}>
+                {statLabel('Recent Form')}
+                {hasData ? (
+                  <div style={{ display: 'flex', gap: '0.3rem' }}>
+                    {analysis.teamMatches.slice(0, 10).map((m, i) => (
+                      <div key={i} title={m.gameMode + ' · ' + (m.won === true ? 'Win' : m.won === false ? 'Loss' : '?')} style={{ width: 10, height: 10, borderRadius: '50%', background: m.won === true ? 'var(--accent-win)' : m.won === false ? 'var(--accent-loss)' : 'var(--border-color)' }} />
+                    ))}
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', gap: '0.3rem' }}>
+                    {[...Array(5)].map((_, i) => (
+                      <div key={i} style={{ width: 10, height: 10, borderRadius: '50%', background: 'rgba(255,255,255,0.06)' }} />
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
           </div>
+        );
+      })()}
+
+      {/* Winrate by patch (TEAM-002) */}
+      {patchStats.length > 1 && (
+        <div className="glass-card" style={{ padding: '0.75rem 1.25rem' }}>
+          <div style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: '0.6rem' }}>Winrate by Patch</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+            {patchStats.map(({ patch, wins, losses, total, wr }) => (
+              <div key={patch} style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.72rem', color: 'var(--text-muted)', flex: '0 0 72px' }}>{patch}</span>
+                <div style={{ flex: 1, height: 6, borderRadius: 999, background: 'rgba(255,255,255,0.06)', overflow: 'hidden' }}>
+                  <div style={{ width: `${wr}%`, height: '100%', background: wr >= 50 ? 'var(--accent-win)' : 'var(--accent-loss)', borderRadius: 999, transition: 'width 0.3s' }} />
+                </div>
+                <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.72rem', fontWeight: 700, color: wr >= 50 ? 'var(--accent-win)' : 'var(--accent-loss)', flex: '0 0 36px', textAlign: 'right' }}>{wr}%</span>
+                <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.65rem', color: 'var(--text-muted)', flex: '0 0 60px' }}>{wins}W {losses}L</span>
+              </div>
+            ))}
+          </div>
         </div>
+      )}
+
+      {/* Conversion rates (TEAM-016/017) */}
+      {(analysis.primeConversionRate !== null || analysis.fangtoolhConversionRate !== null) && (
+        <div className="glass-card" style={{ padding: '0.75rem 1.25rem' }}>
+          <div style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: '0.6rem' }}>Objective Conversion</div>
+          <div style={{ display: 'flex', gap: '2rem', flexWrap: 'wrap' }}>
+            {analysis.primeConversionRate !== null && (
+              <div>
+                <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)', marginBottom: '0.15rem' }}>Orb Prime → Structure</div>
+                <div style={{ fontFamily: 'var(--font-mono)', fontSize: '1.2rem', fontWeight: 700, color: analysis.primeConversionRate >= 60 ? 'var(--accent-win)' : analysis.primeConversionRate >= 40 ? 'var(--accent-prime)' : 'var(--accent-loss)' }}>{analysis.primeConversionRate}%</div>
+                <div style={{ fontSize: '0.62rem', color: 'var(--text-muted)' }}>structure within 3 min</div>
+              </div>
+            )}
+            {analysis.fangtoolhConversionRate !== null && (
+              <div>
+                <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)', marginBottom: '0.15rem' }}>Fangtooth → Structure</div>
+                <div style={{ fontFamily: 'var(--font-mono)', fontSize: '1.2rem', fontWeight: 700, color: analysis.fangtoolhConversionRate >= 60 ? 'var(--accent-win)' : analysis.fangtoolhConversionRate >= 40 ? 'var(--accent-prime)' : 'var(--accent-loss)' }}>{analysis.fangtoolhConversionRate}%</div>
+                <div style={{ fontSize: '0.62rem', color: 'var(--text-muted)' }}>structure within 2 min</div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Scouting Report — RIVAL only */}
+      {analysis.teamType === 'RIVAL' && analysis.rivalHeroPool.length > 0 && (
+        <ScoutingReport playerStats={analysis.playerStats} heroPool={analysis.rivalHeroPool} />
       )}
 
       {/* Player comparison table */}
@@ -636,11 +793,12 @@ function PerformanceTab({ analysis, loading, onRefresh }: {
         </div>
 
         {/* Header */}
-        <div style={{ display: 'grid', gridTemplateColumns: '180px 60px 80px 70px 70px 70px 70px 70px', padding: '0.35rem 1rem', fontSize: '0.62rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', borderBottom: '1px solid var(--border-color)', background: 'rgba(255,255,255,0.01)' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '180px 60px 80px 70px 70px 70px 70px 70px 72px', padding: '0.35rem 1rem', fontSize: '0.62rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', borderBottom: '1px solid var(--border-color)', background: 'rgba(255,255,255,0.01)' }}>
           <span>Player</span>
           {SORT_COLS.map(({ key, label }) => (
             <span key={key} style={{ textAlign: 'center', color: sortKey === key ? 'var(--accent-blue)' : undefined }}>{label}</span>
           ))}
+          <span style={{ textAlign: 'center' }}>E.Deaths</span>
         </div>
 
         {sorted.map((p) => {
@@ -648,7 +806,7 @@ function PerformanceTab({ analysis, loading, onRefresh }: {
           const recentWR = recentTotal > 0 ? Math.round((p.recentWins / recentTotal) * 100) : null;
           const roleSlug = p.role?.toLowerCase().replace('mid_lane', 'midlane') ?? null;
           return (
-            <div key={p.playerId} style={{ display: 'grid', gridTemplateColumns: '180px 60px 80px 70px 70px 70px 70px 70px', padding: '0.6rem 1rem', borderBottom: '1px solid var(--border-color)', alignItems: 'center' }}>
+            <div key={p.playerId} style={{ display: 'grid', gridTemplateColumns: '180px 60px 80px 70px 70px 70px 70px 70px 72px', padding: '0.6rem 1rem', borderBottom: '1px solid var(--border-color)', alignItems: 'center' }}>
               {/* Player */}
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', minWidth: 0 }}>
                 {roleSlug && <img src={`/icons/roles/${roleSlug}.png`} alt={p.role ?? ''} style={{ width: 18, height: 18, objectFit: 'contain', opacity: 0.85, flexShrink: 0 }} />}
@@ -670,19 +828,33 @@ function PerformanceTab({ analysis, loading, onRefresh }: {
               <PerfCell value={p.avgDPM ?? '—'} />
               <PerfCell value={p.avgCS ?? '—'} />
               <PerfCell value={p.avgWardsPlaced !== null ? p.avgWardsPlaced.toFixed(1) : '—'} />
+              <div style={{ textAlign: 'center', fontFamily: 'var(--font-mono)', fontSize: '0.75rem', color: p.earlyDeathRate !== null && p.earlyDeathRate >= 1 ? 'var(--accent-loss)' : 'var(--text-muted)' }}>
+                {p.earlyDeathRate !== null ? p.earlyDeathRate.toFixed(2) : '—'}
+              </div>
             </div>
           );
         })}
       </div>
 
       {/* Objective Control */}
-      {majorObjs.length > 0 && (
+      {(majorObjs.length > 0 || analysis.teamType === 'RIVAL') && (
         <div className="glass-card" style={{ padding: '1rem 1.25rem' }}>
-          <div style={{ fontWeight: 700, fontSize: '0.85rem', color: 'var(--text-primary)', marginBottom: '1rem' }}>
-            Objective Control
-            <span style={{ fontWeight: 400, fontSize: '0.68rem', color: 'var(--text-muted)', marginLeft: '0.5rem' }}>from {analysis.teamMatches.filter((m) => m.won !== null).length} team matches with event stream</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1rem', flexWrap: 'wrap' }}>
+            <div style={{ fontWeight: 700, fontSize: '0.85rem', color: 'var(--text-primary)' }}>
+              Objective Control
+              {majorObjs.length > 0 && <span style={{ fontWeight: 400, fontSize: '0.68rem', color: 'var(--text-muted)', marginLeft: '0.5rem' }}>from team matches with event stream</span>}
+            </div>
+            {analysis.teamType === 'RIVAL' && (
+              <button onClick={() => void handleSyncMatches()} disabled={syncingMatches} style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.72rem', fontWeight: 600, padding: '0.3rem 0.7rem', borderRadius: '5px', cursor: syncingMatches ? 'not-allowed' : 'pointer', border: '1px solid var(--accent-blue)', background: 'rgba(91,156,246,0.08)', color: 'var(--accent-blue)', opacity: syncingMatches ? 0.6 : 1 }}>
+                <span style={{ display: 'inline-block', width: 10, height: 10, border: syncingMatches ? '2px solid var(--accent-blue)' : 'none', borderTopColor: 'transparent', borderRadius: '50%', animation: syncingMatches ? 'spin 0.8s linear infinite' : 'none', background: syncingMatches ? 'transparent' : 'none', marginRight: syncingMatches ? 2 : 0 }} />
+                {syncingMatches ? 'Syncing...' : `Sync matches (10)${syncResult?.remaining ? ` · ${syncResult.remaining} left` : ''}`}
+              </button>
+            )}
           </div>
-          <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+          {majorObjs.length === 0 && (
+            <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', margin: 0 }}>No event stream data yet. Click "Sync matches" to load objective stats.</p>
+          )}
+          {majorObjs.length > 0 && <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', marginTop: majorObjs.length === 0 ? 0 : '0.5rem' }}>
             {majorObjs.map((o) => {
               const color = OBJ_COLORS[o.entityType] ?? '#64748b';
               const label = OBJ_LABELS[o.entityType] ?? o.entityType;
@@ -700,10 +872,15 @@ function PerformanceTab({ analysis, loading, onRefresh }: {
                     <span style={{ color, fontWeight: 700 }}>{o.teamCaptures} ({o.controlPct}%)</span>
                     <span style={{ color: 'var(--accent-loss)' }}>{o.rivalCaptures}</span>
                   </div>
+                  {o.avgGameTimeSecs && (
+                    <div style={{ marginTop: '0.3rem', fontSize: '0.6rem', color: 'var(--text-muted)' }}>
+                      avg capture {Math.floor(o.avgGameTimeSecs / 60)}:{String(o.avgGameTimeSecs % 60).padStart(2, '0')}
+                    </div>
+                  )}
                 </div>
               );
             })}
-          </div>
+          </div>}
         </div>
       )}
 
@@ -733,6 +910,107 @@ function PerformanceTab({ analysis, loading, onRefresh }: {
           ))}
         </div>
       </div>
+    </div>
+  );
+}
+
+function ScoutingReport({ playerStats, heroPool }: { playerStats: PlayerAnalysisStat[]; heroPool: RivalHeroStat[] }) {
+  // Build hero pool per player
+  const poolByPlayer = new Map<string, RivalHeroStat[]>();
+  for (const h of heroPool) {
+    const arr = poolByPlayer.get(h.playerId) ?? [];
+    arr.push(h);
+    poolByPlayer.set(h.playerId, arr);
+  }
+
+  // Threat score: weighted combo of winRate, kda, dpm
+  function threatScore(p: PlayerAnalysisStat): number {
+    return Math.round((p.winRate * 0.4) + (Math.min(p.kda, 10) * 5) + (p.avgDPM ? Math.min(p.avgDPM / 15, 10) : 0));
+  }
+
+  // Ban suggestions: heroes with 3+ games and high WR from actual matches
+  const banCandidates = heroPool
+    .filter((h) => h.games >= 3 && h.winRate >= 50)
+    .sort((a, b) => b.winRate - a.winRate || b.games - a.games)
+    .slice(0, 6);
+
+  // Pool depth per player (heroes with 2+ games)
+  function poolDepth(pid: string) { return (poolByPlayer.get(pid) ?? []).filter((h) => h.games >= 2).length; }
+
+  const sorted = [...playerStats].sort((a, b) => threatScore(b) - threatScore(a));
+
+  return (
+    <div className="glass-card" style={{ padding: '1rem 1.25rem' }}>
+      <div style={{ fontWeight: 700, fontSize: '0.85rem', color: 'var(--accent-loss)', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+        <span>⚔</span> Scouting Report
+      </div>
+
+      {/* Threat cards */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '0.75rem', marginBottom: '1.25rem' }}>
+        {sorted.map((p) => {
+          const threat = threatScore(p);
+          const heroes = (poolByPlayer.get(p.playerId) ?? []).slice(0, 4);
+          const depth = poolDepth(p.playerId);
+          const threatColor = threat >= 60 ? '#ef4444' : threat >= 40 ? '#f97316' : '#f0b429';
+          const threatLabel = threat >= 60 ? 'High Threat' : threat >= 40 ? 'Medium' : 'Low';
+          const roleSlug = p.role?.toLowerCase().replace('mid_lane', 'midlane') ?? null;
+          return (
+            <div key={p.playerId} style={{ border: `1px solid ${threatColor}33`, borderRadius: '8px', padding: '0.75rem', background: `${threatColor}08` }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', minWidth: 0 }}>
+                  {roleSlug && <img src={`/icons/roles/${roleSlug}.png`} alt={p.role ?? ''} style={{ width: 16, height: 16, objectFit: 'contain', opacity: 0.8, flexShrink: 0 }} />}
+                  <span style={{ fontWeight: 700, fontSize: '0.78rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.customName ?? p.displayName}</span>
+                </div>
+                <span style={{ fontSize: '0.6rem', fontWeight: 700, color: threatColor, background: `${threatColor}18`, border: `1px solid ${threatColor}44`, borderRadius: '4px', padding: '0.1rem 0.4rem', flexShrink: 0 }}>{threatLabel}</span>
+              </div>
+              {/* Stats row */}
+              <div style={{ display: 'flex', gap: '0.75rem', fontSize: '0.68rem', fontFamily: 'var(--font-mono)', color: 'var(--text-muted)', marginBottom: '0.5rem' }}>
+                <span>WR <b style={{ color: p.winRate >= 55 ? 'var(--accent-win)' : p.winRate < 45 ? 'var(--accent-loss)' : 'var(--text-secondary)' }}>{p.winRate.toFixed(0)}%</b></span>
+                <span>KDA <b style={{ color: 'var(--text-secondary)' }}>{p.kda.toFixed(2)}</b></span>
+                {p.avgDPM && <span>DPM <b style={{ color: 'var(--text-secondary)' }}>{Math.round(p.avgDPM)}</b></span>}
+              </div>
+              {/* Hero pool */}
+              <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
+                {heroes.map((h) => (
+                  <div key={h.heroSlug} title={`${h.heroSlug} · ${h.games}g · ${h.winRate}% WR`} style={{ width: 28, height: 28, borderRadius: 5, overflow: 'hidden', border: '1px solid var(--border-color)', background: 'var(--bg-dark)', flexShrink: 0 }}>
+                    <img src={`/heroes/${h.heroSlug}.webp`} alt={h.heroSlug} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                  </div>
+                ))}
+                {depth <= 2 && (
+                  <span title="Narrow hero pool — high ban vulnerability" style={{ fontSize: '0.6rem', color: '#f97316', marginLeft: '4px' }}>⚠ narrow pool</span>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Ban suggestions */}
+      {banCandidates.length > 0 && (
+        <div>
+          <div style={{ fontSize: '0.68rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: '0.6rem' }}>
+            Ban Targets
+            <span style={{ fontWeight: 400, marginLeft: '0.4rem' }}>— heroes with ≥3 games and highest win rate</span>
+          </div>
+          <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+            {banCandidates.map((h, i) => {
+              const owner = playerStats.find((p) => (poolByPlayer.get(p.playerId) ?? []).some((ph) => ph.heroSlug === h.heroSlug && ph.playerId === h.playerId));
+              return (
+                <div key={`${h.playerId}-${h.heroSlug}`} style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', padding: '0.35rem 0.6rem', border: `1px solid ${i === 0 ? '#ef4444' : i <= 2 ? '#f97316' : 'var(--border-color)'}`, borderRadius: '6px', background: i === 0 ? 'rgba(239,68,68,0.08)' : 'rgba(255,255,255,0.02)' }}>
+                  <div style={{ width: 24, height: 24, borderRadius: 4, overflow: 'hidden', flexShrink: 0 }}>
+                    <img src={`/heroes/${h.heroSlug}.webp`} alt={h.heroSlug} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                  </div>
+                  <div>
+                    <div style={{ fontSize: '0.72rem', fontWeight: 700, textTransform: 'capitalize' }}>{h.heroSlug}</div>
+                    <div style={{ fontSize: '0.6rem', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>{h.winRate}% WR · {h.games}g{owner ? ` · ${owner.customName ?? owner.displayName}` : ''}</div>
+                  </div>
+                  {i === 0 && <span style={{ fontSize: '0.55rem', fontWeight: 700, color: '#ef4444', marginLeft: '0.2rem' }}>BAN 1</span>}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -1022,3 +1300,98 @@ function TeamForm({
 const labelStyle: CSSProperties = {
   display: 'block', fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.25rem',
 };
+
+// ── Performance Tab Button with hover tooltip ─────────────────────────────────
+
+function PerformanceTabButton({ active, hasTeamMatches, rosterSize, onClick }: {
+  active: boolean;
+  hasTeamMatches: boolean | null; // null = not yet loaded
+  rosterSize: number;
+  onClick: () => void;
+}) {
+  const [tooltip, setTooltip] = useState<{ x: number; y: number } | null>(null);
+
+  const needsSync = hasTeamMatches === false;
+  const notEnoughPlayers = rosterSize < 3;
+
+  const tooltipLines: string[] = [];
+  if (notEnoughPlayers) {
+    tooltipLines.push(`Roster needs at least 3 players (currently ${rosterSize}).`);
+  } else if (needsSync) {
+    tooltipLines.push('No team matches detected yet.');
+    tooltipLines.push('Sync each roster player\'s profile so the system');
+    tooltipLines.push('finds matches where 3+ played together.');
+  } else {
+    tooltipLines.push('Player stats, hero pool, objective control,');
+    tooltipLines.push('team form and first tower rate.');
+    if (hasTeamMatches === null) tooltipLines.push('Loading analysis…');
+  }
+
+  const dimmed = !active && (needsSync || notEnoughPlayers);
+
+  function handleMouseMove(e: MouseEvent) {
+    setTooltip({ x: e.clientX, y: e.clientY });
+  }
+
+  return (
+    <>
+      <button
+        onClick={onClick}
+        onMouseEnter={(e) => setTooltip({ x: e.clientX, y: e.clientY })}
+        onMouseMove={handleMouseMove}
+        onMouseLeave={() => setTooltip(null)}
+        style={{
+          background: 'transparent',
+          border: 'none',
+          cursor: 'pointer',
+          padding: '0.55rem 1rem',
+          fontSize: '0.875rem',
+          fontWeight: 600,
+          color: active
+            ? 'var(--accent-blue)'
+            : dimmed ? 'rgba(148,163,184,0.35)' : 'var(--text-muted)',
+          borderBottom: active ? '2px solid var(--accent-blue)' : '2px solid transparent',
+          transition: 'color 0.15s',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '0.35rem',
+        }}
+      >
+        Performance
+        {dimmed && (
+          <span style={{ fontSize: '0.65rem', fontFamily: 'var(--font-mono)', color: 'rgba(148,163,184,0.45)', fontWeight: 400 }}>
+            ·  needs data
+          </span>
+        )}
+      </button>
+
+      {tooltip && createPortal(
+        <div style={{
+          position: 'fixed',
+          left: tooltip.x + 14,
+          top: tooltip.y + 14,
+          zIndex: 9999,
+          background: 'var(--bg-card, #1e2433)',
+          border: '1px solid var(--border-color)',
+          borderRadius: '6px',
+          padding: '0.5rem 0.75rem',
+          pointerEvents: 'none',
+          maxWidth: 280,
+          boxShadow: '0 4px 16px rgba(0,0,0,0.4)',
+        }}>
+          {tooltipLines.map((line, i) => (
+            <div key={i} style={{
+              fontSize: '0.72rem',
+              color: i === 0 && (needsSync || notEnoughPlayers) ? 'var(--accent-loss)' : 'var(--text-secondary)',
+              lineHeight: 1.5,
+              fontWeight: i === 0 ? 600 : 400,
+            }}>
+              {line}
+            </div>
+          ))}
+        </div>,
+        document.body
+      )}
+    </>
+  );
+}
