@@ -202,6 +202,8 @@ export interface PlayerAnalysisStat {
   // Recent form (last 20 matches)
   recentWins: number;
   recentLosses: number;
+  // Early death rate (IND-036): deaths in first 10 min / total matches
+  earlyDeathRate: number | null;
   // Top heroes from snapshot
   topHeroes: Array<{ slug: string; name: string; matches: number; winRate: number; imageUrl: string | null }>;
 }
@@ -215,6 +217,8 @@ export interface TeamMatch {
   teamSide: string;
   won: boolean | null;
   playerCount: number;
+  version: string | null;
+  firstTowerWon: boolean | null;
 }
 
 export interface TeamObjectiveControl {
@@ -223,6 +227,16 @@ export interface TeamObjectiveControl {
   rivalCaptures: number;
   total: number;
   controlPct: number;
+  avgGameTimeSecs: number | null;
+}
+
+export interface RivalHeroStat {
+  playerId: string;
+  heroSlug: string;
+  games: number;
+  wins: number;
+  winRate: number;
+  avgKda: number;
 }
 
 export interface TeamAnalysis {
@@ -230,10 +244,13 @@ export interface TeamAnalysis {
   teamName: string;
   teamType: string;
   playerStats: PlayerAnalysisStat[];
-  teamMatches: TeamMatch[];       // matches with 3+ players together
+  teamMatches: TeamMatch[];
   teamWins: number;
   teamLosses: number;
   objectiveControl: TeamObjectiveControl[];
+  rivalHeroPool: RivalHeroStat[];
+  primeConversionRate: number | null;   // TEAM-016: % of ORB_PRIME that yielded a structure
+  fangtoolhConversionRate: number | null; // TEAM-017: % of Fangtooth that yielded a structure
 }
 
 function safeNum(v: unknown): number {
@@ -278,6 +295,18 @@ export async function getTeamAnalysis(teamId: string): Promise<TeamAnalysis> {
     arr.push(mp);
     mpByPlayer.set(mp.playerId, arr);
   }
+
+  // ── Early death rate per player (IND-036: deaths in first 10 min) ────────
+  const earlyDeathRows = rosterPlayerIds.length > 0
+    ? await db.$queryRaw<Array<{ killedPlayerId: string; cnt: bigint }>>`
+        SELECT hk."killedPlayerId", COUNT(*)::bigint AS cnt
+        FROM "HeroKill" hk
+        WHERE hk."killedPlayerId" = ANY(${rosterPlayerIds}::text[])
+          AND hk."gameTime" < 600
+        GROUP BY hk."killedPlayerId"
+      `
+    : [];
+  const earlyDeathMap = new Map(earlyDeathRows.map((r) => [r.killedPlayerId, Number(r.cnt)]));
 
   // ── Build per-player stats ────────────────────────────────────────────────
   const playerStats: PlayerAnalysisStat[] = team.roster.map((r) => {
@@ -330,6 +359,7 @@ export async function getTeamAnalysis(teamId: string): Promise<TeamAnalysis> {
       avgGPM, avgDPM, avgCS,
       avgWardsPlaced: avgW,
       recentWins, recentLosses,
+      earlyDeathRate: safeNum(gs.matches) > 0 ? Math.round((earlyDeathMap.get(r.player.id) ?? 0) / safeNum(gs.matches) * 100) / 100 : null,
       topHeroes,
     };
   });
@@ -337,61 +367,177 @@ export async function getTeamAnalysis(teamId: string): Promise<TeamAnalysis> {
   // ── Team matches (3+ players on same side) ────────────────────────────────
   const teamMatchRows = await db.$queryRaw<Array<{
     matchId: string; predggUuid: string; startTime: Date; duration: number;
-    gameMode: string; team: string; winningTeam: string | null; player_count: bigint;
+    gameMode: string; team: string; winningTeam: string | null; player_count: bigint; version: string | null;
   }>>`
     SELECT mp."matchId", m."predggUuid", m."startTime", m."duration", m."gameMode",
-           mp."team", m."winningTeam", COUNT(DISTINCT mp."playerId")::bigint AS player_count
+           mp."team", m."winningTeam", v."name" AS version,
+           COUNT(DISTINCT mp."playerId")::bigint AS player_count
     FROM "MatchPlayer" mp
     JOIN "Match" m ON m.id = mp."matchId"
+    LEFT JOIN "Version" v ON v.id = m."versionId"
     WHERE mp."playerId" = ANY(${rosterPlayerIds}::text[])
     GROUP BY mp."matchId", m."predggUuid", m."startTime", m."duration",
-             m."gameMode", mp."team", m."winningTeam"
+             m."gameMode", mp."team", m."winningTeam", v."name"
     HAVING COUNT(DISTINCT mp."playerId") >= 3
     ORDER BY m."startTime" DESC
     LIMIT 30
   `;
 
-  const teamMatches: TeamMatch[] = teamMatchRows.map((r) => ({
-    matchId: r.matchId,
-    predggUuid: r.predggUuid,
-    startTime: r.startTime,
-    duration: r.duration,
-    gameMode: r.gameMode,
-    teamSide: r.team,
-    won: r.winningTeam ? r.team === r.winningTeam : null,
-    playerCount: Number(r.player_count),
-  }));
+  // First tower per team match (TEAM-012)
+  const rawMatchIds = teamMatchRows.map((r) => r.matchId);
+  const firstTowerRows = rawMatchIds.length > 0
+    ? await db.structureDestruction.findMany({
+        where: { matchId: { in: rawMatchIds }, structureType: 'OUTER_TOWER' },
+        select: { matchId: true, gameTime: true, destructionTeam: true },
+        orderBy: { gameTime: 'asc' },
+      })
+    : [];
+
+  const firstTowerByMatch = new Map<string, string | null>();
+  for (const sd of firstTowerRows) {
+    if (!firstTowerByMatch.has(sd.matchId)) {
+      firstTowerByMatch.set(sd.matchId, sd.destructionTeam);
+    }
+  }
+
+  const teamMatches: TeamMatch[] = teamMatchRows.map((r) => {
+    const ft = firstTowerByMatch.get(r.matchId);
+    return {
+      matchId: r.matchId,
+      predggUuid: r.predggUuid,
+      startTime: r.startTime,
+      duration: r.duration,
+      gameMode: r.gameMode,
+      teamSide: r.team,
+      won: r.winningTeam ? r.team === r.winningTeam : null,
+      playerCount: Number(r.player_count),
+      version: r.version ?? null,
+      firstTowerWon: ft !== undefined && ft !== null ? ft === r.team : null,
+    };
+  });
 
   const teamWins   = teamMatches.filter((m) => m.won === true).length;
   const teamLosses = teamMatches.filter((m) => m.won === false).length;
 
-  // ── Objective control from team matches with event stream ─────────────────
+  // ── Objective control: team matches + any individual synced match ─────────
   const teamMatchIds = teamMatches.map((m) => m.matchId);
   const teamSideMap  = new Map(teamMatches.map((m) => [m.matchId, m.teamSide]));
 
-  const objKills = teamMatchIds.length > 0
+  // Also include individual matches (single player) that have event stream data
+  const individualMatchRows = rosterPlayerIds.length > 0
+    ? await db.$queryRaw<Array<{ matchId: string; team: string }>>`
+        SELECT DISTINCT mp."matchId", mp."team"
+        FROM "MatchPlayer" mp
+        JOIN "Match" m ON m.id = mp."matchId"
+        WHERE mp."playerId" = ANY(${rosterPlayerIds}::text[])
+          AND m."eventStreamSynced" = true
+          AND mp."matchId" != ALL(${teamMatchIds.length ? teamMatchIds : ['__none__']}::text[])
+        LIMIT 100
+      `
+    : [];
+
+  for (const r of individualMatchRows) {
+    if (!teamSideMap.has(r.matchId)) teamSideMap.set(r.matchId, r.team);
+  }
+  const allEventMatchIds = [...teamMatchIds, ...individualMatchRows.map((r) => r.matchId)];
+
+  const objKills = allEventMatchIds.length > 0
     ? await db.objectiveKill.findMany({
-        where: { matchId: { in: teamMatchIds } },
-        select: { matchId: true, entityType: true, killerTeam: true },
+        where: { matchId: { in: allEventMatchIds } },
+        select: { matchId: true, entityType: true, killerTeam: true, gameTime: true },
       })
     : [];
 
-  const objMap = new Map<string, { team: number; rival: number }>();
+  const objMap = new Map<string, { team: number; rival: number; teamTimes: number[] }>();
   for (const o of objKills) {
     const side = teamSideMap.get(o.matchId);
     if (!side) continue;
-    const entry = objMap.get(o.entityType) ?? { team: 0, rival: 0 };
-    if (o.killerTeam === side) entry.team++;
+    const entry = objMap.get(o.entityType) ?? { team: 0, rival: 0, teamTimes: [] };
+    if (o.killerTeam === side) { entry.team++; entry.teamTimes.push(o.gameTime); }
     else entry.rival++;
     objMap.set(o.entityType, entry);
   }
 
   const objectiveControl: TeamObjectiveControl[] = Array.from(objMap.entries())
-    .map(([entityType, { team, rival }]) => {
+    .map(([entityType, { team, rival, teamTimes }]) => {
       const total = team + rival;
-      return { entityType, teamCaptures: team, rivalCaptures: rival, total, controlPct: total > 0 ? Math.round((team / total) * 100) : 0 };
+      const avgTime = teamTimes.length > 0 ? Math.round(teamTimes.reduce((s, t) => s + t, 0) / teamTimes.length) : null;
+      return { entityType, teamCaptures: team, rivalCaptures: rival, total, controlPct: total > 0 ? Math.round((team / total) * 100) : 0, avgGameTimeSecs: avgTime };
     })
     .sort((a, b) => b.total - a.total);
 
-  return { teamId, teamName: team.name, teamType: team.type, playerStats, teamMatches, teamWins, teamLosses, objectiveControl };
+  // ── Hero pool from actual match records (more accurate than snapshot) ────────
+  const mpHeroes = await db.$queryRaw<Array<{
+    playerId: string; heroSlug: string; games: bigint;
+    wins: bigint; totalKda: number;
+  }>>`
+    SELECT mp."playerId", mp."heroSlug",
+           COUNT(*)::bigint AS games,
+           COUNT(*) FILTER (WHERE mp.team = m."winningTeam")::bigint AS wins,
+           SUM(CASE WHEN mp.deaths > 0 THEN (mp.kills + mp.assists)::float / mp.deaths ELSE mp.kills + mp.assists END) AS "totalKda"
+    FROM "MatchPlayer" mp
+    JOIN "Match" m ON m.id = mp."matchId"
+    WHERE mp."playerId" = ANY(${rosterPlayerIds}::text[])
+      AND m."winningTeam" IS NOT NULL
+    GROUP BY mp."playerId", mp."heroSlug"
+    HAVING COUNT(*) >= 2
+    ORDER BY games DESC
+  `;
+
+  const rivalHeroPool: RivalHeroStat[] = mpHeroes.map((r) => {
+    const games = Number(r.games);
+    const wins = Number(r.wins);
+    return {
+      playerId: r.playerId,
+      heroSlug: r.heroSlug,
+      games,
+      wins,
+      winRate: games > 0 ? Math.round((wins / games) * 100) : 0,
+      avgKda: games > 0 ? Math.round((r.totalKda / games) * 100) / 100 : 0,
+    };
+  });
+
+  // ── Conversion rates (TEAM-016/017) ──────────────────────────────────────
+  let primeConversionRate: number | null = null;
+  let fangtoolhConversionRate: number | null = null;
+
+  const primeKills = objKills.filter((o) => o.entityType === 'ORB_PRIME');
+  const ftKills    = objKills.filter((o) => o.entityType === 'FANGTOOTH' || o.entityType === 'PRIMAL_FANGTOOTH');
+
+  if (primeKills.length > 0 || ftKills.length > 0) {
+    const convMatchIds = [...new Set([...primeKills, ...ftKills].map((o) => o.matchId))];
+    const structDestructions = await db.structureDestruction.findMany({
+      where: { matchId: { in: convMatchIds } },
+      select: { matchId: true, gameTime: true, destructionTeam: true, structureType: true },
+    });
+    const sdByMatch = new Map<string, typeof structDestructions>();
+    for (const sd of structDestructions) {
+      const arr = sdByMatch.get(sd.matchId) ?? [];
+      arr.push(sd);
+      sdByMatch.set(sd.matchId, arr);
+    }
+
+    const primeTaken = primeKills.filter((o) => o.killerTeam === teamSideMap.get(o.matchId));
+    const primeConverted = primeTaken.filter((o) => {
+      const side = teamSideMap.get(o.matchId);
+      return (sdByMatch.get(o.matchId) ?? []).some((sd) =>
+        sd.destructionTeam === side &&
+        sd.gameTime >= o.gameTime && sd.gameTime <= o.gameTime + 180 &&
+        ['INNER_TOWER', 'INHIBITOR', 'CORE'].includes(sd.structureType),
+      );
+    });
+    if (primeTaken.length > 0) primeConversionRate = Math.round((primeConverted.length / primeTaken.length) * 100);
+
+    const ftTaken = ftKills.filter((o) => o.killerTeam === teamSideMap.get(o.matchId));
+    const ftConverted = ftTaken.filter((o) => {
+      const side = teamSideMap.get(o.matchId);
+      return (sdByMatch.get(o.matchId) ?? []).some((sd) =>
+        sd.destructionTeam === side &&
+        sd.gameTime >= o.gameTime && sd.gameTime <= o.gameTime + 120,
+      );
+    });
+    if (ftTaken.length > 0) fangtoolhConversionRate = Math.round((ftConverted.length / ftTaken.length) * 100);
+  }
+
+  return { teamId, teamName: team.name, teamType: team.type, playerStats, teamMatches, teamWins, teamLosses, objectiveControl, rivalHeroPool, primeConversionRate, fangtoolhConversionRate };
 }

@@ -147,6 +147,8 @@ model MatchPlayer {
   physicalDamageDealt          Int?
   magicalDamageDealt           Int?
   trueDamageDealt              Int?
+
+  @@unique([matchId, playerId])
 }
 
 // ── Event stream models ───────────────────────────────────────────────────────
