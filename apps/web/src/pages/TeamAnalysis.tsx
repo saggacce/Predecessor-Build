@@ -17,7 +17,7 @@ import {
   Trophy,
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { apiClient, type TeamProfile, type TeamRole, type PlayerSearchResult, type TeamAnalysis, type TeamObjectiveControl, type RivalHeroStat, type PlayerAnalysisStat, ApiErrorResponse } from '../api/client';
+import { apiClient, type TeamProfile, type TeamRole, type PlayerSearchResult, type TeamAnalysis, type TeamObjectiveControl, type RivalHeroStat, type PlayerAnalysisStat, type Insight, ApiErrorResponse } from '../api/client';
 
 const ROLES: TeamRole[] = ['carry', 'jungle', 'midlane', 'offlane', 'support'];
 
@@ -569,6 +569,17 @@ function PerformanceTab({ teamId, analysis, loading, onRefresh }: {
 }) {
   const [syncingMatches, setSyncingMatches] = useState(false);
   const [syncResult, setSyncResult] = useState<{ synced: number; remaining: number } | null>(null);
+  const [insights, setInsights] = useState<Insight[] | null>(null);
+  const [loadingInsights, setLoadingInsights] = useState(false);
+  const [expandedEvidence, setExpandedEvidence] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    setLoadingInsights(true);
+    apiClient.analyst.insights(teamId)
+      .then((res) => setInsights(res.insights))
+      .catch(() => setInsights([]))
+      .finally(() => setLoadingInsights(false));
+  }, [teamId]);
 
   async function handleSyncMatches() {
     setSyncingMatches(true);
@@ -909,6 +920,111 @@ function PerformanceTab({ teamId, analysis, loading, onRefresh }: {
             </div>
           ))}
         </div>
+      </div>
+
+      {/* ── Analyst Panel ─────────────────────────────────────────── */}
+      <div className="glass-card" style={{ padding: 0, overflow: 'hidden' }}>
+        <div style={{ padding: '0.75rem 1rem', borderBottom: '1px solid var(--border-color)', background: 'rgba(255,255,255,0.02)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          <span style={{ fontWeight: 700, fontSize: '0.85rem', color: 'var(--text-primary)' }}>Analyst</span>
+          <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>Insights automáticos basados en reglas</span>
+          {insights && insights.length > 0 && (
+            <span style={{ marginLeft: 'auto', fontFamily: 'var(--font-mono)', fontSize: '0.65rem', color: 'var(--text-muted)' }}>
+              {insights.filter(i => i.severity !== 'positive' && i.severity !== 'low').length} alertas · {insights.filter(i => i.severity === 'positive').length} fortalezas
+            </span>
+          )}
+        </div>
+        {loadingInsights ? (
+          <div style={{ padding: '1.5rem', color: 'var(--text-muted)', fontSize: '0.82rem' }}>Analizando…</div>
+        ) : !insights || insights.length === 0 ? (
+          <div style={{ padding: '1.5rem', color: 'var(--text-muted)', fontSize: '0.82rem' }}>No se generaron insights. Sincroniza más partidas del equipo.</div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column' }}>
+            {insights.map((ins, i) => (
+              <InsightCard
+                key={ins.id}
+                insight={ins}
+                last={i === insights.length - 1}
+                expanded={expandedEvidence.has(ins.id)}
+                onToggle={() => setExpandedEvidence((prev) => {
+                  const next = new Set(prev);
+                  next.has(ins.id) ? next.delete(ins.id) : next.add(ins.id);
+                  return next;
+                })}
+              />
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+const SEVERITY_COLOR: Record<string, string> = {
+  critical: 'var(--accent-loss)',
+  high: '#f97316',
+  medium: '#f0b429',
+  low: 'var(--text-muted)',
+  positive: 'var(--accent-win)',
+};
+const SEVERITY_BG: Record<string, string> = {
+  critical: 'rgba(248,113,113,0.08)',
+  high: 'rgba(249,115,22,0.08)',
+  medium: 'rgba(240,180,41,0.06)',
+  low: 'rgba(255,255,255,0.03)',
+  positive: 'rgba(74,222,128,0.08)',
+};
+const CATEGORY_LABEL: Record<string, string> = {
+  macro: 'Macro', vision: 'Visión', draft: 'Draft', performance: 'Rendimiento', economy: 'Economía',
+};
+
+function InsightCard({ insight: ins, last, expanded, onToggle }: {
+  insight: Insight; last: boolean; expanded: boolean; onToggle: () => void;
+}) {
+  const color = SEVERITY_COLOR[ins.severity] ?? 'var(--text-muted)';
+  const bg = SEVERITY_BG[ins.severity] ?? 'transparent';
+  return (
+    <div style={{
+      display: 'flex', gap: '0.75rem', padding: '0.85rem 1rem',
+      borderBottom: last ? 'none' : '1px solid var(--border-color)',
+      background: bg, borderLeft: `3px solid ${color}`,
+    }}>
+      <div style={{ flexShrink: 0, paddingTop: '0.1rem' }}>
+        <div style={{ width: 8, height: 8, borderRadius: '50%', background: color, marginTop: '0.35rem' }} />
+      </div>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.3rem', flexWrap: 'wrap' }}>
+          <span style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--text-primary)' }}>{ins.title}</span>
+          <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.6rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', padding: '0.1rem 0.45rem', borderRadius: 999, background: `${color}22`, color, border: `1px solid ${color}44` }}>
+            {ins.severity}
+          </span>
+          <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.6rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+            {CATEGORY_LABEL[ins.category]}
+          </span>
+          {ins.reviewRequired && (
+            <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.6rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', padding: '0.1rem 0.45rem', borderRadius: 999, background: 'rgba(91,156,246,0.1)', color: 'var(--accent-blue)', border: '1px solid rgba(91,156,246,0.3)' }}>
+              Review
+            </span>
+          )}
+        </div>
+        <p style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', margin: '0 0 0.4rem', lineHeight: 1.5 }}>{ins.body}</p>
+        <button
+          onClick={onToggle}
+          style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontSize: '0.68rem', color: 'var(--accent-blue)', fontFamily: 'var(--font-mono)', letterSpacing: '0.04em' }}
+        >
+          {expanded ? '▲ Ocultar evidencia' : '▼ Ver evidencia'}
+        </button>
+        {expanded && (
+          <div style={{ marginTop: '0.5rem' }}>
+            <ul style={{ margin: '0 0 0.5rem 0', paddingLeft: '1rem', display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
+              {ins.evidence.map((e, i) => (
+                <li key={i} style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>{e}</li>
+              ))}
+            </ul>
+            <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', background: 'rgba(255,255,255,0.03)', borderRadius: 6, padding: '0.45rem 0.65rem', borderLeft: `2px solid ${color}` }}>
+              💡 {ins.recommendation}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
