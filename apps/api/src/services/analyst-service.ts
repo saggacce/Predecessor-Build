@@ -303,7 +303,7 @@ export async function getTeamInsights(teamId: string): Promise<Insight[]> {
   // RULE 5 — Draft dependency (pool < 2 héroes fiables)
   // ─────────────────────────────────────────────────────────────────────────
   for (const [playerId, mps] of mpByPlayer) {
-    if (mps.length < 15) continue;
+    if (mps.length < 8) continue;
 
     const heroCount = new Map<string, number>();
     for (const mp of mps) heroCount.set(mp.heroSlug, (heroCount.get(mp.heroSlug) ?? 0) + 1);
@@ -396,7 +396,7 @@ export async function getTeamInsights(teamId: string): Promise<Insight[]> {
   // RULE 7 — Player slump
   // ─────────────────────────────────────────────────────────────────────────
   for (const [playerId, mps] of mpByPlayer) {
-    if (mps.length < 15) continue;
+    if (mps.length < 10) continue;
 
     const snap = snapshots.get(playerId);
     const historicalKda = snap
@@ -444,7 +444,7 @@ export async function getTeamInsights(teamId: string): Promise<Insight[]> {
     if (!role || !WARD_BASELINE[role]) continue;
 
     const withWards = mps.filter((m) => m.wardsPlaced !== null && m.match.duration > 0);
-    if (withWards.length < 10) continue;
+    if (withWards.length < 5) continue;
 
     const avgWardsPerMin =
       withWards.reduce((s, m) => s + (m.wardsPlaced! / (m.match.duration / 60)), 0) / withWards.length;
@@ -520,19 +520,36 @@ export async function getTeamInsights(teamId: string): Promise<Insight[]> {
     });
   }
 
-  // Insufficient data note when there are no event-stream matches
-  if (eventMatchIds.length === 0 && rosterPlayerIds.length >= 3) {
-    insights.push({
-      id: 'rule-no-event-data',
-      severity: 'low',
-      category: 'macro',
-      title: 'Sin partidas de equipo con event stream',
-      body: 'No se detectaron partidas donde 3+ jugadores del roster jugaran juntos con event stream sincronizado. Las reglas de objetivos y visión no pueden calcularse.',
-      evidence: ['Usa "Sync matches" en la sección Objective Control para sincronizar el event stream de las partidas del equipo.'],
-      recommendation: 'Sincronizar al menos 3 partidas de equipo para activar el análisis macro completo.',
-      reviewRequired: false,
-    });
-  }
+  // ── Data status insight — always shown ───────────────────────────────────
+  const totalMPs = [...mpByPlayer.values()].reduce((s, arr) => s + arr.length, 0);
+  const playersWithEnoughData = [...mpByPlayer.values()].filter((arr) => arr.length >= 8).length;
+
+  const statusEvidence: string[] = [
+    `Jugadores en el roster: ${rosterPlayerIds.length}`,
+    `Partidas individuales sincronizadas: ${totalMPs} registros entre ${mpByPlayer.size} jugadores`,
+    `Jugadores con datos suficientes (≥8 partidas): ${playersWithEnoughData}/${rosterPlayerIds.length}`,
+    `Partidas de equipo con event stream (≥3 jugadores juntos): ${eventMatchIds.length}`,
+  ];
+
+  const missingData: string[] = [];
+  if (rosterPlayerIds.length < 3) missingData.push('Añade al menos 3 jugadores al roster para análisis de equipo');
+  if (eventMatchIds.length === 0) missingData.push('Sincroniza el event stream con "Sync matches" en Objective Control para activar reglas macro');
+  if (playersWithEnoughData < rosterPlayerIds.length) missingData.push(`${rosterPlayerIds.length - playersWithEnoughData} jugador(es) necesita(n) más partidas sincronizadas (mín. 8)`);
+
+  insights.push({
+    id: 'data-status',
+    severity: 'low',
+    category: 'performance',
+    title: `Estado de datos del análisis`,
+    body: missingData.length === 0
+      ? 'Datos suficientes para todas las reglas disponibles.'
+      : missingData.join(' · '),
+    evidence: statusEvidence,
+    recommendation: missingData.length === 0
+      ? 'El análisis está completo. Las reglas se recalculan con cada nueva partida sincronizada.'
+      : 'Sincroniza más partidas y asegúrate de tener al menos 3 jugadores en el roster para desbloquear todas las reglas.',
+    reviewRequired: false,
+  });
 
   return insights.sort((a, b) => SEVERITY_ORDER[a.severity] - SEVERITY_ORDER[b.severity]);
 }
