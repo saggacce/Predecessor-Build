@@ -22,6 +22,7 @@ import { reportsRouter } from './routes/reports.js';
 import { patchesRouter } from './routes/patches.js';
 import { adminRouter } from './routes/admin.js';
 import { authRouter } from './routes/auth.js';
+import { analystRouter } from './routes/analyst.js';
 import { errorHandler } from './middleware/error-handler.js';
 import { disconnectDb } from './db.js';
 import { logger } from './logger.js';
@@ -61,6 +62,7 @@ app.use('/matches', matchesRouter);
 app.use('/reports', reportsRouter);
 app.use('/patches', patchesRouter);
 app.use('/admin', adminRouter);
+app.use('/analysis', analystRouter);
 
 app.use(errorHandler);
 

@@ -339,6 +339,18 @@ export interface TeamAnalysis {
   fangtoolhConversionRate: number | null;
 }
 
+export interface Insight {
+  id: string;
+  severity: 'critical' | 'high' | 'medium' | 'low' | 'positive';
+  category: 'macro' | 'vision' | 'draft' | 'performance' | 'economy';
+  title: string;
+  body: string;
+  evidence: string[];
+  recommendation: string;
+  reviewRequired: boolean;
+  affectedPlayers?: string[];
+}
+
 export interface AdminSyncVersionsResult {
   synced: number;
   elapsed: number;
@@ -451,6 +463,11 @@ export const apiClient = {
         method: 'POST',
         body: JSON.stringify({ ownTeamId, rivalTeamId }),
       }),
+  },
+
+  analyst: {
+    insights: (teamId: string) =>
+      fetchApi<{ insights: Insight[] }>(`/analysis/insights/${teamId}`),
   },
 
   auth: {
