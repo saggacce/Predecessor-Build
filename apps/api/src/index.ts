@@ -22,6 +22,8 @@ import { reportsRouter } from './routes/reports.js';
 import { patchesRouter } from './routes/patches.js';
 import { adminRouter } from './routes/admin.js';
 import { authRouter } from './routes/auth.js';
+import { internalAuthRouter } from './routes/internal-auth.js';
+import { invitationsRouter } from './routes/invitations.js';
 import { analystRouter } from './routes/analyst.js';
 import { errorHandler } from './middleware/error-handler.js';
 import { disconnectDb } from './db.js';
@@ -56,6 +58,8 @@ app.get('/health', (_req, res) => {
 });
 
 app.use('/auth', authRouter);
+app.use('/internal-auth', internalAuthRouter);
+app.use('/invitations', invitationsRouter);
 app.use('/players', playersRouter);
 app.use('/teams', teamsRouter);
 app.use('/matches', matchesRouter);
