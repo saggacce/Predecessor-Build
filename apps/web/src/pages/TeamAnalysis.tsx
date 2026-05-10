@@ -945,6 +945,7 @@ function PerformanceTab({ teamId, analysis, loading, onRefresh }: {
                 insight={ins}
                 last={i === insights.length - 1}
                 expanded={expandedEvidence.has(ins.id)}
+                teamId={teamId}
                 onToggle={() => setExpandedEvidence((prev) => {
                   const next = new Set(prev);
                   next.has(ins.id) ? next.delete(ins.id) : next.add(ins.id);
@@ -977,9 +978,26 @@ const CATEGORY_LABEL: Record<string, string> = {
   macro: 'Macro', vision: 'Visión', draft: 'Draft', performance: 'Rendimiento', economy: 'Economía',
 };
 
-function InsightCard({ insight: ins, last, expanded, onToggle }: {
-  insight: Insight; last: boolean; expanded: boolean; onToggle: () => void;
+function InsightCard({ insight: ins, last, expanded, onToggle, teamId }: {
+  insight: Insight; last: boolean; expanded: boolean; onToggle: () => void; teamId: string;
 }) {
+  const [added, setAdded] = useState(false);
+
+  async function handleAddToReview() {
+    try {
+      await apiClient.review.create({
+        teamId,
+        insightId: ins.id,
+        eventType: ins.category,
+        priority: ins.severity === 'positive' ? 'low' : ins.severity,
+        reason: ins.title,
+      });
+      setAdded(true);
+      toast.success('Added to Review Queue.');
+    } catch {
+      toast.error('Failed to add to review.');
+    }
+  }
   const color = SEVERITY_COLOR[ins.severity] ?? 'var(--text-muted)';
   const bg = SEVERITY_BG[ins.severity] ?? 'transparent';
   return (
@@ -1001,9 +1019,13 @@ function InsightCard({ insight: ins, last, expanded, onToggle }: {
             {CATEGORY_LABEL[ins.category]}
           </span>
           {ins.reviewRequired && (
-            <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.6rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', padding: '0.1rem 0.45rem', borderRadius: 999, background: 'rgba(91,156,246,0.1)', color: 'var(--accent-blue)', border: '1px solid rgba(91,156,246,0.3)' }}>
-              Review
-            </span>
+            <button
+              onClick={(e) => { e.stopPropagation(); void handleAddToReview(); }}
+              disabled={added || ins.severity === 'positive'}
+              style={{ fontFamily: 'var(--font-mono)', fontSize: '0.6rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', padding: '0.1rem 0.45rem', borderRadius: 999, background: added ? 'rgba(74,222,128,0.1)' : 'rgba(91,156,246,0.1)', color: added ? 'var(--accent-win)' : 'var(--accent-blue)', border: `1px solid ${added ? 'rgba(74,222,128,0.3)' : 'rgba(91,156,246,0.3)'}`, cursor: added ? 'default' : 'pointer' }}
+            >
+              {added ? '✓ Added' : '+ Review'}
+            </button>
           )}
         </div>
         <p style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', margin: '0 0 0.4rem', lineHeight: 1.5 }}>{ins.body}</p>
