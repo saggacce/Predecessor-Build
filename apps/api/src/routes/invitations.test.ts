@@ -20,6 +20,9 @@ vi.mock('../db.js', () => ({
       findMany: vi.fn(),
       delete: vi.fn(),
     },
+    syncLog: {
+      create: vi.fn(),
+    },
   },
   disconnectDb: vi.fn().mockResolvedValue(undefined),
 }));
@@ -27,6 +30,7 @@ vi.mock('../db.js', () => ({
 import { db } from '../db.js';
 
 const mockInvitation = (db as any).invitation;
+const mockSyncLog = (db as any).syncLog;
 
 const app = express();
 app.use(express.json());
@@ -72,6 +76,7 @@ beforeEach(() => {
   mockInvitation.findUnique.mockResolvedValue(null);
   mockInvitation.findMany.mockResolvedValue([]);
   mockInvitation.delete.mockResolvedValue(invitationRecord());
+  mockSyncLog.create.mockResolvedValue({ id: 'sync-log-1' });
 });
 
 describe('POST /invitations', () => {
@@ -116,6 +121,9 @@ describe('POST /invitations', () => {
         invitedById: 'user-1',
       }),
     }));
+    expect(mockSyncLog.create).toHaveBeenCalledWith({
+      data: { entity: 'Invitation', entityId: 'invitation-1', operation: 'create', status: 'success' },
+    });
   });
 });
 
@@ -142,5 +150,21 @@ describe('GET /invitations/:token', () => {
 
     expect(res.status).toBe(404);
     expect(res.body.error.code).toBe('INVITATION_NOT_FOUND');
+  });
+});
+
+describe('DELETE /invitations/:id', () => {
+  it('writes an audit log when deleting an unused invitation', async () => {
+    const cookie = await sessionCookie();
+    mockInvitation.findUnique.mockResolvedValue(invitationRecord());
+
+    const res = await request(app).delete('/invitations/invitation-1').set('Cookie', cookie);
+
+    expect(res.status).toBe(200);
+    expect(res.body.ok).toBe(true);
+    expect(mockInvitation.delete).toHaveBeenCalledWith({ where: { id: 'invitation-1' } });
+    expect(mockSyncLog.create).toHaveBeenCalledWith({
+      data: { entity: 'Invitation', entityId: 'invitation-1', operation: 'delete', status: 'success' },
+    });
   });
 });

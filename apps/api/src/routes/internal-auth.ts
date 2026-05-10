@@ -1,17 +1,21 @@
 import { Router, type Response } from 'express';
 import bcrypt from 'bcryptjs';
-import { SignJWT } from 'jose';
+import { SignJWT, jwtVerify } from 'jose';
 import { z } from 'zod';
 import { db } from '../db.js';
 import { AppError } from '../middleware/error-handler.js';
+import { loginRateLimit, registerRateLimit } from '../middleware/auth-rate-limit.js';
 import { requireAuth, type SessionUser } from '../middleware/require-auth.js';
 import { logger } from '../logger.js';
 
 export const internalAuthRouter = Router();
 
 const SESSION_COOKIE = 'ps_session';
-const SESSION_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
+const REFRESH_COOKIE = 'ps_refresh';
+const SESSION_MAX_AGE_MS = 60 * 60 * 1000;
+const REFRESH_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
 const PASSWORD_SALT_ROUNDS = 12;
+const DUMMY_PASSWORD_HASH = '$2b$12$nEepa.avChnIhNhaFuuTl.atEouSMEYqQZWLGAT5u9wRUou6CY1DS';
 
 const loginSchema = z.object({
   email: z.string().email().transform((email) => email.toLowerCase()),
@@ -72,7 +76,7 @@ async function signSession(user: UserWithMemberships): Promise<string> {
   return new SignJWT({ ...toSessionUser(user) })
     .setProtectedHeader({ alg: 'HS256' })
     .setIssuedAt()
-    .setExpirationTime(process.env.PS_JWT_EXPIRES_IN ?? '7d')
+    .setExpirationTime(process.env.PS_JWT_EXPIRES_IN ?? '1h')
     .sign(jwtSecret());
 }
 
@@ -81,11 +85,25 @@ async function setSessionCookie(res: Response, user: UserWithMemberships): Promi
   res.cookie(SESSION_COOKIE, token, {
     httpOnly: true,
     sameSite: 'lax',
+    secure: process.env.NODE_ENV === 'production',
     maxAge: SESSION_MAX_AGE_MS,
+  });
+
+  const refreshToken = await new SignJWT({ userId: user.id, type: 'refresh' })
+    .setProtectedHeader({ alg: 'HS256' })
+    .setIssuedAt()
+    .setExpirationTime('30d')
+    .sign(jwtSecret());
+  res.cookie(REFRESH_COOKIE, refreshToken, {
+    httpOnly: true,
+    sameSite: 'lax',
+    secure: process.env.NODE_ENV === 'production',
+    maxAge: REFRESH_MAX_AGE_MS,
+    path: '/internal-auth/refresh',
   });
 }
 
-internalAuthRouter.post('/login', async (req, res, next) => {
+internalAuthRouter.post('/login', loginRateLimit, async (req, res, next) => {
   try {
     const { email, password } = loginSchema.parse(req.body);
     const user = await db.user.findUnique({
@@ -95,7 +113,9 @@ internalAuthRouter.post('/login', async (req, res, next) => {
       },
     });
 
-    if (!user || !(await bcrypt.compare(password, user.passwordHash))) {
+    const passwordValid = await bcrypt.compare(password, user?.passwordHash ?? DUMMY_PASSWORD_HASH);
+
+    if (!user || !passwordValid) {
       logger.warn({ email }, 'internal auth login failed');
       throw new AppError(401, 'Invalid credentials', 'INVALID_CREDENTIALS');
     }
@@ -107,6 +127,9 @@ internalAuthRouter.post('/login', async (req, res, next) => {
 
     await db.user.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } });
     await setSessionCookie(res, user);
+    await db.syncLog.create({
+      data: { entity: 'User', entityId: user.id, operation: 'login', status: 'success' },
+    });
     logger.info({ userId: user.id }, 'internal auth login succeeded');
     res.json({ user: toResponseUser(user) });
   } catch (err) {
@@ -116,7 +139,37 @@ internalAuthRouter.post('/login', async (req, res, next) => {
 
 internalAuthRouter.post('/logout', (_req, res) => {
   res.clearCookie(SESSION_COOKIE);
+  res.clearCookie(REFRESH_COOKIE, { path: '/internal-auth/refresh' });
   res.json({ ok: true });
+});
+
+internalAuthRouter.post('/refresh', async (req, res, next) => {
+  try {
+    const refreshToken = req.cookies?.[REFRESH_COOKIE] as string | undefined;
+    if (!refreshToken) {
+      throw new AppError(401, 'Not authenticated', 'NOT_AUTHENTICATED');
+    }
+
+    const { payload } = await jwtVerify(refreshToken, jwtSecret());
+    if (payload.type !== 'refresh' || typeof payload.userId !== 'string') {
+      throw new AppError(401, 'Invalid refresh token', 'INVALID_TOKEN');
+    }
+
+    const user = await db.user.findUnique({
+      where: { id: payload.userId },
+      include: {
+        memberships: { select: { teamId: true, role: true, playerId: true } },
+      },
+    });
+    if (!user || !user.isActive) {
+      throw new AppError(401, 'Not authenticated', 'NOT_AUTHENTICATED');
+    }
+
+    await setSessionCookie(res, user);
+    res.json({ ok: true });
+  } catch (err) {
+    next(err);
+  }
 });
 
 internalAuthRouter.get('/me', requireAuth, (req, res) => {
@@ -132,7 +185,7 @@ internalAuthRouter.get('/me', requireAuth, (req, res) => {
   });
 });
 
-internalAuthRouter.post('/register', async (req, res, next) => {
+internalAuthRouter.post('/register', registerRateLimit, async (req, res, next) => {
   try {
     const { token, name, password } = registerSchema.parse(req.body);
     const invitation = await db.invitation.findUnique({ where: { token } });
@@ -172,6 +225,9 @@ internalAuthRouter.post('/register', async (req, res, next) => {
     });
 
     await setSessionCookie(res, user);
+    await db.syncLog.create({
+      data: { entity: 'User', entityId: user.id, operation: 'register', status: 'success' },
+    });
     logger.info({ userId: user.id, invitationId: invitation.id }, 'internal auth registration completed');
     res.status(201).json({ user: toResponseUser(user) });
   } catch (err) {

@@ -69,6 +69,9 @@ invitationsRouter.post('/', requireAuth, requireRole(['MANAGER']), async (req, r
     });
 
     logger.info({ invitationId: invitation.id, teamId: invitation.teamId }, 'invitation created');
+    await db.syncLog.create({
+      data: { entity: 'Invitation', entityId: invitation.id, operation: 'create', status: 'success' },
+    });
     res.status(201).json({ invitation });
   } catch (err) {
     next(err);
@@ -129,6 +132,9 @@ invitationsRouter.delete(
       }
 
       await db.invitation.delete({ where: { id: invitationId } });
+      await db.syncLog.create({
+        data: { entity: 'Invitation', entityId: invitationId, operation: 'delete', status: 'success' },
+      });
       logger.info({ invitationId }, 'invitation deleted');
       res.json({ ok: true });
     } catch (err) {
