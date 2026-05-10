@@ -236,3 +236,60 @@ model SyncLog {
   syncedAt  DateTime @default(now())
   error     String?
 }
+
+// ── Review Queue ──────────────────────────────────────────────────────────────
+
+model ReviewItem {
+  id           String   @id @default(cuid())
+  teamId       String
+  matchId      String?
+  playerId     String?
+  insightId    String?  // rule id that generated this item
+  gameTime     Int?     // seconds into the match
+  eventType    String   // category: macro|vision|draft|performance|economy
+  priority     String   @default("high") // critical|high|medium|low
+  reason       String   // brief description of the issue
+  status       String   @default("PENDING")
+  // PENDING|IN_REVIEW|REVIEWED|FALSE_POSITIVE|TEAM_ISSUE|PLAYER_ISSUE|DRAFT_ISSUE|ADDED_TO_TRAINING
+  tag          String?  // bad_objective_setup|facecheck|bad_reset|late_rotation|bad_engage|ignored_call|bad_secure|poor_conversion
+  coachComment String?
+  assignedTo   String?  // player name or role label
+  actionItem   String?  // concrete training action
+  vodUrl       String?
+  vodTimestamp Int?     // seconds into the video
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model TeamGoal {
+  id            String   @id @default(cuid())
+  teamId        String
+  title         String
+  description   String?
+  metricId      String?  // indicator ID e.g. "TEAM-012"
+  baselineValue Float?
+  targetValue   Float?
+  currentValue  Float?
+  timeframe     String?  // e.g. "next 5 scrims"
+  priority      String   @default("medium") // high|medium|low
+  status        String   @default("ACTIVE") // DRAFT|ACTIVE|ACHIEVED|FAILED|PAUSED|ARCHIVED
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model PlayerGoal {
+  id            String   @id @default(cuid())
+  playerId      String
+  teamId        String
+  title         String
+  description   String?
+  metricId      String?
+  baselineValue Float?
+  targetValue   Float?
+  currentValue  Float?
+  coachNote     String?
+  visibility    String   @default("staff") // staff|player|all
+  status        String   @default("ACTIVE")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}

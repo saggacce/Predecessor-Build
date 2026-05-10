@@ -23,6 +23,7 @@ import { patchesRouter } from './routes/patches.js';
 import { adminRouter } from './routes/admin.js';
 import { authRouter } from './routes/auth.js';
 import { analystRouter } from './routes/analyst.js';
+import { reviewRouter } from './routes/review.js';
 import { errorHandler } from './middleware/error-handler.js';
 import { disconnectDb } from './db.js';
 import { logger } from './logger.js';
@@ -63,6 +64,7 @@ app.use('/reports', reportsRouter);
 app.use('/patches', patchesRouter);
 app.use('/admin', adminRouter);
 app.use('/analysis', analystRouter);
+app.use('/review', reviewRouter);
 
 app.use(errorHandler);
 
