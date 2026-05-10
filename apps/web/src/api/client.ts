@@ -325,6 +325,28 @@ export interface RivalHeroStat {
   avgKda: number;
 }
 
+export interface ObjectiveConversionStat {
+  entityType: string;
+  taken: number;
+  toAnyStructureRate: number | null;
+  toInhibitorRate: number | null;
+  toCoreRate: number | null;
+}
+
+export interface ObjectiveTimingStat {
+  entityType: string;
+  teamTaken: number;
+  avgGameTimeSecs: number | null;
+  stdDevSecs: number | null;
+  priorityShare: number | null;
+}
+
+export interface TeamObjectiveAnalysis {
+  sampleSize: number;
+  conversions: ObjectiveConversionStat[];
+  timingStats: ObjectiveTimingStat[];
+}
+
 export interface TeamAnalysis {
   teamId: string;
   teamName: string;
@@ -538,6 +560,7 @@ export const apiClient = {
     getAnalysis: (id: string) => fetchApi<TeamAnalysis>(`/teams/${id}/analysis`),
     getPhaseAnalysis: (id: string) => fetchApi<TeamPhaseAnalysis>(`/teams/${id}/phase-analysis`),
     getVisionAnalysis: (id: string) => fetchApi<TeamVisionAnalysis>(`/teams/${id}/vision-analysis`),
+    getObjectiveAnalysis: (id: string) => fetchApi<TeamObjectiveAnalysis>(`/teams/${id}/objective-analysis`),
     syncMatches: (id: string, limit = 10) =>
       fetchApi<{ synced: number; errors: number; remaining: number }>(`/teams/${id}/sync-matches`, {
         method: 'POST', body: JSON.stringify({ limit }),

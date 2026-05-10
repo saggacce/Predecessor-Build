@@ -962,3 +962,142 @@ function emptyPhaseAnalysis(): TeamPhaseAnalysis {
     perMatch: [],
   };
 }
+
+// ── Objective Analysis ────────────────────────────────────────────────────────
+
+const CONVERSION_WINDOWS: Record<string, number> = {
+  FANGTOOTH: 120, PRIMAL_FANGTOOTH: 120,
+  SHAPER: 150,
+  ORB_PRIME: 180, MINI_PRIME: 150,
+};
+
+const CONVERSION_OBJECTIVES = Object.keys(CONVERSION_WINDOWS);
+
+export interface ObjectiveConversionStat {
+  entityType: string;
+  taken: number;
+  toAnyStructureRate: number | null;
+  toInhibitorRate: number | null;
+  toCoreRate: number | null;
+}
+
+export interface ObjectiveTimingStat {
+  entityType: string;
+  teamTaken: number;
+  avgGameTimeSecs: number | null;
+  stdDevSecs: number | null;
+  priorityShare: number | null;
+}
+
+export interface TeamObjectiveAnalysis {
+  sampleSize: number;
+  conversions: ObjectiveConversionStat[];
+  timingStats: ObjectiveTimingStat[];
+}
+
+export async function getTeamObjectiveAnalysis(teamId: string): Promise<TeamObjectiveAnalysis> {
+  const team = await db.team.findUnique({ where: { id: teamId } });
+  if (!team) throw new AppError(404, `Team not found: ${teamId}`, 'TEAM_NOT_FOUND');
+
+  const roster = await db.teamRoster.findMany({
+    where: { teamId, activeTo: null },
+    select: { playerId: true },
+  });
+  const rosterPlayerIds = roster.map((r) => r.playerId);
+  if (rosterPlayerIds.length === 0) return { sampleSize: 0, conversions: [], timingStats: [] };
+
+  const matchRows = await db.$queryRaw<Array<{ matchId: string; team: string }>>`
+    SELECT mp."matchId", mp."team"
+    FROM "MatchPlayer" mp
+    JOIN "Match" m ON m.id = mp."matchId"
+    WHERE mp."playerId" = ANY(${rosterPlayerIds}::text[])
+      AND m."eventStreamSynced" = true
+    GROUP BY mp."matchId", mp."team"
+    HAVING COUNT(DISTINCT mp."playerId") >= 3
+    ORDER BY m."startTime" DESC
+    LIMIT 50
+  `;
+
+  if (matchRows.length === 0) return { sampleSize: 0, conversions: [], timingStats: [] };
+
+  const matchIds = matchRows.map((r) => r.matchId);
+  const sideMap = new Map(matchRows.map((r) => [r.matchId, r.team]));
+
+  const [objectiveKills, structureDestructions] = await Promise.all([
+    db.objectiveKill.findMany({
+      where: { matchId: { in: matchIds }, entityType: { in: CONVERSION_OBJECTIVES } },
+      select: { matchId: true, gameTime: true, entityType: true, killerTeam: true },
+    }),
+    db.structureDestruction.findMany({
+      where: { matchId: { in: matchIds } },
+      select: { matchId: true, gameTime: true, structureType: true, destructionTeam: true },
+    }),
+  ]);
+
+  const sdByMatch = new Map<string, typeof structureDestructions>();
+  for (const sd of structureDestructions) {
+    const arr = sdByMatch.get(sd.matchId) ?? [];
+    arr.push(sd);
+    sdByMatch.set(sd.matchId, arr);
+  }
+
+  // ── Conversion rates per objective type ───────────────────────────────────
+  const convBuckets = new Map<string, { taken: number; toAny: number; toInhibitor: number; toCore: number }>();
+
+  for (const obj of objectiveKills) {
+    const side = sideMap.get(obj.matchId);
+    if (!side || obj.killerTeam !== side) continue;
+
+    const bucket = convBuckets.get(obj.entityType) ?? { taken: 0, toAny: 0, toInhibitor: 0, toCore: 0 };
+    bucket.taken++;
+
+    const window = CONVERSION_WINDOWS[obj.entityType] ?? 120;
+    const structs = (sdByMatch.get(obj.matchId) ?? []).filter(
+      (sd) => sd.destructionTeam === side && sd.gameTime >= obj.gameTime && sd.gameTime <= obj.gameTime + window,
+    );
+
+    if (structs.length > 0) bucket.toAny++;
+    if (structs.some((sd) => sd.structureType === 'INHIBITOR')) bucket.toInhibitor++;
+    if (structs.some((sd) => sd.structureType === 'CORE')) bucket.toCore++;
+
+    convBuckets.set(obj.entityType, bucket);
+  }
+
+  const conversions: ObjectiveConversionStat[] = Array.from(convBuckets.entries()).map(([entityType, b]) => ({
+    entityType,
+    taken: b.taken,
+    toAnyStructureRate: b.taken > 0 ? Math.round((b.toAny / b.taken) * 100) : null,
+    toInhibitorRate: b.taken > 0 ? Math.round((b.toInhibitor / b.taken) * 100) : null,
+    toCoreRate: b.taken > 0 ? Math.round((b.toCore / b.taken) * 100) : null,
+  }));
+
+  // ── Timing consistency (stddev) + priority share ──────────────────────────
+  const timingBuckets = new Map<string, number[]>();
+
+  for (const obj of objectiveKills) {
+    const side = sideMap.get(obj.matchId);
+    if (!side || obj.killerTeam !== side) continue;
+    const arr = timingBuckets.get(obj.entityType) ?? [];
+    arr.push(obj.gameTime);
+    timingBuckets.set(obj.entityType, arr);
+  }
+
+  const totalTeamTakes = Array.from(timingBuckets.values()).reduce((s, arr) => s + arr.length, 0);
+
+  const timingStats: ObjectiveTimingStat[] = Array.from(timingBuckets.entries()).map(([entityType, times]) => {
+    const n = times.length;
+    const avg = n > 0 ? times.reduce((s, t) => s + t, 0) / n : null;
+    const stdDev = avg !== null && n > 1
+      ? Math.round(Math.sqrt(times.reduce((s, t) => s + (t - avg) ** 2, 0) / n))
+      : null;
+    return {
+      entityType,
+      teamTaken: n,
+      avgGameTimeSecs: avg !== null ? Math.round(avg) : null,
+      stdDevSecs: stdDev,
+      priorityShare: totalTeamTakes > 0 ? Math.round((n / totalTeamTakes) * 100) : null,
+    };
+  }).sort((a, b) => b.teamTaken - a.teamTaken);
+
+  return { sampleSize: matchRows.length, conversions, timingStats };
+}
