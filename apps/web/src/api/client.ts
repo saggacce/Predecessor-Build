@@ -339,6 +339,47 @@ export interface TeamAnalysis {
   fangtoolhConversionRate: number | null;
 }
 
+export interface MatchPhaseStat {
+  matchId: string;
+  predggUuid: string;
+  won: boolean | null;
+  killDiff10: number;
+  killDiff15: number;
+  objectiveDiff10: number;
+  objectiveDiff15: number;
+  objectiveDiff20: number;
+}
+
+export interface TeamPhaseAnalysis {
+  sampleSize: number;
+  avgKillDiff10: number | null;
+  avgKillDiff15: number | null;
+  avgObjectiveDiff10: number | null;
+  avgObjectiveDiff15: number | null;
+  avgObjectiveDiff20: number | null;
+  throwRate: number | null;
+  comebackRate: number | null;
+  perMatch: MatchPhaseStat[];
+}
+
+export interface VisionObjectiveStat {
+  entityType: string;
+  teamTaken: number;
+  avgWardsNearby: number | null;
+  avgWardsLost: number | null;
+  avgEnemyWardsCleared: number | null;
+  junglerAliveRate: number | null;
+  supportAliveRate: number | null;
+}
+
+export interface TeamVisionAnalysis {
+  sampleSize: number;
+  visionControlScore: number | null;
+  objectiveLostAfterAllyDeathRate: number | null;
+  objectiveTakenAfterEnemyDeathRate: number | null;
+  byObjective: VisionObjectiveStat[];
+}
+
 export interface Insight {
   id: string;
   severity: 'critical' | 'high' | 'medium' | 'low' | 'positive';
@@ -495,6 +536,8 @@ export const apiClient = {
     removePlayer: (teamId: string, rosterId: string) =>
       fetchApi<{ ok: boolean }>(`/teams/${teamId}/roster/${rosterId}`, { method: 'DELETE' }),
     getAnalysis: (id: string) => fetchApi<TeamAnalysis>(`/teams/${id}/analysis`),
+    getPhaseAnalysis: (id: string) => fetchApi<TeamPhaseAnalysis>(`/teams/${id}/phase-analysis`),
+    getVisionAnalysis: (id: string) => fetchApi<TeamVisionAnalysis>(`/teams/${id}/vision-analysis`),
     syncMatches: (id: string, limit = 10) =>
       fetchApi<{ synced: number; errors: number; remaining: number }>(`/teams/${id}/sync-matches`, {
         method: 'POST', body: JSON.stringify({ limit }),
