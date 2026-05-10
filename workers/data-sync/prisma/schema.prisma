@@ -61,7 +61,8 @@ model Team {
   notes        String?
   createdAt    DateTime @default(now())
 
-  roster TeamRoster[]
+  roster      TeamRoster[]
+  memberships TeamMembership[]
 }
 
 enum TeamType {
@@ -235,6 +236,45 @@ model SyncLog {
   status    String
   syncedAt  DateTime @default(now())
   error     String?
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  name         String
+  passwordHash String
+  globalRole   String   @default("VIEWER") // PLATFORM_ADMIN | VIEWER
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  lastLoginAt  DateTime?
+
+  memberships     TeamMembership[]
+  sentInvitations Invitation[] @relation("InvitedBy")
+}
+
+model TeamMembership {
+  id       String  @id @default(cuid())
+  userId   String
+  user     User    @relation(fields: [userId], references: [id])
+  teamId   String
+  team     Team    @relation(fields: [teamId], references: [id])
+  role     String  // MANAGER | COACH | ANALISTA | JUGADOR
+  playerId String? // FK a Player si role = JUGADOR
+
+  @@unique([userId, teamId])
+}
+
+model Invitation {
+  id          String    @id @default(cuid())
+  token       String    @unique @default(cuid())
+  email       String
+  teamId      String
+  role        String    // MANAGER | COACH | ANALISTA | JUGADOR
+  invitedById String
+  invitedBy   User      @relation("InvitedBy", fields: [invitedById], references: [id])
+  expiresAt   DateTime
+  usedAt      DateTime?
+  createdAt   DateTime  @default(now())
 }
 
 // ── Review Queue ──────────────────────────────────────────────────────────────
