@@ -1,13 +1,14 @@
 import { useEffect, useState } from 'react';
 import { BrowserRouter, Routes, Route, NavLink } from 'react-router';
 import { Toaster, toast } from 'sonner';
-import { Home, Users, Target, Shield, LogIn, LogOut, Loader, Radio, Zap } from 'lucide-react';
+import { Home, Users, Target, Shield, LogIn, LogOut, Loader, Radio, Zap, ClipboardList } from 'lucide-react';
 import type { VersionRecord } from '@predecessor/data-model';
 import Dashboard from './pages/Dashboard';
 import PlayerScouting from './pages/PlayerScouting';
 import TeamAnalysis from './pages/TeamAnalysis';
 import ScrimReport from './pages/ScrimReport';
 import MatchDetail from './pages/MatchDetail';
+import ReviewQueue from './pages/ReviewQueue';
 import { useAuth } from './hooks/useAuth';
 import { apiClient } from './api/client';
 import './App.css';
@@ -61,6 +62,7 @@ function Sidebar() {
     { to: '/players', label: 'Player Scouting', icon: <Target size={18} /> },
     { to: '/teams', label: 'Team Analysis', icon: <Users size={18} /> },
     { to: '/scrims', label: 'Scrim Reports', icon: <Shield size={18} /> },
+    { to: '/review', label: 'Review Queue', icon: <ClipboardList size={18} /> },
   ];
 
   return (
@@ -134,6 +136,7 @@ export default function App() {
             <Route path="/teams" element={<TeamAnalysis />} />
             <Route path="/scrims" element={<ScrimReport />} />
             <Route path="/matches/:id" element={<MatchDetail />} />
+            <Route path="/review" element={<ReviewQueue />} />
           </Routes>
         </main>
       </div>

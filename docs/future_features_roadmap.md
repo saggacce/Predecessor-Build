@@ -1,206 +1,454 @@
 # Future Features Roadmap — PrimeSight
 
-Backlog de capacidades no incluidas en las fases activas. Ver `docs/planning.md` para tareas en curso y `docs/primesight_indicators_catalog.csv` para el detalle de los 102 indicadores y sus fases de implementación.
+Backlog de funcionalidades pendientes o posibles a futuro para la plataforma PrimeSight / Predecessor-Build.
 
-Prioridad: **P0** crítico · **P1** alto valor · **P2** medio plazo · **P3** experimental
-Dificultad: Low / Medium / High / Very High
+Este documento complementa:
+- `docs/planning.md` → tareas activas y desglose operativo.
+- `docs/project_predecessor.md` → especificación de producto.
+- `docs/predecessor_api_technical_doc.md` → referencia técnica de pred.gg.
+- GitHub Issues → unidad de trabajo accionable.
 
----
-
-## Estado de implementación por fase
-
-| Fase | Contenido | Estado |
-|------|-----------|--------|
-| Fase 1 — Base | Player scouting, OAuth2, sync, dashboard, CI/CD | ✅ Completo |
-| Fase 2 — Teams | Teams management CRUD, PrimeSight design system, docs | ✅ Completo |
-| Fase 3 — Event stream | heroKills/objectives/wards sync, heatmaps, métricas temporales | 🔜 Próxima |
-| Fase 4 — Draft/Scouting | Hero pool, comfort scores, ban vulnerability, rival threat | 📋 Planificado |
-| Fase 5 — Build/Stat | Calculadora de stats, simulador de builds | 📋 Planificado |
+> Principio rector: **reglas deterministas primero, IA solo para resumir evidencias ya calculadas**. Evitar predicciones falsas o claims no trazables.
 
 ---
 
-## 0. OAuth2 login con pred.gg ✅ COMPLETADO
+## Estado general
 
-- Implementado con PKCE (RFC 7636), HTTP-only cookies, refresh automático 30 días.
-- Hallazgo clave: iniciar en `https://pred.gg/oauth2/authorize` (ruta SPA), no en `/api/`.
-- Scopes: `offline_access profile player:read:interval hero_leaderboard:read matchup_statistic:read`
-
----
-
-## 1. Event stream sync + heatmaps (Fase 3)
-
-- **Priority:** P0
-- **Difficulty:** High
-- **Contexto:** El event stream de pred.gg está confirmado disponible con auth Bearer. Ver `docs/primesight_visual_design_direction.md` sección "Limitaciones conocidas" y `docs/primesight_indicators_catalog.csv` columna `data_dependency`.
-- **Lo que incluye:**
-  - Extender sync worker: heroKills, objectiveKills, structureDestructions, wardPlacements/Destructions, goldEarnedAtInterval, transactions, heroBans (solo RANKED)
-  - Almacenar eventos individuales por partida en BD (nueva tabla o columnas JSONB)
-  - Definir polígonos de zonas tácticas sobre el mapa (entrada Fangtooth, zona Prime, carriles)
-  - Panel de heatmap sobre `assets/maps/map.png` con capas por evento
-  - Métricas de Fase 2: Deaths Before Objective (IND-018), Gold Diff @5/10/15/20 (TEAM-005), Objective Control (TEAM-008/009/010)
-- **Bloqueador conocido:** el sync Bearer token solo está disponible cuando el usuario tiene sesión activa.
-
----
-
-## 2. Nombres personalizados para jugadores sin cuenta pred.gg (Tarea 5)
-
-- **Priority:** P0
-- **Difficulty:** Low
-- **Contexto:** El 60% de jugadores en el event stream tienen `name=null` (sin cuenta pred.gg, típicamente consola). Sus UUID y stats son accesibles, solo falta el nombre.
-- **Lo que incluye:**
-  - Migration: campo `customName String?` en tabla `Player`
-  - Endpoint `PATCH /players/:id/name` — actualiza `customName`, nunca sobreescrito por sync
-  - Lógica display: `customName ?? displayName ?? "Unknown"`
-  - UI: icono de edición junto al nombre en roster y scouting para jugadores sin nombre
+| Área | Estado | Referencia |
+|---|---|---|
+| OAuth2 pred.gg, player scouting, teams, dashboard, match detail, timeline, analysis tab | Completo / base existente | `README.md`, `docs/planning.md` |
+| Tests pendientes de agregación/filtros | Pendiente | #47 |
+| Player sync para UUIDs sin nombre | Pendiente | #48 |
+| Analyst Rules Engine | Pendiente | #49 |
+| Review Queue + goals | Pendiente | #51 |
+| Tactical map zones | Pendiente | #52 |
+| Tactical Board | Pendiente | #53 |
+| Tactical Timeline | Pendiente | #54 |
+| VOD & Replay Index | Pendiente | #56 |
+| RBAC + invitations | Pendiente | #57 |
+| Pre-Match Battle Plan | Pendiente | #58 |
+| Draft Board | Pendiente | #59 |
+| Build/Stat Calculator | Pendiente | #60 |
+| Game data version manager | Pendiente | #61 |
+| Discord Companion Bot | Pendiente | #62 |
+| UI/UX V2 + Coach Session Mode | Pendiente | #63 |
+| Scrim Planner + Playbook + Review Sessions | Futuro | #64 |
 
 ---
 
-## 3. Logo upload de equipos (Tarea 5)
+## Prioridades
 
-- **Priority:** P1
-- **Difficulty:** Low
-- **Contexto:** El campo `logoUrl` existe en el modelo `Team`. Actualmente solo se puede introducir una URL manualmente en el formulario. Falta soporte para subida de imagen.
-- **Opciones:** URL externa (ya funciona), upload a un bucket S3/R2, o base64 inline.
-
----
-
-## 4. Real-time draft assistant
-
-- **Priority:** P0
-- **Difficulty:** High
-- **Estimated time:** 8–12 semanas
-- **Contexto:** Los bans están disponibles en pred.gg (RANKED, hero+team sin orden). Los picks se infieren de matchPlayers. No hay secuencia de draft. El análisis de composición (estilos, balance de daño) es viable — ver IND-031/032/033 y TEAM-023/024/025 en el catálogo.
-- **Lo que se necesita:**
-  - Base de datos manual de arquetipos de héroe (engage/poke/scaling/dive) actualizada por parche
-  - Cálculo de Hero Comfort Score por jugador-héroe (IND-031)
-  - Ban Vulnerability Score (IND-033) — qué héroes se banean contra cada jugador
-  - UI de composición con balance de daño visual (físico/mágico/true/utility)
-  - Para draft asistido en tiempo real: sistema de tracking durante el pick/ban en vivo
+- **P0 — Base crítica:** necesario para fiabilidad, datos o flujo principal.
+- **P1 — Alto valor:** mejora fuerte para coaches/staff.
+- **P2 — Medio plazo:** útil, pero no bloquea el core.
+- **P3 — Experimental:** requiere validación o depende de datos/uso real.
 
 ---
 
-## 5. Team-vs-team scrim prep auto-reports
+# P0 — Base crítica
 
-- **Priority:** P0
-- **Difficulty:** Medium
-- **Estimated time:** 4–6 semanas
-- **Contexto:** El ScrimReport básico existe. Necesita enriquecerse con datos del event stream y métricas del catálogo.
-- **Lo que se necesita:**
-  - Integrar métricas de Fase 2 (objective control, gold diff, deaths before objective)
-  - Rival weak zones (TEAM-022) basadas en heatmaps
-  - Threat index por jugador rival (TEAM-029)
-  - Exportación PDF o HTML compartible
+## 1. Tests de agregación y filtros por parche/ventana
 
----
+**Issue:** #47  
+**Estado:** Pendiente  
+**Motivo:** sin estos tests, el Rules Engine y los reportes pueden mezclar muestras incorrectas por parche, timeframe o modo.
 
-## 6. Opponent strategy fingerprinting
-
-- **Priority:** P1
-- **Difficulty:** High
-- **Estimated time:** 6–10 semanas
-- **Contexto:** Clasificar estilos de equipo — early pressure, objective control, scaling, etc. Se apoya en TEAM-023 (Draft Style Winrate) del catálogo.
-- **Lo que se necesita:**
-  - Feature engineering sobre event stream (ventanas de objetivos, gold diff, picks)
-  - Definición manual de arquetipos validados por el coach
-  - Visualización: radar chart o fingerprint visual por equipo
+Incluye:
+- tests de agregación de métricas de jugador;
+- tests de filtros por parche y ventana temporal;
+- casos de muestra baja, dataset vacío y jugadores privados/nulos.
 
 ---
 
-## 7. VOD review con tags de coach
+## 2. Sync de jugadores desconocidos del event stream
 
-- **Priority:** P1
-- **Difficulty:** Medium
-- **Estimated time:** 4–6 semanas
-- **Contexto:** El catálogo define 16 review markers (REV-001 a REV-016): bad_reset, late_rotation, bad_objective_setup, etc. Todos son entradas manuales del coach con timestamp, jugador, severidad y comentario.
-- **Lo que se necesita:**
-  - Modelo de datos ReviewTag en BD
-  - UI de annotación vinculada a partida + minuto
-  - Sistema de acceso por rol (staff / jugador afectado / equipo)
-  - Integración con métricas automáticas (las alertas de IND-018/019 sugieren qué revisar)
+**Issue:** #48  
+**Estado:** Pendiente  
+**Motivo:** jugadores de consola/privados pueden aparecer con UUID pero sin nombre. Deben persistirse para análisis, roster, review y scouting.
 
----
-
-## 8. Post-match coaching insights
-
-- **Priority:** P1
-- **Difficulty:** High
-- **Estimated time:** 6–10 semanas
-- **Contexto:** Requiere event stream activo (Fase 3). Comparar partidas propias con umbrales del catálogo (min_sample_matches, métricas por rol).
-- **Lo que se necesita:**
-  - Baseline por rol/héroe/parche
-  - Reglas de alerta configurables
-  - Panel de "training priority" (TEAM-030)
+Incluye:
+- crear placeholders de `Player` para UUIDs del event stream;
+- preservar `customName`;
+- fallback de display consistente.
 
 ---
 
-## 9. Build intelligence con simulación de escenario
+## 3. Analyst Rules Engine MVP
 
-- **Priority:** P1
-- **Difficulty:** Medium
-- **Estimated time:** 5–8 semanas
-- **Contexto:** El motor de cálculo base existe en `packages/domain-engine`. Falta UI y cobertura completa de items/pasivas/habilidades.
-- **Lo que se necesita:**
-  - Motor determinista: stat engine, item/pasiva logic, versioning por parche
-  - UI: selección de héroe, nivel, build, skill order
-  - Outputs explicables: stats intermedios, spikes, burst window
+**Issue:** #49  
+**Estado:** Pendiente  
+**Motivo:** es el puente entre datos descriptivos y acciones reales para staff.
 
----
+Incluye reglas deterministas para:
+- muertes críticas antes de objetivos;
+- baja visión antes de objetivos;
+- visión limpiada por el rival;
+- Prime no convertido;
+- draft dependency / ban vulnerability;
+- throws tras ventaja de oro;
+- player slump;
+- gaps de visión;
+- refuerzos positivos.
 
-## 10. Alerting y monitoring de rivales
-
-- **Priority:** P2
-- **Difficulty:** Medium
-- **Estimated time:** 3–5 semanas
-- **Lo que es:** alertas cuando un rival cambia su pool de héroes, hay role swaps o cae el rendimiento.
-- **Lo que se necesita:**
-  - Thresholds de cambio configurables
-  - Canales de notificación (in-app + opcional Discord webhook)
-  - Audit log de alertas y falsos positivos
-
----
-
-## 11. Live overlays (timers, objectives)
-
-- **Priority:** P2
-- **Difficulty:** Very High
-- **Estimated time:** 10–16+ semanas
-- **Nota:** Requiere validación de compliance con el juego. Alta complejidad técnica. No prioritario mientras haya brechas en analytics post-partida.
+Salida esperada:
+```ts
+{
+  id: string;
+  severity: 'critical' | 'high' | 'medium' | 'low' | 'positive';
+  category: string;
+  title: string;
+  evidence: Evidence[];
+  recommendation: string;
+  reviewRequired: boolean;
+}
+```
 
 ---
 
-## 12. RBAC y workspace multi-equipo
+## 4. Tactical map zones
 
-- **Priority:** P2
-- **Difficulty:** Medium
-- **Estimated time:** 4–7 semanas
-- **Contexto:** Las señales visuales de RBAC ya están definidas en `primesight_visual_design_direction.md`. Implementar el backend real con roles staff/coach/player/viewer.
-- **Lo que se necesita:**
-  - Modelo de roles en BD
-  - Middleware de autorización por endpoint
-  - UI diferenciada: datos "staff privado" (IND-040) ocultos a jugadores
+**Issue:** #52  
+**Estado:** Pendiente  
+**Motivo:** varias métricas avanzadas dependen de saber si un evento ocurrió cerca de Fangtooth, Prime, Shaper, río, carriles o jungla.
 
----
-
-## 13. Narrativa de report con IA asistida
-
-- **Priority:** P3
-- **Difficulty:** Medium
-- **Estimated time:** 3–6 semanas
-- **Lo que es:** resúmenes narrativos auto-generados a partir de métricas estructuradas del scrim report.
-- **Lo que se necesita:**
-  - Templates de prompt ligados a métricas específicas del catálogo
-  - Revisión humana antes de compartir
-  - Trazabilidad: cada claim narrativo vinculado a su métrica fuente
+Incluye:
+- polígonos tácticos sobre el mapa calibrado;
+- tabla/modelo `MapZone`;
+- función `pointInZone(x, y, zone)` en `domain-engine`;
+- tests de coordenadas.
 
 ---
 
-## Guía de implementación segura
+## 5. RBAC, invitaciones y perfiles de usuario
 
-Ruta más segura en función del estado actual:
+**Issue:** #57  
+**Estado:** Pendiente  
+**Motivo:** necesario para multiusuario real, visibilidad privada de objetivos, roles staff/jugador y uso por equipos.
 
-1. Completar Tarea 5 (logo, customName) — bajo riesgo, alto valor inmediato
-2. Extender sync worker con event stream (Tarea 6) — prerequisito de todo lo demás
-3. Implementar heatmaps básicos con el mapa ya disponible (`assets/maps/map.png`)
-4. Implementar métricas de Fase 2 del catálogo (IND-018, TEAM-005, TEAM-008/009/010)
-5. Enriquecer ScrimReport con esas métricas
-6. Luego abordar draft analysis con los datos de heroBans ya disponibles
+Incluye:
+- `User`;
+- `Invitation`;
+- `TeamMembership`;
+- roles globales y por equipo;
+- middleware de autorización.
+
+---
+
+# P1 — Alto valor para coaches/staff
+
+## 6. Review Queue + Team/Player Goals
+
+**Issue:** #51  
+**Estado:** Pendiente  
+**Depende de:** #49 para máximo valor.
+
+Convierte insights/eventos en trabajo de revisión:
+```text
+Insight/evento → ReviewItem → coach confirma/descarta → tag causa → action item → TeamGoal/PlayerGoal
+```
+
+Incluye:
+- cola de review filtrable;
+- estados de revisión;
+- tags manuales;
+- objetivos de equipo y jugador;
+- visibilidad privada por rol.
+
+---
+
+## 7. Pre-Match Intelligence: Battle Plan
+
+**Issue:** #58  
+**Estado:** Pendiente  
+**Depende de:** #49 y, para mejores mapas/zonas, #52.
+
+Mejora el Scrim Report hacia una vista prescriptiva:
+- VS con logos;
+- timeframe / patch filter;
+- win conditions;
+- target players;
+- objective plan;
+- avoid list;
+- roster validator;
+- export/share view.
+
+---
+
+## 8. Draft Board, hero pools y ban recommendations
+
+**Issue:** #59  
+**Estado:** Pendiente
+
+Incluye:
+- hero pool por jugador;
+- comfort score;
+- ban vulnerability;
+- recommended bans;
+- composition board;
+- saved draft plans;
+- patch-aware filtering.
+
+No incluye en MVP:
+- live draft automation;
+- inferir orden real de picks/bans cuando la API no lo expone.
+
+---
+
+## 9. Tactical Board
+
+**Issue:** #53  
+**Estado:** Pendiente
+
+Pizarra libre sobre mapa para:
+- setups de Fangtooth/Prime/Shaper;
+- zonas de peligro;
+- flechas de rotación;
+- puntos de engage/reset;
+- notas de coach;
+- exportación a imagen.
+
+No es replay ni tracking de posiciones.
+
+---
+
+## 10. Tactical Timeline con anotaciones
+
+**Issue:** #54  
+**Estado:** Pendiente  
+**Depende de:** #51 para crear Review Items desde eventos.
+
+Diferente al Timeline tab actual:
+- orientado a sesión de review;
+- permite anotaciones;
+- filtra por objetivo/ventana temporal;
+- crea Review Items desde eventos.
+
+---
+
+## 11. VOD & Replay Index
+
+**Issue:** #56  
+**Estado:** Pendiente
+
+Índice de enlaces externos, no hosting de vídeo:
+- full match;
+- player POV;
+- clip;
+- coach review;
+- scrim recording;
+- tournament VOD;
+- in-game replay reference.
+
+Debe soportar timestamps de vídeo y game time.
+
+---
+
+## 12. UI/UX V2 + Coach Session Mode
+
+**Issue:** #63  
+**Estado:** Pendiente
+
+Incluye:
+- OWN/RIVAL color system;
+- hover/highlight en tablas;
+- pocket pick highlight;
+- team status badges;
+- quick report buttons;
+- dashboard más compacto;
+- Coach Session Mode para proyectar en Discord/review.
+
+---
+
+# P2 — Medio plazo
+
+## 13. Discord Companion Bot
+
+**Issue:** #62  
+**Estado:** Pendiente  
+**Depende de:** #49 y #51 para mayor valor.
+
+El bot consume datos procesados por PrimeSight. No calcula analytics.
+
+MVP:
+- vincular guild ↔ team;
+- configurar canales;
+- enviar match summaries;
+- enviar critical review alerts;
+- slash commands básicos.
+
+Regla: sin permiso Administrator y sin spam.
+
+---
+
+## 14. Scrim Planner, Playbook y Review Sessions
+
+**Issue:** #64  
+**Estado:** Futuro  
+**Depende de:** #51, #53 y #59.
+
+Capa superior de Team Tools:
+- planificación de scrims con focus area;
+- playbook de estrategias/setups/draft plans;
+- review sessions con agenda, boards, review items y action items.
+
+---
+
+## 15. Build/Stat Calculator MVP
+
+**Issue:** #60  
+**Estado:** Pendiente  
+**Relacionado con:** #61.
+
+Permite seleccionar:
+- versión;
+- héroe;
+- nivel;
+- rol;
+- crest/items;
+- skill order.
+
+Devuelve:
+- base stats;
+- bonus stats;
+- final stats;
+- ability values para daño/heal/shield cuando el dato esté soportado;
+- explicaciones de fórmula.
+
+Regla crítica: **no fingir pasivas no soportadas**. Etiquetarlas como unsupported/partial.
+
+---
+
+## 16. Game Data Version Manager + update checker
+
+**Issue:** #61  
+**Estado:** Pendiente
+
+Necesario para que el Build/Stat Calculator y los reportes sean reproducibles por parche.
+
+Incluye:
+- versiones importadas;
+- versión por defecto;
+- archivar/borrar versión;
+- advertencia si hay builds/presets/comparativas dependientes;
+- checker automático de nuevas versiones;
+- import manual tras validación.
+
+---
+
+# P3 — Experimental / futuro avanzado
+
+## 17. Matchup evaluator explicable
+
+**Estado:** Futuro  
+**Depende de:** Build/Stat Calculator estable (#60).
+
+Debe producir ventaja/riesgo, no “ganador garantizado”.
+
+Dimensiones posibles:
+- burst;
+- sustained DPS;
+- durability/effective health;
+- mobility/disengage;
+- crowd control pressure;
+- timing por nivel/item spike.
+
+---
+
+## 18. AI-assisted summaries
+
+**Estado:** Futuro  
+**Depende de:** Rules Engine (#49).
+
+Uso permitido:
+- resumir evidencias;
+- generar texto de reporte;
+- convertir insights en narrativa entendible.
+
+Uso prohibido:
+- inventar causalidad;
+- generar recomendaciones no trazables;
+- sustituir reglas deterministas.
+
+---
+
+## 19. Opponent strategy fingerprinting
+
+**Estado:** Futuro
+
+Clasificar estilos de rival:
+- early pressure;
+- objective control;
+- scaling;
+- dive/pick;
+- vision denial;
+- weak-side tendencies.
+
+Debe basarse en features del event stream y validación manual del coach.
+
+---
+
+## 20. Alerting y monitoring de rivales
+
+**Estado:** Futuro
+
+Alertas cuando:
+- rival cambia hero pool;
+- role swap;
+- aparece nuevo jugador;
+- cae/sube rendimiento;
+- cambia tendencia de bans/picks.
+
+Canales posibles:
+- in-app;
+- Discord;
+- email opcional.
+
+---
+
+## 21. Live overlays / live draft mode
+
+**Estado:** Experimental  
+**Riesgo:** alto.
+
+Antes de implementar:
+- revisar compliance con el juego/torneos;
+- validar utilidad real;
+- evitar overlays que puedan considerarse ventaja indebida.
+
+---
+
+## 22. Funcionalidades explícitamente NO prioritarias
+
+| Funcionalidad | Motivo |
+|---|---|
+| Predicción exacta de ganador | No es fiable ni explicable con datos disponibles. |
+| Pathing continuo de jugadores | La API expone eventos puntuales, no trayectoria continua. |
+| POV automático desde replay | No hay soporte oficial directo. Usar VOD Index. |
+| IA generativa como motor principal | Primero reglas deterministas. |
+| Simulación completa de teamfight | Complejidad muy alta; no necesaria para MVP. |
+| Migración automática de builds entre parches | Puede romper semántica si cambian ítems/stats/pasivas. |
+
+---
+
+## Orden recomendado de implementación
+
+1. #47 — Tests de agregación/filtros.
+2. #48 — Crear jugadores para UUIDs desconocidos.
+3. #49 — Analyst Rules Engine.
+4. #52 — Tactical map zones.
+5. #51 — Review Queue + goals.
+6. #58 — Battle Plan.
+7. #59 — Draft Board.
+8. #56 — VOD & Replay Index.
+9. #57 — RBAC/invitations.
+10. #63 — UI/UX V2 + Coach Session Mode.
+11. #53 / #54 — Tactical Board y Tactical Timeline.
+12. #60 / #61 — Build/Stat Calculator + Version Manager.
+13. #62 — Discord Companion Bot.
+14. #64 — Scrim Planner + Playbook + Review Sessions.
+
+---
+
+## Nota de mantenimiento
+
+Cuando una funcionalidad pase a estar en desarrollo activo, debe moverse o detallarse en `docs/planning.md`. Este roadmap debe mantenerse como backlog de capacidades pendientes/futuras, no como tablero operativo diario.

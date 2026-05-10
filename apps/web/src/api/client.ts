@@ -351,6 +351,60 @@ export interface Insight {
   affectedPlayers?: string[];
 }
 
+export interface ReviewItem {
+  id: string;
+  teamId: string;
+  matchId: string | null;
+  playerId: string | null;
+  insightId: string | null;
+  gameTime: number | null;
+  eventType: string;
+  priority: string;
+  reason: string;
+  status: string;
+  tag: string | null;
+  coachComment: string | null;
+  assignedTo: string | null;
+  actionItem: string | null;
+  vodUrl: string | null;
+  vodTimestamp: number | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface TeamGoal {
+  id: string;
+  teamId: string;
+  title: string;
+  description: string | null;
+  metricId: string | null;
+  baselineValue: number | null;
+  targetValue: number | null;
+  currentValue: number | null;
+  timeframe: string | null;
+  priority: string;
+  status: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PlayerGoal {
+  id: string;
+  playerId: string;
+  teamId: string;
+  title: string;
+  description: string | null;
+  metricId: string | null;
+  baselineValue: number | null;
+  targetValue: number | null;
+  currentValue: number | null;
+  coachNote: string | null;
+  visibility: string;
+  status: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface AdminSyncVersionsResult {
   synced: number;
   elapsed: number;
@@ -468,6 +522,40 @@ export const apiClient = {
   analyst: {
     insights: (teamId: string) =>
       fetchApi<{ insights: Insight[] }>(`/analysis/insights/${teamId}`),
+  },
+
+  review: {
+    list: (teamId: string, params?: { status?: string; priority?: string; limit?: number }) => {
+      const p = new URLSearchParams({ teamId });
+      if (params?.status) p.set('status', params.status);
+      if (params?.priority) p.set('priority', params.priority);
+      if (params?.limit) p.set('limit', String(params.limit));
+      return fetchApi<{ items: ReviewItem[]; total: number }>(`/review/items?${p}`);
+    },
+    create: (data: { teamId: string; eventType: string; priority: string; reason: string; insightId?: string; matchId?: string; playerId?: string }) =>
+      fetchApi<ReviewItem>('/review/items', { method: 'POST', body: JSON.stringify(data) }),
+    update: (id: string, data: { status?: string; tag?: string; coachComment?: string; assignedTo?: string; actionItem?: string; vodUrl?: string }) =>
+      fetchApi<ReviewItem>(`/review/items/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+    delete: (id: string) =>
+      fetchApi<{ ok: boolean }>(`/review/items/${id}`, { method: 'DELETE' }),
+  },
+
+  goals: {
+    listTeam: (teamId: string) =>
+      fetchApi<{ goals: TeamGoal[] }>(`/review/goals/team/${teamId}`),
+    createTeam: (data: { teamId: string; title: string; description?: string; metricId?: string; baselineValue?: number; targetValue?: number; timeframe?: string; priority?: string }) =>
+      fetchApi<TeamGoal>('/review/goals/team', { method: 'POST', body: JSON.stringify(data) }),
+    updateTeam: (id: string, data: { title?: string; currentValue?: number; status?: string; targetValue?: number; timeframe?: string }) =>
+      fetchApi<TeamGoal>(`/review/goals/team/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+    deleteTeam: (id: string) =>
+      fetchApi<{ ok: boolean }>(`/review/goals/team/${id}`, { method: 'DELETE' }),
+    listPlayer: (teamId: string, playerId?: string) => {
+      const p = new URLSearchParams();
+      if (playerId) p.set('playerId', playerId);
+      return fetchApi<{ goals: PlayerGoal[] }>(`/review/goals/player/${teamId}?${p}`);
+    },
+    createPlayer: (data: { playerId: string; teamId: string; title: string; description?: string; coachNote?: string; visibility?: string }) =>
+      fetchApi<PlayerGoal>('/review/goals/player', { method: 'POST', body: JSON.stringify(data) }),
   },
 
   auth: {
