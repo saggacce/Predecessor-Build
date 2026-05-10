@@ -275,6 +275,8 @@ model Invitation {
   expiresAt   DateTime
   usedAt      DateTime?
   createdAt   DateTime  @default(now())
+}
+
 // ── Review Queue ──────────────────────────────────────────────────────────────
 
 model ReviewItem {
