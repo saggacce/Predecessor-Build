@@ -541,3 +541,424 @@ export async function getTeamAnalysis(teamId: string): Promise<TeamAnalysis> {
 
   return { teamId, teamName: team.name, teamType: team.type, playerStats, teamMatches, teamWins, teamLosses, objectiveControl, rivalHeroPool, primeConversionRate, fangtoolhConversionRate };
 }
+
+// ── Phase Analysis ────────────────────────────────────────────────────────────
+
+export interface MatchPhaseStat {
+  matchId: string;
+  predggUuid: string;
+  won: boolean | null;
+  killDiff10: number;
+  killDiff15: number;
+  objectiveDiff10: number;
+  objectiveDiff15: number;
+  objectiveDiff20: number;
+}
+
+export interface TeamPhaseAnalysis {
+  sampleSize: number;
+  avgKillDiff10: number | null;
+  avgKillDiff15: number | null;
+  avgObjectiveDiff10: number | null;
+  avgObjectiveDiff15: number | null;
+  avgObjectiveDiff20: number | null;
+  throwRate: number | null;
+  comebackRate: number | null;
+  perMatch: MatchPhaseStat[];
+}
+
+export async function getTeamPhaseAnalysis(teamId: string): Promise<TeamPhaseAnalysis> {
+  const team = await db.team.findUnique({ where: { id: teamId } });
+  if (!team) throw new AppError(404, `Team not found: ${teamId}`, 'TEAM_NOT_FOUND');
+
+  const roster = await db.teamRoster.findMany({
+    where: { teamId, activeTo: null },
+    select: { playerId: true },
+  });
+  const rosterPlayerIds = roster.map((r) => r.playerId);
+  if (rosterPlayerIds.length === 0) return emptyPhaseAnalysis();
+
+  // Team matches with event stream (3+ players same side, eventStreamSynced = true)
+  const matchRows = await db.$queryRaw<Array<{
+    matchId: string; predggUuid: string; team: string; winningTeam: string | null;
+  }>>`
+    SELECT mp."matchId", m."predggUuid", mp."team", m."winningTeam"
+    FROM "MatchPlayer" mp
+    JOIN "Match" m ON m.id = mp."matchId"
+    WHERE mp."playerId" = ANY(${rosterPlayerIds}::text[])
+      AND m."eventStreamSynced" = true
+    GROUP BY mp."matchId", m."predggUuid", mp."team", m."winningTeam"
+    HAVING COUNT(DISTINCT mp."playerId") >= 3
+    ORDER BY m."startTime" DESC
+    LIMIT 50
+  `;
+
+  if (matchRows.length === 0) return emptyPhaseAnalysis();
+
+  const matchIds = matchRows.map((r) => r.matchId);
+  const sideMap = new Map(matchRows.map((r) => [r.matchId, r.team]));
+  const uuidMap = new Map(matchRows.map((r) => [r.matchId, r.predggUuid]));
+
+  // Fetch all HeroKill and ObjectiveKill for these matches in parallel
+  const [heroKills, objectiveKills] = await Promise.all([
+    db.heroKill.findMany({
+      where: { matchId: { in: matchIds } },
+      select: { matchId: true, gameTime: true, killerTeam: true },
+    }),
+    db.objectiveKill.findMany({
+      where: { matchId: { in: matchIds } },
+      select: { matchId: true, gameTime: true, killerTeam: true, entityType: true },
+    }),
+  ]);
+
+  // Group by matchId
+  const killsByMatch = new Map<string, typeof heroKills>();
+  for (const k of heroKills) {
+    const arr = killsByMatch.get(k.matchId) ?? [];
+    arr.push(k);
+    killsByMatch.set(k.matchId, arr);
+  }
+
+  const objsByMatch = new Map<string, typeof objectiveKills>();
+  for (const o of objectiveKills) {
+    const arr = objsByMatch.get(o.matchId) ?? [];
+    arr.push(o);
+    objsByMatch.set(o.matchId, arr);
+  }
+
+  const perMatch: MatchPhaseStat[] = matchRows.map((r) => {
+    const side = sideMap.get(r.matchId)!;
+    const kills = killsByMatch.get(r.matchId) ?? [];
+    const objs = objsByMatch.get(r.matchId) ?? [];
+    const won = r.winningTeam ? side === r.winningTeam : null;
+
+    const killDiff = (cutoff: number) => {
+      const filtered = kills.filter((k) => k.gameTime <= cutoff);
+      const team = filtered.filter((k) => k.killerTeam === side).length;
+      const rival = filtered.filter((k) => k.killerTeam !== side && k.killerTeam != null).length;
+      return team - rival;
+    };
+
+    const objDiff = (cutoff: number) => {
+      const filtered = objs.filter((o) => o.gameTime <= cutoff);
+      const team = filtered.filter((o) => o.killerTeam === side).length;
+      const rival = filtered.filter((o) => o.killerTeam !== side && o.killerTeam != null).length;
+      return team - rival;
+    };
+
+    return {
+      matchId: r.matchId,
+      predggUuid: uuidMap.get(r.matchId)!,
+      won,
+      killDiff10: killDiff(600),
+      killDiff15: killDiff(900),
+      objectiveDiff10: objDiff(600),
+      objectiveDiff15: objDiff(900),
+      objectiveDiff20: objDiff(1200),
+    };
+  });
+
+  const n = perMatch.length;
+  const avg = (key: keyof MatchPhaseStat) => {
+    const vals = perMatch.map((m) => m[key] as number);
+    return Math.round((vals.reduce((s, v) => s + v, 0) / n) * 10) / 10;
+  };
+
+  // Throw Rate: had kill lead at 10 but lost
+  const withOutcome = perMatch.filter((m) => m.won !== null);
+  const hadLead10 = withOutcome.filter((m) => m.killDiff10 > 0);
+  const throwRate = hadLead10.length > 0
+    ? Math.round((hadLead10.filter((m) => !m.won).length / hadLead10.length) * 100)
+    : null;
+
+  // Comeback Rate: had kill deficit at 10 but won
+  const hadDeficit10 = withOutcome.filter((m) => m.killDiff10 < 0);
+  const comebackRate = hadDeficit10.length > 0
+    ? Math.round((hadDeficit10.filter((m) => m.won).length / hadDeficit10.length) * 100)
+    : null;
+
+  return {
+    sampleSize: n,
+    avgKillDiff10: n > 0 ? avg('killDiff10') : null,
+    avgKillDiff15: n > 0 ? avg('killDiff15') : null,
+    avgObjectiveDiff10: n > 0 ? avg('objectiveDiff10') : null,
+    avgObjectiveDiff15: n > 0 ? avg('objectiveDiff15') : null,
+    avgObjectiveDiff20: n > 0 ? avg('objectiveDiff20') : null,
+    throwRate,
+    comebackRate,
+    perMatch,
+  };
+}
+
+// ── Vision Analysis ───────────────────────────────────────────────────────────
+
+const MAJOR_OBJECTIVES = ['FANGTOOTH', 'PRIMAL_FANGTOOTH', 'ORB_PRIME', 'MINI_PRIME', 'SHAPER'];
+const VISION_RADIUS = 3000;      // game units around objective
+const VISION_WINDOW = 120;       // seconds before objective to look for wards
+const ALIVE_WINDOW = 60;         // seconds before objective to check if role was alive
+const REACT_WINDOW = 90;         // seconds after death to check for objective reaction
+
+function dist2D(x1: number, y1: number, x2: number, y2: number) {
+  return Math.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2);
+}
+
+export interface VisionObjectiveStat {
+  entityType: string;
+  teamTaken: number;
+  avgWardsNearby: number | null;
+  avgWardsLost: number | null;
+  avgEnemyWardsCleared: number | null;
+  junglerAliveRate: number | null;
+  supportAliveRate: number | null;
+}
+
+export interface TeamVisionAnalysis {
+  sampleSize: number;
+  visionControlScore: number | null;
+  objectiveLostAfterAllyDeathRate: number | null;
+  objectiveTakenAfterEnemyDeathRate: number | null;
+  byObjective: VisionObjectiveStat[];
+}
+
+export async function getTeamVisionAnalysis(teamId: string): Promise<TeamVisionAnalysis> {
+  const team = await db.team.findUnique({ where: { id: teamId } });
+  if (!team) throw new AppError(404, `Team not found: ${teamId}`, 'TEAM_NOT_FOUND');
+
+  const roster = await db.teamRoster.findMany({
+    where: { teamId, activeTo: null },
+    select: { playerId: true },
+  });
+  const rosterPlayerIds = roster.map((r) => r.playerId);
+  if (rosterPlayerIds.length === 0) return emptyVisionAnalysis();
+
+  // Team matches with event stream
+  const matchRows = await db.$queryRaw<Array<{
+    matchId: string; team: string; winningTeam: string | null;
+  }>>`
+    SELECT mp."matchId", mp."team", m."winningTeam"
+    FROM "MatchPlayer" mp
+    JOIN "Match" m ON m.id = mp."matchId"
+    WHERE mp."playerId" = ANY(${rosterPlayerIds}::text[])
+      AND m."eventStreamSynced" = true
+    GROUP BY mp."matchId", mp."team", m."winningTeam"
+    HAVING COUNT(DISTINCT mp."playerId") >= 3
+    ORDER BY m."startTime" DESC
+    LIMIT 50
+  `;
+
+  if (matchRows.length === 0) return emptyVisionAnalysis();
+
+  const matchIds = matchRows.map((r) => r.matchId);
+  const sideMap = new Map(matchRows.map((r) => [r.matchId, r.team]));
+
+  // Fetch all event stream data for these matches in parallel
+  const [wardEvents, heroKills, objectiveKills, matchPlayers] = await Promise.all([
+    db.wardEvent.findMany({
+      where: { matchId: { in: matchIds } },
+      select: { matchId: true, gameTime: true, eventType: true, team: true, locationX: true, locationY: true },
+    }),
+    db.heroKill.findMany({
+      where: { matchId: { in: matchIds } },
+      select: { matchId: true, gameTime: true, killedTeam: true, killedPlayerId: true },
+    }),
+    db.objectiveKill.findMany({
+      where: { matchId: { in: matchIds } },
+      select: { matchId: true, gameTime: true, entityType: true, killerTeam: true, locationX: true, locationY: true },
+    }),
+    db.matchPlayer.findMany({
+      where: { matchId: { in: matchIds }, playerId: { in: rosterPlayerIds } },
+      select: { matchId: true, playerId: true, role: true },
+    }),
+  ]);
+
+  // Group by matchId
+  const wardsByMatch = new Map<string, typeof wardEvents>();
+  for (const w of wardEvents) {
+    const arr = wardsByMatch.get(w.matchId) ?? [];
+    arr.push(w);
+    wardsByMatch.set(w.matchId, arr);
+  }
+
+  const killsByMatch = new Map<string, typeof heroKills>();
+  for (const k of heroKills) {
+    const arr = killsByMatch.get(k.matchId) ?? [];
+    arr.push(k);
+    killsByMatch.set(k.matchId, arr);
+  }
+
+  const objsByMatch = new Map<string, typeof objectiveKills>();
+  for (const o of objectiveKills) {
+    const arr = objsByMatch.get(o.matchId) ?? [];
+    arr.push(o);
+    objsByMatch.set(o.matchId, arr);
+  }
+
+  // Role map: matchId → { JUNGLE: playerId, SUPPORT: playerId }
+  const roleMap = new Map<string, Map<string, string>>();
+  for (const mp of matchPlayers) {
+    if (!mp.playerId || !mp.role) continue;
+    const roles = roleMap.get(mp.matchId) ?? new Map<string, string>();
+    roles.set(mp.role.toUpperCase(), mp.playerId);
+    roleMap.set(mp.matchId, roles);
+  }
+
+  // ── Vision Control Score per match ────────────────────────────────────────
+  let totalVisionScore = 0;
+  for (const r of matchRows) {
+    const side = sideMap.get(r.matchId)!;
+    const wards = wardsByMatch.get(r.matchId) ?? [];
+    const placed  = wards.filter((w) => w.eventType === 'PLACEMENT' && w.team === side).length;
+    const enemyCleared = wards.filter((w) => w.eventType === 'DESTRUCTION' && w.team === side).length;
+    const ownLost = wards.filter((w) => w.eventType === 'DESTRUCTION' && w.team !== side && w.team != null).length;
+    totalVisionScore += placed + enemyCleared - ownLost;
+  }
+  const visionControlScore = matchRows.length > 0
+    ? Math.round((totalVisionScore / matchRows.length) * 10) / 10
+    : null;
+
+  // ── By objective stats ────────────────────────────────────────────────────
+  const objStats = new Map<string, {
+    teamTaken: number;
+    wardsNearby: number[]; wardsLost: number[]; enemyCleared: number[];
+    junglerAlive: boolean[]; supportAlive: boolean[];
+  }>();
+
+  for (const r of matchRows) {
+    const side = sideMap.get(r.matchId)!;
+    const wards = wardsByMatch.get(r.matchId) ?? [];
+    const kills = killsByMatch.get(r.matchId) ?? [];
+    const roles = roleMap.get(r.matchId) ?? new Map();
+    const objs = (objsByMatch.get(r.matchId) ?? []).filter(
+      (o) => MAJOR_OBJECTIVES.includes(o.entityType) && o.killerTeam === side,
+    );
+
+    for (const obj of objs) {
+      const bucket = objStats.get(obj.entityType) ?? {
+        teamTaken: 0, wardsNearby: [], wardsLost: [], enemyCleared: [], junglerAlive: [], supportAlive: [],
+      };
+      bucket.teamTaken++;
+
+      if (obj.locationX != null && obj.locationY != null) {
+        const ox = obj.locationX, oy = obj.locationY;
+        const windowStart = obj.gameTime - VISION_WINDOW;
+
+        const nearby = wards.filter((w) =>
+          w.eventType === 'PLACEMENT' && w.team === side &&
+          w.gameTime >= windowStart && w.gameTime <= obj.gameTime &&
+          w.locationX != null && w.locationY != null &&
+          dist2D(w.locationX!, w.locationY!, ox, oy) <= VISION_RADIUS,
+        ).length;
+        bucket.wardsNearby.push(nearby);
+
+        const lost = wards.filter((w) =>
+          w.eventType === 'DESTRUCTION' && w.team !== side && w.team != null &&
+          w.gameTime >= windowStart && w.gameTime <= obj.gameTime &&
+          w.locationX != null && w.locationY != null &&
+          dist2D(w.locationX!, w.locationY!, ox, oy) <= VISION_RADIUS,
+        ).length;
+        bucket.wardsLost.push(lost);
+
+        const cleared = wards.filter((w) =>
+          w.eventType === 'DESTRUCTION' && w.team === side &&
+          w.gameTime >= windowStart && w.gameTime <= obj.gameTime &&
+          w.locationX != null && w.locationY != null &&
+          dist2D(w.locationX!, w.locationY!, ox, oy) <= VISION_RADIUS,
+        ).length;
+        bucket.enemyCleared.push(cleared);
+      }
+
+      // Jungler and support alive check
+      for (const [roleKey, key] of [['JUNGLE', 'junglerAlive'], ['SUPPORT', 'supportAlive']] as const) {
+        const pid = roles.get(roleKey);
+        if (pid) {
+          const wasDead = kills.some(
+            (k) => k.killedPlayerId === pid &&
+              k.gameTime >= obj.gameTime - ALIVE_WINDOW && k.gameTime < obj.gameTime,
+          );
+          (bucket[key] as boolean[]).push(!wasDead);
+        }
+      }
+
+      objStats.set(obj.entityType, bucket);
+    }
+  }
+
+  const avg = (arr: number[]) =>
+    arr.length > 0 ? Math.round((arr.reduce((s, v) => s + v, 0) / arr.length) * 10) / 10 : null;
+  const rate = (arr: boolean[]) =>
+    arr.length > 0 ? Math.round((arr.filter(Boolean).length / arr.length) * 100) : null;
+
+  const byObjective: VisionObjectiveStat[] = Array.from(objStats.entries()).map(([entityType, b]) => ({
+    entityType,
+    teamTaken: b.teamTaken,
+    avgWardsNearby: avg(b.wardsNearby),
+    avgWardsLost: avg(b.wardsLost),
+    avgEnemyWardsCleared: avg(b.enemyCleared),
+    junglerAliveRate: rate(b.junglerAlive),
+    supportAliveRate: rate(b.supportAlive),
+  }));
+
+  // ── Objective Lost After Ally Death ───────────────────────────────────────
+  let allyDeaths = 0, lostAfterDeath = 0;
+  for (const r of matchRows) {
+    const side = sideMap.get(r.matchId)!;
+    const kills = killsByMatch.get(r.matchId) ?? [];
+    const objs = objsByMatch.get(r.matchId) ?? [];
+    const enemyMajorObjs = objs.filter((o) => MAJOR_OBJECTIVES.includes(o.entityType) && o.killerTeam !== side && o.killerTeam != null);
+    const allyKills = kills.filter((k) => k.killedTeam === side);
+
+    for (const death of allyKills) {
+      allyDeaths++;
+      const triggered = enemyMajorObjs.some(
+        (o) => o.gameTime > death.gameTime && o.gameTime <= death.gameTime + REACT_WINDOW,
+      );
+      if (triggered) lostAfterDeath++;
+    }
+  }
+  const objectiveLostAfterAllyDeathRate = allyDeaths > 0
+    ? Math.round((lostAfterDeath / allyDeaths) * 100)
+    : null;
+
+  // ── Objective Taken After Enemy Death ─────────────────────────────────────
+  let enemyDeaths = 0, takenAfterKill = 0;
+  for (const r of matchRows) {
+    const side = sideMap.get(r.matchId)!;
+    const kills = killsByMatch.get(r.matchId) ?? [];
+    const objs = objsByMatch.get(r.matchId) ?? [];
+    const ownMajorObjs = objs.filter((o) => MAJOR_OBJECTIVES.includes(o.entityType) && o.killerTeam === side);
+    const enemyKills = kills.filter((k) => k.killedTeam !== side && k.killedTeam != null);
+
+    for (const kill of enemyKills) {
+      enemyDeaths++;
+      const triggered = ownMajorObjs.some(
+        (o) => o.gameTime > kill.gameTime && o.gameTime <= kill.gameTime + REACT_WINDOW,
+      );
+      if (triggered) takenAfterKill++;
+    }
+  }
+  const objectiveTakenAfterEnemyDeathRate = enemyDeaths > 0
+    ? Math.round((takenAfterKill / enemyDeaths) * 100)
+    : null;
+
+  return {
+    sampleSize: matchRows.length,
+    visionControlScore,
+    objectiveLostAfterAllyDeathRate,
+    objectiveTakenAfterEnemyDeathRate,
+    byObjective,
+  };
+}
+
+function emptyVisionAnalysis(): TeamVisionAnalysis {
+  return { sampleSize: 0, visionControlScore: null, objectiveLostAfterAllyDeathRate: null, objectiveTakenAfterEnemyDeathRate: null, byObjective: [] };
+}
+
+function emptyPhaseAnalysis(): TeamPhaseAnalysis {
+  return {
+    sampleSize: 0,
+    avgKillDiff10: null, avgKillDiff15: null,
+    avgObjectiveDiff10: null, avgObjectiveDiff15: null, avgObjectiveDiff20: null,
+    throwRate: null, comebackRate: null,
+    perMatch: [],
+  };
+}

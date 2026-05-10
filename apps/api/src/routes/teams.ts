@@ -14,6 +14,8 @@ import {
   updateRosterEntry,
   removeRosterPlayer,
   getTeamAnalysis,
+  getTeamPhaseAnalysis,
+  getTeamVisionAnalysis,
 } from '../services/team-service.js';
 
 export const teamsRouter = Router();
@@ -205,6 +207,24 @@ teamsRouter.post('/:id/sync-matches', async (req, res, next) => {
     }
 
     res.json({ synced, errors, remaining: Math.max(0, total - synced) });
+  } catch (err) {
+    next(err);
+  }
+});
+
+teamsRouter.get('/:id/phase-analysis', async (req, res, next) => {
+  try {
+    const data = await getTeamPhaseAnalysis(req.params.id);
+    res.json(data);
+  } catch (err) {
+    next(err);
+  }
+});
+
+teamsRouter.get('/:id/vision-analysis', async (req, res, next) => {
+  try {
+    const data = await getTeamVisionAnalysis(req.params.id);
+    res.json(data);
   } catch (err) {
     next(err);
   }
