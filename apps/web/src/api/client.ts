@@ -362,6 +362,33 @@ export interface HeroOverlapEntry {
   playerIds: string[];
 }
 
+export interface ThreatPlayer {
+  playerId: string;
+  displayName: string;
+  customName: string | null;
+  role: string | null;
+  threatScore: number;
+  games: number;
+  winRate: number;
+  kda: number;
+  avgDPM: number | null;
+  topHeroes: Array<{ heroSlug: string; games: number; winRate: number }>;
+}
+
+export interface RivalScoutingReport {
+  teamId: string;
+  teamName: string;
+  sampleSize: number;
+  recentForm: { wins: number; losses: number; last10: string[]; trend: 'improving' | 'declining' | 'stable' };
+  identity: string[];
+  strongPhase: 'early' | 'mid' | 'late' | null;
+  weakPhase: 'early' | 'mid' | 'late' | null;
+  throwRate: number | null;
+  threatPlayers: ThreatPlayer[];
+  weakRole: string | null;
+  objectivePriority: Array<{ entityType: string; controlPct: number; avgGameTimeSecs: number | null }>;
+}
+
 export interface TeamDraftAnalysis {
   sampleSize: number;
   rankedSampleSize: number;
@@ -651,6 +678,7 @@ export const apiClient = {
     getVisionAnalysis: (id: string) => fetchApi<TeamVisionAnalysis>(`/teams/${id}/vision-analysis`),
     getObjectiveAnalysis: (id: string) => fetchApi<TeamObjectiveAnalysis>(`/teams/${id}/objective-analysis`),
     getDraftAnalysis: (id: string) => fetchApi<TeamDraftAnalysis>(`/teams/${id}/draft-analysis`),
+    getRivalScouting: (id: string) => fetchApi<RivalScoutingReport>(`/teams/${id}/rival-scouting`),
     syncMatches: (id: string, limit = 10) =>
       fetchApi<{ synced: number; errors: number; remaining: number }>(`/teams/${id}/sync-matches`, {
         method: 'POST', body: JSON.stringify({ limit }),
