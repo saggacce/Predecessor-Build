@@ -15,6 +15,7 @@ import MatchDetail from './pages/MatchDetail';
 import ReviewQueue from './pages/ReviewQueue';
 import MatchList from './pages/MatchList';
 import ComingSoon from './pages/ComingSoon';
+import VodIndex from './pages/VodIndex';
 import Login from './pages/Login';
 import Register from './pages/Register';
 import Unauthorized from './pages/Unauthorized';
@@ -360,7 +361,7 @@ export default function App() {
             <Route path="/tools/review" element={<ReviewQueue />} />
             <Route path="/tools/goals" element={<ReviewQueue />} />
             <Route path="/tools/board" element={<ComingSoon section="Tactical Board" description="Free-form tactical planning board over the Predecessor map." issue={53} />} />
-            <Route path="/tools/vod" element={<ComingSoon section="VOD & Replay Index" description="External VOD links and timestamps linked to matches and review items." issue={56} />} />
+            <Route path="/tools/vod" element={<VodIndex />} />
             <Route path="/tools/scrims" element={<ComingSoon section="Scrim Planner" description="Plan scrims with focus areas linked to team goals." issue={64} />} />
 
             {/* Reports */}

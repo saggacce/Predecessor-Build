@@ -342,3 +342,20 @@ model PlayerGoal {
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 }
+
+model VodLink {
+  id                  String   @id @default(cuid())
+  matchId             String?
+  playerId            String?
+  teamId              String
+  type                String
+  url                 String
+  gameTimeStart       Int?
+  gameTimeEnd         Int?
+  videoTimestampStart Int?
+  videoTimestampEnd   Int?
+  tags                String[] @default([])
+  notes               String?
+  visibility          String   @default("staff")
+  createdAt           DateTime @default(now())
+}
