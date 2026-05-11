@@ -416,6 +416,24 @@
   100% { transform: rotate(360deg); }
 }
 
+/* ── LED pulse (dashboard status dot) ───────────────────────────────── */
+@keyframes ledPulse {
+  0%, 100% { opacity: 1; box-shadow: 0 0 6px var(--pulse-color, #4ade80); }
+  50%       { opacity: 0.55; box-shadow: 0 0 2px var(--pulse-color, #4ade80); }
+}
+.led-pulse {
+  animation: ledPulse 2.4s ease-in-out infinite;
+}
+
+/* ── Team list rows ─────────────────────────────────────────────────── */
+.team-list-row {
+  transition: background 0.12s, border-color 0.12s;
+}
+.team-list-row:hover {
+  background: rgba(255, 255, 255, 0.035) !important;
+  border-color: rgba(255, 255, 255, 0.1) !important;
+}
+
 /* ── Responsive — tablet (920px) ─────────────────────────────────────── */
 @media (max-width: 920px) {
   .sidebar {

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { FileText, ChevronRight, Download, Copy, Check } from 'lucide-react';
+import { FileText, ChevronRight, Download, Copy, Check, Target } from 'lucide-react';
 import { toast } from 'sonner';
 import {
   apiClient,
@@ -263,12 +263,15 @@ export default function ScrimReport() {
                   }).map((member, i) => {
                     const playerStat = ta?.playerStats.find((p) => (p.customName ?? p.displayName) === member.displayName || p.displayName === member.displayName);
                     const heroPool = ta ? (ta.rivalHeroPool.filter((h) => h.playerId === playerStat?.playerId && h.games >= 2).slice(0, 4)) : [];
+                    const topHeroGames = heroPool[0]?.games ?? 0;
+                    const isOneTrick = playerStat && topHeroGames >= 5 && (topHeroGames / playerStat.matches) >= 0.5;
                     return (
                       <div key={i} style={{ padding: '0.65rem 0.75rem', background: 'var(--bg-dark)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-color)' }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.4rem' }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
                             {member.role && <span style={{ fontSize: '0.62rem', fontWeight: 700, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>{ROLE_LABELS[member.role] ?? member.role}</span>}
                             <span style={{ fontWeight: 600, fontSize: '0.875rem' }}>{member.displayName}</span>
+                            {isOneTrick && <Target size={11} aria-label="One-trick" style={{ color: 'var(--accent-loss)', flexShrink: 0 }} />}
                           </div>
                           <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
                             {member.rankLabel && <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.68rem', color: 'var(--accent-violet)', fontWeight: 500 }}>{member.rankLabel}</span>}
