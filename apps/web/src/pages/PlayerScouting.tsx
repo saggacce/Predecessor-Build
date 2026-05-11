@@ -15,15 +15,18 @@ import {
   LogIn,
   MapPin,
   Monitor,
+  Plus,
   RefreshCw,
+  Save,
   Search,
   Shield,
   Swords,
+  Target,
   User,
   XCircle,
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { apiClient, type PlayerAdvancedMetrics, type PlayerProfile, type PlayerSearchResult, type SyncedPlayer, ApiErrorResponse } from '../api/client';
+import { apiClient, type PlayerAdvancedMetrics, type PlayerGoal, type PlayerProfile, type PlayerSearchResult, type SyncedPlayer, type TeamProfile, ApiErrorResponse } from '../api/client';
 import { useAuth } from '../hooks/useAuth';
 
 type Phase =
