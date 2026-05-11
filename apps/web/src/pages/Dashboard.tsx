@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
-import { Server, Zap, RefreshCw, CheckCircle, XCircle } from 'lucide-react';
+import { Link } from 'react-router';
+import { Server, Zap, RefreshCw, CheckCircle, XCircle, ArrowRight, Users } from 'lucide-react';
 import { toast } from 'sonner';
-import { apiClient, ApiErrorResponse } from '../api/client';
+import { apiClient, ApiErrorResponse, type TeamProfile, type TeamAnalysis } from '../api/client';
 import type { VersionRecord } from '@predecessor/data-model';
 
 type SyncState =
@@ -14,8 +15,22 @@ export default function Dashboard() {
   const [healthStatus, setHealthStatus] = useState<'checking' | 'ok' | 'error'>('checking');
   const [latestPatch, setLatestPatch] = useState<VersionRecord | null>(null);
   const [syncState, setSyncState] = useState<SyncState>({ tag: 'idle' });
+  const [ownTeam, setOwnTeam] = useState<TeamProfile | null>(null);
+  const [ownAnalysis, setOwnAnalysis] = useState<TeamAnalysis | null>(null);
 
   useEffect(() => { void fetchDashboardData(); }, []);
+
+  useEffect(() => {
+    apiClient.teams.list('OWN').then((res) => {
+      const team = res.teams?.[0] ?? null;
+      setOwnTeam(team);
+      if (team) {
+        apiClient.teams.getAnalysis(team.id)
+          .then((a) => setOwnAnalysis(a))
+          .catch(() => null);
+      }
+    }).catch(() => null);
+  }, []);
 
   async function fetchDashboardData() {
     const [health, patch] = await Promise.allSettled([
@@ -73,6 +88,11 @@ export default function Dashboard() {
           System status and data controls.
         </p>
       </header>
+
+      {/* Team widget */}
+      {ownTeam && (
+        <TeamFormWidget team={ownTeam} analysis={ownAnalysis} />
+      )}
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1rem' }}>
 
@@ -171,6 +191,63 @@ export default function Dashboard() {
         </div>
 
       </div>
+    </div>
+  );
+}
+
+function TeamFormWidget({ team, analysis }: { team: TeamProfile; analysis: TeamAnalysis | null }) {
+  const totalMatches = analysis ? analysis.teamWins + analysis.teamLosses : 0;
+  const wr = totalMatches > 0 ? Math.round((analysis!.teamWins / totalMatches) * 100) : null;
+  const last5 = analysis
+    ? [...analysis.teamMatches]
+        .sort((a, b) => new Date(b.startTime).getTime() - new Date(a.startTime).getTime())
+        .slice(0, 5)
+    : [];
+  const recentWins = last5.filter((m) => m.won).length;
+  const trend = last5.length >= 3
+    ? recentWins >= last5.length * 0.6 ? 'hot' : recentWins <= last5.length * 0.3 ? 'cold' : 'neutral'
+    : 'neutral';
+
+  return (
+    <div className="glass-card" style={{ marginBottom: '1rem', borderLeft: '3px solid var(--accent-teal-bright)' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.85rem' }}>
+        <Users size={16} style={{ color: 'var(--accent-teal-bright)', flexShrink: 0 }} />
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontWeight: 700, fontSize: '0.9rem', color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{team.name}</div>
+          <div style={{ fontSize: '0.65rem', color: 'var(--accent-teal-bright)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', marginTop: '0.1rem' }}>Our Team</div>
+        </div>
+        {wr !== null && (
+          <div style={{ textAlign: 'right', flexShrink: 0 }}>
+            <div style={{ fontFamily: 'var(--font-mono)', fontSize: '1.15rem', fontWeight: 700, color: wr >= 50 ? 'var(--accent-win)' : 'var(--accent-loss)' }}>{wr}%</div>
+            <div style={{ fontSize: '0.6rem', color: 'var(--text-muted)' }}>{totalMatches}g WR</div>
+          </div>
+        )}
+        {!analysis && <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>Loading...</div>}
+      </div>
+
+      {last5.length > 0 && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.75rem' }}>
+          <div style={{ display: 'flex', gap: '0.3rem' }}>
+            {last5.map((m, i) => (
+              <div key={i} style={{ width: 22, height: 22, borderRadius: 4, display: 'flex', alignItems: 'center', justifyContent: 'center', background: m.won ? 'var(--accent-win)' : m.won === false ? 'var(--accent-loss)' : 'var(--bg-dark)', opacity: m.won !== null ? 0.85 : 0.4 }}>
+                <span style={{ fontSize: '0.58rem', fontWeight: 700, color: '#000', fontFamily: 'var(--font-mono)' }}>{m.won ? 'W' : m.won === false ? 'L' : '?'}</span>
+              </div>
+            ))}
+          </div>
+          {trend !== 'neutral' && (
+            <span style={{ fontSize: '0.65rem', fontWeight: 700, color: trend === 'hot' ? 'var(--accent-win)' : 'var(--accent-loss)', background: trend === 'hot' ? 'rgba(74,222,128,0.1)' : 'rgba(248,113,113,0.1)', border: `1px solid ${trend === 'hot' ? 'rgba(74,222,128,0.25)' : 'rgba(248,113,113,0.25)'}`, borderRadius: '999px', padding: '0.1rem 0.45rem' }}>
+              {trend === 'hot' ? '🔥 On fire' : '❄ Cold streak'}
+            </span>
+          )}
+        </div>
+      )}
+
+      <Link
+        to={`/analysis/teams?team=${team.id}`}
+        style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.75rem', fontWeight: 600, color: 'var(--accent-teal-bright)', textDecoration: 'none' }}
+      >
+        View full analysis <ArrowRight size={12} />
+      </Link>
     </div>
   );
 }
