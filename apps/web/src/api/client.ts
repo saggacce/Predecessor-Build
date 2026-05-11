@@ -336,6 +336,42 @@ export interface RivalHeroStat {
   avgKda: number;
 }
 
+export interface HeroPickStat {
+  heroSlug: string;
+  pickCount: number;
+  pickRate: number;
+  wins: number;
+  winRate: number;
+  playedBy: string[];
+}
+
+export interface HeroBanStat {
+  heroSlug: string;
+  count: number;
+  rate: number;
+}
+
+export interface PlayerHeroDepth {
+  playerId: string;
+  heroCount: number;
+  topHeroes: Array<{ heroSlug: string; games: number; winRate: number; comfortScore: number }>;
+}
+
+export interface HeroOverlapEntry {
+  heroSlug: string;
+  playerIds: string[];
+}
+
+export interface TeamDraftAnalysis {
+  sampleSize: number;
+  rankedSampleSize: number;
+  pickRates: HeroPickStat[];
+  ownBanRates: HeroBanStat[];
+  receivedBanRates: HeroBanStat[];
+  playerDepth: PlayerHeroDepth[];
+  heroOverlap: HeroOverlapEntry[];
+}
+
 export interface ObjectiveConversionStat {
   entityType: string;
   taken: number;
@@ -573,6 +609,7 @@ export const apiClient = {
     getPhaseAnalysis: (id: string) => fetchApi<TeamPhaseAnalysis>(`/teams/${id}/phase-analysis`),
     getVisionAnalysis: (id: string) => fetchApi<TeamVisionAnalysis>(`/teams/${id}/vision-analysis`),
     getObjectiveAnalysis: (id: string) => fetchApi<TeamObjectiveAnalysis>(`/teams/${id}/objective-analysis`),
+    getDraftAnalysis: (id: string) => fetchApi<TeamDraftAnalysis>(`/teams/${id}/draft-analysis`),
     syncMatches: (id: string, limit = 10) =>
       fetchApi<{ synced: number; errors: number; remaining: number }>(`/teams/${id}/sync-matches`, {
         method: 'POST', body: JSON.stringify({ limit }),
