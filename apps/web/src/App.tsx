@@ -1,11 +1,10 @@
 import { useEffect, useState } from 'react';
-import { BrowserRouter, Routes, Route, NavLink, Navigate, useLocation } from 'react-router';
+import { BrowserRouter, Routes, Route, NavLink, Navigate, Link, useLocation } from 'react-router';
 import { Toaster, toast } from 'sonner';
 import {
-  Home, Film, BarChart2, Wrench, FileText, Users, Settings,
+  Film, BarChart2, Wrench, FileText, Users, Settings,
   LogIn, LogOut, Loader, Radio, Zap, ChevronDown, ChevronRight,
-  Target, Shield, ClipboardList, Map, Clock, Video, Bot,
-  UserCog, LayoutDashboard, Swords,
+  LayoutDashboard, KeyRound,
 } from 'lucide-react';
 import type { VersionRecord } from '@predecessor/data-model';
 import Dashboard from './pages/Dashboard';
@@ -16,6 +15,10 @@ import MatchDetail from './pages/MatchDetail';
 import ReviewQueue from './pages/ReviewQueue';
 import MatchList from './pages/MatchList';
 import ComingSoon from './pages/ComingSoon';
+import Login from './pages/Login';
+import Register from './pages/Register';
+import Unauthorized from './pages/Unauthorized';
+import StaffManagement from './pages/StaffManagement';
 import { useAuth } from './hooks/useAuth';
 import { apiClient } from './api/client';
 import './App.css';
@@ -23,7 +26,7 @@ import './App.css';
 // ── Workspace header ──────────────────────────────────────────────────────────
 
 function WorkspaceHeader() {
-  const { authenticated } = useAuth();
+  const { authenticated, user } = useAuth();
   const [latestPatch, setLatestPatch] = useState<VersionRecord | null>(null);
 
   useEffect(() => {
@@ -49,6 +52,12 @@ function WorkspaceHeader() {
           <Radio size={13} />
           {authenticated ? 'pred.gg connected' : 'pred.gg login required'}
         </div>
+        {user && (
+          <div className="workspace-chip connected">
+            <KeyRound size={13} />
+            {user.name}
+          </div>
+        )}
       </div>
     </header>
   );
@@ -202,7 +211,7 @@ const sections: SidebarSection[] = [
 ];
 
 function Sidebar() {
-  const { authenticated, loading } = useAuth();
+  const { authenticated, loading, user, internalLoading } = useAuth();
   const location = useLocation();
 
   // Accordion: only one section open at a time
@@ -223,7 +232,7 @@ function Sidebar() {
     if (active) setOpenSection(active.id);
   }, [location.pathname]);
 
-  async function handleLogout() {
+  async function handlePredggLogout() {
     try {
       await apiClient.auth.logout();
       window.location.reload();
@@ -231,6 +240,20 @@ function Sidebar() {
       toast.error('Logout failed');
     }
   }
+
+  async function handleInternalLogout() {
+    try {
+      await apiClient.auth.internalLogout();
+      window.location.reload();
+    } catch {
+      toast.error('Logout failed');
+    }
+  }
+
+  const primaryMembership = user?.memberships[0] ?? null;
+  const roleLabel = user?.globalRole === 'PLATFORM_ADMIN'
+    ? 'PLATFORM_ADMIN'
+    : primaryMembership?.role ?? user?.globalRole;
 
   return (
     <aside className="sidebar">
@@ -258,13 +281,37 @@ function Sidebar() {
       </nav>
 
       <div className="sidebar-auth">
+        {internalLoading ? (
+          <div className="session-state muted">
+            <Loader size={14} style={{ animation: 'spin 1s linear infinite' }} />
+            Checking internal session...
+          </div>
+        ) : user ? (
+          <div className="internal-session-card">
+            <div className="internal-session-name">{user.name}</div>
+            <div className="internal-session-email">{user.email}</div>
+            <div className="internal-session-row">
+              <span className="internal-role-badge">{roleLabel}</span>
+              <button onClick={handleInternalLogout} className="btn-auth btn-auth-logout" type="button">
+                <LogOut size={15} /> Logout
+              </button>
+            </div>
+          </div>
+        ) : (
+          <Link to="/login" className="btn-auth btn-auth-login">
+            <KeyRound size={16} /> Internal login
+          </Link>
+        )}
+
+        <div className="sidebar-auth-divider" />
+
         {loading ? (
           <div className="session-state muted">
             <Loader size={14} style={{ animation: 'spin 1s linear infinite' }} />
-            Checking session...
+            Checking pred.gg...
           </div>
         ) : authenticated ? (
-          <button onClick={handleLogout} className="btn-auth btn-auth-logout">
+          <button onClick={handlePredggLogout} className="btn-auth btn-auth-logout" type="button">
             <LogOut size={16} /> Logout pred.gg
           </button>
         ) : (
@@ -295,6 +342,9 @@ export default function App() {
           <Routes>
             {/* Dashboard */}
             <Route path="/" element={<Dashboard />} />
+            <Route path="/login" element={<Login />} />
+            <Route path="/register/:token" element={<Register />} />
+            <Route path="/unauthorized" element={<Unauthorized />} />
 
             {/* Matches */}
             <Route path="/matches" element={<MatchList />} />
@@ -321,7 +371,7 @@ export default function App() {
 
             {/* Team Management */}
             <Route path="/management/teams" element={<ComingSoon section="Teams & Rosters" description="Create and manage teams, rosters and player assignments." issue={72} />} />
-            <Route path="/management/staff" element={<ComingSoon section="Staff Management" description="Manage coaching staff and analyst accounts." issue={73} />} />
+            <Route path="/management/staff" element={<StaffManagement />} />
             <Route path="/management/roles" element={<ComingSoon section="Roles & Permissions" description="Configure access levels per user and team." issue={76} />} />
 
             {/* Platform Admin */}
