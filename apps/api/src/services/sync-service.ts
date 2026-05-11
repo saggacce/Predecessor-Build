@@ -927,7 +927,7 @@ export async function resyncMatch(
         physicalDamageDealt: mp.physicalDamageDealt ?? null,
         magicalDamageDealt: mp.magicalDamageDealt ?? null,
         trueDamageDealt: mp.trueDamageDealt ?? null,
-        inventoryItems: mp.inventoryItemData.filter(Boolean).map((i) => i!.name.toLowerCase()),
+        inventoryItems: (mp.inventoryItemData ?? []).filter(Boolean).map((i) => i!.name.toLowerCase()),
         perkSlug: null,
         abilityOrder: [],
       },

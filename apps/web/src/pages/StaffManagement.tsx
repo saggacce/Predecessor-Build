@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
-import { Copy, Plus, Shield, Trash2, UserPlus, Database, ScrollText, RefreshCw, CheckCircle, XCircle, AlertTriangle } from 'lucide-react';
+import { Copy, Plus, Shield, Trash2, UserPlus, Database, ScrollText, RefreshCw, CheckCircle, XCircle, AlertTriangle, Activity, Play, Square } from 'lucide-react';
 import { toast } from 'sonner';
-import { ApiErrorResponse, apiClient, type Invitation, type TeamProfile, type SyncLog } from '../api/client';
+import { ApiErrorResponse, apiClient, type Invitation, type TeamProfile, type SyncLog, type SyncStatus } from '../api/client';
 import { useAuth } from '../hooks/useAuth';
 
 const ROLES = ['MANAGER', 'COACH', 'ANALISTA', 'JUGADOR'] as const;
-type AdminTab = 'staff' | 'data' | 'logs';
+type AdminTab = 'staff' | 'data' | 'sync' | 'logs';
 
 function invitationUrl(token: string) {
   return `${window.location.origin}/register/${token}`;
@@ -56,6 +56,7 @@ export default function StaffManagement() {
       <div style={{ display: 'flex', gap: '0.25rem', borderBottom: '1px solid var(--border-color)', marginBottom: '1.5rem' }}>
         {([
           { id: 'staff', label: 'Staff & Invitations', icon: <UserPlus size={14} /> },
+          { id: 'sync', label: 'Sync Status', icon: <Activity size={14} />, adminOnly: true },
           { id: 'data', label: 'Data Controls', icon: <Database size={14} />, adminOnly: true },
           { id: 'logs', label: 'Audit Logs', icon: <ScrollText size={14} />, adminOnly: true },
         ] as Array<{ id: AdminTab; label: string; icon: React.ReactNode; adminOnly?: boolean }>).map(({ id, label, icon, adminOnly }) => {
@@ -69,6 +70,7 @@ export default function StaffManagement() {
       </div>
 
       {tab === 'staff' && <StaffTab user={user} isPlatformAdmin={isPlatformAdmin} />}
+      {tab === 'sync' && isPlatformAdmin && <SyncStatusTab />}
       {tab === 'data' && isPlatformAdmin && <DataControlsTab />}
       {tab === 'logs' && isPlatformAdmin && <AuditLogsTab />}
     </div>
@@ -205,6 +207,154 @@ function StaffTab({ user, isPlatformAdmin }: { user: NonNullable<ReturnType<type
 }
 
 // ── Data Controls Tab ─────────────────────────────────────────────────────────
+
+// ── Sync Status Tab ───────────────────────────────────────────────────────────
+
+function SyncStatusTab() {
+  const [status, setStatus] = useState<SyncStatus | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [jobLoading, setJobLoading] = useState(false);
+
+  async function refresh() {
+    try {
+      const s = await apiClient.admin.syncStatus();
+      setStatus(s);
+    } catch { /* silent */ }
+    finally { setLoading(false); }
+  }
+
+  useEffect(() => {
+    void refresh();
+    const interval = setInterval(() => void refresh(), 5000);
+    return () => clearInterval(interval);
+  }, []);
+
+  async function handleStartStop() {
+    if (!status) return;
+    setJobLoading(true);
+    try {
+      if (status.eventStreamJob.running) {
+        await apiClient.admin.stopEventStreamSync();
+        toast.success('Background sync stopped');
+      } else {
+        const res = await apiClient.admin.startEventStreamSync();
+        if (res.ok) toast.success('Background event stream sync started');
+        else toast.error(res.message);
+      }
+      await refresh();
+    } catch (err) {
+      toast.error(err instanceof ApiErrorResponse ? err.error.message : 'Failed');
+    } finally { setJobLoading(false); }
+  }
+
+  if (loading) return <div style={{ padding: '1.5rem', color: 'var(--text-muted)' }}>Loading sync status...</div>;
+  if (!status) return <div style={{ padding: '1.5rem', color: 'var(--accent-loss)' }}>Failed to load sync status</div>;
+
+  const { players, matches, eventStreamJob: job } = status;
+  const playerSyncPct = players.total > 0 ? Math.round(((players.total - players.stale - players.hidden) / players.total) * 100) : 0;
+  const matchCompletePct = matches.total > 0 ? Math.round((matches.complete / matches.total) * 100) : 0;
+  const jobPct = job.total > 0 ? Math.round((job.synced / job.total) * 100) : 0;
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+
+      {/* Players table */}
+      <div className="glass-card" style={{ padding: 0, overflow: 'clip' }}>
+        <div style={{ padding: '0.75rem 1.25rem', borderBottom: '1px solid var(--border-color)', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+          <Activity size={15} style={{ color: 'var(--accent-blue)' }} />
+          <span style={{ fontWeight: 700, fontSize: '0.9rem' }}>Players</span>
+          <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.72rem', color: 'var(--text-muted)', marginLeft: 'auto' }}>{players.total.toLocaleString()} total</span>
+        </div>
+        <SyncRow label="Fully synced" value={players.synced} total={players.total} color="var(--accent-win)" />
+        <SyncRow label="Needs re-sync (>24h)" value={players.stale} total={players.total} color="var(--accent-prime)" warning />
+        <SyncRow label="Private / hidden" value={players.hidden} total={players.total} color="var(--text-muted)" />
+        <div style={{ padding: '0.65rem 1.25rem', background: 'rgba(255,255,255,0.02)', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+          <div style={{ flex: 1, height: 6, borderRadius: 999, background: 'rgba(255,255,255,0.07)', overflow: 'hidden' }}>
+            <div style={{ height: '100%', width: `${playerSyncPct}%`, background: playerSyncPct === 100 ? 'var(--accent-win)' : 'var(--accent-blue)', borderRadius: 999, transition: 'width 0.5s' }} />
+          </div>
+          <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.72rem', color: playerSyncPct === 100 ? 'var(--accent-win)' : 'var(--text-muted)', flexShrink: 0 }}>{playerSyncPct}%</span>
+        </div>
+      </div>
+
+      {/* Matches table */}
+      <div className="glass-card" style={{ padding: 0, overflow: 'clip' }}>
+        <div style={{ padding: '0.75rem 1.25rem', borderBottom: '1px solid var(--border-color)', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+          <Activity size={15} style={{ color: 'var(--accent-violet)' }} />
+          <span style={{ fontWeight: 700, fontSize: '0.9rem' }}>Matches</span>
+          <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.72rem', color: 'var(--text-muted)', marginLeft: 'auto' }}>{matches.total.toLocaleString()} total</span>
+        </div>
+        <SyncRow label="Complete (players + event stream)" value={matches.complete} total={matches.total} color="var(--accent-win)" />
+        <SyncRow label="Partial (players, no event stream)" value={matches.partial} total={matches.total} color="var(--accent-prime)" warning />
+        <SyncRow label="Incomplete (no players)" value={matches.incomplete} total={matches.total} color="var(--accent-loss)" warning />
+        <div style={{ padding: '0.65rem 1.25rem', background: 'rgba(255,255,255,0.02)', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+          <div style={{ flex: 1, height: 6, borderRadius: 999, background: 'rgba(255,255,255,0.07)', overflow: 'hidden' }}>
+            <div style={{ height: '100%', width: `${matchCompletePct}%`, background: matchCompletePct === 100 ? 'var(--accent-win)' : 'var(--accent-violet)', borderRadius: 999, transition: 'width 0.5s' }} />
+          </div>
+          <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.72rem', color: matchCompletePct === 100 ? 'var(--accent-win)' : 'var(--text-muted)', flexShrink: 0 }}>{matchCompletePct}%</span>
+        </div>
+      </div>
+
+      {/* Event Stream Background Sync */}
+      <div className="glass-card">
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1rem' }}>
+          <RefreshCw size={15} style={{ color: job.running ? 'var(--accent-blue)' : 'var(--text-muted)', animation: job.running ? 'spin 1s linear infinite' : 'none' }} />
+          <span style={{ fontWeight: 700, fontSize: '0.9rem' }}>Event Stream Background Sync</span>
+          {job.running && <span style={{ fontSize: '0.65rem', fontWeight: 700, color: 'var(--accent-blue)', background: 'rgba(91,156,246,0.12)', border: '1px solid rgba(91,156,246,0.3)', borderRadius: '999px', padding: '0.1rem 0.45rem' }}>RUNNING</span>}
+        </div>
+
+        <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginBottom: '1rem', lineHeight: 1.6 }}>
+          Sincroniza el event stream (kills, objectives, wards, gold diff) de todas las partidas pendientes en background.
+          Requiere sesión activa de pred.gg. Se actualiza cada 5 segundos.
+        </p>
+
+        {job.total > 0 && (
+          <div style={{ marginBottom: '1rem' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.72rem', color: 'var(--text-muted)', marginBottom: '0.4rem', fontFamily: 'var(--font-mono)' }}>
+              <span>{job.synced.toLocaleString()} / {job.total.toLocaleString()} partidas</span>
+              <span>{jobPct}%</span>
+            </div>
+            <div style={{ height: 8, borderRadius: 999, background: 'rgba(255,255,255,0.07)', overflow: 'hidden' }}>
+              <div style={{ height: '100%', width: `${jobPct}%`, background: 'var(--accent-blue)', borderRadius: 999, transition: 'width 0.5s' }} />
+            </div>
+            <div style={{ display: 'flex', gap: '1.5rem', marginTop: '0.5rem', fontSize: '0.68rem', fontFamily: 'var(--font-mono)', color: 'var(--text-muted)' }}>
+              <span><span style={{ color: 'var(--accent-win)' }}>{job.synced}</span> synced</span>
+              <span><span style={{ color: 'var(--accent-loss)' }}>{job.errors}</span> errors</span>
+              {job.lastActivity && <span>last: {new Date(job.lastActivity).toLocaleTimeString()}</span>}
+            </div>
+          </div>
+        )}
+
+        <button
+          onClick={() => void handleStartStop()}
+          disabled={jobLoading}
+          className={job.running ? 'btn-secondary' : 'btn-primary'}
+          style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}
+        >
+          {job.running ? <><Square size={13} /> Detener sync</> : <><Play size={13} /> Iniciar event stream sync</>}
+        </button>
+        {!job.running && matches.partial > 0 && (
+          <p style={{ fontSize: '0.68rem', color: 'var(--accent-prime)', marginTop: '0.5rem' }}>
+            ⚠ {matches.partial.toLocaleString()} partidas pendientes de event stream · asegúrate de estar logueado en pred.gg
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function SyncRow({ label, value, total, color, warning }: { label: string; value: number; total: number; color: string; warning?: boolean }) {
+  const pct = total > 0 ? ((value / total) * 100).toFixed(1) : '0.0';
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: '1fr 80px 60px', alignItems: 'center', padding: '0.55rem 1.25rem', borderBottom: '1px solid var(--border-color)', gap: '1rem' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+        {warning && value > 0 ? <AlertTriangle size={12} style={{ color, flexShrink: 0 }} /> : <CheckCircle size={12} style={{ color, flexShrink: 0 }} />}
+        {label}
+      </div>
+      <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.82rem', fontWeight: 700, color, textAlign: 'right' }}>{value.toLocaleString()}</span>
+      <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.68rem', color: 'var(--text-muted)', textAlign: 'right' }}>{pct}%</span>
+    </div>
+  );
+}
 
 type OpState = 'idle' | 'running' | 'done' | 'error';
 
