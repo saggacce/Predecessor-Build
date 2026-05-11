@@ -214,46 +214,77 @@ function SyncStatusTab() {
   const [status, setStatus] = useState<SyncStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [jobLoading, setJobLoading] = useState(false);
+  const [optimisticRunning, setOptimisticRunning] = useState(false);
 
   async function refresh() {
     try {
       const s = await apiClient.admin.syncStatus();
       setStatus(s);
+      if (s.eventStreamJob.running) setOptimisticRunning(true);
     } catch { /* silent */ }
     finally { setLoading(false); }
   }
 
   useEffect(() => {
     void refresh();
-    const interval = setInterval(() => void refresh(), 5000);
-    return () => clearInterval(interval);
   }, []);
+
+  // Fast refresh (2s) when running, slow (10s) when idle
+  useEffect(() => {
+    const isRunning = status?.eventStreamJob.running || optimisticRunning;
+    const interval = setInterval(() => void refresh(), isRunning ? 2000 : 10000);
+    return () => clearInterval(interval);
+  }, [status?.eventStreamJob.running, optimisticRunning]);
 
   async function handleStartStop() {
     if (!status) return;
+    const isRunning = status.eventStreamJob.running;
     setJobLoading(true);
+    if (!isRunning) setOptimisticRunning(true); // immediate feedback
     try {
-      if (status.eventStreamJob.running) {
+      if (isRunning) {
         await apiClient.admin.stopEventStreamSync();
-        toast.success('Background sync stopped');
+        setOptimisticRunning(false);
+        toast.success('Sync detenido');
       } else {
         const res = await apiClient.admin.startEventStreamSync();
-        if (res.ok) toast.success('Background event stream sync started');
-        else toast.error(res.message);
+        if (res.ok) {
+          toast.success('Sync iniciado — procesando partidas en background');
+        } else {
+          setOptimisticRunning(false);
+          toast.error(res.message);
+        }
       }
       await refresh();
     } catch (err) {
-      toast.error(err instanceof ApiErrorResponse ? err.error.message : 'Failed');
+      setOptimisticRunning(false);
+      const msg = err instanceof ApiErrorResponse ? err.error.message : 'Error al iniciar sync';
+      if (msg.includes('pred.gg') || msg.includes('PREDGG')) {
+        toast.error('Necesitas estar logueado en pred.gg — usa el botón "Connect pred.gg" en Login');
+      } else {
+        toast.error(msg);
+      }
     } finally { setJobLoading(false); }
   }
 
-  if (loading) return <div style={{ padding: '1.5rem', color: 'var(--text-muted)' }}>Loading sync status...</div>;
-  if (!status) return <div style={{ padding: '1.5rem', color: 'var(--accent-loss)' }}>Failed to load sync status</div>;
+  if (loading) return <div style={{ padding: '1.5rem', color: 'var(--text-muted)' }}>Cargando estado de sincronización...</div>;
+  if (!status) return <div style={{ padding: '1.5rem', color: 'var(--accent-loss)' }}>Error al cargar estado</div>;
 
   const { players, matches, eventStreamJob: job } = status;
+  const isRunning = job.running || optimisticRunning;
   const playerSyncPct = players.total > 0 ? Math.round(((players.total - players.stale - players.hidden) / players.total) * 100) : 0;
   const matchCompletePct = matches.total > 0 ? Math.round((matches.complete / matches.total) * 100) : 0;
   const jobPct = job.total > 0 ? Math.round((job.synced / job.total) * 100) : 0;
+
+  // Estimate rate (matches/min) from startedAt
+  let ratePerMin: number | null = null;
+  let etaMin: number | null = null;
+  if (job.running && job.startedAt && job.synced > 0) {
+    const elapsedMin = (Date.now() - new Date(job.startedAt).getTime()) / 60000;
+    ratePerMin = Math.round(job.synced / elapsedMin);
+    const remaining = job.total - job.synced;
+    if (ratePerMin > 0) etaMin = Math.ceil(remaining / ratePerMin);
+  }
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
@@ -284,8 +315,8 @@ function SyncStatusTab() {
           <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.72rem', color: 'var(--text-muted)', marginLeft: 'auto' }}>{matches.total.toLocaleString()} total</span>
         </div>
         <SyncRow label="Complete (players + event stream)" value={matches.complete} total={matches.total} color="var(--accent-win)" />
-        <SyncRow label="Partial (players, no event stream)" value={matches.partial} total={matches.total} color="var(--accent-prime)" warning />
-        <SyncRow label="Incomplete (no players)" value={matches.incomplete} total={matches.total} color="var(--accent-loss)" warning />
+        <SyncRow label="Partial (players, sin event stream)" value={matches.partial} total={matches.total} color="var(--accent-prime)" warning />
+        <SyncRow label="Incomplete (sin players)" value={matches.incomplete} total={matches.total} color="var(--accent-loss)" warning />
         <div style={{ padding: '0.65rem 1.25rem', background: 'rgba(255,255,255,0.02)', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
           <div style={{ flex: 1, height: 6, borderRadius: 999, background: 'rgba(255,255,255,0.07)', overflow: 'hidden' }}>
             <div style={{ height: '100%', width: `${matchCompletePct}%`, background: matchCompletePct === 100 ? 'var(--accent-win)' : 'var(--accent-violet)', borderRadius: 999, transition: 'width 0.5s' }} />
@@ -295,48 +326,77 @@ function SyncStatusTab() {
       </div>
 
       {/* Event Stream Background Sync */}
-      <div className="glass-card">
+      <div className="glass-card" style={{ borderLeft: isRunning ? '3px solid var(--accent-blue)' : undefined }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1rem' }}>
-          <RefreshCw size={15} style={{ color: job.running ? 'var(--accent-blue)' : 'var(--text-muted)', animation: job.running ? 'spin 1s linear infinite' : 'none' }} />
+          <RefreshCw size={16} style={{ color: isRunning ? 'var(--accent-blue)' : 'var(--text-muted)', animation: isRunning ? 'spin 1s linear infinite' : 'none', flexShrink: 0 }} />
           <span style={{ fontWeight: 700, fontSize: '0.9rem' }}>Event Stream Background Sync</span>
-          {job.running && <span style={{ fontSize: '0.65rem', fontWeight: 700, color: 'var(--accent-blue)', background: 'rgba(91,156,246,0.12)', border: '1px solid rgba(91,156,246,0.3)', borderRadius: '999px', padding: '0.1rem 0.45rem' }}>RUNNING</span>}
+          {isRunning && (
+            <span style={{ fontSize: '0.65rem', fontWeight: 700, color: 'var(--accent-blue)', background: 'rgba(91,156,246,0.15)', border: '1px solid rgba(91,156,246,0.4)', borderRadius: '999px', padding: '0.15rem 0.55rem', animation: 'ledPulse 1.5s ease-in-out infinite', ['--pulse-color' as string]: 'var(--accent-blue)' }}>
+              EN CURSO
+            </span>
+          )}
+          {isRunning && <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)', marginLeft: 'auto', fontFamily: 'var(--font-mono)' }}>↻ cada 2s</span>}
         </div>
 
-        <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginBottom: '1rem', lineHeight: 1.6 }}>
-          Sincroniza el event stream (kills, objectives, wards, gold diff) de todas las partidas pendientes en background.
-          Requiere sesión activa de pred.gg. Se actualiza cada 5 segundos.
-        </p>
-
-        {job.total > 0 && (
-          <div style={{ marginBottom: '1rem' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.72rem', color: 'var(--text-muted)', marginBottom: '0.4rem', fontFamily: 'var(--font-mono)' }}>
-              <span>{job.synced.toLocaleString()} / {job.total.toLocaleString()} partidas</span>
-              <span>{jobPct}%</span>
-            </div>
-            <div style={{ height: 8, borderRadius: 999, background: 'rgba(255,255,255,0.07)', overflow: 'hidden' }}>
-              <div style={{ height: '100%', width: `${jobPct}%`, background: 'var(--accent-blue)', borderRadius: 999, transition: 'width 0.5s' }} />
-            </div>
-            <div style={{ display: 'flex', gap: '1.5rem', marginTop: '0.5rem', fontSize: '0.68rem', fontFamily: 'var(--font-mono)', color: 'var(--text-muted)' }}>
-              <span><span style={{ color: 'var(--accent-win)' }}>{job.synced}</span> synced</span>
-              <span><span style={{ color: 'var(--accent-loss)' }}>{job.errors}</span> errors</span>
-              {job.lastActivity && <span>last: {new Date(job.lastActivity).toLocaleTimeString()}</span>}
-            </div>
+        {/* Progress — always visible when running */}
+        {isRunning && (
+          <div style={{ marginBottom: '1.25rem', padding: '1rem', background: 'rgba(91,156,246,0.06)', border: '1px solid rgba(91,156,246,0.15)', borderRadius: 8 }}>
+            {job.total === 0 ? (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', color: 'var(--accent-blue)', fontSize: '0.82rem' }}>
+                <RefreshCw size={14} style={{ animation: 'spin 0.8s linear infinite', flexShrink: 0 }} />
+                Iniciando — calculando partidas pendientes...
+              </div>
+            ) : (
+              <>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '0.6rem' }}>
+                  <span style={{ fontFamily: 'var(--font-mono)', fontSize: '1.1rem', fontWeight: 700, color: 'var(--text-primary)' }}>
+                    {job.synced.toLocaleString()}
+                    <span style={{ fontSize: '0.72rem', fontWeight: 400, color: 'var(--text-muted)', marginLeft: '0.3rem' }}>/ {job.total.toLocaleString()} partidas</span>
+                  </span>
+                  <span style={{ fontFamily: 'var(--font-mono)', fontSize: '1.1rem', fontWeight: 700, color: 'var(--accent-blue)' }}>{jobPct}%</span>
+                </div>
+                <div style={{ height: 10, borderRadius: 999, background: 'rgba(255,255,255,0.07)', overflow: 'hidden', marginBottom: '0.6rem' }}>
+                  <div style={{ height: '100%', width: `${jobPct}%`, background: 'linear-gradient(90deg, var(--accent-blue), #7eb8fb)', borderRadius: 999, transition: 'width 1s ease' }} />
+                </div>
+                <div style={{ display: 'flex', gap: '1.5rem', fontSize: '0.7rem', fontFamily: 'var(--font-mono)', flexWrap: 'wrap' }}>
+                  <span><span style={{ color: 'var(--accent-win)', fontWeight: 700 }}>{job.synced.toLocaleString()}</span> <span style={{ color: 'var(--text-muted)' }}>OK</span></span>
+                  <span><span style={{ color: 'var(--accent-loss)', fontWeight: 700 }}>{job.errors}</span> <span style={{ color: 'var(--text-muted)' }}>errores</span></span>
+                  {ratePerMin !== null && <span><span style={{ color: 'var(--accent-blue)', fontWeight: 700 }}>{ratePerMin}</span> <span style={{ color: 'var(--text-muted)' }}>p/min</span></span>}
+                  {etaMin !== null && <span style={{ color: 'var(--text-muted)' }}>~{etaMin < 60 ? `${etaMin}min` : `${Math.round(etaMin / 60)}h`} restantes</span>}
+                  {job.lastActivity && <span style={{ color: 'var(--text-muted)' }}>última actividad {new Date(job.lastActivity).toLocaleTimeString()}</span>}
+                </div>
+              </>
+            )}
           </div>
         )}
 
-        <button
-          onClick={() => void handleStartStop()}
-          disabled={jobLoading}
-          className={job.running ? 'btn-secondary' : 'btn-primary'}
-          style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}
-        >
-          {job.running ? <><Square size={13} /> Detener sync</> : <><Play size={13} /> Iniciar event stream sync</>}
-        </button>
-        {!job.running && matches.partial > 0 && (
-          <p style={{ fontSize: '0.68rem', color: 'var(--accent-prime)', marginTop: '0.5rem' }}>
-            ⚠ {matches.partial.toLocaleString()} partidas pendientes de event stream · asegúrate de estar logueado en pred.gg
+        {!isRunning && (
+          <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginBottom: '1rem', lineHeight: 1.6 }}>
+            Sincroniza kills, objectives, wards y gold diff de todas las partidas pendientes en background.
+            Requiere sesión activa de pred.gg.
           </p>
         )}
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+          <button
+            onClick={() => void handleStartStop()}
+            disabled={jobLoading}
+            className={isRunning ? 'btn-secondary' : 'btn-primary'}
+            style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}
+          >
+            {jobLoading
+              ? <><RefreshCw size={13} style={{ animation: 'spin 0.6s linear infinite' }} /> {isRunning ? 'Deteniendo...' : 'Iniciando...'}</>
+              : isRunning
+                ? <><Square size={13} /> Detener sync</>
+                : <><Play size={13} /> Iniciar event stream sync</>
+            }
+          </button>
+          {!isRunning && matches.partial > 0 && (
+            <span style={{ fontSize: '0.72rem', color: 'var(--accent-prime)' }}>
+              {matches.partial.toLocaleString()} partidas pendientes · asegúrate de estar logueado en pred.gg
+            </span>
+          )}
+        </div>
       </div>
     </div>
   );
