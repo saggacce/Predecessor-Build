@@ -15,6 +15,13 @@ vi.mock('../db.js', () => ({
 vi.mock('../services/sync-service.js', () => ({
   syncVersionsFromPredgg: vi.fn().mockResolvedValue(5),
   syncStalePlayers: vi.fn().mockResolvedValue({ synced: 2, skipped: 0, errors: 0 }),
+  syncIncompleteMatches: vi.fn().mockResolvedValue({ synced: 1, errors: 0 }),
+  repairEventStreamPlayerIds: vi.fn().mockResolvedValue({
+    heroKillsUpdated: 1,
+    objectiveKillsUpdated: 1,
+    wardEventsUpdated: 1,
+    placeholdersCreated: 0,
+  }),
   syncPlayerByName: vi.fn().mockResolvedValue(null),
 }));
 
@@ -63,6 +70,30 @@ describe('POST /admin/sync-stale', () => {
   it('returns 401 when ADMIN_API_KEY is set and header is missing', async () => {
     process.env.ADMIN_API_KEY = 'secret-key';
     const res = await request(app).post('/admin/sync-stale');
+    expect(res.status).toBe(401);
+    expect(res.body.error.code).toBe('ADMIN_KEY_REQUIRED');
+  });
+});
+
+describe('POST /admin/fix-herokill-player-ids', () => {
+  it('returns 200 with repair counts', async () => {
+    const res = await request(app).post('/admin/fix-herokill-player-ids');
+
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({
+      heroKillsUpdated: 1,
+      objectiveKillsUpdated: 1,
+      wardEventsUpdated: 1,
+      placeholdersCreated: 0,
+    });
+    expect(res.body).toHaveProperty('elapsed');
+  });
+
+  it('returns 401 when ADMIN_API_KEY is set and header is missing', async () => {
+    process.env.ADMIN_API_KEY = 'secret-key';
+
+    const res = await request(app).post('/admin/fix-herokill-player-ids');
+
     expect(res.status).toBe(401);
     expect(res.body.error.code).toBe('ADMIN_KEY_REQUIRED');
   });
