@@ -82,12 +82,15 @@ export default function Dashboard() {
             <h3 style={{ color: 'var(--text-muted)', margin: 0, fontSize: '0.72rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em' }}>System Health</h3>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
-            <div style={{
-              width: '8px', height: '8px', borderRadius: '50%', flexShrink: 0,
-              background: statusColor,
-              boxShadow: healthStatus === 'ok' ? '0 0 8px var(--accent-win)' : 'none',
-              transition: 'background 0.3s',
-            }} />
+            <div
+              className={healthStatus === 'ok' ? 'led-pulse' : undefined}
+              style={{
+                width: '8px', height: '8px', borderRadius: '50%', flexShrink: 0,
+                background: statusColor,
+                ['--pulse-color' as string]: 'var(--accent-win)',
+                transition: 'background 0.3s',
+              }}
+            />
             <span style={{ color: healthStatus === 'ok' ? 'var(--text-primary)' : statusColor, fontWeight: 600, fontSize: '0.9rem' }}>
               {healthStatus === 'ok' ? 'API Online' : healthStatus === 'error' ? 'API Disconnected' : 'Checking…'}
             </span>
