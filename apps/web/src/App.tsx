@@ -70,19 +70,18 @@ interface SidebarSection {
   defaultOpen?: boolean;
 }
 
-function SidebarSectionEl({ section }: { section: SidebarSection }) {
+interface SidebarSectionProps {
+  section: SidebarSection;
+  isOpen: boolean;
+  onToggle: () => void;
+}
+
+function SidebarSectionEl({ section, isOpen, onToggle }: SidebarSectionProps) {
   const location = useLocation();
 
   const isActive = section.to
     ? (section.to === '/' ? location.pathname === '/' : location.pathname.startsWith(section.to))
     : section.items?.some((item) => location.pathname.startsWith(item.to)) ?? false;
-
-  const [open, setOpen] = useState(isActive || section.defaultOpen || false);
-
-  // Auto-expand when navigating into section
-  useEffect(() => {
-    if (isActive) setOpen(true);
-  }, [isActive]);
 
   if (section.to) {
     return (
@@ -101,16 +100,16 @@ function SidebarSectionEl({ section }: { section: SidebarSection }) {
     <div className="nav-section">
       <button
         className={`nav-section-header${isActive ? ' active' : ''}`}
-        onClick={() => setOpen((o) => !o)}
-        aria-expanded={open}
+        onClick={onToggle}
+        aria-expanded={isOpen}
       >
         <span className="nav-section-icon">{section.icon}</span>
         <span className="nav-section-label">{section.label}</span>
         <span className="nav-section-chevron">
-          {open ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
+          {isOpen ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
         </span>
       </button>
-      {open && (
+      {isOpen && (
         <div className="nav-section-items">
           {section.items?.map((item) => (
             <NavLink
@@ -204,6 +203,25 @@ const sections: SidebarSection[] = [
 
 function Sidebar() {
   const { authenticated, loading } = useAuth();
+  const location = useLocation();
+
+  // Accordion: only one section open at a time
+  const getInitialOpen = () => {
+    const active = sections.find((s) =>
+      s.items?.some((item) => location.pathname.startsWith(item.to))
+    );
+    return active?.id ?? sections.find((s) => s.defaultOpen)?.id ?? null;
+  };
+
+  const [openSection, setOpenSection] = useState<string | null>(getInitialOpen);
+
+  // Auto-open section when navigating to a route inside it
+  useEffect(() => {
+    const active = sections.find((s) =>
+      s.items?.some((item) => location.pathname.startsWith(item.to))
+    );
+    if (active) setOpenSection(active.id);
+  }, [location.pathname]);
 
   async function handleLogout() {
     try {
@@ -230,7 +248,12 @@ function Sidebar() {
 
       <nav className="sidebar-nav">
         {sections.map((section) => (
-          <SidebarSectionEl key={section.id} section={section} />
+          <SidebarSectionEl
+            key={section.id}
+            section={section}
+            isOpen={openSection === section.id}
+            onToggle={() => setOpenSection((prev) => prev === section.id ? null : section.id)}
+          />
         ))}
       </nav>
 
