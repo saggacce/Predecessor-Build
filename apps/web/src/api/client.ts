@@ -765,6 +765,12 @@ export const apiClient = {
   analyst: {
     insights: (teamId: string) =>
       fetchApi<{ insights: Insight[] }>(`/analysis/insights/${teamId}`),
+    summaryUrl: (teamId: string) => `${API_BASE}/analysis/insights/${teamId}/summary`,
+    saveFeedback: (analysisId: string, feedback: 'positive' | 'negative', correction?: string) =>
+      fetchApi<{ ok: boolean }>(`/analysis/insights/summary/${analysisId}/feedback`, {
+        method: 'PATCH',
+        body: JSON.stringify({ feedback, correction }),
+      }),
   },
 
   mapZones: {
