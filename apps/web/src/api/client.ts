@@ -809,8 +809,10 @@ export const apiClient = {
       if (playerId) p.set('playerId', playerId);
       return fetchApi<{ goals: PlayerGoal[] }>(`/review/goals/player/${teamId}?${p}`);
     },
-    createPlayer: (data: { playerId: string; teamId: string; title: string; description?: string; coachNote?: string; visibility?: string }) =>
+    createPlayer: (data: { playerId: string; teamId: string; title: string; description?: string; metricId?: string; baselineValue?: number; targetValue?: number; coachNote?: string; visibility?: string }) =>
       fetchApi<PlayerGoal>('/review/goals/player', { method: 'POST', body: JSON.stringify(data) }),
+    updatePlayer: (id: string, data: { title?: string; description?: string | null; metricId?: string | null; targetValue?: number | null; currentValue?: number | null; coachNote?: string | null; visibility?: string; status?: string }) =>
+      fetchApi<PlayerGoal>(`/review/goals/player/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
   },
 
   auth: {
