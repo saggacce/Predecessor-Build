@@ -23,7 +23,7 @@ import {
   Layers,
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { apiClient, type TeamProfile, type TeamRole, type PlayerSearchResult, type TeamAnalysis, type TeamDraftAnalysis, type RivalHeroStat, type PlayerAnalysisStat, type Insight, ApiErrorResponse } from '../api/client';
+import { apiClient, type TeamProfile, type TeamRole, type PlayerSearchResult, type TeamAnalysis, type TeamDraftAnalysis, type TeamObjectiveAnalysis, type TeamPhaseAnalysis, type TeamVisionAnalysis, type RivalHeroStat, type PlayerAnalysisStat, type Insight, ApiErrorResponse } from '../api/client';
 
 const ROLES: TeamRole[] = ['carry', 'jungle', 'midlane', 'offlane', 'support'];
 
@@ -51,9 +51,15 @@ export default function TeamAnalysis() {
   const [selected, setSelected] = useState<TeamProfile | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const [detailTab, setDetailTab] = useState<'roster' | 'performance' | 'draft'>('roster');
+  const [detailTab, setDetailTab] = useState<'roster' | 'performance' | 'phase' | 'vision' | 'objectives' | 'draft'>('roster');
   const [analysis, setAnalysis] = useState<TeamAnalysis | null>(null);
   const [loadingAnalysis, setLoadingAnalysis] = useState(false);
+  const [phaseAnalysis, setPhaseAnalysis] = useState<TeamPhaseAnalysis | null>(null);
+  const [loadingPhaseAnalysis, setLoadingPhaseAnalysis] = useState(false);
+  const [visionAnalysis, setVisionAnalysis] = useState<TeamVisionAnalysis | null>(null);
+  const [loadingVisionAnalysis, setLoadingVisionAnalysis] = useState(false);
+  const [objectiveAnalysis, setObjectiveAnalysis] = useState<TeamObjectiveAnalysis | null>(null);
+  const [loadingObjectiveAnalysis, setLoadingObjectiveAnalysis] = useState(false);
   const [draftAnalysis, setDraftAnalysis] = useState<TeamDraftAnalysis | null>(null);
   const [loadingDraftAnalysis, setLoadingDraftAnalysis] = useState(false);
 
@@ -108,10 +114,58 @@ export default function TeamAnalysis() {
     }
   }
 
-  function handleTabChange(tab: 'roster' | 'performance' | 'draft') {
+  async function loadPhaseAnalysis(teamId: string) {
+    setLoadingPhaseAnalysis(true);
+    setPhaseAnalysis(null);
+    try {
+      const data = await apiClient.teams.getPhaseAnalysis(teamId);
+      setPhaseAnalysis(data);
+    } catch {
+      // silent — show empty state
+    } finally {
+      setLoadingPhaseAnalysis(false);
+    }
+  }
+
+  async function loadVisionAnalysis(teamId: string) {
+    setLoadingVisionAnalysis(true);
+    setVisionAnalysis(null);
+    try {
+      const data = await apiClient.teams.getVisionAnalysis(teamId);
+      setVisionAnalysis(data);
+    } catch {
+      // silent — show empty state
+    } finally {
+      setLoadingVisionAnalysis(false);
+    }
+  }
+
+  async function loadObjectiveAnalysis(teamId: string) {
+    setLoadingObjectiveAnalysis(true);
+    setObjectiveAnalysis(null);
+    try {
+      const data = await apiClient.teams.getObjectiveAnalysis(teamId);
+      setObjectiveAnalysis(data);
+    } catch {
+      // silent — show empty state
+    } finally {
+      setLoadingObjectiveAnalysis(false);
+    }
+  }
+
+  function handleTabChange(tab: 'roster' | 'performance' | 'phase' | 'vision' | 'objectives' | 'draft') {
     setDetailTab(tab);
     if (tab === 'performance' && selected && !analysis) {
       void loadAnalysis(selected.id);
+    }
+    if (tab === 'phase' && selected && !phaseAnalysis) {
+      void loadPhaseAnalysis(selected.id);
+    }
+    if (tab === 'vision' && selected && !visionAnalysis) {
+      void loadVisionAnalysis(selected.id);
+    }
+    if (tab === 'objectives' && selected && !objectiveAnalysis) {
+      void loadObjectiveAnalysis(selected.id);
     }
     if (tab === 'draft' && selected && !draftAnalysis) {
       void loadDraftAnalysis(selected.id);
@@ -121,6 +175,9 @@ export default function TeamAnalysis() {
   async function handleSelectTeam(id: string) {
     setDetailTab('roster');
     setAnalysis(null);
+    setPhaseAnalysis(null);
+    setVisionAnalysis(null);
+    setObjectiveAnalysis(null);
     setDraftAnalysis(null);
     try {
       const profile = await apiClient.teams.getProfile(id);
@@ -415,7 +472,7 @@ export default function TeamAnalysis() {
                 </div>
 
                 {/* Tabs */}
-                <div style={{ display: 'flex', gap: '0.25rem', borderBottom: '1px solid var(--border-color)', marginTop: '1.5rem' }}>
+                <div style={{ display: 'flex', gap: '0.25rem', borderBottom: '1px solid var(--border-color)', marginTop: '1.5rem', overflowX: 'auto' }}>
                   <button onClick={() => handleTabChange('roster')} style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: '0.55rem 1rem', fontSize: '0.875rem', fontWeight: 600, color: detailTab === 'roster' ? 'var(--accent-blue)' : 'var(--text-muted)', borderBottom: detailTab === 'roster' ? '2px solid var(--accent-blue)' : '2px solid transparent', transition: 'color 0.15s' }}>
                     Roster
                   </button>
@@ -425,6 +482,9 @@ export default function TeamAnalysis() {
                     rosterSize={selected?.roster.length ?? 0}
                     onClick={() => handleTabChange('performance')}
                   />
+                  <AnalysisTabButton active={detailTab === 'phase'} label="Phase" onClick={() => handleTabChange('phase')} />
+                  <AnalysisTabButton active={detailTab === 'vision'} label="Vision" onClick={() => handleTabChange('vision')} />
+                  <AnalysisTabButton active={detailTab === 'objectives'} label="Objectives" onClick={() => handleTabChange('objectives')} />
                   <button onClick={() => handleTabChange('draft')} style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: '0.55rem 1rem', fontSize: '0.875rem', fontWeight: 600, color: detailTab === 'draft' ? 'var(--accent-blue)' : 'var(--text-muted)', borderBottom: detailTab === 'draft' ? '2px solid var(--accent-blue)' : '2px solid transparent', transition: 'color 0.15s' }}>
                     Draft
                   </button>
@@ -439,6 +499,33 @@ export default function TeamAnalysis() {
                 analysis={analysis}
                 loading={loadingAnalysis}
                 onRefresh={() => void loadAnalysis(selected.id)}
+              />
+            )}
+
+            {/* Phase Tab */}
+            {detailTab === 'phase' && selected && (
+              <PhaseAnalysisTab
+                analysis={phaseAnalysis}
+                loading={loadingPhaseAnalysis}
+                onRefresh={() => void loadPhaseAnalysis(selected.id)}
+              />
+            )}
+
+            {/* Vision Tab */}
+            {detailTab === 'vision' && selected && (
+              <VisionAnalysisTab
+                analysis={visionAnalysis}
+                loading={loadingVisionAnalysis}
+                onRefresh={() => void loadVisionAnalysis(selected.id)}
+              />
+            )}
+
+            {/* Objectives Tab */}
+            {detailTab === 'objectives' && selected && (
+              <ObjectiveAnalysisTab
+                analysis={objectiveAnalysis}
+                loading={loadingObjectiveAnalysis}
+                onRefresh={() => void loadObjectiveAnalysis(selected.id)}
               />
             )}
 
@@ -584,6 +671,159 @@ export default function TeamAnalysis() {
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+function AnalysisTabButton({ active, label, onClick }: { active: boolean; label: string; onClick: () => void }) {
+  return (
+    <button onClick={onClick} style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: '0.55rem 1rem', fontSize: '0.875rem', fontWeight: 600, color: active ? 'var(--accent-blue)' : 'var(--text-muted)', borderBottom: active ? '2px solid var(--accent-blue)' : '2px solid transparent', transition: 'color 0.15s', whiteSpace: 'nowrap' }}>
+      {label}
+    </button>
+  );
+}
+
+// ── Phase / Vision / Objective Analysis Tabs ────────────────────────────────
+
+function PhaseAnalysisTab({ analysis, loading, onRefresh }: {
+  analysis: TeamPhaseAnalysis | null; loading: boolean; onRefresh: () => void;
+}) {
+  if (loading) return <AnalysisLoading text="Loading phase analysis…" />;
+  if (!analysis || analysis.sampleSize === 0) return <AnalysisEmpty title="No phase data yet" body="Sync team matches with event streams to calculate phase deltas." onRefresh={onRefresh} />;
+
+  const objectiveDiffs = [
+    { label: '10m', value: analysis.avgObjectiveDiff10 },
+    { label: '15m', value: analysis.avgObjectiveDiff15 },
+    { label: '20m', value: analysis.avgObjectiveDiff20 },
+  ];
+  const maxAbsDiff = Math.max(...objectiveDiffs.map((d) => Math.abs(d.value ?? 0)), 1);
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+      <AnalysisHeader title="Phase Analysis" sampleSize={analysis.sampleSize} onRefresh={onRefresh} />
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '0.75rem' }}>
+        <AnalysisKpi label="Kill Diff @10" value={formatSigned(analysis.avgKillDiff10)} tone={toneForSigned(analysis.avgKillDiff10)} />
+        <AnalysisKpi label="Kill Diff @15" value={formatSigned(analysis.avgKillDiff15)} tone={toneForSigned(analysis.avgKillDiff15)} />
+        <AnalysisKpi label="Throw Rate" value={formatPct(analysis.throwRate)} tone={analysis.throwRate !== null && analysis.throwRate >= 25 ? 'var(--accent-loss)' : 'var(--text-secondary)'} />
+        <AnalysisKpi label="Comeback Rate" value={formatPct(analysis.comebackRate)} tone={analysis.comebackRate !== null && analysis.comebackRate >= 20 ? 'var(--accent-win)' : 'var(--text-secondary)'} />
+      </div>
+
+      <div className="glass-card" style={{ padding: '1rem 1.25rem' }}>
+        <div style={{ fontWeight: 700, fontSize: '0.85rem', color: 'var(--text-primary)', marginBottom: '0.8rem' }}>Objective Diff Timeline</div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
+          {objectiveDiffs.map((diff) => {
+            const value = diff.value ?? 0;
+            const pct = Math.min((Math.abs(value) / maxAbsDiff) * 100, 100);
+            const color = value >= 0 ? 'var(--accent-win)' : 'var(--accent-loss)';
+            return (
+              <div key={diff.label} style={{ display: 'grid', gridTemplateColumns: '42px 1fr 54px', gap: '0.75rem', alignItems: 'center' }}>
+                <span className="mono" style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>{diff.label}</span>
+                <div style={{ height: 8, borderRadius: 999, background: 'rgba(255,255,255,0.07)', overflow: 'hidden' }}>
+                  <div style={{ width: `${pct}%`, height: '100%', marginLeft: value < 0 ? `${100 - pct}%` : 0, background: color, borderRadius: 999 }} />
+                </div>
+                <span className="mono" style={{ fontSize: '0.72rem', color, textAlign: 'right', fontWeight: 700 }}>{formatSigned(diff.value)}</span>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      <AnalysisTable title="Per-match Phase Breakdown">
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 74px 74px 86px 86px 86px', padding: '0.45rem 0.8rem', borderBottom: '1px solid var(--border-color)', fontSize: '0.62rem', color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+          <span>Match</span><span>Result</span><span>KD@10</span><span>KD@15</span><span>OD@15</span><span>OD@20</span>
+        </div>
+        {analysis.perMatch.slice(0, 20).map((match) => (
+          <div key={match.matchId} style={{ display: 'grid', gridTemplateColumns: '1fr 74px 74px 86px 86px 86px', padding: '0.55rem 0.8rem', borderBottom: '1px solid var(--border-color)', alignItems: 'center' }}>
+            <span className="mono" style={{ fontSize: '0.68rem', color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{match.predggUuid}</span>
+            <span className="mono" style={{ fontSize: '0.7rem', color: match.won === true ? 'var(--accent-win)' : match.won === false ? 'var(--accent-loss)' : 'var(--text-muted)', fontWeight: 700 }}>{match.won === true ? 'WIN' : match.won === false ? 'LOSS' : '—'}</span>
+            <SignedCell value={match.killDiff10} />
+            <SignedCell value={match.killDiff15} />
+            <SignedCell value={match.objectiveDiff15} />
+            <SignedCell value={match.objectiveDiff20} />
+          </div>
+        ))}
+      </AnalysisTable>
+    </div>
+  );
+}
+
+function VisionAnalysisTab({ analysis, loading, onRefresh }: {
+  analysis: TeamVisionAnalysis | null; loading: boolean; onRefresh: () => void;
+}) {
+  if (loading) return <AnalysisLoading text="Loading vision analysis…" />;
+  if (!analysis || analysis.sampleSize === 0) return <AnalysisEmpty title="No vision data yet" body="Sync event streams to calculate ward and objective context." onRefresh={onRefresh} />;
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+      <AnalysisHeader title="Vision Analysis" sampleSize={analysis.sampleSize} onRefresh={onRefresh} />
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: '0.75rem' }}>
+        <AnalysisKpi label="Vision Control Score" value={formatNullableNumber(analysis.visionControlScore, 1)} tone={analysis.visionControlScore !== null && analysis.visionControlScore >= 60 ? 'var(--accent-win)' : 'var(--text-secondary)'} />
+        <AnalysisKpi label="Obj Lost After Death" value={formatPct(analysis.objectiveLostAfterAllyDeathRate)} tone={analysis.objectiveLostAfterAllyDeathRate !== null && analysis.objectiveLostAfterAllyDeathRate >= 25 ? 'var(--accent-loss)' : 'var(--text-secondary)'} />
+        <AnalysisKpi label="Obj Taken After Kill" value={formatPct(analysis.objectiveTakenAfterEnemyDeathRate)} tone={analysis.objectiveTakenAfterEnemyDeathRate !== null && analysis.objectiveTakenAfterEnemyDeathRate >= 25 ? 'var(--accent-win)' : 'var(--text-secondary)'} />
+      </div>
+      <AnalysisTable title="Vision by Objective">
+        <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 78px 78px 86px 92px 92px', padding: '0.45rem 0.8rem', borderBottom: '1px solid var(--border-color)', fontSize: '0.62rem', color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+          <span>Objective</span><span>Taken</span><span>Wards</span><span>Lost</span><span>Cleared</span><span>J/S alive</span>
+        </div>
+        {analysis.byObjective.map((objective) => (
+          <div key={objective.entityType} style={{ display: 'grid', gridTemplateColumns: '1.2fr 78px 78px 86px 92px 92px', padding: '0.6rem 0.8rem', borderBottom: '1px solid var(--border-color)', alignItems: 'center' }}>
+            <span style={{ fontSize: '0.76rem', fontWeight: 700, color: 'var(--text-secondary)' }}>{OBJ_LABELS[objective.entityType] ?? objective.entityType}</span>
+            <MonoCell value={objective.teamTaken} />
+            <MonoCell value={formatNullableNumber(objective.avgWardsNearby, 1)} />
+            <MonoCell value={formatNullableNumber(objective.avgWardsLost, 1)} />
+            <MonoCell value={formatNullableNumber(objective.avgEnemyWardsCleared, 1)} />
+            <span className="mono" style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>{formatPct(objective.junglerAliveRate)} / {formatPct(objective.supportAliveRate)}</span>
+          </div>
+        ))}
+      </AnalysisTable>
+    </div>
+  );
+}
+
+function ObjectiveAnalysisTab({ analysis, loading, onRefresh }: {
+  analysis: TeamObjectiveAnalysis | null; loading: boolean; onRefresh: () => void;
+}) {
+  if (loading) return <AnalysisLoading text="Loading objective analysis…" />;
+  if (!analysis || analysis.sampleSize === 0) return <AnalysisEmpty title="No objective analysis yet" body="Sync team matches with objective events to calculate conversions and timings." onRefresh={onRefresh} />;
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+      <AnalysisHeader title="Objective Analysis" sampleSize={analysis.sampleSize} onRefresh={onRefresh} />
+      <div className="glass-card" style={{ padding: '1rem 1.25rem' }}>
+        <div style={{ fontWeight: 700, fontSize: '0.85rem', color: 'var(--text-primary)', marginBottom: '0.85rem' }}>Conversion Funnel</div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+          {analysis.conversions.map((conversion) => (
+            <div key={conversion.entityType}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.3rem' }}>
+                <span style={{ fontSize: '0.76rem', fontWeight: 700, color: 'var(--text-secondary)' }}>{OBJ_LABELS[conversion.entityType] ?? conversion.entityType}</span>
+                <span className="mono" style={{ fontSize: '0.66rem', color: 'var(--text-muted)' }}>{conversion.taken} taken</span>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.35rem' }}>
+                <ConversionSegment label="Structure" value={conversion.toAnyStructureRate} color="var(--accent-blue)" />
+                <ConversionSegment label="Inhibitor" value={conversion.toInhibitorRate} color="var(--accent-prime)" />
+                <ConversionSegment label="Core" value={conversion.toCoreRate} color="var(--accent-win)" />
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+      <AnalysisTable title="Timing Consistency">
+        <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 80px 110px 100px 100px', padding: '0.45rem 0.8rem', borderBottom: '1px solid var(--border-color)', fontSize: '0.62rem', color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+          <span>Objective</span><span>Taken</span><span>Avg Time</span><span>Std Dev</span><span>Priority</span>
+        </div>
+        {analysis.timingStats.map((timing) => {
+          const inconsistent = timing.stdDevSecs !== null && timing.stdDevSecs > 120;
+          return (
+            <div key={timing.entityType} style={{ display: 'grid', gridTemplateColumns: '1.2fr 80px 110px 100px 100px', padding: '0.6rem 0.8rem', borderBottom: '1px solid var(--border-color)', alignItems: 'center' }}>
+              <span style={{ fontSize: '0.76rem', fontWeight: 700, color: 'var(--text-secondary)' }}>{OBJ_LABELS[timing.entityType] ?? timing.entityType}</span>
+              <MonoCell value={timing.teamTaken} />
+              <MonoCell value={formatDuration(timing.avgGameTimeSecs)} />
+              <span className="mono" style={{ fontSize: '0.7rem', color: inconsistent ? '#f97316' : 'var(--text-muted)' }}>{formatDuration(timing.stdDevSecs)}{inconsistent ? ' · inconsistent' : ''}</span>
+              <MonoCell value={formatPct(timing.priorityShare)} />
+            </div>
+          );
+        })}
+      </AnalysisTable>
     </div>
   );
 }
@@ -827,6 +1067,97 @@ function DraftEmptyState({ text }: { text: string }) {
 
 function formatHeroName(heroSlug: string) {
   return heroSlug.split(/[-_]/).filter(Boolean).map((part) => part[0]?.toUpperCase() + part.slice(1)).join(' ');
+}
+
+function AnalysisHeader({ title, sampleSize, onRefresh }: { title: string; sampleSize: number; onRefresh: () => void }) {
+  return (
+    <div className="glass-card" style={{ padding: '0.85rem 1rem', display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+      <div style={{ fontWeight: 700, fontSize: '0.9rem', color: 'var(--text-primary)' }}>{title}</div>
+      <span className="mono" style={{ fontSize: '0.68rem', color: sampleSize < 5 ? '#f0b429' : 'var(--text-muted)' }}>{sampleSize} match sample{sampleSize < 5 ? ' · low sample' : ''}</span>
+      <button onClick={onRefresh} style={{ marginLeft: 'auto', fontSize: '0.72rem', fontWeight: 600, padding: '0.3rem 0.7rem', borderRadius: '5px', cursor: 'pointer', border: '1px solid var(--accent-blue)', background: 'rgba(91,156,246,0.08)', color: 'var(--accent-blue)' }}>Refresh</button>
+    </div>
+  );
+}
+
+function AnalysisKpi({ label, value, tone }: { label: string; value: string; tone?: string }) {
+  return (
+    <div className="glass-card" style={{ padding: '0.9rem 1rem' }}>
+      <div style={{ fontSize: '0.64rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: '0.35rem' }}>{label}</div>
+      <div className="mono" style={{ fontSize: '1.25rem', fontWeight: 700, color: tone ?? 'var(--text-secondary)' }}>{value}</div>
+    </div>
+  );
+}
+
+function AnalysisLoading({ text }: { text: string }) {
+  return <div className="glass-card" style={{ padding: '2rem', color: 'var(--text-muted)', fontSize: '0.85rem' }}>{text}</div>;
+}
+
+function AnalysisEmpty({ title, body, onRefresh }: { title: string; body: string; onRefresh: () => void }) {
+  return (
+    <div className="glass-card" style={{ padding: '2rem', textAlign: 'center' }}>
+      <div style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', fontWeight: 600, marginBottom: '0.5rem' }}>{title}</div>
+      <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '1.25rem' }}>{body}</div>
+      <button onClick={onRefresh} style={{ fontSize: '0.8rem', fontWeight: 600, padding: '0.4rem 0.9rem', borderRadius: '6px', cursor: 'pointer', border: '1px solid var(--accent-blue)', background: 'rgba(91,156,246,0.1)', color: 'var(--accent-blue)' }}>Retry</button>
+    </div>
+  );
+}
+
+function AnalysisTable({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <div className="glass-card" style={{ padding: 0, overflow: 'auto' }}>
+      <div style={{ padding: '0.75rem 1rem', borderBottom: '1px solid var(--border-color)', background: 'rgba(255,255,255,0.02)', fontWeight: 700, fontSize: '0.85rem', color: 'var(--text-primary)' }}>{title}</div>
+      <div style={{ minWidth: 620 }}>{children}</div>
+    </div>
+  );
+}
+
+function ConversionSegment({ label, value, color }: { label: string; value: number | null; color: string }) {
+  const width = value ?? 0;
+  return (
+    <div>
+      <div style={{ height: 7, borderRadius: 999, background: 'rgba(255,255,255,0.07)', overflow: 'hidden', marginBottom: '0.25rem' }}>
+        <div style={{ width: `${Math.min(Math.max(width, 0), 100)}%`, height: '100%', background: color, borderRadius: 999 }} />
+      </div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.35rem' }}>
+        <span style={{ fontSize: '0.62rem', color: 'var(--text-muted)' }}>{label}</span>
+        <span className="mono" style={{ fontSize: '0.62rem', color }}>{formatPct(value)}</span>
+      </div>
+    </div>
+  );
+}
+
+function SignedCell({ value }: { value: number | null }) {
+  return <span className="mono" style={{ fontSize: '0.7rem', color: toneForSigned(value), fontWeight: 700 }}>{formatSigned(value)}</span>;
+}
+
+function MonoCell({ value }: { value: string | number }) {
+  return <span className="mono" style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>{value}</span>;
+}
+
+function toneForSigned(value: number | null) {
+  if (value === null || value === 0) return 'var(--text-muted)';
+  return value > 0 ? 'var(--accent-win)' : 'var(--accent-loss)';
+}
+
+function formatSigned(value: number | null) {
+  if (value === null) return '—';
+  const rounded = Math.round(value * 10) / 10;
+  return rounded > 0 ? `+${rounded}` : `${rounded}`;
+}
+
+function formatPct(value: number | null) {
+  return value === null ? '—' : `${Math.round(value)}%`;
+}
+
+function formatNullableNumber(value: number | null, digits = 0) {
+  return value === null ? '—' : value.toFixed(digits);
+}
+
+function formatDuration(value: number | null) {
+  if (value === null) return '—';
+  const mins = Math.floor(value / 60);
+  const secs = Math.round(value % 60);
+  return `${mins}:${String(secs).padStart(2, '0')}`;
 }
 
 // ── Performance Tab ───────────────────────────────────────────────────────────
