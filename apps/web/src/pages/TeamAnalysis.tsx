@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type ChangeEvent, type CSSProperties, type ReactNode, type KeyboardEvent, type MouseEvent } from 'react';
 import { createPortal } from 'react-dom';
+import { Link } from 'react-router';
 import { RankIcon } from '../components/RankIcon';
 import {
   Users,
@@ -15,6 +16,7 @@ import {
   Activity,
   Swords,
   Trophy,
+  FileText,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { apiClient, type TeamProfile, type TeamRole, type PlayerSearchResult, type TeamAnalysis, type RivalHeroStat, type PlayerAnalysisStat, type Insight, ApiErrorResponse } from '../api/client';
@@ -367,6 +369,15 @@ export default function TeamAnalysis() {
                     {selected.type}
                   </span>
                   <div style={{ display: 'flex', gap: '0.5rem' }}>
+                    {selected.type === 'RIVAL' && (
+                      <Link
+                        to={`/reports/scrim?rival=${selected.id}`}
+                        className="btn-secondary"
+                        style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.8rem', padding: '0.4rem 0.75rem', color: 'var(--accent-teal-bright)', borderColor: 'rgba(56,212,200,0.3)' }}
+                      >
+                        <FileText size={13} /> Quick Report
+                      </Link>
+                    )}
                     <button className="btn-secondary" onClick={() => openEdit(selected)} style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.8rem', padding: '0.4rem 0.75rem', flex: 'unset' }}>
                       <Pencil size={13} /> Edit
                     </button>
@@ -788,7 +799,7 @@ function PerformanceTab({ teamId, analysis, loading, onRefresh }: {
       )}
 
       {/* Player comparison table */}
-      <div className="glass-card" style={{ padding: 0, overflow: 'hidden' }}>
+      <div className="glass-card" style={{ padding: 0, overflow: 'clip' }}>
         <div style={{ padding: '0.75rem 1rem', borderBottom: '1px solid var(--border-color)', background: 'rgba(255,255,255,0.02)', display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
           <span style={{ fontWeight: 700, fontSize: '0.85rem', color: 'var(--text-primary)', marginRight: '0.5rem' }}>Player Comparison</span>
           <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>Sort by:</span>
@@ -800,7 +811,7 @@ function PerformanceTab({ teamId, analysis, loading, onRefresh }: {
         </div>
 
         {/* Header */}
-        <div style={{ display: 'grid', gridTemplateColumns: '180px 60px 80px 70px 70px 70px 70px 70px 72px', padding: '0.35rem 1rem', fontSize: '0.62rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', borderBottom: '1px solid var(--border-color)', background: 'rgba(255,255,255,0.01)' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '180px 60px 80px 70px 70px 70px 70px 70px 72px', padding: '0.35rem 1rem', fontSize: '0.62rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', borderBottom: '1px solid var(--border-color)', background: 'var(--bg-card)', position: 'sticky', top: 0, zIndex: 1 }}>
           <span>Player</span>
           {SORT_COLS.map(({ key, label }) => (
             <span key={key} style={{ textAlign: 'center', color: sortKey === key ? 'var(--accent-blue)' : undefined }}>{label}</span>
@@ -808,41 +819,45 @@ function PerformanceTab({ teamId, analysis, loading, onRefresh }: {
           <span style={{ textAlign: 'center' }}>E.Deaths</span>
         </div>
 
-        {sorted.map((p) => {
-          const recentTotal = p.recentWins + p.recentLosses;
-          const recentWR = recentTotal > 0 ? Math.round((p.recentWins / recentTotal) * 100) : null;
-          const roleSlug = p.role?.toLowerCase().replace('mid_lane', 'midlane') ?? null;
-          return (
-            <div key={p.playerId} style={{ display: 'grid', gridTemplateColumns: '180px 60px 80px 70px 70px 70px 70px 70px 72px', padding: '0.6rem 1rem', borderBottom: '1px solid var(--border-color)', alignItems: 'center' }}>
-              {/* Player */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', minWidth: 0 }}>
-                {roleSlug && <img src={`/icons/roles/${roleSlug}.png`} alt={p.role ?? ''} style={{ width: 18, height: 18, objectFit: 'contain', opacity: 0.85, flexShrink: 0 }} />}
-                <div style={{ minWidth: 0 }}>
-                  <div style={{ fontSize: '0.78rem', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.customName ?? p.displayName}</div>
-                  {p.rankLabel && <div style={{ fontSize: '0.62rem', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>{p.rankLabel}</div>}
+        {(() => {
+          const maxGPM = Math.max(...sorted.map((p) => p.avgGPM ?? 0), 1);
+          const maxDPM = Math.max(...sorted.map((p) => p.avgDPM ?? 0), 1);
+          return sorted.map((p) => {
+            const recentTotal = p.recentWins + p.recentLosses;
+            const recentWR = recentTotal > 0 ? Math.round((p.recentWins / recentTotal) * 100) : null;
+            const roleSlug = p.role?.toLowerCase().replace('mid_lane', 'midlane') ?? null;
+            return (
+              <div key={p.playerId} style={{ display: 'grid', gridTemplateColumns: '180px 60px 80px 70px 70px 70px 70px 70px 72px', padding: '0.6rem 1rem', borderBottom: '1px solid var(--border-color)', alignItems: 'center' }}>
+                {/* Player */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', minWidth: 0 }}>
+                  {roleSlug && <img src={`/icons/roles/${roleSlug}.png`} alt={p.role ?? ''} style={{ width: 18, height: 18, objectFit: 'contain', opacity: 0.85, flexShrink: 0 }} />}
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontSize: '0.78rem', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.customName ?? p.displayName}</div>
+                    {p.rankLabel && <div style={{ fontSize: '0.62rem', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>{p.rankLabel}</div>}
+                  </div>
+                </div>
+                {/* Stats */}
+                <PerfCell value={p.matches} />
+                <div style={{ textAlign: 'center', fontFamily: 'var(--font-mono)', fontSize: '0.75rem' }}>
+                  <span style={{ color: p.winRate >= 55 ? 'var(--accent-win)' : p.winRate < 45 ? 'var(--accent-loss)' : 'var(--text-primary)', fontWeight: 700 }}>{p.winRate.toFixed(1)}%</span>
+                  {recentWR !== null && recentTotal >= 5 && (
+                    <div style={{ fontSize: '0.6rem', color: recentWR > p.winRate ? 'var(--accent-win)' : recentWR < p.winRate ? 'var(--accent-loss)' : 'var(--text-muted)' }}>
+                      last {recentTotal}: {recentWR}%
+                    </div>
+                  )}
+                </div>
+                <PerfCell value={p.kda > 0 ? p.kda.toFixed(2) : '—'} highlight={p.kda >= 3} />
+                <BarCell value={p.avgGPM ?? null} max={maxGPM} color="var(--accent-prime)" />
+                <BarCell value={p.avgDPM ?? null} max={maxDPM} color="var(--accent-loss)" />
+                <PerfCell value={p.avgCS ?? '—'} />
+                <PerfCell value={p.avgWardsPlaced !== null ? p.avgWardsPlaced.toFixed(1) : '—'} />
+                <div style={{ textAlign: 'center', fontFamily: 'var(--font-mono)', fontSize: '0.75rem', color: p.earlyDeathRate !== null && p.earlyDeathRate >= 1 ? 'var(--accent-loss)' : 'var(--text-muted)' }}>
+                  {p.earlyDeathRate !== null ? p.earlyDeathRate.toFixed(2) : '—'}
                 </div>
               </div>
-              {/* Stats */}
-              <PerfCell value={p.matches} />
-              <div style={{ textAlign: 'center', fontFamily: 'var(--font-mono)', fontSize: '0.75rem' }}>
-                <span style={{ color: p.winRate >= 55 ? 'var(--accent-win)' : p.winRate < 45 ? 'var(--accent-loss)' : 'var(--text-primary)', fontWeight: 700 }}>{p.winRate.toFixed(1)}%</span>
-                {recentWR !== null && recentTotal >= 5 && (
-                  <div style={{ fontSize: '0.6rem', color: recentWR > p.winRate ? 'var(--accent-win)' : recentWR < p.winRate ? 'var(--accent-loss)' : 'var(--text-muted)' }}>
-                    last {recentTotal}: {recentWR}%
-                  </div>
-                )}
-              </div>
-              <PerfCell value={p.kda > 0 ? p.kda.toFixed(2) : '—'} highlight={p.kda >= 3} />
-              <PerfCell value={p.avgGPM ?? '—'} />
-              <PerfCell value={p.avgDPM ?? '—'} />
-              <PerfCell value={p.avgCS ?? '—'} />
-              <PerfCell value={p.avgWardsPlaced !== null ? p.avgWardsPlaced.toFixed(1) : '—'} />
-              <div style={{ textAlign: 'center', fontFamily: 'var(--font-mono)', fontSize: '0.75rem', color: p.earlyDeathRate !== null && p.earlyDeathRate >= 1 ? 'var(--accent-loss)' : 'var(--text-muted)' }}>
-                {p.earlyDeathRate !== null ? p.earlyDeathRate.toFixed(2) : '—'}
-              </div>
-            </div>
-          );
-        })}
+            );
+          });
+        })()}
       </div>
 
       {/* Objective Control */}
@@ -1158,6 +1173,18 @@ function PerfCell({ value, highlight }: { value: string | number | null; highlig
   return (
     <div style={{ textAlign: 'center', fontFamily: 'var(--font-mono)', fontSize: '0.75rem', color: highlight ? 'var(--accent-win)' : value === '—' || value === null ? 'var(--text-muted)' : 'var(--text-secondary)', fontWeight: highlight ? 700 : 400 }}>
       {value ?? '—'}
+    </div>
+  );
+}
+
+function BarCell({ value, max, color = 'var(--accent-blue)' }: { value: number | null; max: number; color?: string }) {
+  const pct = value !== null && max > 0 ? Math.min((value / max) * 100, 100) : 0;
+  return (
+    <div style={{ position: 'relative', textAlign: 'center', fontFamily: 'var(--font-mono)', fontSize: '0.75rem', color: value !== null ? 'var(--text-secondary)' : 'var(--text-muted)', padding: '0.1rem 0.25rem' }}>
+      {pct > 0 && (
+        <div style={{ position: 'absolute', inset: 0, width: `${pct}%`, background: color, opacity: 0.12, borderRadius: 3 }} />
+      )}
+      <span style={{ position: 'relative' }}>{value !== null ? Math.round(value) : '—'}</span>
     </div>
   );
 }

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router';
 import { FileText, ChevronRight, Download, Copy, Check, Target } from 'lucide-react';
 import { toast } from 'sonner';
 import {
@@ -16,6 +17,7 @@ const ROLE_LABELS: Record<string, string> = {
 };
 
 export default function ScrimReport() {
+  const [searchParams] = useSearchParams();
   const [ownTeams, setOwnTeams] = useState<TeamProfile[]>([]);
   const [rivalTeams, setRivalTeams] = useState<TeamProfile[]>([]);
   const [ownTeamId, setOwnTeamId] = useState('');
@@ -34,7 +36,13 @@ export default function ScrimReport() {
         apiClient.teams.list('RIVAL'),
       ]);
       if (own.status === 'fulfilled') setOwnTeams(own.value.teams ?? []);
-      if (rival.status === 'fulfilled') setRivalTeams(rival.value.teams ?? []);
+      if (rival.status === 'fulfilled') {
+        setRivalTeams(rival.value.teams ?? []);
+        const preselected = searchParams.get('rival');
+        if (preselected && rival.value.teams?.some((t: TeamProfile) => t.id === preselected)) {
+          setRivalTeamId(preselected);
+        }
+      }
     })();
   }, []);
 
