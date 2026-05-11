@@ -646,6 +646,16 @@ export interface AdminSyncStaleResult {
   timestamp: string;
 }
 
+export interface SyncLog {
+  id: string;
+  entity: string;
+  entityId: string;
+  operation: string;
+  status: string;
+  syncedAt: string;
+  error?: string | null;
+}
+
 // ── Fetch helper ─────────────────────────────────────────────────────────────
 
 async function fetchApi<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
@@ -851,11 +861,15 @@ export const apiClient = {
       fetchApi<AdminSyncVersionsResult>('/admin/sync-versions', { method: 'POST' }),
     syncStale: () =>
       fetchApi<AdminSyncStaleResult>('/admin/sync-stale', { method: 'POST' }),
+    syncIncompleteMatches: () =>
+      fetchApi<{ synced: number; errors: number; elapsed: number }>('/admin/sync-incomplete-matches', { method: 'POST' }),
+    fixHeroKillPlayerIds: () =>
+      fetchApi<{ heroKillsUpdated: number; objectiveKillsUpdated: number; wardEventsUpdated: number; placeholdersCreated: number; elapsed: number }>('/admin/fix-herokill-player-ids', { method: 'POST' }),
     syncLogs: (limit = 50, entity?: string, status?: string) => {
       const params = new URLSearchParams({ limit: String(limit) });
       if (entity) params.set('entity', entity);
       if (status) params.set('status', status);
-      return fetchApi<{ logs: unknown[]; total: number }>(`/admin/sync-logs?${params}`);
+      return fetchApi<{ logs: SyncLog[]; total: number }>(`/admin/sync-logs?${params}`);
     },
   },
 };
