@@ -12,6 +12,87 @@ description: >-
 # Token names map 1:1 to CSS custom properties in apps/web/src/index.css
 # Component class names map 1:1 to apps/web/src/App.css + index.css
 
+tech-stack:
+  # ── Frontend ──────────────────────────────────────────────────────────────
+  frontend:
+    framework: "React 19"
+    language: "TypeScript (strict)"
+    bundler: "Vite"
+    router: "react-router v7"
+    router-import: "import { ... } from 'react-router'"   # NOT react-router-dom
+    state: "useState / useEffect — no global state library"
+    data-fetching: "custom fetchApi wrapper in apps/web/src/api/client.ts"
+    notifications: "sonner (toast)"
+    icons: "lucide-react"
+    fonts: "DM Sans (body) + JetBrains Mono (data) — loaded via @fontsource or CDN"
+    css: "plain CSS custom properties — no framework"
+    component-library: "Radix UI (headless, selective — see component-library section)"
+
+  # ── Backend ───────────────────────────────────────────────────────────────
+  backend:
+    runtime: "Node.js 20+"
+    framework: "Express"
+    language: "TypeScript (ESM)"
+    orm: "Prisma v5"
+    database: "PostgreSQL"
+    logging: "Pino (structured JSON)"
+    validation: "Zod"
+    auth-pred-gg: "OAuth2 PKCE — pred.gg provider — cookie: predgg_token (httpOnly)"
+    auth-internal: "JWT (jose) — email + bcrypt — cookie: ps_session (httpOnly, 1h) + ps_refresh (30d)"
+    auth-middleware: "requireAuth + requireRole(['ROLE']) — apps/api/src/middleware/"
+
+  # ── Shared packages (monorepo) ────────────────────────────────────────────
+  packages:
+    "@predecessor/data-model":
+      location: "packages/data-model/"
+      purpose: "Shared TypeScript types and DTOs consumed by both frontend and backend"
+    "@predecessor/domain-engine":
+      location: "packages/domain-engine/"
+      purpose: "Pure business logic — stat calculations, pointInZone, map zone definitions"
+
+  # ── Data sync ─────────────────────────────────────────────────────────────
+  sync-worker:
+    location: "workers/data-sync/"
+    purpose: "Fetches data from pred.gg GraphQL API and persists to PostgreSQL"
+    api-endpoint: "https://pred.gg/gql (GraphQL POST)"
+    auth-public: "X-Api-Key header — heroes, matches, player basics"
+    auth-bearer: "Bearer token (pred.gg OAuth) — event stream, goldEarnedAtInterval"
+
+  # ── Testing ───────────────────────────────────────────────────────────────
+  testing:
+    framework: "Vitest"
+    http-testing: "Supertest"
+    command: "npm test"
+    typecheck: "npm run typecheck"
+    coverage: "95+ tests across 12 test files (as of 2026-05-11)"
+
+  # ── Repository structure ──────────────────────────────────────────────────
+  monorepo:
+    "apps/web/":       "React 19 frontend — pages, components, CSS, API client"
+    "apps/api/":       "Express backend — routes, services, middleware"
+    "packages/data-model/":    "Shared types"
+    "packages/domain-engine/": "Pure logic — stat calc, map zones"
+    "workers/data-sync/":      "pred.gg sync worker + Prisma schema"
+    "assets/":         "Static game assets — hero icons, item icons, maps"
+
+  # ── Key files ─────────────────────────────────────────────────────────────
+  key-files:
+    frontend:
+      "apps/web/src/App.tsx":          "Root layout, sidebar accordion, routing"
+      "apps/web/src/index.css":        "Design tokens (CSS custom properties)"
+      "apps/web/src/App.css":          "Shared components: sidebar, buttons, cards, nav"
+      "apps/web/src/api/client.ts":    "Typed API client — all fetch calls go through here"
+      "apps/web/src/pages/":           "One file per page/route"
+      "apps/web/src/hooks/useAuth.ts": "pred.gg auth state"
+    backend:
+      "apps/api/src/index.ts":             "Express app entry — registers all routers"
+      "apps/api/src/routes/":              "One router file per domain"
+      "apps/api/src/services/":           "Business logic — team-service, player-service, etc."
+      "apps/api/src/middleware/require-auth.ts":  "JWT session verification"
+      "apps/api/src/middleware/require-role.ts":  "Role-based access control"
+    schema:
+      "workers/data-sync/prisma/schema.prisma": "Single Prisma schema for the entire DB"
+
 colors:
   # ── Backgrounds (dark-first, four elevation levels) ───────────────────────
   bg-page:    "#0a0c10"        # canvas — the darkest surface, body background
@@ -613,6 +694,30 @@ Percentages displayed without the `%` symbol in column headers (the header decla
 At 920px, the sidebar collapses to a horizontal top bar with nav items scrolling horizontally. Accordion sections lose their collapsing behavior and show as flat links.
 
 At 640px, the sidebar compresses to icon-only (text labels hidden), the logo text disappears (only favicon shown), and the auth button shows icon only. Card padding reduces from 1.5rem to 0.9rem. The workspace subtitle is hidden.
+
+## Arquitectura técnica
+
+PrimeSight es un monorepo con cuatro capas:
+
+**Frontend** — `apps/web/` — React 19 + TypeScript + Vite. El router es `react-router v7` (importar siempre desde `'react-router'`, nunca `'react-router-dom'`). No hay librería de estado global — todo es `useState` / `useEffect` local. Todas las llamadas a la API pasan por `apps/web/src/api/client.ts`, un cliente tipado con interfaces para cada respuesta. Las notificaciones usan `sonner`. Los iconos son `lucide-react` a `stroke-width: 2`.
+
+**Backend** — `apps/api/` — Express + Node.js 20 + TypeScript (ESM). Validación con Zod en todos los endpoints. Logging estructurado con Pino. Un router por dominio en `apps/api/src/routes/`, lógica de negocio en `apps/api/src/services/`. Base de datos PostgreSQL via Prisma v5.
+
+**Paquetes compartidos** del monorepo:
+- `@predecessor/data-model` (`packages/data-model/`) — tipos TypeScript y DTOs compartidos
+- `@predecessor/domain-engine` (`packages/domain-engine/`) — lógica pura: stats, `pointInZone`, zonas del mapa
+
+**Sync worker** — `workers/data-sync/` — consume la API GraphQL de pred.gg (`https://pred.gg/gql`) y persiste en PostgreSQL. El schema de Prisma vive aquí y es el único schema de toda la app.
+
+**Auth** — dos sistemas coexistentes:
+- pred.gg OAuth2 PKCE — Bearer token para sync de datos. Cookie `predgg_token` (httpOnly).
+- Auth interno JWT — email + bcrypt. Cookie `ps_session` (1h) + `ps_refresh` (30d). Roles globales: `PLATFORM_ADMIN | VIEWER`. Roles por equipo: `MANAGER | COACH | ANALISTA | JUGADOR`. Middleware: `requireAuth` + `requireRole(['ROLE'])`.
+
+Al generar código para PrimeSight:
+- Importar tipos desde `@predecessor/data-model` si existen
+- Usar `apiClient.X.Y()` del cliente tipado, nunca `fetch` directo
+- Nuevos endpoints: Router Express → `next(err)` para errores → Pino para logging
+- Nuevos modelos de BD: `schema.prisma` → `npx prisma generate` → `npx prisma db push`
 
 ## CSS and component libraries
 
