@@ -1765,29 +1765,6 @@ const SYNC_STEPS = [
   'Saving to local database...',
 ];
 
-function AdvancedMetricsSection({ metrics, loading }: { metrics: import('../api/client').PlayerAdvancedMetrics | null; loading: boolean }) {
-  if (loading) return <div style={{ color: 'var(--text-muted)', fontSize: '0.8rem', padding: '0.5rem 0' }}>Loading advanced metrics…</div>;
-  if (!metrics) return <div style={{ color: 'var(--text-muted)', fontSize: '0.8rem', padding: '0.5rem 0' }}>No data available.</div>;
-  const items = [
-    { label: 'Gold Share', value: metrics.goldSharePct !== null ? `${metrics.goldSharePct.toFixed(1)}%` : '—' },
-    { label: 'Damage Share', value: metrics.damageSharePct !== null ? `${metrics.damageSharePct.toFixed(1)}%` : '—' },
-    { label: 'Kill Share', value: metrics.killSharePct !== null ? `${metrics.killSharePct.toFixed(1)}%` : '—' },
-    { label: 'Efficiency Gap', value: metrics.efficiencyGap !== null ? `${metrics.efficiencyGap > 0 ? '+' : ''}${metrics.efficiencyGap.toFixed(1)}%` : '—' },
-    { label: 'Early Death Rate', value: metrics.earlyDeathRate !== null ? metrics.earlyDeathRate.toFixed(2) : '—' },
-    { label: 'First Death Rate', value: metrics.firstDeathRate !== null ? `${(metrics.firstDeathRate * 100).toFixed(0)}%` : '—' },
-  ];
-  return (
-    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(110px, 1fr))', gap: '0.5rem', marginTop: '0.5rem' }}>
-      {items.map(({ label, value }) => (
-        <div key={label} style={{ padding: '0.6rem 0.75rem', background: 'var(--bg-dark)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-color)' }}>
-          <div style={{ fontSize: '0.6rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.25rem' }}>{label}</div>
-          <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.88rem', fontWeight: 600, color: 'var(--text-primary)' }}>{value}</div>
-        </div>
-      ))}
-    </div>
-  );
-}
-
 function SyncSteps({ currentStep }: { currentStep: string }) {
   const currentIdx = SYNC_STEPS.findIndex((s) => currentStep.startsWith(s));
   return (
