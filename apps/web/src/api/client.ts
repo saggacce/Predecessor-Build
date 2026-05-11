@@ -274,6 +274,17 @@ export interface SyncedPlayer {
   lastSynced: Date;
 }
 
+export interface PlayerAdvancedMetrics {
+  sampleSize: number;
+  eventStreamSampleSize: number;
+  goldSharePct: number | null;
+  damageSharePct: number | null;
+  killSharePct: number | null;
+  efficiencyGap: number | null;
+  earlyDeathRate: number | null;
+  firstDeathRate: number | null;
+}
+
 export interface PlayerAnalysisStat {
   playerId: string;
   displayName: string;
@@ -532,6 +543,7 @@ export const apiClient = {
         body: JSON.stringify({ playerIdA, playerIdB }),
       }),
     seasons: (id: string) => fetchApi<PlayerSeasons>(`/players/${id}/seasons`),
+    advancedMetrics: (id: string) => fetchApi<PlayerAdvancedMetrics>(`/players/${id}/advanced-metrics`),
     setCustomName: (id: string, customName: string | null) =>
       fetchApi<{ player: { id: string; customName: string | null; displayName: string } }>(`/players/${id}/name`, {
         method: 'PATCH',

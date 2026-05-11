@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { getPlayerProfile, comparePlayers, searchPlayers } from '../services/player-service.js';
+import { getPlayerProfile, comparePlayers, searchPlayers, getPlayerAdvancedMetrics } from '../services/player-service.js';
 import { syncPlayerByName } from '../services/sync-service.js';
 import { AppError } from '../middleware/error-handler.js';
 import { db } from '../db.js';
@@ -138,6 +138,15 @@ playersRouter.patch('/:id/name', async (req, res, next) => {
  * POST /players/compare
  * Body: { playerIdA: string, playerIdB: string }
  */
+playersRouter.get('/:id/advanced-metrics', async (req, res, next) => {
+  try {
+    const data = await getPlayerAdvancedMetrics(req.params.id);
+    res.json(data);
+  } catch (err) {
+    next(err);
+  }
+});
+
 playersRouter.post('/compare', async (req, res, next) => {
   try {
     const body = z.object({
