@@ -551,6 +551,55 @@ export interface PlayerGoal {
   updatedAt: string;
 }
 
+export type VodLinkType =
+  | 'full_match'
+  | 'player_pov'
+  | 'clip'
+  | 'coach_review'
+  | 'scrim_recording'
+  | 'tournament_vod'
+  | 'ingame_replay_ref';
+
+export type VodVisibility = 'staff' | 'team' | 'player';
+
+export interface VodLink {
+  id: string;
+  matchId: string | null;
+  playerId: string | null;
+  teamId: string;
+  type: VodLinkType | string;
+  url: string;
+  gameTimeStart: number | null;
+  gameTimeEnd: number | null;
+  videoTimestampStart: number | null;
+  videoTimestampEnd: number | null;
+  tags: string[];
+  notes: string | null;
+  visibility: VodVisibility | string;
+  createdAt: string;
+  match: {
+    id: string;
+    startTime: string;
+    gameMode: string;
+    winningTeam: string | null;
+  } | null;
+}
+
+export interface VodLinkInput {
+  teamId: string;
+  matchId?: string | null;
+  playerId?: string | null;
+  type: VodLinkType;
+  url: string;
+  gameTimeStart?: number | null;
+  gameTimeEnd?: number | null;
+  videoTimestampStart?: number | null;
+  videoTimestampEnd?: number | null;
+  tags?: string[];
+  notes?: string | null;
+  visibility?: VodVisibility;
+}
+
 export interface SessionMembership {
   teamId: string;
   role: 'MANAGER' | 'COACH' | 'ANALISTA' | 'JUGADOR' | string;
@@ -729,6 +778,21 @@ export const apiClient = {
       fetchApi<ReviewItem>(`/review/items/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
     delete: (id: string) =>
       fetchApi<{ ok: boolean }>(`/review/items/${id}`, { method: 'DELETE' }),
+  },
+
+  vod: {
+    list: (params: { teamId?: string; matchId?: string }) => {
+      const p = new URLSearchParams();
+      if (params.teamId) p.set('teamId', params.teamId);
+      if (params.matchId) p.set('matchId', params.matchId);
+      return fetchApi<{ vods: VodLink[] }>(`/vod?${p}`);
+    },
+    create: (data: VodLinkInput) =>
+      fetchApi<{ vod: VodLink }>('/vod', { method: 'POST', body: JSON.stringify(data) }),
+    update: (id: string, data: Partial<VodLinkInput>) =>
+      fetchApi<{ vod: VodLink }>(`/vod/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+    delete: (id: string) =>
+      fetchApi<{ ok: boolean }>(`/vod/${id}`, { method: 'DELETE' }),
   },
 
   goals: {
