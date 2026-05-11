@@ -1,9 +1,11 @@
-import { Router } from 'express';
+import { Router, type NextFunction, type Request, type Response } from 'express';
 import { z } from 'zod';
 import { db } from '../db.js';
 import { resyncMatch, syncPlayerByName } from '../services/sync-service.js';
 import { logger } from '../logger.js';
 import { getValidToken } from './auth.js';
+import { requireAuth } from '../middleware/require-auth.js';
+import { requireRole } from '../middleware/require-role.js';
 import {
   getTeamProfile,
   listTeams,
@@ -58,7 +60,19 @@ const updateRosterSchema = z.object({
   role: z.enum(['carry', 'jungle', 'midlane', 'offlane', 'support']).nullable(),
 });
 
-teamsRouter.get('/', async (req, res, next) => {
+const staffRoles = ['COACH', 'ANALISTA', 'MANAGER'];
+
+function attachManagedTeamForCreate(req: Request, _res: Response, next: NextFunction): void {
+  if (!req.body?.teamId) {
+    const managedTeam = req.user?.memberships.find((membership) => membership.role === 'MANAGER');
+    if (managedTeam) {
+      req.body = { ...req.body, teamId: managedTeam.teamId };
+    }
+  }
+  next();
+}
+
+teamsRouter.get('/', requireAuth, async (req, res, next) => {
   try {
     const { type } = listQuerySchema.parse(req.query);
     const teams = await listTeams(type);
@@ -68,7 +82,7 @@ teamsRouter.get('/', async (req, res, next) => {
   }
 });
 
-teamsRouter.post('/', async (req, res, next) => {
+teamsRouter.post('/', requireAuth, attachManagedTeamForCreate, requireRole(['MANAGER']), async (req, res, next) => {
   try {
     const data = createTeamSchema.parse(req.body);
     const team = await createTeam(data);
@@ -78,7 +92,7 @@ teamsRouter.post('/', async (req, res, next) => {
   }
 });
 
-teamsRouter.get('/:id', async (req, res, next) => {
+teamsRouter.get('/:id', requireAuth, async (req, res, next) => {
   try {
     const profile = await getTeamProfile(req.params.id);
     res.json(profile);
@@ -87,38 +101,38 @@ teamsRouter.get('/:id', async (req, res, next) => {
   }
 });
 
-teamsRouter.get('/:id/analysis', async (req, res, next) => {
+teamsRouter.get('/:teamId/analysis', requireAuth, requireRole(staffRoles), async (req, res, next) => {
   try {
-    const analysis = await getTeamAnalysis(req.params.id);
+    const analysis = await getTeamAnalysis(req.params.teamId);
     res.json(analysis);
   } catch (err) {
     next(err);
   }
 });
 
-teamsRouter.patch('/:id', async (req, res, next) => {
+teamsRouter.patch('/:teamId', requireAuth, requireRole(['MANAGER']), async (req, res, next) => {
   try {
     const data = updateTeamSchema.parse(req.body);
-    const team = await updateTeam(req.params.id, data);
+    const team = await updateTeam(req.params.teamId, data);
     res.json(team);
   } catch (err) {
     next(err);
   }
 });
 
-teamsRouter.delete('/:id', async (req, res, next) => {
+teamsRouter.delete('/:teamId', requireAuth, requireRole(['MANAGER']), async (req, res, next) => {
   try {
-    await deleteTeam(req.params.id);
+    await deleteTeam(req.params.teamId);
     res.json({ ok: true });
   } catch (err) {
     next(err);
   }
 });
 
-teamsRouter.post('/:id/roster', async (req, res, next) => {
+teamsRouter.post('/:teamId/roster', requireAuth, requireRole(['MANAGER']), async (req, res, next) => {
   try {
     const { playerId, role } = addRosterSchema.parse(req.body);
-    const entry = await addRosterPlayer(req.params.id, playerId, role);
+    const entry = await addRosterPlayer(req.params.teamId, playerId, role);
 
     // Get token before sending response (needed for pred.gg auth)
     let userToken: string | null = null;
@@ -139,19 +153,19 @@ teamsRouter.post('/:id/roster', async (req, res, next) => {
   }
 });
 
-teamsRouter.patch('/:id/roster/:rosterId', async (req, res, next) => {
+teamsRouter.patch('/:teamId/roster/:rosterId', requireAuth, requireRole(['MANAGER']), async (req, res, next) => {
   try {
     const { role } = updateRosterSchema.parse(req.body);
-    const entry = await updateRosterEntry(req.params.id, req.params.rosterId, role);
+    const entry = await updateRosterEntry(req.params.teamId, req.params.rosterId, role);
     res.json(entry);
   } catch (err) {
     next(err);
   }
 });
 
-teamsRouter.delete('/:id/roster/:rosterId', async (req, res, next) => {
+teamsRouter.delete('/:teamId/roster/:rosterId', requireAuth, requireRole(['MANAGER']), async (req, res, next) => {
   try {
-    await removeRosterPlayer(req.params.id, req.params.rosterId);
+    await removeRosterPlayer(req.params.teamId, req.params.rosterId);
     res.json({ ok: true });
   } catch (err) {
     next(err);
@@ -163,14 +177,14 @@ teamsRouter.delete('/:id/roster/:rosterId', async (req, res, next) => {
  * Syncs event stream for up to `limit` unsynced matches of roster players.
  * Requires Bearer token. Returns { synced, errors, remaining }.
  */
-teamsRouter.post('/:id/sync-matches', async (req, res, next) => {
+teamsRouter.post('/:teamId/sync-matches', requireAuth, requireRole(['MANAGER']), async (req, res, next) => {
   try {
     const limit = Math.min(Number(req.body?.limit ?? 10), 20);
     const userToken = await getValidToken(req, res);
 
     // Get roster player IDs
     const roster = await db.teamRoster.findMany({
-      where: { teamId: req.params.id, activeTo: null },
+      where: { teamId: req.params.teamId, activeTo: null },
       select: { playerId: true },
     });
     const playerIds = roster.map((r) => r.playerId);
@@ -215,45 +229,45 @@ teamsRouter.post('/:id/sync-matches', async (req, res, next) => {
   }
 });
 
-teamsRouter.get('/:id/phase-analysis', async (req, res, next) => {
+teamsRouter.get('/:teamId/phase-analysis', requireAuth, requireRole(staffRoles), async (req, res, next) => {
   try {
-    const data = await getTeamPhaseAnalysis(req.params.id);
+    const data = await getTeamPhaseAnalysis(req.params.teamId);
     res.json(data);
   } catch (err) {
     next(err);
   }
 });
 
-teamsRouter.get('/:id/vision-analysis', async (req, res, next) => {
+teamsRouter.get('/:teamId/vision-analysis', requireAuth, requireRole(staffRoles), async (req, res, next) => {
   try {
-    const data = await getTeamVisionAnalysis(req.params.id);
+    const data = await getTeamVisionAnalysis(req.params.teamId);
     res.json(data);
   } catch (err) {
     next(err);
   }
 });
 
-teamsRouter.get('/:id/objective-analysis', async (req, res, next) => {
+teamsRouter.get('/:teamId/objective-analysis', requireAuth, requireRole(staffRoles), async (req, res, next) => {
   try {
-    const data = await getTeamObjectiveAnalysis(req.params.id);
+    const data = await getTeamObjectiveAnalysis(req.params.teamId);
     res.json(data);
   } catch (err) {
     next(err);
   }
 });
 
-teamsRouter.get('/:id/draft-analysis', async (req, res, next) => {
+teamsRouter.get('/:teamId/draft-analysis', requireAuth, requireRole(staffRoles), async (req, res, next) => {
   try {
-    const data = await getTeamDraftAnalysis(req.params.id);
+    const data = await getTeamDraftAnalysis(req.params.teamId);
     res.json(data);
   } catch (err) {
     next(err);
   }
 });
 
-teamsRouter.get('/:id/rival-scouting', async (req, res, next) => {
+teamsRouter.get('/:teamId/rival-scouting', requireAuth, requireRole(staffRoles), async (req, res, next) => {
   try {
-    const data = await getTeamRivalScouting(req.params.id);
+    const data = await getTeamRivalScouting(req.params.teamId);
     res.json(data);
   } catch (err) {
     next(err);

@@ -1,5 +1,9 @@
-import { Router } from 'express';
+import { Router, type NextFunction, type Request, type Response } from 'express';
 import { z } from 'zod';
+import { db } from '../db.js';
+import { AppError } from '../middleware/error-handler.js';
+import { requireAuth } from '../middleware/require-auth.js';
+import { requireRole } from '../middleware/require-role.js';
 import {
   createReviewItem, listReviewItems, updateReviewItem, deleteReviewItem,
   createTeamGoal, listTeamGoals, updateTeamGoal, deleteTeamGoal,
@@ -7,6 +11,54 @@ import {
 } from '../services/review-service.js';
 
 export const reviewRouter = Router();
+
+const staffRoles = ['COACH', 'ANALISTA', 'MANAGER'];
+
+function attachTeamId(teamId: string, req: Request): void {
+  req.body = { ...req.body, teamId };
+}
+
+async function attachReviewItemTeamId(req: Request, _res: Response, next: NextFunction): Promise<void> {
+  try {
+    const item = await db.reviewItem.findUnique({
+      where: { id: req.params.id },
+      select: { teamId: true },
+    });
+    if (!item) throw new AppError(404, `Review item not found: ${req.params.id}`, 'NOT_FOUND');
+    attachTeamId(item.teamId, req);
+    next();
+  } catch (err) {
+    next(err);
+  }
+}
+
+async function attachTeamGoalTeamId(req: Request, _res: Response, next: NextFunction): Promise<void> {
+  try {
+    const goal = await db.teamGoal.findUnique({
+      where: { id: req.params.id },
+      select: { teamId: true },
+    });
+    if (!goal) throw new AppError(404, `Team goal not found: ${req.params.id}`, 'NOT_FOUND');
+    attachTeamId(goal.teamId, req);
+    next();
+  } catch (err) {
+    next(err);
+  }
+}
+
+async function attachPlayerGoalTeamId(req: Request, _res: Response, next: NextFunction): Promise<void> {
+  try {
+    const goal = await db.playerGoal.findUnique({
+      where: { id: req.params.id },
+      select: { teamId: true },
+    });
+    if (!goal) throw new AppError(404, `Player goal not found: ${req.params.id}`, 'NOT_FOUND');
+    attachTeamId(goal.teamId, req);
+    next();
+  } catch (err) {
+    next(err);
+  }
+}
 
 // ── Review Items ──────────────────────────────────────────────────────────────
 
@@ -31,7 +83,7 @@ const updateReviewSchema = z.object({
   vodTimestamp: z.number().int().nullable().optional(),
 });
 
-reviewRouter.get('/items', async (req, res, next) => {
+reviewRouter.get('/items', requireAuth, requireRole(staffRoles), async (req, res, next) => {
   try {
     const teamId = String(req.query.teamId ?? '');
     if (!teamId) { res.status(400).json({ error: { message: 'teamId required' } }); return; }
@@ -46,7 +98,7 @@ reviewRouter.get('/items', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-reviewRouter.post('/items', async (req, res, next) => {
+reviewRouter.post('/items', requireAuth, requireRole(staffRoles), async (req, res, next) => {
   try {
     const data = createReviewSchema.parse(req.body);
     const item = await createReviewItem(data);
@@ -54,7 +106,7 @@ reviewRouter.post('/items', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-reviewRouter.patch('/items/:id', async (req, res, next) => {
+reviewRouter.patch('/items/:id', requireAuth, attachReviewItemTeamId, requireRole(staffRoles), async (req, res, next) => {
   try {
     const data = updateReviewSchema.parse(req.body);
     const item = await updateReviewItem(req.params.id, data);
@@ -62,7 +114,7 @@ reviewRouter.patch('/items/:id', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-reviewRouter.delete('/items/:id', async (req, res, next) => {
+reviewRouter.delete('/items/:id', requireAuth, attachReviewItemTeamId, requireRole(staffRoles), async (req, res, next) => {
   try {
     await deleteReviewItem(req.params.id);
     res.json({ ok: true });
@@ -92,14 +144,14 @@ const updateGoalSchema = z.object({
   status: z.enum(['DRAFT', 'ACTIVE', 'ACHIEVED', 'FAILED', 'PAUSED', 'ARCHIVED']).optional(),
 });
 
-reviewRouter.get('/goals/team/:teamId', async (req, res, next) => {
+reviewRouter.get('/goals/team/:teamId', requireAuth, requireRole(staffRoles), async (req, res, next) => {
   try {
     const goals = await listTeamGoals(req.params.teamId);
     res.json({ goals });
   } catch (err) { next(err); }
 });
 
-reviewRouter.post('/goals/team', async (req, res, next) => {
+reviewRouter.post('/goals/team', requireAuth, requireRole(staffRoles), async (req, res, next) => {
   try {
     const data = createGoalSchema.parse(req.body);
     const goal = await createTeamGoal(data);
@@ -107,7 +159,7 @@ reviewRouter.post('/goals/team', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-reviewRouter.patch('/goals/team/:id', async (req, res, next) => {
+reviewRouter.patch('/goals/team/:id', requireAuth, attachTeamGoalTeamId, requireRole(staffRoles), async (req, res, next) => {
   try {
     const data = updateGoalSchema.parse(req.body);
     const goal = await updateTeamGoal(req.params.id, data);
@@ -115,7 +167,7 @@ reviewRouter.patch('/goals/team/:id', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-reviewRouter.delete('/goals/team/:id', async (req, res, next) => {
+reviewRouter.delete('/goals/team/:id', requireAuth, attachTeamGoalTeamId, requireRole(staffRoles), async (req, res, next) => {
   try {
     await deleteTeamGoal(req.params.id);
     res.json({ ok: true });
@@ -136,7 +188,7 @@ const createPlayerGoalSchema = z.object({
   visibility: z.enum(['staff', 'player', 'all']).default('staff'),
 });
 
-reviewRouter.get('/goals/player/:teamId', async (req, res, next) => {
+reviewRouter.get('/goals/player/:teamId', requireAuth, requireRole(staffRoles), async (req, res, next) => {
   try {
     const playerId = req.query.playerId ? String(req.query.playerId) : undefined;
     const goals = await listPlayerGoals(req.params.teamId, playerId);
@@ -144,7 +196,7 @@ reviewRouter.get('/goals/player/:teamId', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-reviewRouter.post('/goals/player', async (req, res, next) => {
+reviewRouter.post('/goals/player', requireAuth, requireRole(staffRoles), async (req, res, next) => {
   try {
     const data = createPlayerGoalSchema.parse(req.body);
     const goal = await createPlayerGoal(data);
@@ -152,7 +204,7 @@ reviewRouter.post('/goals/player', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-reviewRouter.patch('/goals/player/:id', async (req, res, next) => {
+reviewRouter.patch('/goals/player/:id', requireAuth, attachPlayerGoalTeamId, requireRole(staffRoles), async (req, res, next) => {
   try {
     const goal = await updatePlayerGoal(req.params.id, req.body);
     res.json(goal);
