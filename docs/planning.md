@@ -87,30 +87,14 @@ Datos de partida → eventos críticos → review → objetivos → mejora medib
 
 ---
 
-## Tarea 8 — Analyst: Rules Engine
-Motor determinista. Genera insights estructurados con evidencia trazable. Sin LLM, sin coste de inferencia.
+## [x] Tarea 8 — Analyst: Rules Engine
+Motor determinista. 9 reglas implementadas. Sin LLM.
 
-### Arquitectura
-- `GET /analysis/insights/:teamId` → lista ordenada por severidad
-- Cada insight: `{ id, severity, category, title, evidence[], recommendation, reviewRequired }`
-- Severidades: `critical | high | medium | low | positive`
-- Panel "Analyst" en TeamAnalysis y PlayerScouting
-
-### Reglas iniciales (datos disponibles ahora)
-- [ ] Muerte crítica pre-objetivo — jungla/carry/support muere 60s antes de Fangtooth/Prime/Shaper en ≥60% de partidas → *"Revisar setup antes de objetivo"*
-- [ ] Baja visión previa — 0 wards cerca del objetivo 90s antes en ≥50% de partidas → *"Objetivo disputado sin visión"*
-- [ ] Visión limpiada — ≥2 wards destruidas 120s antes de objetivo → *"El rival limpió el área"*
-- [ ] Prime no convertido — Orb Prime tomado + 0 estructuras en 180s en ≥50% de tomas → *"Ventaja no convertida"*
-- [ ] Draft dependency — top 2 héroes de un jugador >60% de sus picks → *"Vulnerabilidad a bans"*
-- [ ] Throw pattern — ventaja gold >3k convertida en derrota en ≥2 partidas → *"Patrón de throw"*
-- [ ] Player slump — KDA <1.5 en últimas 10 vs histórico → *"Bajón de rendimiento"*
-- [ ] Vision gaps — wards/min del equipo por debajo de la media del rol → *"Visión insuficiente"*
-- [ ] Reinforcement positivo — Fangtooth control >70%, Prime conversion >60% → destacar como fortaleza
-
-### Pendiente
-- [ ] Umbrales configurables por coach (no hardcodeados)
-- [ ] Panel UI: tarjetas de insight con severity badge + evidencia colapsable
-- [ ] Flag `reviewRequired: true` para enlazar con Tarea 10 (Review Queue)
+- [x] `GET /analysis/insights/:teamId` → lista ordenada por severidad (`apps/api/src/services/analyst-service.ts`)
+- [x] Reglas: muerte crítica pre-objetivo, baja visión, visión limpiada, prime no convertido, draft dependency, throw pattern, player slump, vision gaps, reinforcement positivo
+- [x] Data Status insight — distingue "datos de jugador OK" vs "event stream pendiente"
+- [x] Panel "Analyst" en TeamAnalysis con InsightCard (severity badge, evidencia colapsable, botón Review)
+- [ ] Umbrales configurables por coach (pendiente)
 
 ---
 
@@ -124,41 +108,16 @@ Motor determinista. Genera insights estructurados con evidencia trazable. Sin LL
 
 ---
 
-## Tarea 10 — Team Tools: Review Queue y flujo de entrenamiento
-El módulo de mayor ROI no implementado. Convierte detección de patrones en trabajo real de revisión.
-*Prerequisito: Tarea 8 activa.*
+## [x] Tarea 10 — Team Tools: Review Queue y flujo de entrenamiento
 
-### Modelo de datos
-- [ ] Tabla `ReviewItem`: `{ id, matchId, teamId, playerId, eventId, gameTime, priority, reason, status, coachComment, assignedTo, actionItem, vodUrl, vodTimestamp }`
-- [ ] Tabla `TeamGoal`: `{ id, teamId, title, metricId, baselineValue, targetValue, currentValue, timeframe, priority, status }`
-- [ ] Tabla `PlayerGoal`: `{ id, playerId, teamId, title, metricId, baseline, target, coachNote, visibility, status }`
-
-### Flujo
-```
-Rules Engine detecta evento → ReviewItem (status: pending)
-→ Coach revisa en cola ordenada por severidad
-→ Coach confirma / descarta / marca dudoso
-→ Coach asigna tag de causa + acción correctiva
-→ Sistema mide si el patrón mejora en partidas siguientes
-```
-
-### Estados de ReviewItem
-`pending` · `in_review` · `reviewed` · `false_positive` · `team_issue` · `player_issue` · `draft_issue` · `added_to_training`
-
-### Tags manuales
-`bad_objective_setup` · `facecheck` · `bad_reset` · `late_rotation` · `bad_engage` · `ignored_call` · `bad_secure` · `poor_conversion`
-
-### API
-- [ ] `POST /review-items` — crear desde insight
-- [ ] `PATCH /review-items/:id` — confirmar/descartar + tag + nota
-- [ ] `GET /review-items` — cola paginada, filtrable por severidad/status/team
-- [ ] `POST /goals/team` + `GET /goals/team/:teamId`
-- [ ] `POST /goals/player` + `GET /goals/player/:playerId`
-
-### UI
-- [ ] Página Review Queue: tarjetas con timestamp, minimap snippet, descripción, botones de acción
-- [ ] Team Goals panel en TeamAnalysis: métricas vinculadas, estado, progreso
-- [ ] Player Goals: privado por defecto, visible solo para el jugador afectado y staff
+- [x] Modelos `ReviewItem`, `TeamGoal`, `PlayerGoal` en schema.prisma
+- [x] `GET/POST/PATCH/DELETE /review/items` — cola con filtros por status/priority
+- [x] `GET/POST/PATCH/DELETE /review/goals/team/:teamId`
+- [x] `GET/POST/PATCH /review/goals/player/:teamId`
+- [x] Página Review Queue con 2 tabs: Review Queue + Team Goals (KPI strip, filtros, inline edit)
+- [x] 8 estados de ReviewItem, 8 tags manuales de causa
+- [ ] Player Goals UI (modelo existe, UI pendiente)
+- [ ] Vincular Review Item → Team/Player Goal desde la UI
 
 ---
 
@@ -290,32 +249,36 @@ Konva.js (canvas con React) — soporta layers, drag, export a imagen
 
 ---
 
-## Tarea 17 — Auth: RBAC, invitaciones y perfiles de usuario
-*Prerequisito para multi-usuario. Para la fase de testing actual: User + Invitation + roles básicos.*
+## [x] Tarea 17 — Auth: RBAC, invitaciones y perfiles de usuario
 
-### Fase 1 — Para el testing (ahora)
-- [ ] Tabla `User`: `{ id, email, name, passwordHash?, predggPlayerId?, discordId?, globalRole, tier, createdAt }`
-- [ ] Tabla `Invitation`: `{ id, email, token, globalRole, teamId?, expiresAt, usedAt, createdBy }`
-- [ ] Tabla `TeamMembership`: `{ userId, teamId, role }`
-- [ ] Endpoint `POST /invitations` — crear token + enviar email (Resend/SendGrid)
-- [ ] Endpoint `GET /invitations/:token` — validar token
-- [ ] Endpoint `POST /auth/register` — crear cuenta desde invitation token
-- [ ] Middleware de autorización por rol en rutas sensibles
+### Fase 1 — Completada (PR #66 + #68)
+- [x] Modelos `User`, `TeamMembership`, `Invitation` en schema.prisma
+- [x] `POST /internal-auth/login` — bcrypt 12, JWT 1h en cookie httpOnly, refresh token 30d
+- [x] `POST /internal-auth/register` — registro por invitation token, transacción atómica
+- [x] `POST /internal-auth/refresh` — rota sesión desde refresh cookie
+- [x] `GET /internal-auth/me` — sesión actual
+- [x] `POST/GET/DELETE /invitations` — gestión de invitaciones (solo MANAGER o PLATFORM_ADMIN)
+- [x] Middleware `requireAuth` + `requireRole(roles[])` para proteger rutas
+- [x] Security hardening: rate limiting (10 intentos/15min), timing attack fix, cookie secure en prod, audit log en SyncLog
+- [x] Roles globales: `PLATFORM_ADMIN` | `VIEWER`
+- [x] Roles por equipo: `MANAGER` | `COACH` | `ANALISTA` | `JUGADOR`
+- [ ] UI de login/registro/gestión de usuarios (frontend pendiente — bloqueado por restructura de menú)
+- [ ] Discord OAuth (Fase 2)
+- [ ] Tiers de monetización (Fase 2)
 
-### Roles globales (MVP)
-`admin` · `staff` · `viewer`
+---
 
-### Roles por equipo (MVP)
-`owner` · `coach` · `analyst` · `player`
+## [x] Tarea 20 — Backend Analytics: catálogo de métricas (coach/analista)
+Implementación de los indicadores verdes del catálogo `PrimeSight_metric_catalog_full.csv` revisado por coach y analista externo.
 
-### Fase 2 — Cuando haya usuarios externos
-- [ ] Discord OAuth como segundo proveedor de login
-- [ ] Tabla `PlayerAlias`: `{ mainPlayerId, aliasPlayerId, label }` — vincular múltiples cuentas
-- [ ] Tabla `PlayerNameHistory`: `{ playerId, name, seenAt }` — historial de nombres por UUID
-- [ ] UI de gestión de perfil para jugadores autenticados
+- [x] `GET /teams/:id/phase-analysis` — Kill Diff @10/15, Objective Diff @10/15/20, Throw Rate, Comeback Rate (`team-service.ts`)
+- [x] `GET /teams/:id/vision-analysis` — Vision Control Score, Vision Before Objective (por tipo), Jungler/Support Alive Before Objective, Objective Lost/Taken After Death, Vision Lost Before Objective (`team-service.ts`)
+- [x] `GET /teams/:id/objective-analysis` — Conversiones detalladas (→estructura/inhibidor/core) por Fangtooth/Shaper/Prime/Mini, Timing Consistency (stddev), Priority Share (`team-service.ts`)
+- [x] `GET /teams/:id/draft-analysis` — Pick rates, Ban rates propio/recibido (RANKED), Hero Pool Depth, Comfort Score, Hero Pool Overlap (`team-service.ts`)
+- [x] `GET /players/:id/advanced-metrics` — Gold/Damage/Kill Share %, Efficiency Gap, First Death Rate, Early Death Rate individual (`player-service.ts`)
 
-### Tiers de monetización (campo en User, gates de feature después)
-`free` · `team` · `enterprise` — añadir el campo ahora, implementar gates cuando haya clientes reales
+### Nueva arquitectura de menús (doc coach/analista)
+Restructura completa de navegación definida en `PrimeSight_menu_distribution.md` y `PrimeSight_metric_catalog_full.csv`. 8 secciones principales: Dashboard, Matches, Analysis, Team Tools, Reports, Discord Bot, Team Management, Platform Admin. **Bloqueada por Tarea 17 frontend** (visibilidad condicional por rol).
 
 ---
 
