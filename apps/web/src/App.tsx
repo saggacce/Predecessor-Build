@@ -16,6 +16,7 @@ import ReviewQueue from './pages/ReviewQueue';
 import MatchList from './pages/MatchList';
 import ComingSoon from './pages/ComingSoon';
 import VodIndex from './pages/VodIndex';
+import RivalScouting from './pages/RivalScouting';
 import Login from './pages/Login';
 import Register from './pages/Register';
 import Unauthorized from './pages/Unauthorized';
@@ -355,7 +356,7 @@ export default function App() {
             <Route path="/analysis/teams" element={<TeamAnalysis />} />
             <Route path="/analysis/players" element={<PlayerScouting />} />
             <Route path="/analysis/draft" element={<ComingSoon section="Draft Analysis" description="Pick rates, ban rates, hero pool depth, comfort scores and hero overlap — coming soon." issue={79} />} />
-            <Route path="/analysis/rival" element={<ComingSoon section="Rival Scouting" description="Rival team identity, objective priority, vision patterns and direct comparison — coming soon." issue={74} />} />
+            <Route path="/analysis/rival" element={<RivalScouting />} />
 
             {/* Team Tools */}
             <Route path="/tools/review" element={<ReviewQueue />} />
