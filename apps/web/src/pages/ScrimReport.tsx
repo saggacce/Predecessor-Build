@@ -1,12 +1,13 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router';
-import { FileText, ChevronRight, Download, Copy, Check, Target } from 'lucide-react';
+import { ChevronRight, Download, Copy, Check, Target, Maximize, Minimize, AlertTriangle, Lightbulb, Trophy } from 'lucide-react';
 import { toast } from 'sonner';
 import {
   apiClient,
   type TeamProfile,
   type ScrimReport as ScrimReportData,
   type TeamAnalysis,
+  type RivalScoutingReport,
   ApiErrorResponse,
 } from '../api/client';
 
@@ -24,10 +25,13 @@ export default function ScrimReport() {
   const [rivalTeamId, setRivalTeamId] = useState('');
   const [report, setReport] = useState<ScrimReportData | null>(null);
   const [rivalAnalysis, setRivalAnalysis] = useState<TeamAnalysis | null>(null);
+  const [rivalScouting, setRivalScouting] = useState<RivalScoutingReport | null>(null);
   const [loading, setLoading] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [isFullScreen, setIsFullScreen] = useState(false);
   const [syncingMatches, setSyncingMatches] = useState(false);
   const [matchSyncResult, setMatchSyncResult] = useState<{ synced: number; remaining: number } | null>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     void (async () => {
@@ -52,15 +56,18 @@ export default function ScrimReport() {
     setLoading(true);
     setReport(null);
     setRivalAnalysis(null);
+    setRivalScouting(null);
     const toastId = toast.loading('Generating scrim report...');
     try {
-      const [data, analysis] = await Promise.allSettled([
+      const [data, analysis, scouting] = await Promise.allSettled([
         apiClient.reports.scrim(ownTeamId, rivalTeamId),
         apiClient.teams.getAnalysis(rivalTeamId),
+        apiClient.teams.getRivalScouting(rivalTeamId),
       ]);
       if (data.status === 'fulfilled') setReport(data.value);
       else throw data.reason;
       if (analysis.status === 'fulfilled') setRivalAnalysis(analysis.value);
+      if (scouting.status === 'fulfilled') setRivalScouting(scouting.value);
       toast.success('Report ready', { id: toastId });
     } catch (err) {
       toast.error(err instanceof ApiErrorResponse ? err.error.message : 'Failed to generate report.', { id: toastId });
@@ -106,6 +113,17 @@ export default function ScrimReport() {
       toast.success('Report copied to clipboard');
       setTimeout(() => setCopied(false), 2000);
     });
+  }
+
+  function toggleFullScreen() {
+    if (!containerRef.current) return;
+    if (!isFullScreen) {
+      void containerRef.current.requestFullscreen?.();
+      setIsFullScreen(true);
+    } else {
+      void document.exitFullscreen?.();
+      setIsFullScreen(false);
+    }
   }
 
   const selectStyle: React.CSSProperties = {
@@ -158,20 +176,39 @@ export default function ScrimReport() {
       </div>
 
       {report && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+        <div ref={containerRef} style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', background: isFullScreen ? 'var(--bg-dark)' : undefined, padding: isFullScreen ? '2rem' : undefined, overflowY: isFullScreen ? 'auto' : undefined }}>
 
-          {/* Report header + export buttons */}
-          <div className="glass-card" style={{ display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
-            <FileText color="var(--accent-violet)" size={28} style={{ flexShrink: 0 }} />
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <h2 style={{ margin: 0, color: 'var(--text-primary)' }}>
-                {report.ownTeam.name} <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>vs</span> {report.rivalTeam.name}
-              </h2>
-              <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-                Generated {new Date(report.generatedAt).toLocaleString()}
-              </p>
+          {/* VS header */}
+          <div className="glass-card" style={{ padding: '1.25rem 1.5rem' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+              {/* OWN team */}
+              <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '0.75rem', minWidth: 0 }}>
+                <TeamLogoMini team={ownTeams.find((t) => t.id === ownTeamId)} name={report.ownTeam.name} color="var(--accent-teal-bright)" />
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontWeight: 700, fontSize: '1rem', color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{report.ownTeam.name}</div>
+                  <div style={{ fontSize: '0.65rem', color: 'var(--accent-teal-bright)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Our Team</div>
+                </div>
+              </div>
+              {/* VS badge */}
+              <div style={{ flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.2rem' }}>
+                <div style={{ fontFamily: 'var(--font-mono)', fontWeight: 900, fontSize: '1.1rem', color: 'var(--text-muted)', letterSpacing: '0.1em' }}>VS</div>
+                <div style={{ fontSize: '0.6rem', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>{new Date(report.generatedAt).toLocaleDateString()}</div>
+              </div>
+              {/* RIVAL team */}
+              <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '0.75rem', justifyContent: 'flex-end', minWidth: 0 }}>
+                <div style={{ minWidth: 0, textAlign: 'right' }}>
+                  <div style={{ fontWeight: 700, fontSize: '1rem', color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{report.rivalTeam.name}</div>
+                  <div style={{ fontSize: '0.65rem', color: 'var(--accent-loss)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Rival</div>
+                </div>
+                <TeamLogoMini team={rivalTeams.find((t) => t.id === rivalTeamId)} name={report.rivalTeam.name} color="var(--accent-loss)" />
+              </div>
             </div>
-            <div style={{ display: 'flex', gap: '0.5rem', flexShrink: 0 }}>
+            {/* Export buttons */}
+            <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end', marginTop: '1rem', paddingTop: '0.75rem', borderTop: '1px solid var(--border-color)' }}>
+              <button onClick={toggleFullScreen} style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.8rem', fontWeight: 600, padding: '0.45rem 0.9rem', borderRadius: '6px', cursor: 'pointer', border: '1px solid var(--border-color)', background: 'transparent', color: 'var(--text-muted)', transition: 'all 0.15s' }}>
+                {isFullScreen ? <Minimize size={14} /> : <Maximize size={14} />}
+                {isFullScreen ? 'Exit' : 'Full Screen'}
+              </button>
               <button onClick={handleCopyText} style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.8rem', fontWeight: 600, padding: '0.45rem 0.9rem', borderRadius: '6px', cursor: 'pointer', border: '1px solid var(--border-color)', background: 'transparent', color: 'var(--text-secondary)', transition: 'all 0.15s' }}>
                 {copied ? <Check size={14} /> : <Copy size={14} />}
                 {copied ? 'Copied' : 'Copy text'}
@@ -182,17 +219,25 @@ export default function ScrimReport() {
             </div>
           </div>
 
-          {/* Intelligence notes */}
+          {/* Win Conditions */}
+          {rivalScouting && (
+            <WinConditions scouting={rivalScouting} />
+          )}
+
+          {/* Intelligence notes — categorized */}
           {report.matchupNotes.length > 0 && (
             <div className="glass-card">
               <h3 style={{ color: 'var(--text-primary)', marginBottom: '1rem', fontSize: '0.95rem' }}>Intelligence Notes</h3>
-              <ul style={{ listStyle: 'none', display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
-                {report.matchupNotes.map((note, i) => (
-                  <li key={i} style={{ display: 'flex', gap: '0.75rem', padding: '0.65rem 0.75rem', background: 'var(--bg-dark)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-color)' }}>
-                    <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--accent-violet)', fontWeight: 600, flexShrink: 0, fontSize: '0.78rem', paddingTop: '0.1rem' }}>{String(i + 1).padStart(2, '0')}</span>
-                    <span style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>{note}</span>
-                  </li>
-                ))}
+              <ul style={{ listStyle: 'none', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                {report.matchupNotes.map((note, i) => {
+                  const cat = classifyNote(note);
+                  return (
+                    <li key={i} style={{ display: 'flex', gap: '0.65rem', padding: '0.6rem 0.75rem', background: 'var(--bg-dark)', borderRadius: 'var(--radius-sm)', border: `1px solid ${cat.borderColor}` }}>
+                      <span style={{ flexShrink: 0, color: cat.color, paddingTop: '0.1rem' }}>{cat.icon}</span>
+                      <span style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>{note}</span>
+                    </li>
+                  );
+                })}
               </ul>
             </div>
           )}
@@ -453,4 +498,65 @@ function buildTextReport(report: ScrimReportData, analysis: TeamAnalysis | null)
 
   lines.push('— PrimeSight Competitive Intelligence —');
   return lines.join('\n');
+}
+
+// ── Helper components ─────────────────────────────────────────────────────────
+
+function TeamLogoMini({ team, name, color }: { team: TeamProfile | undefined; name: string; color: string }) {
+  const initials = (team?.abbreviation || name)
+    .split(/\s+/).map((w: string) => w[0]).join('').slice(0, 3).toUpperCase();
+  return (
+    <div style={{ width: 44, height: 44, borderRadius: 10, overflow: 'hidden', border: `2px solid ${color}`, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: `${color}18` }}>
+      {team?.logoUrl ? (
+        <img src={team.logoUrl} alt={name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+      ) : (
+        <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 700, fontSize: '0.75rem', color }}>{initials}</span>
+      )}
+    </div>
+  );
+}
+
+function classifyNote(note: string): { icon: React.ReactNode; color: string; borderColor: string } {
+  const lower = note.toLowerCase();
+  if (/ban|priority ban/.test(lower))
+    return { icon: <Target size={14} />, color: 'var(--accent-loss)', borderColor: 'rgba(248,113,113,0.2)' };
+  if (/weak|struggle|low|poor|vulner|exploit|only \d+%|below/.test(lower))
+    return { icon: <Lightbulb size={14} />, color: 'var(--accent-prime)', borderColor: 'rgba(240,180,41,0.2)' };
+  return { icon: <AlertTriangle size={14} />, color: 'var(--accent-blue)', borderColor: 'rgba(91,156,246,0.2)' };
+}
+
+function WinConditions({ scouting }: { scouting: RivalScoutingReport }) {
+  const conditions: string[] = [];
+
+  if (scouting.weakPhase)
+    conditions.push(`Force ${scouting.weakPhase} game — they underperform in this phase.`);
+  if (scouting.throwRate !== null && scouting.throwRate > 0.2)
+    conditions.push(`Play patient — they throw leads at ${(scouting.throwRate * 100).toFixed(0)}% rate.`);
+  if (scouting.weakRole)
+    conditions.push(`Focus their ${ROLE_LABELS[scouting.weakRole] ?? scouting.weakRole} — statistically their weakest position.`);
+  const lowObj = scouting.objectivePriority.find((o) => o.controlPct < 45);
+  if (lowObj)
+    conditions.push(`Contest ${lowObj.entityType.replace('_', ' ').toLowerCase()} — they only control it ${lowObj.controlPct}% of the time.`);
+  if (scouting.identity.includes('Late Game Scaling'))
+    conditions.push('Close the game before 25 minutes — they scale hard into late game.');
+
+  if (conditions.length === 0) return null;
+
+  return (
+    <div className="glass-card" style={{ borderLeft: '3px solid var(--accent-win)' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '0.85rem' }}>
+        <Trophy size={16} style={{ color: 'var(--accent-win)', flexShrink: 0 }} />
+        <h3 style={{ margin: 0, fontSize: '0.95rem', color: 'var(--accent-win)' }}>Win Conditions</h3>
+        <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>{scouting.sampleSize} matches</span>
+      </div>
+      <ol style={{ listStyle: 'none', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+        {conditions.slice(0, 3).map((c, i) => (
+          <li key={i} style={{ display: 'flex', gap: '0.65rem', alignItems: 'flex-start', padding: '0.55rem 0.75rem', background: 'rgba(74,222,128,0.05)', borderRadius: 'var(--radius-sm)', border: '1px solid rgba(74,222,128,0.15)' }}>
+            <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 700, fontSize: '0.72rem', color: 'var(--accent-win)', flexShrink: 0, paddingTop: '0.1rem' }}>{i + 1}.</span>
+            <span style={{ fontSize: '0.875rem', color: 'var(--text-secondary)' }}>{c}</span>
+          </li>
+        ))}
+      </ol>
+    </div>
+  );
 }
