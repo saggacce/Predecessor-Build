@@ -17,9 +17,13 @@ import {
   Swords,
   Trophy,
   FileText,
+  BarChart3,
+  Ban,
+  GitCompare,
+  Layers,
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { apiClient, type TeamProfile, type TeamRole, type PlayerSearchResult, type TeamAnalysis, type RivalHeroStat, type PlayerAnalysisStat, type Insight, ApiErrorResponse } from '../api/client';
+import { apiClient, type TeamProfile, type TeamRole, type PlayerSearchResult, type TeamAnalysis, type TeamDraftAnalysis, type RivalHeroStat, type PlayerAnalysisStat, type Insight, ApiErrorResponse } from '../api/client';
 
 const ROLES: TeamRole[] = ['carry', 'jungle', 'midlane', 'offlane', 'support'];
 
@@ -47,9 +51,11 @@ export default function TeamAnalysis() {
   const [selected, setSelected] = useState<TeamProfile | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const [detailTab, setDetailTab] = useState<'roster' | 'performance'>('roster');
+  const [detailTab, setDetailTab] = useState<'roster' | 'performance' | 'draft'>('roster');
   const [analysis, setAnalysis] = useState<TeamAnalysis | null>(null);
   const [loadingAnalysis, setLoadingAnalysis] = useState(false);
+  const [draftAnalysis, setDraftAnalysis] = useState<TeamDraftAnalysis | null>(null);
+  const [loadingDraftAnalysis, setLoadingDraftAnalysis] = useState(false);
 
   const [formMode, setFormMode] = useState<'create' | 'edit' | null>(null);
   const [form, setForm] = useState<TeamFormData>(emptyForm());
@@ -89,16 +95,33 @@ export default function TeamAnalysis() {
     }
   }
 
-  function handleTabChange(tab: 'roster' | 'performance') {
+  async function loadDraftAnalysis(teamId: string) {
+    setLoadingDraftAnalysis(true);
+    setDraftAnalysis(null);
+    try {
+      const data = await apiClient.teams.getDraftAnalysis(teamId);
+      setDraftAnalysis(data);
+    } catch {
+      // silent — show empty state
+    } finally {
+      setLoadingDraftAnalysis(false);
+    }
+  }
+
+  function handleTabChange(tab: 'roster' | 'performance' | 'draft') {
     setDetailTab(tab);
     if (tab === 'performance' && selected && !analysis) {
       void loadAnalysis(selected.id);
+    }
+    if (tab === 'draft' && selected && !draftAnalysis) {
+      void loadDraftAnalysis(selected.id);
     }
   }
 
   async function handleSelectTeam(id: string) {
     setDetailTab('roster');
     setAnalysis(null);
+    setDraftAnalysis(null);
     try {
       const profile = await apiClient.teams.getProfile(id);
       setSelected(profile);
@@ -402,6 +425,9 @@ export default function TeamAnalysis() {
                     rosterSize={selected?.roster.length ?? 0}
                     onClick={() => handleTabChange('performance')}
                   />
+                  <button onClick={() => handleTabChange('draft')} style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: '0.55rem 1rem', fontSize: '0.875rem', fontWeight: 600, color: detailTab === 'draft' ? 'var(--accent-blue)' : 'var(--text-muted)', borderBottom: detailTab === 'draft' ? '2px solid var(--accent-blue)' : '2px solid transparent', transition: 'color 0.15s' }}>
+                    Draft
+                  </button>
                 </div>
               </div>
             )}
@@ -413,6 +439,16 @@ export default function TeamAnalysis() {
                 analysis={analysis}
                 loading={loadingAnalysis}
                 onRefresh={() => void loadAnalysis(selected.id)}
+              />
+            )}
+
+            {/* Draft Tab */}
+            {detailTab === 'draft' && selected && (
+              <DraftAnalysisTab
+                team={selected}
+                analysis={draftAnalysis}
+                loading={loadingDraftAnalysis}
+                onRefresh={() => void loadDraftAnalysis(selected.id)}
               />
             )}
 
@@ -550,6 +586,247 @@ export default function TeamAnalysis() {
       </div>
     </div>
   );
+}
+
+// ── Draft Analysis Tab ───────────────────────────────────────────────────────
+
+type DraftSubTab = 'picks' | 'bans' | 'pool' | 'overlap';
+
+const DRAFT_TABS: Array<{ key: DraftSubTab; label: string; icon: ReactNode }> = [
+  { key: 'picks', label: 'Pick Rates', icon: <BarChart3 size={14} /> },
+  { key: 'bans', label: 'Ban Rates', icon: <Ban size={14} /> },
+  { key: 'pool', label: 'Hero Pool', icon: <Layers size={14} /> },
+  { key: 'overlap', label: 'Hero Overlap', icon: <GitCompare size={14} /> },
+];
+
+function DraftAnalysisTab({ team, analysis, loading, onRefresh }: {
+  team: TeamProfile; analysis: TeamDraftAnalysis | null; loading: boolean; onRefresh: () => void;
+}) {
+  const [subTab, setSubTab] = useState<DraftSubTab>('picks');
+  const playerById = new Map(team.roster.map((member) => [member.playerId, member]));
+
+  if (loading) return <div className="glass-card" style={{ padding: '2rem', color: 'var(--text-muted)', fontSize: '0.85rem' }}>Loading draft analysis…</div>;
+
+  if (!analysis || analysis.sampleSize === 0) {
+    return (
+      <div className="glass-card" style={{ padding: '2rem', textAlign: 'center' }}>
+        <div style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', fontWeight: 600, marginBottom: '0.5rem' }}>No draft data yet</div>
+        <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '1.25rem' }}>Sync roster player matches so the system can detect team drafts.</div>
+        <button onClick={onRefresh} style={{ fontSize: '0.8rem', fontWeight: 600, padding: '0.4rem 0.9rem', borderRadius: '6px', cursor: 'pointer', border: '1px solid var(--accent-blue)', background: 'rgba(91,156,246,0.1)', color: 'var(--accent-blue)' }}>Retry</button>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+      <div className="glass-card" style={{ padding: 0, overflow: 'hidden' }}>
+        <div style={{ padding: '0.85rem 1rem', borderBottom: '1px solid var(--border-color)', background: 'rgba(255,255,255,0.02)', display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+          <div style={{ fontWeight: 700, fontSize: '0.9rem', color: 'var(--text-primary)' }}>Draft Analysis</div>
+          <span className="mono" style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>{analysis.sampleSize} team matches</span>
+          <span className="mono" style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>{analysis.rankedSampleSize} ranked matches</span>
+          <button onClick={onRefresh} style={{ marginLeft: 'auto', fontSize: '0.72rem', fontWeight: 600, padding: '0.3rem 0.7rem', borderRadius: '5px', cursor: 'pointer', border: '1px solid var(--accent-blue)', background: 'rgba(91,156,246,0.08)', color: 'var(--accent-blue)' }}>Refresh</button>
+        </div>
+        <div style={{ display: 'flex', gap: '0.25rem', padding: '0.5rem 0.75rem', borderBottom: '1px solid var(--border-color)', overflowX: 'auto' }}>
+          {DRAFT_TABS.map(({ key, label, icon }) => (
+            <button
+              key={key}
+              onClick={() => setSubTab(key)}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', whiteSpace: 'nowrap', background: subTab === key ? 'rgba(91,156,246,0.12)' : 'transparent', border: `1px solid ${subTab === key ? 'rgba(91,156,246,0.35)' : 'transparent'}`, cursor: 'pointer', padding: '0.4rem 0.65rem', borderRadius: 6, fontSize: '0.76rem', fontWeight: 700, color: subTab === key ? 'var(--accent-blue)' : 'var(--text-muted)' }}
+            >
+              {icon} {label}
+            </button>
+          ))}
+        </div>
+        <div style={{ padding: '1rem' }}>
+          {subTab === 'picks' && <DraftPickRates stats={analysis.pickRates} playerById={playerById} sampleSize={analysis.sampleSize} />}
+          {subTab === 'bans' && <DraftBanRates ownBans={analysis.ownBanRates} receivedBans={analysis.receivedBanRates} rankedSampleSize={analysis.rankedSampleSize} />}
+          {subTab === 'pool' && <DraftHeroPool playerDepth={analysis.playerDepth} playerById={playerById} />}
+          {subTab === 'overlap' && <DraftHeroOverlap overlaps={analysis.heroOverlap} playerById={playerById} />}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function DraftPickRates({ stats, playerById, sampleSize }: {
+  stats: TeamDraftAnalysis['pickRates']; playerById: Map<string, TeamProfile['roster'][number]>; sampleSize: number;
+}) {
+  if (stats.length === 0) return <DraftEmptyState text="No picked heroes found in the current sample." />;
+  const top = stats.slice(0, 14);
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(230px, 1fr))', gap: '0.75rem' }}>
+      {top.map((hero) => (
+        <HeroDraftCard key={hero.heroSlug} heroSlug={hero.heroSlug}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.45rem', marginTop: '0.65rem' }}>
+            <MiniMetric label="Picks" value={`${hero.pickCount}/${sampleSize}`} />
+            <MiniMetric label="Pick Rate" value={`${hero.pickRate}%`} tone={hero.pickRate >= 35 ? 'var(--accent-blue)' : undefined} />
+            <MiniMetric label="WR" value={`${hero.winRate}%`} tone={hero.winRate >= 55 ? 'var(--accent-win)' : hero.winRate < 45 ? 'var(--accent-loss)' : undefined} />
+          </div>
+          <div style={{ display: 'flex', gap: '0.25rem', flexWrap: 'wrap', marginTop: '0.65rem' }}>
+            {hero.playedBy.map((playerId) => <PlayerPill key={playerId} playerId={playerId} playerById={playerById} />)}
+          </div>
+        </HeroDraftCard>
+      ))}
+    </div>
+  );
+}
+
+function DraftBanRates({ ownBans, receivedBans, rankedSampleSize }: {
+  ownBans: TeamDraftAnalysis['ownBanRates']; receivedBans: TeamDraftAnalysis['receivedBanRates']; rankedSampleSize: number;
+}) {
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '1rem' }}>
+      <BanColumn title="Own bans" subtitle={`${rankedSampleSize} ranked matches`} stats={ownBans} />
+      <BanColumn title="Bans received" subtitle="Solo partidas RANKED" stats={receivedBans} highlight />
+    </div>
+  );
+}
+
+function DraftHeroPool({ playerDepth, playerById }: {
+  playerDepth: TeamDraftAnalysis['playerDepth']; playerById: Map<string, TeamProfile['roster'][number]>;
+}) {
+  if (playerDepth.length === 0) return <DraftEmptyState text="No hero pool data found for this roster." />;
+  const sorted = [...playerDepth].sort((a, b) => b.heroCount - a.heroCount);
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+      {sorted.map((player) => {
+        const member = playerById.get(player.playerId);
+        return (
+          <div key={player.playerId} style={{ border: '1px solid var(--border-color)', borderRadius: 8, padding: '0.75rem', background: 'rgba(255,255,255,0.02)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.55rem', marginBottom: '0.65rem', flexWrap: 'wrap' }}>
+              <RoleIcon role={member?.role ?? null} />
+              <span style={{ fontWeight: 700, fontSize: '0.82rem', color: 'var(--text-primary)' }}>{member ? member.customName ?? member.displayName : player.playerId}</span>
+              <span className="mono" style={{ fontSize: '0.66rem', color: 'var(--text-muted)' }}>{player.heroCount} qualified heroes</span>
+              {player.heroCount <= 2 && <span className="mono" style={{ fontSize: '0.6rem', color: '#f97316', background: 'rgba(249,115,22,0.1)', border: '1px solid rgba(249,115,22,0.25)', borderRadius: 999, padding: '0.1rem 0.45rem' }}>narrow pool</span>}
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(145px, 1fr))', gap: '0.5rem' }}>
+              {player.topHeroes.map((hero) => {
+                const isPocketPick = hero.games <= 5 && hero.winRate >= 65;
+                return (
+                <div key={hero.heroSlug} style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', minWidth: 0, border: `1px solid ${isPocketPick ? 'rgba(240,180,41,0.45)' : 'var(--border-color)'}`, borderRadius: 6, padding: '0.4rem', background: isPocketPick ? 'rgba(240,180,41,0.06)' : 'var(--bg-dark)' }}>
+                  <HeroIcon heroSlug={hero.heroSlug} size={30} />
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', minWidth: 0 }}>
+                      <span style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{formatHeroName(hero.heroSlug)}</span>
+                      {isPocketPick && <span className="mono" style={{ fontSize: '0.54rem', color: '#f0b429', flexShrink: 0 }}>pocket</span>}
+                    </div>
+                    <div className="mono" style={{ fontSize: '0.62rem', color: 'var(--text-muted)' }}>{hero.games}g · {hero.winRate}% WR · {hero.comfortScore} comfort</div>
+                  </div>
+                </div>
+                );
+              })}
+              {player.topHeroes.length === 0 && <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>No comfort picks yet.</span>}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function DraftHeroOverlap({ overlaps, playerById }: {
+  overlaps: TeamDraftAnalysis['heroOverlap']; playerById: Map<string, TeamProfile['roster'][number]>;
+}) {
+  if (overlaps.length === 0) return <DraftEmptyState text="No shared comfort picks detected across roster players." />;
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(230px, 1fr))', gap: '0.75rem' }}>
+      {overlaps.map((overlap) => {
+        const members = overlap.playerIds.map((id) => playerById.get(id)).filter(Boolean);
+        const roles = new Set(members.map((member) => member?.role).filter(Boolean));
+        const hasKnownRoles = roles.size > 0;
+        return (
+          <HeroDraftCard key={overlap.heroSlug} heroSlug={overlap.heroSlug}>
+            <div style={{ marginTop: '0.65rem', display: 'flex', gap: '0.35rem', flexWrap: 'wrap' }}>
+              {overlap.playerIds.map((playerId) => <PlayerPill key={playerId} playerId={playerId} playerById={playerById} />)}
+            </div>
+            <div style={{ marginTop: '0.65rem', fontSize: '0.68rem', color: hasKnownRoles && roles.size <= 1 ? '#f97316' : 'var(--text-muted)' }}>
+              {!hasKnownRoles ? 'Shared pick with unassigned roster roles.' : roles.size <= 1 ? 'Shared inside the same role group.' : 'Shared across multiple roles.'}
+            </div>
+          </HeroDraftCard>
+        );
+      })}
+    </div>
+  );
+}
+
+function BanColumn({ title, subtitle, stats, highlight }: {
+  title: string; subtitle: string; stats: TeamDraftAnalysis['ownBanRates']; highlight?: boolean;
+}) {
+  return (
+    <div style={{ border: '1px solid var(--border-color)', borderRadius: 8, overflow: 'hidden', background: 'rgba(255,255,255,0.02)' }}>
+      <div style={{ padding: '0.75rem 0.9rem', borderBottom: '1px solid var(--border-color)', background: highlight ? 'rgba(248,113,113,0.06)' : 'rgba(255,255,255,0.02)' }}>
+        <div style={{ fontWeight: 700, fontSize: '0.82rem', color: highlight ? 'var(--accent-loss)' : 'var(--text-primary)' }}>{title}</div>
+        <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>{subtitle}</div>
+      </div>
+      {stats.length === 0 ? (
+        <div style={{ padding: '1rem', fontSize: '0.78rem', color: 'var(--text-muted)' }}>No bans in this sample.</div>
+      ) : (
+        <div>
+          {stats.slice(0, 12).map((ban, index) => (
+            <div key={ban.heroSlug} style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', padding: '0.55rem 0.8rem', borderBottom: index === Math.min(stats.length, 12) - 1 ? 'none' : '1px solid var(--border-color)' }}>
+              <HeroIcon heroSlug={ban.heroSlug} size={30} />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: '0.76rem', fontWeight: 700, color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{formatHeroName(ban.heroSlug)}</div>
+                <div className="mono" style={{ fontSize: '0.62rem', color: 'var(--text-muted)' }}>{ban.count} bans</div>
+              </div>
+              <span className="mono" style={{ fontSize: '0.75rem', fontWeight: 700, color: ban.rate >= 30 ? 'var(--accent-loss)' : 'var(--text-secondary)' }}>{ban.rate}%</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function HeroDraftCard({ heroSlug, children }: { heroSlug: string; children: ReactNode }) {
+  return (
+    <div style={{ border: '1px solid var(--border-color)', borderRadius: 8, padding: '0.75rem', background: 'rgba(255,255,255,0.02)', minWidth: 0 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', minWidth: 0 }}>
+        <HeroIcon heroSlug={heroSlug} size={38} />
+        <div style={{ minWidth: 0 }}>
+          <div style={{ fontWeight: 800, color: 'var(--text-primary)', fontSize: '0.86rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{formatHeroName(heroSlug)}</div>
+          <div className="mono" style={{ fontSize: '0.62rem', color: 'var(--text-muted)' }}>{heroSlug}</div>
+        </div>
+      </div>
+      {children}
+    </div>
+  );
+}
+
+function HeroIcon({ heroSlug, size }: { heroSlug: string; size: number }) {
+  return (
+    <div style={{ width: size, height: size, borderRadius: 6, overflow: 'hidden', border: '1px solid var(--border-color)', background: 'var(--bg-dark)', flexShrink: 0 }}>
+      <img src={`/heroes/${heroSlug}.webp`} alt={formatHeroName(heroSlug)} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+    </div>
+  );
+}
+
+function MiniMetric({ label, value, tone }: { label: string; value: string; tone?: string }) {
+  return (
+    <div>
+      <div style={{ fontSize: '0.58rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '0.12rem' }}>{label}</div>
+      <div className="mono" style={{ fontSize: '0.78rem', fontWeight: 700, color: tone ?? 'var(--text-secondary)' }}>{value}</div>
+    </div>
+  );
+}
+
+function PlayerPill({ playerId, playerById }: { playerId: string; playerById: Map<string, TeamProfile['roster'][number]> }) {
+  const member = playerById.get(playerId);
+  const role = member?.role ?? null;
+  const tone = getRoleTone(role);
+  return (
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem', fontSize: '0.64rem', fontWeight: 700, color: tone.color, background: tone.background, border: `1px solid ${tone.border}`, borderRadius: 999, padding: '0.12rem 0.45rem', maxWidth: '100%' }}>
+      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{member ? member.customName ?? member.displayName : playerId}</span>
+    </span>
+  );
+}
+
+function DraftEmptyState({ text }: { text: string }) {
+  return <div style={{ padding: '1rem', border: '1px solid var(--border-color)', borderRadius: 8, background: 'rgba(255,255,255,0.02)', color: 'var(--text-muted)', fontSize: '0.8rem' }}>{text}</div>;
+}
+
+function formatHeroName(heroSlug: string) {
+  return heroSlug.split(/[-_]/).filter(Boolean).map((part) => part[0]?.toUpperCase() + part.slice(1)).join(' ');
 }
 
 // ── Performance Tab ───────────────────────────────────────────────────────────
