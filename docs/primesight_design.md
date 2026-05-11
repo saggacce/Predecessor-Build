@@ -233,6 +233,38 @@ iconography:
     - Settings (Platform Admin)
     - ChevronDown / ChevronRight (accordion)
 
+css-framework: none
+  # PrimeSight uses plain CSS custom properties. No CSS utility framework.
+  # Tailwind is NOT used and should NOT be added. Reasons:
+  # - Existing token system (index.css + App.css) is the source of truth
+  # - Glassmorphism patterns don't map cleanly to utility classes
+  # - Migration cost would outweigh any benefit
+
+component-library:
+  # Radix UI — headless accessible primitives, added selectively per feature.
+  # Radix has zero default styles — all visual output comes from our CSS tokens.
+  # Install individual packages only when needed, not the full suite.
+  package: "@radix-ui/react-*"
+  install-policy: "on demand — one package per feature that needs it"
+  usage-map:
+    "@radix-ui/react-tabs":         "Phase/Vision/Objective/Draft Analysis tab groups"
+    "@radix-ui/react-dialog":       "Create team, invite user, edit goal modals"
+    "@radix-ui/react-select":       "Review Queue filters, team selector, role selector"
+    "@radix-ui/react-dropdown-menu": "Edit/delete context menus in tables and roster rows"
+    "@radix-ui/react-tooltip":      "Heatmap hover info, metric definition tooltips"
+    "@radix-ui/react-popover":      "Date pickers, advanced filter panels"
+    "@radix-ui/react-switch":       "Toggle settings (visibility, notifications)"
+    "@radix-ui/react-progress":     "Goal progress bars with accessible markup"
+  styling-rule: >-
+    Always style Radix components with our CSS custom properties.
+    Never use Radix's optional styling packages or className props from external
+    libraries. Apply our var(--bg-card), var(--border-color), var(--accent-blue)
+    etc. directly via CSS or inline styles.
+  accessibility-note: >-
+    Radix provides ARIA attributes, keyboard navigation, and focus management
+    automatically. Do not re-implement these manually. This is the primary
+    reason Radix is used over hand-built components for complex interactions.
+
 components:
   # ── Glass card ─────────────────────────────────────────────────────────────
   glass-card:
@@ -581,6 +613,21 @@ Percentages displayed without the `%` symbol in column headers (the header decla
 At 920px, the sidebar collapses to a horizontal top bar with nav items scrolling horizontally. Accordion sections lose their collapsing behavior and show as flat links.
 
 At 640px, the sidebar compresses to icon-only (text labels hidden), the logo text disappears (only favicon shown), and the auth button shows icon only. Card padding reduces from 1.5rem to 0.9rem. The workspace subtitle is hidden.
+
+## CSS and component libraries
+
+PrimeSight uses **plain CSS custom properties** — no utility framework. Tailwind is not used and should not be added. The design token system in `index.css` and `App.css` is the source of truth; adding a framework would require migrating hundreds of existing class names with no functional improvement.
+
+For complex interactive components, **Radix UI** is used selectively. Radix is headless — it provides zero default styles, only accessible behavior (ARIA, keyboard navigation, focus traps). Each Radix package is installed individually when a feature needs it:
+
+- `@radix-ui/react-tabs` — Analysis subsection tab groups
+- `@radix-ui/react-dialog` — Modals for creating teams, inviting users, editing goals
+- `@radix-ui/react-select` — Filter dropdowns in Review Queue, team/role selectors
+- `@radix-ui/react-dropdown-menu` — Context menus for edit/delete actions in tables
+- `@radix-ui/react-tooltip` — Heatmap info, metric definition tooltips
+- `@radix-ui/react-popover` — Date pickers, advanced filter panels
+
+All Radix components are styled exclusively with our CSS variables (`var(--bg-card)`, `var(--border-color)`, `var(--accent-blue)`, etc.). Never use Radix's own theming packages or external className systems with Radix.
 
 ## What PrimeSight does not do
 
