@@ -646,6 +646,22 @@ export interface AdminSyncStaleResult {
   timestamp: string;
 }
 
+export interface SyncStatus {
+  players: { total: number; synced: number; stale: number; hidden: number };
+  matches: { total: number; complete: number; partial: number; incomplete: number };
+  eventStreamJob: EventStreamJob;
+}
+
+export interface EventStreamJob {
+  running: boolean;
+  total: number;
+  synced: number;
+  errors: number;
+  skipped: number;
+  startedAt: string | null;
+  lastActivity: string | null;
+}
+
 export interface SyncLog {
   id: string;
   entity: string;
@@ -865,6 +881,10 @@ export const apiClient = {
       fetchApi<AdminSyncStaleResult>('/admin/sync-stale', { method: 'POST' }),
     syncIncompleteMatches: () =>
       fetchApi<{ synced: number; errors: number; elapsed: number }>('/admin/sync-incomplete-matches', { method: 'POST' }),
+    syncStatus: () => fetchApi<SyncStatus>('/admin/sync-status'),
+    startEventStreamSync: () => fetchApi<{ ok: boolean; message: string; job: EventStreamJob }>('/admin/sync-event-streams/start', { method: 'POST' }),
+    stopEventStreamSync: () => fetchApi<{ ok: boolean; job: EventStreamJob }>('/admin/sync-event-streams/stop', { method: 'POST' }),
+    eventStreamSyncStatus: () => fetchApi<EventStreamJob>('/admin/sync-event-streams/status'),
     fixHeroKillPlayerIds: () =>
       fetchApi<{ heroKillsUpdated: number; objectiveKillsUpdated: number; wardEventsUpdated: number; placeholdersCreated: number; elapsed: number }>('/admin/fix-herokill-player-ids', { method: 'POST' }),
     syncLogs: (limit = 50, entity?: string, status?: string) => {
