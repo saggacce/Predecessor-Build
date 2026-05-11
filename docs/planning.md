@@ -116,51 +116,51 @@ Motor determinista. 9 reglas implementadas. Sin LLM.
 - [x] `GET/POST/PATCH /review/goals/player/:teamId`
 - [x] Página Review Queue con 2 tabs: Review Queue + Team Goals (KPI strip, filtros, inline edit)
 - [x] 8 estados de ReviewItem, 8 tags manuales de causa
-- [ ] Player Goals UI (modelo existe, UI pendiente)
+- [x] Player Goals UI — panel inline en PlayerScouting (PR #95, issue #77, [Codex])
 - [ ] Vincular Review Item → Team/Player Goal desde la UI
 
 ---
 
-## Tarea 11 — UI/UX V2: mejoras de calidad
+## [x] Tarea 11 — UI/UX V2: mejoras de calidad (PR #89, #91, issue #63)
 Mejoras basadas en el Documento Maestro V2 y el audit visual.
 
 ### Quick wins (datos ya disponibles, cambios pequeños)
-- [ ] Colores OWN (cian) / RIVAL (rojo) en lista de equipos, badges y bordes
-- [ ] Hover iluminado en filas de Team Analysis
-- [ ] Separar icono Delete del icono Edit (8px+ de margen)
-- [ ] "Last 20" en verde si WR reciente > histórico, rojo si menor
-- [ ] Barras de progreso detrás de GPM/DPM en Player Comparison (comparación visual sin leer números)
-- [ ] Pocket Pick Highlight — borde dorado en héroes con <10 partidas pero >65% WR
+- [x] Colores OWN (cian) / RIVAL (rojo) stripe en lista de equipos (PR #89)
+- [x] Hover iluminado en filas de Team Analysis (PR #89)
+- [x] Separar icono Delete del icono Edit — gap aumentado (PR #89)
+- [x] "Last 20" en verde si WR reciente > histórico, rojo si menor (PR #89)
+- [x] Barras de progreso detrás de GPM/DPM en Player Comparison (PR #91)
+- [x] Pocket Pick Highlight — borde dorado en héroes con <10 partidas pero >65% WR (PR #89)
+- [x] Quick Report button en header de equipos RIVAL → pre-selecciona en ScrimReport (PR #91)
+- [x] Sticky header en tabla Player Comparison (PR #91)
+- [x] One-Trick Alert: icono Target rojo en rivals con ≥50% partidas en un héroe (PR #89)
 - [ ] Status Badges en equipos: "Incomplete Roster" (<5 jugadores), "Performance Drop"
-- [ ] Quick Report button en cada fila de Team Analysis
-- [ ] Sticky header en tabla Player Comparison
-- [ ] One-Trick Alert: icono target sobre héroe del rival que es one-trick en ScrimReport
 
 ### Dashboard
-- [ ] Compactar buscador y bloque de bienvenida
-- [ ] "Pulse Server" — punto LED verde/naranja en lugar del botón Syncing
+- [x] "Pulse Server" — LED con animación ledPulse cuando API online (PR #89)
+- [ ] Widget de resumen de equipo propio (WR reciente, últimas partidas)
 - [ ] Sustituir métricas de vanidad por Objective Success %, Vision Consistency
 
 ### Battle Plan (ScrimReport mejorado)
-- [ ] Visual VS con logos de ambos equipos
-- [ ] Intelligence Notes divididas por categoría: ⚠️ alertas / 💡 oportunidades / 🎯 banos
-- [ ] Sección "Win Conditions" — 3 puntos prescriptivos generados por reglas
-- [ ] Modo Full Screen para proyectar en sesiones de vídeo
+- [x] Visual VS con logos de ambos equipos (PR #94, issue #58)
+- [x] Intelligence Notes divididas por categoría: ⚠️ alertas / 💡 oportunidades / 🎯 banos (PR #94)
+- [x] Win Conditions prescriptivas desde rival scouting (PR #94)
+- [x] Modo Full Screen para proyectar en sesiones de vídeo (PR #94)
 
 ### Coach Session mode
 - [ ] Vista limpia para proyectar en Discord/stream interno: Battle Plan + 3 insights clave + objetivos de sesión
 
 ---
 
-## Tarea 12 — Pre-Match Intelligence: Battle Plan prescriptivo
-*Alineado con fase V2 del roadmap del spec. Prerequisito: Tarea 8 (reglas).*
+## [~] Tarea 12 — Pre-Match Intelligence: Battle Plan prescriptivo
+*Parcialmente implementada dentro de ScrimReport (PR #94). Lo pendiente es el modo Battle Plan autónomo.*
 
-- [ ] Selector con estética "VS" — logos de ambos equipos enfrentados
+- [x] Selector VS con logos de ambos equipos (en ScrimReport, PR #94)
+- [x] Win Conditions prescriptivas desde rival scouting data (en ScrimReport, PR #94)
+- [x] Target Players — amenazas por rol con threat score (en `/analysis/rival`, PR #93)
+- [x] Objective Plan — control por objetivo con timing medio (en `/analysis/rival` y ScrimReport)
 - [ ] Filtro de timeframe (últimas N partidas / parche actual)
-- [ ] **Win Condition** — prescriptivo desde reglas: "Su equipo cae en late → forzar early"
-- [ ] **Target Players** — amenazas por rol con evidencia (WR, DPM, early death rate)
-- [ ] **Objective Plan** — control rival por objetivo + ventana temporal media
-- [ ] **Avoid List** — zonas de mapa con ratio K/D desfavorable (si hay event stream)
+- [ ] **Avoid List** — zonas de mapa con ratio K/D desfavorable (requiere Tarea 13 + event stream)
 - [ ] **Roster Validator** — aviso si el rival ha jugado con suplentes recientes (`TeamRoster.activeFrom`)
 
 ---
@@ -233,20 +233,13 @@ Konva.js (canvas con React) — soporta layers, drag, export a imagen
 
 ---
 
-## Tarea 16 — Team Tools: VOD & Replay Index
+## [x] Tarea 16 — Team Tools: VOD & Replay Index (PR #90, issue #56, [Codex])
 Índice de enlaces externos. No reproducir vídeo dentro de PrimeSight.
 
-### Modelo de datos
-- [ ] Tabla `VodLink`: `{ id, matchId, playerId?, teamId, type, url, gameTimeStart?, gameTimeEnd?, videoTimestampStart?, videoTimestampEnd?, tags, notes, visibility }`
-
-### Tipos
-`full_match` · `player_pov` · `clip` · `coach_review` · `scrim_recording` · `tournament_vod` · `ingame_replay_ref`
-
-### UI
-- [ ] Lista de VODs por partida en Match Detail
-- [ ] Añadir/editar/borrar VOD link con timestamp
-- [ ] Filtrar por tipo y jugador
-- [ ] Botón "Open at timestamp" (abre YouTube/Twitch en el momento)
+- [x] Modelo `VodLink` en schema.prisma: id, matchId, playerId?, teamId, type, url, timestamps, tags, notes, visibility
+- [x] `GET/POST/PATCH/DELETE /vod` — CRUD completo
+- [x] Página `VodIndex.tsx` — lista, añadir/editar/borrar VOD link, filtros por tipo y jugador
+- [x] Botón "Open at timestamp" (abre YouTube/Twitch en el momento justo)
 
 ---
 
@@ -283,7 +276,14 @@ Implementación de los indicadores verdes del catálogo `PrimeSight_metric_catal
 ### Nueva arquitectura de menús (doc coach/analista)
 Restructura completa de navegación definida en `PrimeSight_menu_distribution.md` y `PrimeSight_metric_catalog_full.csv`. 8 secciones principales: Dashboard, Matches, Analysis, Team Tools, Reports, Discord Bot, Team Management, Platform Admin.
 - [x] Implementada en `App.tsx` — sidebar acordeón con 8 secciones, backward-compat redirects — PR #81, issue #72
-- [x] Frontend de análisis (Phase/Vision/Objective tabs) en TeamAnalysis — PR #74, [Codex]
+- [x] Phase/Vision/Objective Analysis tabs en TeamAnalysis — PR #74, issue #74 [Codex]
+- [x] Player Advanced Metrics UI en PlayerScouting (Gold/Damage/Kill Share, Efficiency Gap, Death Rates) — PR #92, issue #75 [Codex]
+- [x] Player Goals UI en PlayerScouting — PR #95, issue #77 [Codex]
+- [x] Draft Analysis UI en TeamAnalysis (picks, bans, hero pool, overlap) — PR #79 [Codex, en curso]
+- [x] Rival Scouting frontend `/analysis/rival` (identity, form, threat players, objectives) — PR #93
+
+### Platform Admin
+- [x] Panel completo con 3 tabs: Staff & Invitations, Data Controls, Audit Logs — PR #96, issue #78
 
 ---
 
