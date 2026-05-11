@@ -431,6 +431,15 @@ export interface TeamPhaseAnalysis {
   perMatch: MatchPhaseStat[];
 }
 
+export interface MapZone {
+  id: string;
+  key: string;
+  name: string;
+  polygon: [number, number][];
+  zoneType: 'objective' | 'lane' | 'jungle' | 'river';
+  relatedObjective: string | null;
+}
+
 export interface VisionObjectiveStat {
   entityType: string;
   teamTaken: number;
@@ -637,6 +646,13 @@ export const apiClient = {
   analyst: {
     insights: (teamId: string) =>
       fetchApi<{ insights: Insight[] }>(`/analysis/insights/${teamId}`),
+  },
+
+  mapZones: {
+    list: () => fetchApi<{ zones: MapZone[] }>('/map-zones'),
+    seed: () => fetchApi<{ ok: boolean; created: number; updated: number; total: number }>(
+      '/map-zones/seed', { method: 'POST' }
+    ),
   },
 
   review: {

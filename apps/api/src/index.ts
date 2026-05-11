@@ -26,6 +26,7 @@ import { internalAuthRouter } from './routes/internal-auth.js';
 import { invitationsRouter } from './routes/invitations.js';
 import { analystRouter } from './routes/analyst.js';
 import { reviewRouter } from './routes/review.js';
+import { mapZonesRouter } from './routes/map-zones.js';
 import { errorHandler } from './middleware/error-handler.js';
 import { disconnectDb } from './db.js';
 import { logger } from './logger.js';
@@ -69,6 +70,7 @@ app.use('/patches', patchesRouter);
 app.use('/admin', adminRouter);
 app.use('/analysis', analystRouter);
 app.use('/review', reviewRouter);
+app.use('/map-zones', mapZonesRouter);
 
 app.use(errorHandler);
 

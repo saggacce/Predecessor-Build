@@ -228,6 +228,15 @@ model HeroBan {
   team     String
 }
 
+model MapZone {
+  id              String  @id @default(cuid())
+  key             String  @unique  // e.g. "FANGTOOTH_PIT"
+  name            String
+  polygon         Json    // Array of [x, y] pairs in game coordinates
+  zoneType        String  // "objective" | "lane" | "jungle" | "river"
+  relatedObjective String? // "FANGTOOTH" | "ORB_PRIME" | etc.
+}
+
 model SyncLog {
   id        String   @id @default(cuid())
   entity    String
