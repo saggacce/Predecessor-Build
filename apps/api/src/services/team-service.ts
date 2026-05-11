@@ -1311,3 +1311,200 @@ export async function getTeamDraftAnalysis(teamId: string): Promise<TeamDraftAna
 function emptyDraftAnalysis(): TeamDraftAnalysis {
   return { sampleSize: 0, rankedSampleSize: 0, pickRates: [], ownBanRates: [], receivedBanRates: [], playerDepth: [], heroOverlap: [] };
 }
+
+// ── Rival Scouting ────────────────────────────────────────────────────────────
+
+export interface ThreatPlayer {
+  playerId: string;
+  displayName: string;
+  customName: string | null;
+  role: string | null;
+  threatScore: number;
+  games: number;
+  winRate: number;
+  kda: number;
+  avgDPM: number | null;
+  topHeroes: Array<{ heroSlug: string; games: number; winRate: number }>;
+}
+
+export interface RivalScoutingReport {
+  teamId: string;
+  teamName: string;
+  sampleSize: number;
+  recentForm: { wins: number; losses: number; last10: string[]; trend: 'improving' | 'declining' | 'stable' };
+  identity: string[];
+  strongPhase: 'early' | 'mid' | 'late' | null;
+  weakPhase: 'early' | 'mid' | 'late' | null;
+  throwRate: number | null;
+  threatPlayers: ThreatPlayer[];
+  weakRole: string | null;
+  objectivePriority: Array<{ entityType: string; controlPct: number; avgGameTimeSecs: number | null }>;
+}
+
+export async function getTeamRivalScouting(teamId: string): Promise<RivalScoutingReport> {
+  const team = await db.team.findUnique({ where: { id: teamId } });
+  if (!team) throw new AppError(404, `Team not found: ${teamId}`, 'TEAM_NOT_FOUND');
+
+  const roster = await db.teamRoster.findMany({
+    where: { teamId, activeTo: null },
+    select: { playerId: true, role: true },
+  });
+  const rosterPlayerIds = roster.map((r) => r.playerId);
+  const roleByPlayer = new Map(roster.map((r) => [r.playerId, r.role]));
+
+  if (rosterPlayerIds.length === 0) return emptyRivalScouting(teamId, team.name);
+
+  const matchRows = await db.$queryRaw<Array<{
+    matchId: string; team: string; winningTeam: string | null; startTime: Date; duration: number;
+  }>>`
+    SELECT mp."matchId", mp."team", m."winningTeam", m."startTime", m."duration"
+    FROM "MatchPlayer" mp
+    JOIN "Match" m ON m.id = mp."matchId"
+    WHERE mp."playerId" = ANY(${rosterPlayerIds}::text[])
+    GROUP BY mp."matchId", mp."team", m."winningTeam", m."startTime", m."duration"
+    HAVING COUNT(DISTINCT mp."playerId") >= 3
+    ORDER BY m."startTime" DESC
+    LIMIT 50
+  `;
+
+  const n = matchRows.length;
+  if (n === 0) return emptyRivalScouting(teamId, team.name);
+
+  const matchIds = matchRows.map((r) => r.matchId);
+  const sideMap = new Map(matchRows.map((r) => [r.matchId, r.team]));
+
+  // Recent form
+  const last10 = matchRows.slice(0, 10).map((r) =>
+    r.winningTeam ? (r.team === r.winningTeam ? 'W' : 'L') : 'U'
+  );
+  const wins = last10.filter((r) => r === 'W').length;
+  const losses = last10.filter((r) => r === 'L').length;
+  const firstHalf = last10.slice(0, 5).filter((r) => r === 'W').length;
+  const secondHalf = last10.slice(5).filter((r) => r === 'W').length;
+  const trend: 'improving' | 'declining' | 'stable' =
+    secondHalf > firstHalf + 1 ? 'improving' : firstHalf > secondHalf + 1 ? 'declining' : 'stable';
+
+  // Per-player stats
+  const playerMPs = await db.matchPlayer.findMany({
+    where: { matchId: { in: matchIds }, playerId: { in: rosterPlayerIds } },
+    select: {
+      playerId: true, heroSlug: true, kills: true, deaths: true, assists: true,
+      heroDamage: true, team: true,
+      match: { select: { winningTeam: true, duration: true } },
+    },
+  });
+
+  const playerStats = new Map<string, {
+    games: number; wins: number; totalKda: number; totalDpm: number; dpmCount: number;
+    heroes: Map<string, { games: number; wins: number }>;
+  }>();
+
+  for (const mp of playerMPs) {
+    if (!mp.playerId) continue;
+    const won = mp.match.winningTeam && mp.team === mp.match.winningTeam;
+    const kda = mp.deaths > 0 ? (mp.kills + mp.assists) / mp.deaths : mp.kills + mp.assists;
+    const dpm = mp.heroDamage !== null ? mp.heroDamage / Math.max(mp.match.duration / 60, 1) : null;
+    const stat = playerStats.get(mp.playerId) ?? { games: 0, wins: 0, totalKda: 0, totalDpm: 0, dpmCount: 0, heroes: new Map() };
+    stat.games++;
+    if (won) stat.wins++;
+    stat.totalKda += kda;
+    if (dpm !== null) { stat.totalDpm += dpm; stat.dpmCount++; }
+    const heroStat = stat.heroes.get(mp.heroSlug) ?? { games: 0, wins: 0 };
+    heroStat.games++;
+    if (won) heroStat.wins++;
+    stat.heroes.set(mp.heroSlug, heroStat);
+    playerStats.set(mp.playerId, stat);
+  }
+
+  const players = await db.player.findMany({
+    where: { id: { in: rosterPlayerIds } },
+    select: { id: true, displayName: true, customName: true },
+  });
+  const playerNameMap = new Map(players.map((p) => [p.id, p]));
+
+  const threatPlayers: ThreatPlayer[] = rosterPlayerIds
+    .filter((pid) => playerStats.has(pid))
+    .map((pid) => {
+      const stat = playerStats.get(pid)!;
+      const wr = stat.games > 0 ? Math.round((stat.wins / stat.games) * 100) : 0;
+      const kda = Math.round((stat.totalKda / stat.games) * 100) / 100;
+      const avgDPM = stat.dpmCount > 0 ? Math.round(stat.totalDpm / stat.dpmCount) : null;
+      const threatScore = Math.round(((wr / 100) * kda * Math.log(stat.games + 1)) * 10) / 10;
+      const p = playerNameMap.get(pid);
+      const topHeroes = Array.from(stat.heroes.entries())
+        .filter(([, h]) => h.games >= 2)
+        .map(([heroSlug, h]) => ({ heroSlug, games: h.games, winRate: Math.round((h.wins / h.games) * 100) }))
+        .sort((a, b) => b.games - a.games)
+        .slice(0, 5);
+      return { playerId: pid, displayName: p?.displayName ?? 'Unknown', customName: p?.customName ?? null, role: roleByPlayer.get(pid) ?? null, threatScore, games: stat.games, winRate: wr, kda, avgDPM, topHeroes };
+    })
+    .sort((a, b) => b.threatScore - a.threatScore);
+
+  const rolesWithStats = threatPlayers.filter((p) => p.role);
+  const weakRole = rolesWithStats.length > 0
+    ? rolesWithStats.reduce((min, p) => p.threatScore < min.threatScore ? p : min).role
+    : null;
+
+  // Objective priority
+  const objKills = await db.objectiveKill.findMany({
+    where: { matchId: { in: matchIds } },
+    select: { matchId: true, entityType: true, killerTeam: true, gameTime: true },
+  });
+  const objMap = new Map<string, { team: number; rival: number; teamTimes: number[] }>();
+  for (const o of objKills) {
+    const side = sideMap.get(o.matchId);
+    if (!side) continue;
+    const entry = objMap.get(o.entityType) ?? { team: 0, rival: 0, teamTimes: [] };
+    if (o.killerTeam === side) { entry.team++; entry.teamTimes.push(o.gameTime); }
+    else entry.rival++;
+    objMap.set(o.entityType, entry);
+  }
+  const objectivePriority = Array.from(objMap.entries())
+    .map(([entityType, { team, rival, teamTimes }]) => {
+      const total = team + rival;
+      const avgTime = teamTimes.length > 0 ? Math.round(teamTimes.reduce((s, t) => s + t, 0) / teamTimes.length) : null;
+      return { entityType, controlPct: total > 0 ? Math.round((team / total) * 100) : 0, avgGameTimeSecs: avgTime };
+    })
+    .sort((a, b) => b.controlPct - a.controlPct);
+
+  // Phase and identity
+  const heroKills = await db.heroKill.findMany({
+    where: { matchId: { in: matchIds } },
+    select: { matchId: true, gameTime: true, killerTeam: true },
+  });
+  const killDiff10s = matchRows.map((r) => {
+    const side = sideMap.get(r.matchId)!;
+    const kills = heroKills.filter((k) => k.matchId === r.matchId && k.gameTime <= 600);
+    return kills.filter((k) => k.killerTeam === side).length - kills.filter((k) => k.killerTeam !== side && k.killerTeam != null).length;
+  });
+  const avgKillDiff10 = killDiff10s.length > 0 ? killDiff10s.reduce((s, v) => s + v, 0) / killDiff10s.length : 0;
+
+  const allMatches = matchRows.filter((r) => r.winningTeam);
+  const avgWinDur = allMatches.filter((r) => r.team === r.winningTeam).map((r) => r.duration).reduce((s, v, _, a) => s + v / a.length, 0);
+  const avgLossDur = allMatches.filter((r) => r.team !== r.winningTeam).map((r) => r.duration).reduce((s, v, _, a) => s + v / a.length, 0);
+  const overallWR = n > 0 ? Math.round((matchRows.filter((r) => r.winningTeam && r.team === r.winningTeam).length / n) * 100) : 0;
+
+  const hadLeadLost = killDiff10s.filter((d, i) => d > 0 && matchRows[i].winningTeam && matchRows[i].team !== matchRows[i].winningTeam).length;
+  const hadLead = killDiff10s.filter((d) => d > 0).length;
+  const throwRate = hadLead > 0 ? Math.round((hadLeadLost / hadLead) * 100) : null;
+
+  const fangPct = objectivePriority.find((o) => ['FANGTOOTH', 'PRIMAL_FANGTOOTH'].includes(o.entityType))?.controlPct ?? 0;
+  const primePct = objectivePriority.find((o) => ['ORB_PRIME', 'MINI_PRIME'].includes(o.entityType))?.controlPct ?? 0;
+
+  const identity: string[] = [];
+  if (avgKillDiff10 > 1.5) identity.push('Early Aggressor');
+  if (fangPct > 58 || primePct > 58) identity.push('Objective Focused');
+  if (avgWinDur > avgLossDur + 180 && overallWR > 45) identity.push('Scaling');
+  if ((throwRate ?? 0) > 30) identity.push('Throw-prone');
+  if (avgKillDiff10 < -1) identity.push('Passive Early');
+  if (identity.length === 0) identity.push('Balanced');
+
+  const strongPhase = avgKillDiff10 > 1 ? 'early' : overallWR > 55 && avgWinDur > 1800 ? 'late' : null;
+  const weakPhase = avgKillDiff10 < -1 ? 'early' : overallWR < 45 && avgLossDur < avgWinDur ? 'late' : null;
+
+  return { teamId, teamName: team.name, sampleSize: n, recentForm: { wins, losses, last10, trend }, identity, strongPhase, weakPhase, throwRate, threatPlayers, weakRole, objectivePriority };
+}
+
+function emptyRivalScouting(teamId: string, teamName: string): RivalScoutingReport {
+  return { teamId, teamName, sampleSize: 0, recentForm: { wins: 0, losses: 0, last10: [], trend: 'stable' }, identity: [], strongPhase: null, weakPhase: null, throwRate: null, threatPlayers: [], weakRole: null, objectivePriority: [] };
+}
