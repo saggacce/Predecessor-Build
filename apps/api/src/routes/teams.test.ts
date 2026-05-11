@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import request from 'supertest';
 import app from '../index.js';
+import { authCookie } from '../test/auth-cookie.js';
 
 vi.mock('../db.js', () => ({
   db: {
@@ -42,6 +43,9 @@ const mockTeamRoster = (db as any).teamRoster as {
   deleteMany: ReturnType<typeof vi.fn>;
 };
 
+let managerCookie: string;
+let playerCookie: string;
+
 function teamRecord(overrides = {}) {
   return {
     id: 'team-1',
@@ -57,8 +61,12 @@ function teamRecord(overrides = {}) {
   };
 }
 
-beforeEach(() => {
+beforeEach(async () => {
   vi.clearAllMocks();
+  managerCookie = await authCookie();
+  playerCookie = await authCookie({
+    memberships: [{ teamId: 'team-1', role: 'JUGADOR', playerId: 'player-1' }],
+  });
   mockTeam.findMany.mockResolvedValue([]);
   mockTeam.findUnique.mockResolvedValue(null);
   mockTeam.create.mockResolvedValue(teamRecord());
@@ -73,28 +81,34 @@ beforeEach(() => {
 });
 
 describe('GET /teams', () => {
+  it('returns 401 without auth', async () => {
+    const res = await request(app).get('/teams');
+    expect(res.status).toBe(401);
+    expect(res.body.error.code).toBe('NOT_AUTHENTICATED');
+  });
+
   it('returns 200 with teams array', async () => {
     mockTeam.findMany.mockResolvedValue([]);
-    const res = await request(app).get('/teams');
+    const res = await request(app).get('/teams').set('Cookie', managerCookie);
     expect(res.status).toBe(200);
     expect(Array.isArray(res.body.teams)).toBe(true);
   });
 
   it('returns 400 VALIDATION_ERROR when type is invalid', async () => {
-    const res = await request(app).get('/teams?type=INVALID');
+    const res = await request(app).get('/teams?type=INVALID').set('Cookie', managerCookie);
     expect(res.status).toBe(400);
     expect(res.body.error.code).toBe('VALIDATION_ERROR');
   });
 
   it('accepts type=OWN filter', async () => {
     mockTeam.findMany.mockResolvedValue([]);
-    const res = await request(app).get('/teams?type=OWN');
+    const res = await request(app).get('/teams?type=OWN').set('Cookie', managerCookie);
     expect(res.status).toBe(200);
   });
 
   it('accepts type=RIVAL filter', async () => {
     mockTeam.findMany.mockResolvedValue([]);
-    const res = await request(app).get('/teams?type=RIVAL');
+    const res = await request(app).get('/teams?type=RIVAL').set('Cookie', managerCookie);
     expect(res.status).toBe(200);
   });
 });
@@ -102,17 +116,28 @@ describe('GET /teams', () => {
 describe('GET /teams/:id', () => {
   it('returns 404 TEAM_NOT_FOUND when team does not exist', async () => {
     mockTeam.findUnique.mockResolvedValue(null);
-    const res = await request(app).get('/teams/nonexistent-id');
+    const res = await request(app).get('/teams/nonexistent-id').set('Cookie', managerCookie);
     expect(res.status).toBe(404);
     expect(res.body.error.code).toBe('TEAM_NOT_FOUND');
   });
 });
 
 describe('POST /teams', () => {
+  it('returns 403 for non-manager users', async () => {
+    const res = await request(app)
+      .post('/teams')
+      .set('Cookie', playerCookie)
+      .send({ name: 'Test Team', type: 'OWN' });
+
+    expect(res.status).toBe(403);
+    expect(res.body.error.code).toBe('FORBIDDEN');
+  });
+
   it('creates a team and returns its profile', async () => {
     mockTeam.findUnique.mockResolvedValue(teamRecord());
     const res = await request(app)
       .post('/teams')
+      .set('Cookie', managerCookie)
       .send({ name: 'Test Team', abbreviation: 'TT', logoUrl: 'https://example.com/logo.png', type: 'OWN', region: 'EU' });
 
     expect(res.status).toBe(201);
@@ -124,7 +149,7 @@ describe('POST /teams', () => {
   });
 
   it('returns 400 VALIDATION_ERROR when type is missing', async () => {
-    const res = await request(app).post('/teams').send({ name: 'Test Team' });
+    const res = await request(app).post('/teams').set('Cookie', managerCookie).send({ name: 'Test Team' });
     expect(res.status).toBe(400);
     expect(res.body.error.code).toBe('VALIDATION_ERROR');
   });
@@ -136,7 +161,10 @@ describe('PATCH /teams/:id', () => {
       .mockResolvedValueOnce(teamRecord())
       .mockResolvedValueOnce(teamRecord({ name: 'Renamed' }));
 
-    const res = await request(app).patch('/teams/team-1').send({ name: 'Renamed', logoUrl: null, notes: null });
+    const res = await request(app)
+      .patch('/teams/team-1')
+      .set('Cookie', managerCookie)
+      .send({ name: 'Renamed', logoUrl: null, notes: null });
 
     expect(res.status).toBe(200);
     expect(res.body.name).toBe('Renamed');
@@ -151,7 +179,7 @@ describe('DELETE /teams/:id', () => {
   it('deletes roster entries before deleting the team', async () => {
     mockTeam.findUnique.mockResolvedValue(teamRecord());
 
-    const res = await request(app).delete('/teams/team-1');
+    const res = await request(app).delete('/teams/team-1').set('Cookie', managerCookie);
 
     expect(res.status).toBe(200);
     expect(res.body.ok).toBe(true);
@@ -167,6 +195,7 @@ describe('POST /teams/:id/roster', () => {
 
     const res = await request(app)
       .post('/teams/team-1/roster')
+      .set('Cookie', managerCookie)
       .send({ playerId: 'player-1', role: 'jungle' });
 
     expect(res.status).toBe(201);
@@ -183,6 +212,7 @@ describe('POST /teams/:id/roster', () => {
 
     const res = await request(app)
       .post('/teams/team-1/roster')
+      .set('Cookie', managerCookie)
       .send({ playerId: 'player-1' });
 
     expect(res.status).toBe(409);
@@ -196,6 +226,7 @@ describe('PATCH /teams/:id/roster/:rosterId', () => {
 
     const res = await request(app)
       .patch('/teams/team-1/roster/roster-1')
+      .set('Cookie', managerCookie)
       .send({ role: 'support' });
 
     expect(res.status).toBe(200);
@@ -210,6 +241,7 @@ describe('PATCH /teams/:id/roster/:rosterId', () => {
 
     const res = await request(app)
       .patch('/teams/team-1/roster/roster-1')
+      .set('Cookie', managerCookie)
       .send({ role: 'support' });
 
     expect(res.status).toBe(404);
@@ -221,7 +253,7 @@ describe('DELETE /teams/:id/roster/:rosterId', () => {
   it('soft-removes a roster player when the entry belongs to the team', async () => {
     mockTeamRoster.findUnique.mockResolvedValue({ id: 'roster-1', teamId: 'team-1' });
 
-    const res = await request(app).delete('/teams/team-1/roster/roster-1');
+    const res = await request(app).delete('/teams/team-1/roster/roster-1').set('Cookie', managerCookie);
 
     expect(res.status).toBe(200);
     expect(res.body.ok).toBe(true);

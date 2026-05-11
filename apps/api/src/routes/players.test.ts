@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import request from 'supertest';
 import app from '../index.js';
+import { authCookie } from '../test/auth-cookie.js';
 
 vi.mock('../db.js', () => ({
   db: {
@@ -15,23 +16,34 @@ vi.mock('../db.js', () => ({
 import { db } from '../db.js';
 const mockPlayer = (db as any).player as { findMany: ReturnType<typeof vi.fn>; findUnique: ReturnType<typeof vi.fn> };
 
-beforeEach(() => vi.clearAllMocks());
+let cookie: string;
+
+beforeEach(async () => {
+  vi.clearAllMocks();
+  cookie = await authCookie();
+});
 
 describe('GET /players/search', () => {
+  it('returns 401 without auth', async () => {
+    const res = await request(app).get('/players/search?q=test');
+    expect(res.status).toBe(401);
+    expect(res.body.error.code).toBe('NOT_AUTHENTICATED');
+  });
+
   it('returns 400 VALIDATION_ERROR when q is missing', async () => {
-    const res = await request(app).get('/players/search');
+    const res = await request(app).get('/players/search').set('Cookie', cookie);
     expect(res.status).toBe(400);
     expect(res.body.error.code).toBe('VALIDATION_ERROR');
   });
 
   it('returns 400 when limit is not a number', async () => {
-    const res = await request(app).get('/players/search?q=test&limit=abc');
+    const res = await request(app).get('/players/search?q=test&limit=abc').set('Cookie', cookie);
     expect(res.status).toBe(400);
     expect(res.body.error.code).toBe('VALIDATION_ERROR');
   });
 
   it('returns 400 when limit exceeds maximum', async () => {
-    const res = await request(app).get('/players/search?q=test&limit=999');
+    const res = await request(app).get('/players/search?q=test&limit=999').set('Cookie', cookie);
     expect(res.status).toBe(400);
     expect(res.body.error.code).toBe('VALIDATION_ERROR');
   });
@@ -40,7 +52,7 @@ describe('GET /players/search', () => {
     mockPlayer.findMany.mockResolvedValue([
       { id: '1', displayName: 'TestPlayer', isPrivate: false, inferredRegion: null, lastSynced: new Date() },
     ]);
-    const res = await request(app).get('/players/search?q=test');
+    const res = await request(app).get('/players/search?q=test').set('Cookie', cookie);
     expect(res.status).toBe(200);
     expect(Array.isArray(res.body.results)).toBe(true);
     expect(res.body.results[0].displayName).toBe('TestPlayer');
@@ -48,7 +60,7 @@ describe('GET /players/search', () => {
 
   it('returns empty array when no players match', async () => {
     mockPlayer.findMany.mockResolvedValue([]);
-    const res = await request(app).get('/players/search?q=nomatch');
+    const res = await request(app).get('/players/search?q=nomatch').set('Cookie', cookie);
     expect(res.status).toBe(200);
     expect(res.body.results).toHaveLength(0);
   });
@@ -57,7 +69,7 @@ describe('GET /players/search', () => {
 describe('GET /players/:id', () => {
   it('returns 404 PLAYER_NOT_FOUND when player does not exist', async () => {
     mockPlayer.findUnique.mockResolvedValue(null);
-    const res = await request(app).get('/players/nonexistent-id');
+    const res = await request(app).get('/players/nonexistent-id').set('Cookie', cookie);
     expect(res.status).toBe(404);
     expect(res.body.error.code).toBe('PLAYER_NOT_FOUND');
   });

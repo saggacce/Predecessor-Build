@@ -4,6 +4,7 @@ import { resyncMatch } from '../services/sync-service.js';
 import { getValidToken } from './auth.js';
 import { db } from '../db.js';
 import { AppError } from '../middleware/error-handler.js';
+import { requireAuth } from '../middleware/require-auth.js';
 
 export const matchesRouter = Router();
 
@@ -11,7 +12,7 @@ export const matchesRouter = Router();
  * GET /matches/:id
  * Full match detail: both teams, per-player stats, hero meta.
  */
-matchesRouter.get('/:id', async (req, res, next) => {
+matchesRouter.get('/:id', requireAuth, async (req, res, next) => {
   try {
     const detail = await getMatchDetail(req.params.id);
     res.json(detail);

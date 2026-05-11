@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { getPlayerProfile, comparePlayers, searchPlayers, getPlayerAdvancedMetrics } from '../services/player-service.js';
 import { syncPlayerByName } from '../services/sync-service.js';
 import { AppError } from '../middleware/error-handler.js';
+import { requireAuth } from '../middleware/require-auth.js';
 import { db } from '../db.js';
 import { getValidToken } from './auth.js';
 
@@ -28,7 +29,7 @@ const SEASONS_QUERY = `
  * GET /players/:id/seasons
  * Fetches season ratings directly from pred.gg using player's predggUuid.
  */
-playersRouter.get('/:id/seasons', async (req, res, next) => {
+playersRouter.get('/:id/seasons', requireAuth, async (req, res, next) => {
   try {
     const player = await db.player.findUnique({ where: { id: req.params.id }, select: { predggUuid: true } });
     if (!player) throw new AppError(404, 'Player not found', 'PLAYER_NOT_FOUND');
@@ -53,7 +54,7 @@ playersRouter.get('/:id/seasons', async (req, res, next) => {
  * GET /players/search?q=name&limit=20
  * Searches the local database for players matching the name.
  */
-playersRouter.get('/search', async (req, res, next) => {
+playersRouter.get('/search', requireAuth, async (req, res, next) => {
   try {
     const { q, limit } = z.object({
       q: z.string().min(1),
@@ -99,7 +100,7 @@ playersRouter.post('/sync', async (req, res, next) => {
  * GET /players/:id
  * Get full player profile with latest stats and recent matches.
  */
-playersRouter.get('/:id', async (req, res, next) => {
+playersRouter.get('/:id', requireAuth, async (req, res, next) => {
   try {
     const profile = await getPlayerProfile(req.params.id);
     res.json(profile);

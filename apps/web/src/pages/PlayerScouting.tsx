@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate, useLocation } from 'react-router';
 import { HeroAvatarWithTooltip } from '../components/HeroAvatar';
@@ -11,8 +11,6 @@ import {
   Calendar,
   CheckCircle,
   ChevronRight,
-  Clock,
-  Coins,
   Gamepad2,
   LogIn,
   MapPin,
@@ -21,8 +19,6 @@ import {
   Search,
   Shield,
   Swords,
-  Target,
-  Trophy,
   User,
   XCircle,
 } from 'lucide-react';
@@ -48,7 +44,6 @@ type ProfilePhase =
 
 export default function PlayerScouting() {
   const { authenticated } = useAuth();
-  const heroMeta = useHeroMeta();
   const location = useLocation();
   const [query, setQuery] = useState('');
   const [phase, setPhase] = useState<Phase>({ tag: 'idle' });
@@ -543,7 +538,7 @@ function PlayerProfilePanel({
           {profile.rating?.rankLabel && (
             <RankIcon
               rankLabel={profile.rating.rankLabel}
-              ratingPoints={profile.rating.ratingPoints !== undefined ? Math.round(profile.rating.ratingPoints) : null}
+              ratingPoints={profile.rating.ratingPoints !== null ? Math.round(profile.rating.ratingPoints) : null}
               size={90}
             />
           )}
@@ -1198,43 +1193,6 @@ function MiniMetric({ label, value }: { label: string; value: string }) {
   );
 }
 
-function MatchMetric({ icon, label, value }: { icon?: React.ReactNode; label: string; value: string }) {
-  return (
-    <div style={{ minWidth: 0 }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', color: 'var(--text-dim)', fontSize: '0.63rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '0.12rem' }}>
-        {icon}
-        {label}
-      </div>
-      <div style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-primary)', fontWeight: 500, fontSize: '0.82rem', overflow: 'hidden', textOverflow: 'ellipsis' }}>{value}</div>
-    </div>
-  );
-}
-
-function ResultPill({ result }: { result: 'win' | 'loss' | 'unknown' }) {
-  return (
-    <span
-      style={{
-        display: 'inline-flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        width: '4.4rem',
-        padding: '0.28rem 0.4rem',
-        borderRadius: '999px',
-        border: `1px solid ${resultColor(result)}`,
-        color: resultColor(result),
-        background: resultBackground(result),
-        fontFamily: 'var(--font-mono)',
-        fontSize: '0.65rem',
-        fontWeight: 600,
-        letterSpacing: '0.05em',
-        textTransform: 'uppercase',
-      }}
-    >
-      {result}
-    </span>
-  );
-}
-
 function RoleBadge({ role, compact = false, size = 'normal' }: { role: string; compact?: boolean; size?: 'normal' | 'large' }) {
   const meta = getRoleMeta(role);
   const iconSize = size === 'large' ? 16 : 14;
@@ -1276,7 +1234,6 @@ function HeroAvatar({
   const localSrc = hero?.slug ? `/heroes/${hero.slug}.webp` : null;
   const cdnSrc = normalizeHeroAsset(hero?.imageUrl);
   const src = !localFailed && localSrc ? localSrc : (!cdnFailed ? cdnSrc : null);
-  const failed = localFailed && cdnFailed;
   const label = hero?.name ?? hero?.slug ?? 'Hero';
   const initials = label
     .split(/[\s_-]+/)
@@ -1429,17 +1386,6 @@ function formatDuration(seconds: number): string {
   return `${minutes}:${String(rest).padStart(2, '0')}`;
 }
 
-function resultColor(result: 'win' | 'loss' | 'unknown'): string {
-  if (result === 'win') return 'var(--accent-success)';
-  if (result === 'loss') return 'var(--accent-danger)';
-  return 'var(--text-muted)';
-}
-
-function resultBackground(result: 'win' | 'loss' | 'unknown'): string {
-  if (result === 'win') return 'rgba(74,222,128,0.1)';
-  if (result === 'loss') return 'rgba(248,113,113,0.1)';
-  return 'rgba(255,255,255,0.03)';
-}
 
 function StatusCard({ icon, title, color }: { icon: React.ReactNode; title: string; color: string }) {
   return (

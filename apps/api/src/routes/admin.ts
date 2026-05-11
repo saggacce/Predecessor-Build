@@ -9,6 +9,8 @@ import {
   syncIncompleteMatches,
 } from '../services/sync-service.js';
 import { getValidToken } from './auth.js';
+import { requireAuth } from '../middleware/require-auth.js';
+import { requirePlatformAdmin } from '../middleware/require-platform-admin.js';
 
 export const adminRouter = Router();
 
@@ -23,6 +25,7 @@ function requireAdminKey(req: Request, res: Response, next: NextFunction) {
 }
 
 adminRouter.use(requireAdminKey);
+adminRouter.use(requireAuth, requirePlatformAdmin);
 
 /**
  * POST /admin/sync-versions
