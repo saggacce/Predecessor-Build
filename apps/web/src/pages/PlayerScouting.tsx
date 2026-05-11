@@ -585,6 +585,11 @@ function PlayerProfilePanel({
         </section>
 
         <section style={{ marginBottom: '1.5rem' }}>
+          <SectionTitle icon={<Target size={18} />} title="Player Goals" />
+          <PlayerGoalsSection playerId={profile.id} playerName={profile.customName ?? profile.displayName} />
+        </section>
+
+        <section style={{ marginBottom: '1.5rem' }}>
           <SectionTitle icon={<Swords size={18} />} title="Comfort Heroes" />
           {profile.heroStats.length > 0 ? (
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '0.75rem' }}>
@@ -732,6 +737,240 @@ function AdvancedMetricsSection({ metrics, loading }: { metrics: PlayerAdvancedM
         <span className="mono">Sample: {metrics.sampleSize}</span>
         <span className="mono">Event stream: {metrics.eventStreamSampleSize}</span>
       </div>
+    </div>
+  );
+}
+
+const PLAYER_GOAL_STATUS_COLOR: Record<string, string> = {
+  DRAFT: 'var(--text-muted)',
+  ACTIVE: 'var(--accent-blue)',
+  ACHIEVED: 'var(--accent-win)',
+  FAILED: 'var(--accent-loss)',
+  PAUSED: '#f0b429',
+  ARCHIVED: 'var(--text-muted)',
+};
+
+const PLAYER_GOAL_METRICS = [
+  'KDA',
+  'First Death Rate',
+  'Early Death Rate',
+  'Damage Share',
+  'Gold Share',
+  'Kill Participation',
+  'Vision Score',
+];
+
+function goalProgress(goal: PlayerGoal): number | null {
+  if (goal.baselineValue === null || goal.targetValue === null || goal.currentValue === null) return null;
+  const range = goal.targetValue - goal.baselineValue;
+  if (range === 0) return goal.currentValue >= goal.targetValue ? 1 : 0;
+  return Math.min(Math.max((goal.currentValue - goal.baselineValue) / range, 0), 1);
+}
+
+function PlayerGoalsSection({ playerId, playerName }: { playerId: string; playerName: string }) {
+  const [teams, setTeams] = React.useState<TeamProfile[]>([]);
+  const [selectedTeamId, setSelectedTeamId] = React.useState('');
+  const [goals, setGoals] = React.useState<PlayerGoal[]>([]);
+  const [loading, setLoading] = React.useState(true);
+  const [saving, setSaving] = React.useState(false);
+  const [showCreate, setShowCreate] = React.useState(false);
+  const [editingId, setEditingId] = React.useState<string | null>(null);
+  const [title, setTitle] = React.useState('');
+  const [metricId, setMetricId] = React.useState('First Death Rate');
+  const [targetValue, setTargetValue] = React.useState('');
+  const [coachNote, setCoachNote] = React.useState('');
+  const [editTitle, setEditTitle] = React.useState('');
+  const [editCurrent, setEditCurrent] = React.useState('');
+  const [editTarget, setEditTarget] = React.useState('');
+  const [editStatus, setEditStatus] = React.useState('ACTIVE');
+  const [editNote, setEditNote] = React.useState('');
+
+  React.useEffect(() => {
+    setLoading(true);
+    setGoals([]);
+    setSelectedTeamId('');
+    apiClient.teams.list('OWN')
+      .then(({ teams: ownTeams }) => {
+        const containingTeams = ownTeams.filter((team) => team.roster.some((member) => member.playerId === playerId));
+        setTeams(containingTeams);
+        setSelectedTeamId(containingTeams[0]?.id ?? '');
+      })
+      .catch(() => toast.error('Failed to load player goal context.'))
+      .finally(() => setLoading(false));
+  }, [playerId]);
+
+  React.useEffect(() => {
+    if (!selectedTeamId) return;
+    setLoading(true);
+    apiClient.goals.listPlayer(selectedTeamId, playerId)
+      .then(({ goals: playerGoals }) => setGoals(playerGoals))
+      .catch(() => toast.error('Failed to load player goals.'))
+      .finally(() => setLoading(false));
+  }, [playerId, selectedTeamId]);
+
+  function resetCreateForm() {
+    setTitle('');
+    setMetricId('First Death Rate');
+    setTargetValue('');
+    setCoachNote('');
+  }
+
+  function startEditing(goal: PlayerGoal) {
+    setEditingId(goal.id);
+    setEditTitle(goal.title);
+    setEditCurrent(goal.currentValue?.toString() ?? '');
+    setEditTarget(goal.targetValue?.toString() ?? '');
+    setEditStatus(goal.status);
+    setEditNote(goal.coachNote ?? '');
+  }
+
+  async function handleCreateGoal() {
+    if (!selectedTeamId || !title.trim()) return;
+    setSaving(true);
+    try {
+      const goal = await apiClient.goals.createPlayer({
+        teamId: selectedTeamId,
+        playerId,
+        title: title.trim(),
+        metricId: metricId.trim() || undefined,
+        targetValue: targetValue.trim() ? Number(targetValue) : undefined,
+        coachNote: coachNote.trim() || undefined,
+        visibility: 'staff',
+      });
+      setGoals((current) => [goal, ...current]);
+      resetCreateForm();
+      setShowCreate(false);
+      toast.success('Player goal created.');
+    } catch {
+      toast.error('Failed to create player goal.');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleUpdateGoal(goalId: string, patch?: Partial<PlayerGoal>) {
+    setSaving(true);
+    try {
+      const payload = patch ?? {
+        title: editTitle.trim(),
+        currentValue: editCurrent.trim() ? Number(editCurrent) : null,
+        targetValue: editTarget.trim() ? Number(editTarget) : null,
+        status: editStatus,
+        coachNote: editNote.trim() || null,
+      };
+      const updated = await apiClient.goals.updatePlayer(goalId, payload);
+      setGoals((current) => current.map((goal) => (goal.id === goalId ? updated : goal)));
+      setEditingId(null);
+      toast.success('Player goal updated.');
+    } catch {
+      toast.error('Failed to update player goal.');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  if (loading && !selectedTeamId) {
+    return (
+      <div style={{ border: '1px solid var(--border-color)', borderRadius: 'var(--radius-sm)', padding: '1rem', color: 'var(--text-muted)', background: 'rgba(255,255,255,0.03)' }}>
+        Loading player goals...
+      </div>
+    );
+  }
+
+  if (teams.length === 0) {
+    return (
+      <div style={{ border: '1px solid var(--border-color)', borderRadius: 'var(--radius-sm)', padding: '1rem', color: 'var(--text-muted)', background: 'rgba(255,255,255,0.03)' }}>
+        Add {playerName} to an own-team roster before assigning individual goals.
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+      <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
+        <select className="input" value={selectedTeamId} onChange={(e) => setSelectedTeamId(e.target.value)} style={{ width: 'auto', minWidth: 190, fontSize: '0.78rem' }}>
+          {teams.map((team) => <option key={team.id} value={team.id}>{team.name}</option>)}
+        </select>
+        <button type="button" className="btn-primary" onClick={() => setShowCreate((value) => !value)} style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.78rem', padding: '0.45rem 0.85rem' }}>
+          <Plus size={14} /> New Goal
+        </button>
+        <span className="mono" style={{ color: 'var(--text-muted)', fontSize: '0.72rem' }}>{goals.length} goals</span>
+      </div>
+
+      {showCreate && (
+        <div style={{ border: '1px solid var(--border-color)', borderRadius: 'var(--radius-sm)', padding: '0.9rem', background: 'rgba(255,255,255,0.03)' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '0.75rem', marginBottom: '0.75rem' }}>
+            <input className="input" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Goal title" />
+            <select className="input" value={metricId} onChange={(e) => setMetricId(e.target.value)}>
+              {PLAYER_GOAL_METRICS.map((metric) => <option key={metric} value={metric}>{metric}</option>)}
+            </select>
+            <input className="input" type="number" value={targetValue} onChange={(e) => setTargetValue(e.target.value)} placeholder="Target value" />
+          </div>
+          <textarea className="input" rows={2} value={coachNote} onChange={(e) => setCoachNote(e.target.value)} placeholder="Coach note" style={{ width: '100%', resize: 'vertical', marginBottom: '0.75rem' }} />
+          <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
+            <button type="button" className="btn-secondary" onClick={() => { setShowCreate(false); resetCreateForm(); }} style={{ fontSize: '0.78rem' }}>Cancel</button>
+            <button type="button" className="btn-primary" onClick={handleCreateGoal} disabled={saving || !title.trim()} style={{ fontSize: '0.78rem' }}>Create</button>
+          </div>
+        </div>
+      )}
+
+      {goals.length === 0 ? (
+        <div style={{ border: '1px solid var(--border-color)', borderRadius: 'var(--radius-sm)', padding: '1rem', color: 'var(--text-muted)', background: 'rgba(255,255,255,0.03)' }}>
+          No individual goals for this player yet.
+        </div>
+      ) : (
+        <div style={{ border: '1px solid var(--border-color)', borderRadius: 'var(--radius-sm)', overflow: 'hidden', background: 'rgba(255,255,255,0.03)' }}>
+          {goals.map((goal, index) => {
+            const statusColor = PLAYER_GOAL_STATUS_COLOR[goal.status] ?? 'var(--text-muted)';
+            const progress = goalProgress(goal);
+            const isEditing = editingId === goal.id;
+            return (
+              <div key={goal.id} style={{ padding: '0.9rem', borderBottom: index === goals.length - 1 ? 'none' : '1px solid var(--border-color)' }}>
+                {isEditing ? (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '0.65rem' }}>
+                      <input className="input" value={editTitle} onChange={(e) => setEditTitle(e.target.value)} />
+                      <input className="input" type="number" value={editCurrent} onChange={(e) => setEditCurrent(e.target.value)} placeholder="Current" />
+                      <input className="input" type="number" value={editTarget} onChange={(e) => setEditTarget(e.target.value)} placeholder="Target" />
+                      <select className="input" value={editStatus} onChange={(e) => setEditStatus(e.target.value)}>
+                        {['DRAFT', 'ACTIVE', 'ACHIEVED', 'FAILED', 'PAUSED', 'ARCHIVED'].map((status) => <option key={status} value={status}>{status}</option>)}
+                      </select>
+                    </div>
+                    <textarea className="input" rows={2} value={editNote} onChange={(e) => setEditNote(e.target.value)} style={{ width: '100%', resize: 'vertical' }} />
+                    <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
+                      <button type="button" className="btn-secondary" onClick={() => setEditingId(null)} style={{ fontSize: '0.72rem' }}>Cancel</button>
+                      <button type="button" className="btn-primary" onClick={() => handleUpdateGoal(goal.id)} disabled={saving || !editTitle.trim()} style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem', fontSize: '0.72rem' }}><Save size={12} /> Save</button>
+                    </div>
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap' }}>
+                    <div style={{ flex: '1 1 260px', minWidth: 0 }}>
+                      <div style={{ display: 'flex', gap: '0.45rem', alignItems: 'center', flexWrap: 'wrap', marginBottom: '0.25rem' }}>
+                        <span style={{ fontSize: '0.84rem', fontWeight: 700, color: 'var(--text-primary)' }}>{goal.title}</span>
+                        {goal.metricId && <span className="mono" style={{ fontSize: '0.6rem', color: 'var(--text-muted)', background: 'rgba(255,255,255,0.05)', padding: '0.1rem 0.4rem', borderRadius: 4 }}>{goal.metricId}</span>}
+                        <span className="mono" style={{ fontSize: '0.6rem', fontWeight: 700, color: statusColor, background: `${statusColor}18`, padding: '0.1rem 0.45rem', borderRadius: 999 }}>{goal.status}</span>
+                      </div>
+                      {goal.coachNote && <div style={{ color: 'var(--text-muted)', fontSize: '0.73rem', lineHeight: 1.35 }}>{goal.coachNote}</div>}
+                      {progress !== null && (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '0.45rem' }}>
+                          <div style={{ flex: 1, maxWidth: 260, height: 5, borderRadius: 999, background: 'rgba(255,255,255,0.07)', overflow: 'hidden' }}>
+                            <div style={{ width: `${Math.round(progress * 100)}%`, height: '100%', background: progress >= 1 ? 'var(--accent-win)' : 'var(--accent-blue)' }} />
+                          </div>
+                          <span className="mono" style={{ color: 'var(--text-muted)', fontSize: '0.68rem' }}>{Math.round(progress * 100)}%</span>
+                        </div>
+                      )}
+                    </div>
+                    <button type="button" className="btn-secondary" onClick={() => startEditing(goal)} style={{ fontSize: '0.72rem' }}>Edit</button>
+                    {goal.status !== 'ACHIEVED' && (
+                      <button type="button" className="btn-secondary" onClick={() => handleUpdateGoal(goal.id, { status: 'ACHIEVED' })} style={{ fontSize: '0.72rem', color: 'var(--accent-win)' }}>Close</button>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
