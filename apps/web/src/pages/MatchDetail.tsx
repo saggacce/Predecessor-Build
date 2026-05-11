@@ -409,8 +409,8 @@ function PlayerRow({ player, isAram, teamColor, maxDamage, teamKills, matchDurat
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', fontSize: '0.72rem', color: 'var(--text-muted)', overflow: 'hidden' }}>
               <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0, flex: '0 1 auto' }}>{displayedName}</span>
               {player.isConsole
-                ? <Gamepad2 size={11} title="Console" style={{ flexShrink: 0, color: 'var(--accent-violet)' }} />
-                : <Monitor size={11} title="PC" style={{ flexShrink: 0, color: 'var(--text-muted)', opacity: 0.4 }} />
+                ? <Gamepad2 size={11} style={{ flexShrink: 0, color: 'var(--accent-violet)' }} />
+                : <Monitor size={11} style={{ flexShrink: 0, color: 'var(--text-muted)', opacity: 0.4 }} />
               }
               {player.customName && <span style={{ fontSize: '0.6rem', color: 'var(--accent-violet)', fontFamily: 'var(--font-mono)', flexShrink: 0 }}>custom</span>}
               {player.playerId && (
@@ -521,7 +521,7 @@ const OBJ_GROUPS = [
   { key: 'river',     label: 'River',      types: ['RIVER','SEEDLING'],               color: '#38d4c8' },
 ] as const;
 
-function AnalysisTab({ match, duskWon, dawnWon, onResync, syncing }: {
+function AnalysisTab({ match, duskWon, dawnWon: _dawnWon, onResync, syncing }: {
   match: MatchDetailData; duskWon: boolean; dawnWon: boolean;
   onResync: () => void; syncing: boolean;
 }) {
@@ -705,7 +705,7 @@ function AnalysisTab({ match, duskWon, dawnWon, onResync, syncing }: {
 
 // ── Gold Diff Chart ───────────────────────────────────────────────────────────
 
-function GoldDiffChart({ goldDiff, events, match, duskWon }: {
+function GoldDiffChart({ goldDiff, events, match: _match, duskWon }: {
   goldDiff: number[]; events: MatchEvents; match: MatchDetailData; duskWon: boolean;
 }) {
   const [tip, setTip] = useState<{ x: number; y: number; content: React.ReactNode } | null>(null);
@@ -788,7 +788,6 @@ function GoldDiffChart({ goldDiff, events, match, duskWon }: {
         {/* Objective markers — vertical line + interactive dot */}
         {chartObjs.map(({ o, tMin, diff, meta }, i) => {
           const x = xScale(tMin);
-          const color = o.killerTeam === 'DUSK' ? '#38d4c8' : '#f87171';
           // Count how many of this objective type DUSK and DAWN have captured so far
           const sameType = chartObjs.filter((c, ci) => c.o.entityType === o.entityType && ci <= i);
           const duskCount = sameType.filter((c) => c.o.killerTeam === 'DUSK').length;

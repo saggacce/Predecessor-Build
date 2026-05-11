@@ -1,8 +1,7 @@
 import { useEffect, useState } from 'react';
-import { AlertTriangle, CheckCircle, Clock, Plus, Trash2, X, ChevronDown } from 'lucide-react';
+import { CheckCircle, Plus, Trash2, ChevronDown } from 'lucide-react';
 import { toast } from 'sonner';
 import { apiClient, type ReviewItem, type TeamGoal, type TeamProfile } from '../api/client';
-import { ApiErrorResponse } from '../api/client';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 

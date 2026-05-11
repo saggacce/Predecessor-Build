@@ -229,7 +229,6 @@ export default function ScrimReport() {
                 {majorObjControl.map((o) => {
                   const label = { FANGTOOTH: 'Fangtooth', PRIMAL_FANGTOOTH: 'Primal FT', ORB_PRIME: 'Orb Prime', MINI_PRIME: 'Mini Prime' }[o.entityType] ?? o.entityType;
                   const color = { FANGTOOTH: '#ef4444', PRIMAL_FANGTOOTH: '#b91c1c', ORB_PRIME: '#7c3aed', MINI_PRIME: '#a78bfa' }[o.entityType] ?? '#64748b';
-                  const contested = o.controlPct < 60 && o.controlPct > 40;
                   return (
                     <div key={o.entityType} style={{ flex: '1 1 130px', padding: '0.75rem', border: `1px solid ${color}33`, borderRadius: '8px', background: `${color}08` }}>
                       <div style={{ fontSize: '0.72rem', fontWeight: 700, color, marginBottom: '0.35rem' }}>{label}</div>

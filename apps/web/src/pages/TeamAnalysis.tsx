@@ -17,7 +17,7 @@ import {
   Trophy,
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { apiClient, type TeamProfile, type TeamRole, type PlayerSearchResult, type TeamAnalysis, type TeamObjectiveControl, type RivalHeroStat, type PlayerAnalysisStat, type Insight, ApiErrorResponse } from '../api/client';
+import { apiClient, type TeamProfile, type TeamRole, type PlayerSearchResult, type TeamAnalysis, type RivalHeroStat, type PlayerAnalysisStat, type Insight, ApiErrorResponse } from '../api/client';
 
 const ROLES: TeamRole[] = ['carry', 'jungle', 'midlane', 'offlane', 'support'];
 
@@ -27,15 +27,6 @@ const roleLabel: Record<TeamRole, string> = {
   midlane: 'Mid',
   offlane: 'Offlane',
   support: 'Support',
-};
-
-const RANK_ICON_IDS: Record<string, string> = {
-  bronze: '26389cf81c492cde',
-  silver: 'fc69387012302b46',
-  gold: 'bd3235ed2d814c4d',
-  platinum: '82f82fede2ff80be',
-  diamond: 'ecb7e9ae11b82dbc',
-  paragon: '228ce78233215776',
 };
 
 interface TeamFormData {
@@ -749,7 +740,7 @@ function PerformanceTab({ teamId, analysis, loading, onRefresh }: {
         <div className="glass-card" style={{ padding: '0.75rem 1.25rem' }}>
           <div style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: '0.6rem' }}>Winrate by Patch</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
-            {patchStats.map(({ patch, wins, losses, total, wr }) => (
+            {patchStats.map(({ patch, wins, losses, wr }) => (
               <div key={patch} style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
                 <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.72rem', color: 'var(--text-muted)', flex: '0 0 72px' }}>{patch}</span>
                 <div style={{ flex: 1, height: 6, borderRadius: 999, background: 'rgba(255,255,255,0.06)', overflow: 'hidden' }}>
@@ -1229,58 +1220,6 @@ function getRoleTone(role: string | null): { color: string; background: string; 
   return { color: 'var(--text-muted)', background: 'rgba(255,255,255,0.04)', border: 'rgba(255,255,255,0.06)' };
 }
 
-function RankEmblem({ rating }: { rating: { rankLabel: string | null; ratingPoints: number | null } | null }) {
-  if (!rating?.rankLabel) return null;
-
-  const iconUrl = getRankIconUrl(rating.rankLabel);
-  const points = typeof rating.ratingPoints === 'number' ? Math.round(rating.ratingPoints) : null;
-
-  return (
-    <div
-      title={points !== null ? `${points} VP - ${rating.rankLabel}` : rating.rankLabel}
-      style={{
-        width: 54,
-        height: 42,
-        position: 'relative',
-        flexShrink: 0,
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-      }}
-    >
-      {iconUrl ? (
-        <img
-          src={iconUrl}
-          alt={rating.rankLabel}
-          style={{
-            position: 'absolute',
-            width: 42,
-            height: 42,
-            objectFit: 'contain',
-          }}
-        />
-      ) : null}
-      <div
-        style={{
-          position: 'relative',
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          justifyContent: 'center',
-          lineHeight: 1,
-          textAlign: 'center',
-          textShadow: '0 1px 2px rgba(0,0,0,0.9)',
-          transform: 'translateY(1px)',
-        }}
-      >
-        {points !== null && (
-          <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.62rem', fontWeight: 600, color: 'var(--text-primary)' }}>{points}</span>
-        )}
-      </div>
-    </div>
-  );
-}
-
 function TeamLogo({ team, size }: { team: Pick<TeamProfile, 'name' | 'abbreviation' | 'logoUrl' | 'type'>; size: number }) {
   const [imageFailed, setImageFailed] = useState(false);
   const initials = getTeamInitials(team);
@@ -1330,13 +1269,6 @@ function getTeamInitials(team: Pick<TeamProfile, 'name' | 'abbreviation'>): stri
   if (words.length === 0) return '?';
   if (words.length === 1) return words[0].slice(0, 2).toUpperCase();
   return words.slice(0, 2).map((word) => word[0]).join('').toUpperCase();
-}
-
-function getRankIconUrl(rankLabel: string | null): string | null {
-  if (!rankLabel) return null;
-  const tier = rankLabel.split(/\s+/)[0]?.toLowerCase();
-  const iconId = tier ? RANK_ICON_IDS[tier] : undefined;
-  return iconId ? `https://pred.gg/assets/${iconId}.webp` : null;
 }
 
 function TeamForm({
