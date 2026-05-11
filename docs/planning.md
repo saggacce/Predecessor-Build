@@ -56,10 +56,10 @@ Datos de partida → eventos críticos → review → objetivos → mejora medib
 
 ## [x] Tarea 4 — Calidad y operación
 - [x] Logs/errores: Pino, logging JSON estructurado
-- [x] 52 tests en Vitest + Supertest
+- [x] 100 tests en Vitest + Supertest (cobertura: players, teams, admin, auth, map-zones, domain-engine)
 - [x] CI/CD GitHub Actions + branch protection en main
-- [ ] Tests de agregación de métricas de jugador
-- [ ] Tests de filtros por parche/ventana temporal
+- [x] Tests de agregación de métricas de jugador (PR #47)
+- [x] Tests de filtros por parche/ventana temporal (PR #47)
 
 ## [x] Tarea 5 — Gestión de jugadores
 - [x] `customName` — API PATCH + UI inline edit + display logic en toda la app
@@ -165,13 +165,14 @@ Mejoras basadas en el Documento Maestro V2 y el audit visual.
 
 ---
 
-## Tarea 13 — Zonas tácticas del mapa (prerequisito bloqueante)
+## [x] Tarea 13 — Zonas tácticas del mapa (PR #83, issue #52)
 Sin polígonos definidos, ~15 indicadores del catálogo no son calculables.
 
-- [ ] Definir polígonos manualmente sobre el mapa calibrado (MAP_BOUNDS ya conocidos)
-- [ ] Zonas mínimas: `FANGTOOTH_PIT`, `FANGTOOTH_ENTRANCES`, `MINI_PRIME_PIT`, `ORB_PRIME_PIT`, `SHAPER_PIT`, `MID_LANE`, `DUO_LANE`, `OFFLANE`, `OWN_JUNGLE`, `ENEMY_JUNGLE`, `RIVER_BUFF_AREAS`
-- [ ] Tabla `MapZone`: `{ id, name, polygon (JSON), zoneType, relatedObjective }`
-- [ ] Función `pointInZone(x, y, zone)` en domain-engine
+- [x] Definir polígonos manualmente sobre el mapa calibrado (MAP_BOUNDS ya conocidos)
+- [x] 11 zonas calibradas desde coordenadas reales de ObjectiveKill: `FANGTOOTH_PIT`, `FANGTOOTH_ENTRANCES`, `MINI_PRIME_PIT`, `ORB_PRIME_PIT`, `SHAPER_PIT`, `MID_LANE`, `DUO_LANE`, `OFFLANE`, `OWN_JUNGLE`, `ENEMY_JUNGLE`, `RIVER_BUFF_AREAS`
+- [x] Tabla `MapZone` en schema.prisma + `GET /map-zones` + `POST /map-zones/seed` (idempotente)
+- [x] `pointInZone(x, y, polygon)` ray casting O(n) en `domain-engine/src/map-zones.ts`
+- [x] 8 tests de correctness en `map-zones.test.ts`
 
 ---
 
@@ -251,18 +252,19 @@ Konva.js (canvas con React) — soporta layers, drag, export a imagen
 
 ## [x] Tarea 17 — Auth: RBAC, invitaciones y perfiles de usuario
 
-### Fase 1 — Completada (PR #66 + #68)
+### Fase 1 — Completada (PR #66 + #68 + #85 + #87)
 - [x] Modelos `User`, `TeamMembership`, `Invitation` en schema.prisma
 - [x] `POST /internal-auth/login` — bcrypt 12, JWT 1h en cookie httpOnly, refresh token 30d
 - [x] `POST /internal-auth/register` — registro por invitation token, transacción atómica
 - [x] `POST /internal-auth/refresh` — rota sesión desde refresh cookie
 - [x] `GET /internal-auth/me` — sesión actual
 - [x] `POST/GET/DELETE /invitations` — gestión de invitaciones (solo MANAGER o PLATFORM_ADMIN)
-- [x] Middleware `requireAuth` + `requireRole(roles[])` para proteger rutas
+- [x] Middleware `requireAuth` + `requireRole(roles[])` + `requirePlatformAdmin` para proteger rutas
+- [x] `requireAuth` aplicado a todas las rutas sensibles (admin, analyst, matches, players, reports, review, teams) — PR #87, issue #76
 - [x] Security hardening: rate limiting (10 intentos/15min), timing attack fix, cookie secure en prod, audit log en SyncLog
 - [x] Roles globales: `PLATFORM_ADMIN` | `VIEWER`
 - [x] Roles por equipo: `MANAGER` | `COACH` | `ANALISTA` | `JUGADOR`
-- [ ] UI de login/registro/gestión de usuarios (frontend pendiente — bloqueado por restructura de menú)
+- [x] UI de login/registro/gestión de usuarios — Login, Register, StaffManagement, `useAuth` extendido con `internalAuthenticated` + `refreshInternalSession` — PR #85, issue #73
 - [ ] Discord OAuth (Fase 2)
 - [ ] Tiers de monetización (Fase 2)
 
@@ -276,9 +278,12 @@ Implementación de los indicadores verdes del catálogo `PrimeSight_metric_catal
 - [x] `GET /teams/:id/objective-analysis` — Conversiones detalladas (→estructura/inhibidor/core) por Fangtooth/Shaper/Prime/Mini, Timing Consistency (stddev), Priority Share (`team-service.ts`)
 - [x] `GET /teams/:id/draft-analysis` — Pick rates, Ban rates propio/recibido (RANKED), Hero Pool Depth, Comfort Score, Hero Pool Overlap (`team-service.ts`)
 - [x] `GET /players/:id/advanced-metrics` — Gold/Damage/Kill Share %, Efficiency Gap, First Death Rate, Early Death Rate individual (`player-service.ts`)
+- [x] `GET /teams/:id/rival-scouting` — Identity labels (Early Aggressor, Objective Focused…), form reciente, strongPhase/weakPhase, Threat Players con threatScore, weakRole, objectivePriority — PR #86
 
 ### Nueva arquitectura de menús (doc coach/analista)
-Restructura completa de navegación definida en `PrimeSight_menu_distribution.md` y `PrimeSight_metric_catalog_full.csv`. 8 secciones principales: Dashboard, Matches, Analysis, Team Tools, Reports, Discord Bot, Team Management, Platform Admin. **Bloqueada por Tarea 17 frontend** (visibilidad condicional por rol).
+Restructura completa de navegación definida en `PrimeSight_menu_distribution.md` y `PrimeSight_metric_catalog_full.csv`. 8 secciones principales: Dashboard, Matches, Analysis, Team Tools, Reports, Discord Bot, Team Management, Platform Admin.
+- [x] Implementada en `App.tsx` — sidebar acordeón con 8 secciones, backward-compat redirects — PR #81, issue #72
+- [x] Frontend de análisis (Phase/Vision/Objective tabs) en TeamAnalysis — PR #74, [Codex]
 
 ---
 
