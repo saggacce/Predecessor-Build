@@ -1101,3 +1101,213 @@ export async function getTeamObjectiveAnalysis(teamId: string): Promise<TeamObje
 
   return { sampleSize: matchRows.length, conversions, timingStats };
 }
+
+// ── Draft Analysis ────────────────────────────────────────────────────────────
+
+const MIN_HERO_GAMES = 3; // minimum games to count toward hero pool depth
+
+export interface HeroPickStat {
+  heroSlug: string;
+  pickCount: number;
+  pickRate: number;
+  wins: number;
+  winRate: number;
+  playedBy: string[];
+}
+
+export interface HeroBanStat {
+  heroSlug: string;
+  count: number;
+  rate: number;
+}
+
+export interface PlayerHeroDepth {
+  playerId: string;
+  heroCount: number;
+  topHeroes: Array<{
+    heroSlug: string;
+    games: number;
+    winRate: number;
+    comfortScore: number;
+  }>;
+}
+
+export interface HeroOverlapEntry {
+  heroSlug: string;
+  playerIds: string[];
+}
+
+export interface TeamDraftAnalysis {
+  sampleSize: number;
+  rankedSampleSize: number;
+  pickRates: HeroPickStat[];
+  ownBanRates: HeroBanStat[];
+  receivedBanRates: HeroBanStat[];
+  playerDepth: PlayerHeroDepth[];
+  heroOverlap: HeroOverlapEntry[];
+}
+
+export async function getTeamDraftAnalysis(teamId: string): Promise<TeamDraftAnalysis> {
+  const team = await db.team.findUnique({ where: { id: teamId } });
+  if (!team) throw new AppError(404, `Team not found: ${teamId}`, 'TEAM_NOT_FOUND');
+
+  const roster = await db.teamRoster.findMany({
+    where: { teamId, activeTo: null },
+    select: { playerId: true },
+  });
+  const rosterPlayerIds = roster.map((r) => r.playerId);
+  if (rosterPlayerIds.length === 0) return emptyDraftAnalysis();
+
+  // Team matches (3+ players same side)
+  const matchRows = await db.$queryRaw<Array<{
+    matchId: string; team: string; winningTeam: string | null; gameMode: string;
+  }>>`
+    SELECT mp."matchId", mp."team", m."winningTeam", m."gameMode"
+    FROM "MatchPlayer" mp
+    JOIN "Match" m ON m.id = mp."matchId"
+    WHERE mp."playerId" = ANY(${rosterPlayerIds}::text[])
+    GROUP BY mp."matchId", mp."team", m."winningTeam", m."gameMode"
+    HAVING COUNT(DISTINCT mp."playerId") >= 3
+    ORDER BY m."startTime" DESC
+    LIMIT 60
+  `;
+
+  if (matchRows.length === 0) return emptyDraftAnalysis();
+
+  const matchIds = matchRows.map((r) => r.matchId);
+  const sideMap = new Map(matchRows.map((r) => [r.matchId, r.team]));
+  const outcomeMap = new Map(matchRows.map((r) => [r.matchId, r.winningTeam]));
+  const rankedMatchIds = matchRows.filter((r) => r.gameMode === 'RANKED').map((r) => r.matchId);
+
+  // All MatchPlayer records for our roster in team matches
+  const [teamMPs, heroBans, allMPs] = await Promise.all([
+    db.matchPlayer.findMany({
+      where: { matchId: { in: matchIds }, playerId: { in: rosterPlayerIds } },
+      select: { matchId: true, playerId: true, heroSlug: true, kills: true, deaths: true, assists: true },
+    }),
+    rankedMatchIds.length > 0
+      ? db.heroBan.findMany({
+          where: { matchId: { in: rankedMatchIds } },
+          select: { matchId: true, heroSlug: true, team: true },
+        })
+      : Promise.resolve([]),
+    // All players' hero stats across all their matches (not just team matches)
+    db.matchPlayer.findMany({
+      where: { playerId: { in: rosterPlayerIds } },
+      select: { playerId: true, heroSlug: true, kills: true, deaths: true, assists: true,
+        match: { select: { winningTeam: true } }, team: true },
+      orderBy: { match: { startTime: 'desc' } },
+      take: 200 * rosterPlayerIds.length,
+    }),
+  ]);
+
+  // ── Pick rates (team matches) ─────────────────────────────────────────────
+  const pickMap = new Map<string, { matchIds: Set<string>; wins: number; playedBy: Set<string> }>();
+
+  for (const mp of teamMPs) {
+    const side = sideMap.get(mp.matchId);
+    const winner = outcomeMap.get(mp.matchId);
+    if (!side || !mp.playerId) continue;
+
+    const entry = pickMap.get(mp.heroSlug) ?? { matchIds: new Set(), wins: 0, playedBy: new Set() };
+    entry.matchIds.add(mp.matchId);
+    entry.playedBy.add(mp.playerId);
+    if (winner && winner === side) entry.wins++;
+    pickMap.set(mp.heroSlug, entry);
+  }
+
+  const n = matchRows.length;
+  const pickRates: HeroPickStat[] = Array.from(pickMap.entries())
+    .map(([heroSlug, { matchIds: mids, wins, playedBy }]) => ({
+      heroSlug,
+      pickCount: mids.size,
+      pickRate: Math.round((mids.size / n) * 100),
+      wins,
+      winRate: mids.size > 0 ? Math.round((wins / mids.size) * 100) : 0,
+      playedBy: Array.from(playedBy),
+    }))
+    .sort((a, b) => b.pickCount - a.pickCount);
+
+  // ── Ban rates (RANKED team matches only) ──────────────────────────────────
+  const ownBanMap = new Map<string, number>();
+  const recvBanMap = new Map<string, number>();
+
+  for (const ban of heroBans) {
+    const side = sideMap.get(ban.matchId);
+    if (!side) continue;
+    if (ban.team === side) {
+      ownBanMap.set(ban.heroSlug, (ownBanMap.get(ban.heroSlug) ?? 0) + 1);
+    } else {
+      recvBanMap.set(ban.heroSlug, (recvBanMap.get(ban.heroSlug) ?? 0) + 1);
+    }
+  }
+
+  const rn = rankedMatchIds.length;
+  const toBanStats = (map: Map<string, number>): HeroBanStat[] =>
+    Array.from(map.entries())
+      .map(([heroSlug, count]) => ({ heroSlug, count, rate: rn > 0 ? Math.round((count / rn) * 100) : 0 }))
+      .sort((a, b) => b.count - a.count);
+
+  // ── Hero pool depth + comfort score (all matches, per player) ─────────────
+  const heroMapByPlayer = new Map<string, Map<string, { games: number; wins: number; kda: number }>>();
+
+  for (const mp of allMPs) {
+    if (!mp.playerId) continue;
+    const won = mp.match.winningTeam && mp.team === mp.match.winningTeam;
+    const kda = mp.deaths > 0 ? (mp.kills + mp.assists) / mp.deaths : mp.kills + mp.assists;
+
+    const playerMap = heroMapByPlayer.get(mp.playerId) ?? new Map();
+    const hero = playerMap.get(mp.heroSlug) ?? { games: 0, wins: 0, kda: 0 };
+    hero.games++;
+    if (won) hero.wins++;
+    hero.kda = (hero.kda * (hero.games - 1) + kda) / hero.games;
+    playerMap.set(mp.heroSlug, hero);
+    heroMapByPlayer.set(mp.playerId, playerMap);
+  }
+
+  const playerDepth: PlayerHeroDepth[] = rosterPlayerIds.map((pid) => {
+    const heroMap = heroMapByPlayer.get(pid) ?? new Map();
+    const qualified = Array.from(heroMap.entries()).filter(([, h]) => h.games >= MIN_HERO_GAMES);
+    const topHeroes = qualified
+      .map(([heroSlug, h]) => {
+        const wr = Math.round((h.wins / h.games) * 100);
+        const kda = Math.round(h.kda * 100) / 100;
+        // Comfort score: WR weighted by log(games), scaled by KDA
+        const comfortScore = Math.round(((wr / 100) * Math.log(h.games + 1) * kda) * 10) / 10;
+        return { heroSlug, games: h.games, winRate: wr, comfortScore };
+      })
+      .sort((a, b) => b.comfortScore - a.comfortScore)
+      .slice(0, 10);
+
+    return { playerId: pid, heroCount: qualified.length, topHeroes };
+  });
+
+  // ── Hero overlap (heroes played by 2+ roster players with ≥MIN_HERO_GAMES) ─
+  const heroToPlayers = new Map<string, string[]>();
+  for (const pd of playerDepth) {
+    for (const h of pd.topHeroes) {
+      const arr = heroToPlayers.get(h.heroSlug) ?? [];
+      arr.push(pd.playerId);
+      heroToPlayers.set(h.heroSlug, arr);
+    }
+  }
+
+  const heroOverlap: HeroOverlapEntry[] = Array.from(heroToPlayers.entries())
+    .filter(([, players]) => players.length >= 2)
+    .map(([heroSlug, playerIds]) => ({ heroSlug, playerIds }))
+    .sort((a, b) => b.playerIds.length - a.playerIds.length);
+
+  return {
+    sampleSize: n,
+    rankedSampleSize: rn,
+    pickRates,
+    ownBanRates: toBanStats(ownBanMap),
+    receivedBanRates: toBanStats(recvBanMap),
+    playerDepth,
+    heroOverlap,
+  };
+}
+
+function emptyDraftAnalysis(): TeamDraftAnalysis {
+  return { sampleSize: 0, rankedSampleSize: 0, pickRates: [], ownBanRates: [], receivedBanRates: [], playerDepth: [], heroOverlap: [] };
+}

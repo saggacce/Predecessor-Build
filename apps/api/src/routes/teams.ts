@@ -17,6 +17,7 @@ import {
   getTeamPhaseAnalysis,
   getTeamVisionAnalysis,
   getTeamObjectiveAnalysis,
+  getTeamDraftAnalysis,
 } from '../services/team-service.js';
 
 export const teamsRouter = Router();
@@ -234,6 +235,15 @@ teamsRouter.get('/:id/vision-analysis', async (req, res, next) => {
 teamsRouter.get('/:id/objective-analysis', async (req, res, next) => {
   try {
     const data = await getTeamObjectiveAnalysis(req.params.id);
+    res.json(data);
+  } catch (err) {
+    next(err);
+  }
+});
+
+teamsRouter.get('/:id/draft-analysis', async (req, res, next) => {
+  try {
+    const data = await getTeamDraftAnalysis(req.params.id);
     res.json(data);
   } catch (err) {
     next(err);
