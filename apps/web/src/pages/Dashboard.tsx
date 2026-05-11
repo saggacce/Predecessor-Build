@@ -1,8 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router';
-import { Server, Zap, RefreshCw, CheckCircle, XCircle, ArrowRight, Users } from 'lucide-react';
+import { Server, Zap, RefreshCw, CheckCircle, XCircle, ArrowRight, Users, Sparkles, ThumbsUp, ThumbsDown, Send } from 'lucide-react';
 import { toast } from 'sonner';
 import { apiClient, ApiErrorResponse, type TeamProfile, type TeamAnalysis } from '../api/client';
+import { useAuth } from '../hooks/useAuth';
 import type { VersionRecord } from '@predecessor/data-model';
 
 type SyncState =
@@ -92,6 +93,11 @@ export default function Dashboard() {
       {/* Team widget */}
       {ownTeam && (
         <TeamFormWidget team={ownTeam} analysis={ownAnalysis} />
+      )}
+
+      {/* LLM Focus of the Day */}
+      {ownTeam && (
+        <FocusOfTheDay teamId={ownTeam.id} />
       )}
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1rem' }}>
@@ -248,6 +254,177 @@ function TeamFormWidget({ team, analysis }: { team: TeamProfile; analysis: TeamA
       >
         View full analysis <ArrowRight size={12} />
       </Link>
+    </div>
+  );
+}
+
+// ── Focus of the Day ──────────────────────────────────────────────────────────
+
+type FocusState = 'idle' | 'streaming' | 'done' | 'error';
+type FeedbackState = 'none' | 'positive' | 'negative';
+
+function FocusOfTheDay({ teamId }: { teamId: string }) {
+  const { internalAuthenticated } = useAuth();
+  const [state, setState] = useState<FocusState>('idle');
+  const [text, setText] = useState('');
+  const [analysisId, setAnalysisId] = useState<string | null>(null);
+  const [feedback, setFeedback] = useState<FeedbackState>('none');
+  const [correction, setCorrection] = useState('');
+  const [sendingFeedback, setSendingFeedback] = useState(false);
+  const abortRef = useRef<AbortController | null>(null);
+
+  async function generate() {
+    if (!internalAuthenticated) return;
+    setState('streaming');
+    setText('');
+    setAnalysisId(null);
+    setFeedback('none');
+    setCorrection('');
+
+    const ctrl = new AbortController();
+    abortRef.current = ctrl;
+
+    try {
+      const res = await fetch(apiClient.analyst.summaryUrl(teamId), {
+        credentials: 'include',
+        signal: ctrl.signal,
+      });
+
+      if (!res.ok || !res.body) {
+        setState('error');
+        return;
+      }
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+      let savedId: string | null = null;
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() ?? '';
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue;
+          try {
+            const payload = JSON.parse(line.slice(6)) as { delta?: string; done?: boolean; id?: string; error?: string };
+            if (payload.error) { setState('error'); return; }
+            if (payload.delta) setText((t) => t + payload.delta);
+            if (payload.id) savedId = payload.id;
+            if (payload.done) { setAnalysisId(savedId); setState('done'); }
+          } catch { /* ignore parse errors */ }
+        }
+      }
+      setState('done');
+    } catch (err: unknown) {
+      if (err instanceof Error && err.name === 'AbortError') return;
+      setState('error');
+    }
+  }
+
+  async function handleFeedback(value: 'positive' | 'negative') {
+    if (!analysisId || feedback !== 'none') return;
+    if (value === 'positive') {
+      setFeedback('positive');
+      await apiClient.analyst.saveFeedback(analysisId, 'positive').catch(() => null);
+      toast.success('Feedback guardado — gracias');
+    } else {
+      setFeedback('negative');
+    }
+  }
+
+  async function handleSendCorrection() {
+    if (!analysisId || !correction.trim()) return;
+    setSendingFeedback(true);
+    await apiClient.analyst.saveFeedback(analysisId, 'negative', correction.trim()).catch(() => null);
+    setSendingFeedback(false);
+    setFeedback('positive');
+    toast.success('Corrección guardada — nos ayudas a mejorar');
+  }
+
+  if (!internalAuthenticated) return null;
+
+  return (
+    <div className="glass-card" style={{ marginBottom: '1rem', borderLeft: '3px solid var(--accent-violet)' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '0.75rem' }}>
+        <Sparkles size={15} style={{ color: 'var(--accent-violet)', flexShrink: 0 }} />
+        <span style={{ fontWeight: 700, fontSize: '0.88rem', color: 'var(--text-primary)' }}>Focus of the Day</span>
+        {state === 'idle' && (
+          <button onClick={() => void generate()} className="btn-secondary" style={{ marginLeft: 'auto', fontSize: '0.72rem', padding: '0.25rem 0.65rem', flex: 'unset' }}>
+            Analizar
+          </button>
+        )}
+        {state === 'streaming' && (
+          <span style={{ marginLeft: 'auto', fontSize: '0.68rem', color: 'var(--accent-violet)', fontFamily: 'var(--font-mono)', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+            <RefreshCw size={11} style={{ animation: 'spin 0.8s linear infinite' }} /> Generando...
+          </span>
+        )}
+        {state === 'done' && (
+          <button onClick={() => void generate()} style={{ marginLeft: 'auto', background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', display: 'flex', padding: '0.2rem' }}>
+            <RefreshCw size={13} />
+          </button>
+        )}
+      </div>
+
+      {state === 'idle' && (
+        <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', margin: 0 }}>
+          Análisis prescriptivo generado por IA a partir de los indicadores del equipo.
+        </p>
+      )}
+
+      {(state === 'streaming' || state === 'done') && text && (
+        <div style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', lineHeight: 1.7, whiteSpace: 'pre-wrap' }}>
+          {text}
+          {state === 'streaming' && <span style={{ display: 'inline-block', width: 8, height: 14, background: 'var(--accent-violet)', marginLeft: 2, animation: 'ledPulse 0.8s ease-in-out infinite', verticalAlign: 'text-bottom', borderRadius: 2 }} />}
+        </div>
+      )}
+
+      {state === 'error' && (
+        <p style={{ color: 'var(--accent-loss)', fontSize: '0.8rem', margin: 0 }}>
+          Análisis no disponible. Verifica la configuración del LLM o inténtalo de nuevo.
+        </p>
+      )}
+
+      {state === 'done' && feedback === 'none' && analysisId && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '0.85rem', paddingTop: '0.75rem', borderTop: '1px solid var(--border-color)' }}>
+          <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>¿Te ha sido útil?</span>
+          <button onClick={() => void handleFeedback('positive')} style={{ background: 'transparent', border: '1px solid var(--border-color)', borderRadius: 6, cursor: 'pointer', padding: '0.2rem 0.5rem', display: 'flex', alignItems: 'center', gap: '0.3rem', color: 'var(--text-muted)', fontSize: '0.72rem' }}>
+            <ThumbsUp size={12} /> Sí
+          </button>
+          <button onClick={() => void handleFeedback('negative')} style={{ background: 'transparent', border: '1px solid var(--border-color)', borderRadius: 6, cursor: 'pointer', padding: '0.2rem 0.5rem', display: 'flex', alignItems: 'center', gap: '0.3rem', color: 'var(--text-muted)', fontSize: '0.72rem' }}>
+            <ThumbsDown size={12} /> Mejorable
+          </button>
+        </div>
+      )}
+
+      {state === 'done' && feedback === 'negative' && (
+        <div style={{ marginTop: '0.85rem', paddingTop: '0.75rem', borderTop: '1px solid var(--border-color)', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+          <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>¿Cómo debería haber respondido? (opcional — mejora el modelo)</span>
+          <textarea
+            value={correction}
+            onChange={(e) => setCorrection(e.target.value)}
+            placeholder="Escribe la respuesta correcta..."
+            rows={3}
+            style={{ background: 'var(--bg-dark)', border: '1px solid var(--border-color)', borderRadius: 6, color: 'var(--text-primary)', fontSize: '0.8rem', padding: '0.5rem 0.75rem', resize: 'vertical', fontFamily: 'inherit', lineHeight: 1.5 }}
+          />
+          <div style={{ display: 'flex', gap: '0.5rem' }}>
+            <button onClick={() => void handleSendCorrection()} disabled={sendingFeedback || !correction.trim()} className="btn-primary" style={{ fontSize: '0.75rem', padding: '0.35rem 0.75rem', display: 'flex', alignItems: 'center', gap: '0.35rem', flex: 'unset' }}>
+              <Send size={12} /> {sendingFeedback ? 'Enviando...' : 'Enviar corrección'}
+            </button>
+            <button onClick={() => setFeedback('positive')} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: '0.72rem' }}>
+              Omitir
+            </button>
+          </div>
+        </div>
+      )}
+
+      {feedback === 'positive' && state === 'done' && (
+        <div style={{ marginTop: '0.75rem', paddingTop: '0.65rem', borderTop: '1px solid var(--border-color)', fontSize: '0.68rem', color: 'var(--accent-win)', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+          <CheckCircle size={11} /> Feedback guardado
+        </div>
+      )}
     </div>
   );
 }

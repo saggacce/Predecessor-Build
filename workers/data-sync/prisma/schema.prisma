@@ -61,8 +61,9 @@ model Team {
   notes        String?
   createdAt    DateTime @default(now())
 
-  roster      TeamRoster[]
-  memberships TeamMembership[]
+  roster       TeamRoster[]
+  memberships  TeamMembership[]
+  llmAnalyses  LlmAnalysis[]
 }
 
 enum TeamType {
@@ -341,6 +342,21 @@ model PlayerGoal {
   status        String   @default("ACTIVE")
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
+}
+
+model LlmAnalysis {
+  id           String   @id @default(cuid())
+  teamId       String
+  model        String
+  insightsJson Json
+  outputText   String
+  promptTokens Int?
+  outputTokens Int?
+  feedback     String?
+  correction   String?
+  createdAt    DateTime @default(now())
+
+  team Team @relation(fields: [teamId], references: [id], onDelete: Cascade)
 }
 
 model VodLink {
