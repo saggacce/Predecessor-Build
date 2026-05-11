@@ -1063,6 +1063,71 @@ interface EventStreamMatchData {
   }>;
 }
 
+function collectEventStreamPredggIds(es: EventStreamMatchData): string[] {
+  const ids = new Set<string>();
+
+  for (const k of es.heroKills ?? []) {
+    if (k.killerPlayer?.id) ids.add(k.killerPlayer.id);
+    if (k.killedPlayer?.id) ids.add(k.killedPlayer.id);
+  }
+
+  for (const k of es.objectiveKills ?? []) {
+    if (k.killerPlayer?.id) ids.add(k.killerPlayer.id);
+  }
+
+  for (const mp of es.matchPlayers ?? []) {
+    if (mp.player?.id) ids.add(mp.player.id);
+  }
+
+  return Array.from(ids);
+}
+
+async function resolveEventStreamPlayerIds(
+  db: PrismaClient,
+  ids: string[],
+): Promise<{ playerIdMap: Map<string, string>; placeholdersCreated: number }> {
+  if (ids.length === 0) return { playerIdMap: new Map(), placeholdersCreated: 0 };
+
+  const players = await db.player.findMany({
+    where: {
+      OR: [
+        { id: { in: ids } },
+        { predggId: { in: ids } },
+      ],
+    },
+    select: { id: true, predggId: true },
+  });
+
+  const playerIdMap = new Map<string, string>();
+  const internalPlayerIds = new Set(players.map((p) => p.id));
+  for (const rawId of ids) {
+    if (internalPlayerIds.has(rawId)) playerIdMap.set(rawId, rawId);
+  }
+  for (const player of players) {
+    playerIdMap.set(player.predggId, player.id);
+  }
+
+  let placeholdersCreated = 0;
+  const missing = ids.filter((id) => !playerIdMap.has(id));
+  for (const predggId of missing) {
+    const placeholder = await db.player.upsert({
+      where: { predggId },
+      create: {
+        predggId,
+        predggUuid: predggId,
+        displayName: 'Unknown Player',
+        lastSynced: new Date(),
+      },
+      update: {},
+      select: { id: true, predggId: true },
+    });
+    playerIdMap.set(placeholder.predggId, placeholder.id);
+    placeholdersCreated++;
+  }
+
+  return { playerIdMap, placeholdersCreated };
+}
+
 export async function syncMatchEventStream(
   db: PrismaClient,
   matchId: string,
@@ -1099,6 +1164,8 @@ export async function syncMatchEventStream(
   ]);
 
   const cuid = () => Math.random().toString(36).slice(2) + Date.now().toString(36);
+  const { playerIdMap } = await resolveEventStreamPlayerIds(db, collectEventStreamPredggIds(es));
+  const toInternalPlayerId = (predggId?: string | null) => predggId ? (playerIdMap.get(predggId) ?? null) : null;
 
   // Hero kills
   if (es.heroKills?.length) {
@@ -1114,8 +1181,8 @@ export async function syncMatchEventStream(
         killedTeam: k.killedTeam ?? null,
         killerHeroSlug: k.killerHero?.slug ?? null,
         killedHeroSlug: k.killedHero?.slug ?? null,
-        killerPlayerId: k.killerPlayer?.id ?? null,
-        killedPlayerId: k.killedPlayer?.id ?? null,
+        killerPlayerId: toInternalPlayerId(k.killerPlayer?.id),
+        killedPlayerId: toInternalPlayerId(k.killedPlayer?.id),
       })),
     });
   }
@@ -1129,7 +1196,7 @@ export async function syncMatchEventStream(
         gameTime: k.gameTime,
         entityType: k.killedEntityType ?? 'UNKNOWN',
         killerTeam: k.killerTeam ?? null,
-        killerPlayerId: k.killerPlayer?.id ?? null,
+        killerPlayerId: toInternalPlayerId(k.killerPlayer?.id),
         locationX: k.location?.x ?? null,
         locationY: k.location?.y ?? null,
         locationZ: k.location?.z ?? null,
@@ -1169,7 +1236,8 @@ export async function syncMatchEventStream(
 
   // Per-player events: wards, transactions, gold timeline
   for (const mp of es.matchPlayers ?? []) {
-    const playerId = mp.player?.id ?? null;
+    const predggPlayerId = mp.player?.id ?? null;
+    const playerId = toInternalPlayerId(predggPlayerId);
     const team = mp.team ?? null;
 
     // Ward placements
@@ -1224,9 +1292,9 @@ export async function syncMatchEventStream(
     }
 
     // Gold timeline — update the MatchPlayer record
-    if (mp.goldEarnedAtInterval?.length && playerId) {
+    if (mp.goldEarnedAtInterval?.length && predggPlayerId) {
       await db.matchPlayer.updateMany({
-        where: { matchId, predggPlayerUuid: playerId },
+        where: { matchId, predggPlayerUuid: predggPlayerId },
         data: { goldEarnedAtInterval: mp.goldEarnedAtInterval },
       });
     }
@@ -1239,6 +1307,97 @@ export async function syncMatchEventStream(
   });
 
   logger.info({ matchId, predggUuid }, 'event stream synced');
+}
+
+export interface EventStreamPlayerIdRepairResult {
+  heroKillsUpdated: number;
+  objectiveKillsUpdated: number;
+  wardEventsUpdated: number;
+  placeholdersCreated: number;
+}
+
+export async function repairEventStreamPlayerIds(db: PrismaClient): Promise<EventStreamPlayerIdRepairResult> {
+  const [heroKills, objectiveKills, wardEvents] = await Promise.all([
+    db.heroKill.findMany({
+      where: {
+        OR: [
+          { killerPlayerId: { not: null } },
+          { killedPlayerId: { not: null } },
+        ],
+      },
+      select: { id: true, killerPlayerId: true, killedPlayerId: true },
+    }),
+    db.objectiveKill.findMany({
+      where: { killerPlayerId: { not: null } },
+      select: { id: true, killerPlayerId: true },
+    }),
+    db.wardEvent.findMany({
+      where: { playerId: { not: null } },
+      select: { id: true, playerId: true },
+    }),
+  ]);
+
+  const rawIds = new Set<string>();
+  for (const kill of heroKills) {
+    if (kill.killerPlayerId) rawIds.add(kill.killerPlayerId);
+    if (kill.killedPlayerId) rawIds.add(kill.killedPlayerId);
+  }
+  for (const objective of objectiveKills) {
+    if (objective.killerPlayerId) rawIds.add(objective.killerPlayerId);
+  }
+  for (const ward of wardEvents) {
+    if (ward.playerId) rawIds.add(ward.playerId);
+  }
+
+  const { playerIdMap, placeholdersCreated } = await resolveEventStreamPlayerIds(db, Array.from(rawIds));
+  let heroKillsUpdated = 0;
+  let objectiveKillsUpdated = 0;
+  let wardEventsUpdated = 0;
+
+  for (const kill of heroKills) {
+    const killerPlayerId = kill.killerPlayerId ? (playerIdMap.get(kill.killerPlayerId) ?? kill.killerPlayerId) : null;
+    const killedPlayerId = kill.killedPlayerId ? (playerIdMap.get(kill.killedPlayerId) ?? kill.killedPlayerId) : null;
+    if (killerPlayerId !== kill.killerPlayerId || killedPlayerId !== kill.killedPlayerId) {
+      await db.heroKill.update({
+        where: { id: kill.id },
+        data: { killerPlayerId, killedPlayerId },
+      });
+      heroKillsUpdated++;
+    }
+  }
+
+  for (const objective of objectiveKills) {
+    const killerPlayerId = objective.killerPlayerId ? (playerIdMap.get(objective.killerPlayerId) ?? objective.killerPlayerId) : null;
+    if (killerPlayerId !== objective.killerPlayerId) {
+      await db.objectiveKill.update({
+        where: { id: objective.id },
+        data: { killerPlayerId },
+      });
+      objectiveKillsUpdated++;
+    }
+  }
+
+  for (const ward of wardEvents) {
+    const playerId = ward.playerId ? (playerIdMap.get(ward.playerId) ?? ward.playerId) : null;
+    if (playerId !== ward.playerId) {
+      await db.wardEvent.update({
+        where: { id: ward.id },
+        data: { playerId },
+      });
+      wardEventsUpdated++;
+    }
+  }
+
+  await db.syncLog.create({
+    data: {
+      entity: 'event-stream',
+      entityId: 'player-ids',
+      operation: 'repair-player-ids',
+      status: 'ok',
+    },
+  });
+
+  return { heroKillsUpdated, objectiveKillsUpdated, wardEventsUpdated, placeholdersCreated };
 }
 
 export async function syncIncompleteMatches(db: PrismaClient): Promise<{ synced: number; errors: number }> {

@@ -2,7 +2,12 @@ import { Router, Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import { db } from '../db.js';
 import { logger } from '../logger.js';
-import { syncVersionsFromPredgg, syncStalePlayers, syncIncompleteMatches } from '../services/sync-service.js';
+import {
+  repairEventStreamPlayerIds,
+  syncVersionsFromPredgg,
+  syncStalePlayers,
+  syncIncompleteMatches,
+} from '../services/sync-service.js';
 import { getValidToken } from './auth.js';
 
 export const adminRouter = Router();
@@ -74,6 +79,23 @@ adminRouter.post('/sync-incomplete-matches', async (_req, res, next) => {
     const result = await syncIncompleteMatches(db);
     const elapsed = Date.now() - start;
     logger.info({ ...result, elapsed }, 'admin: sync-incomplete-matches complete');
+    res.json({ ...result, elapsed, timestamp: new Date() });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * POST /admin/fix-herokill-player-ids
+ * Converts event-stream pred.gg player IDs into internal Player.id references.
+ */
+adminRouter.post('/fix-herokill-player-ids', async (_req, res, next) => {
+  try {
+    const start = Date.now();
+    logger.info('admin: fix-herokill-player-ids started');
+    const result = await repairEventStreamPlayerIds(db);
+    const elapsed = Date.now() - start;
+    logger.info({ ...result, elapsed }, 'admin: fix-herokill-player-ids complete');
     res.json({ ...result, elapsed, timestamp: new Date() });
   } catch (err) {
     next(err);
