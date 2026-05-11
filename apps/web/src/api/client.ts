@@ -524,6 +524,38 @@ export interface PlayerGoal {
   updatedAt: string;
 }
 
+export interface SessionMembership {
+  teamId: string;
+  role: 'MANAGER' | 'COACH' | 'ANALISTA' | 'JUGADOR' | string;
+  playerId: string | null;
+}
+
+export interface SessionUser {
+  id: string;
+  email: string;
+  name: string;
+  globalRole: 'PLATFORM_ADMIN' | 'VIEWER' | string;
+  memberships: SessionMembership[];
+}
+
+export interface Invitation {
+  id: string;
+  token: string;
+  email: string;
+  teamId: string;
+  role: 'MANAGER' | 'COACH' | 'ANALISTA' | 'JUGADOR' | string;
+  expiresAt: string;
+  usedAt?: string | null;
+  createdAt?: string;
+}
+
+export interface PublicInvitation {
+  email: string;
+  teamId: string;
+  role: string;
+  expiresAt: string;
+}
+
 export interface AdminSyncVersionsResult {
   synced: number;
   elapsed: number;
@@ -693,6 +725,33 @@ export const apiClient = {
     me: () => fetchApi<{ authenticated: boolean }>('/auth/me'),
     logout: () => fetchApi<{ ok: boolean }>('/auth/logout', { method: 'POST' }),
     loginUrl: () => `${API_DIRECT}/auth/predgg`,
+    internalMe: () => fetchApi<{ user: SessionUser }>('/internal-auth/me'),
+    internalLogin: (email: string, password: string) =>
+      fetchApi<{ user: SessionUser }>('/internal-auth/login', {
+        method: 'POST',
+        body: JSON.stringify({ email, password }),
+      }),
+    internalLogout: () => fetchApi<{ ok: boolean }>('/internal-auth/logout', { method: 'POST' }),
+    refresh: () => fetchApi<{ ok: boolean }>('/internal-auth/refresh', { method: 'POST' }),
+    register: (token: string, name: string, password: string) =>
+      fetchApi<{ user: SessionUser }>('/internal-auth/register', {
+        method: 'POST',
+        body: JSON.stringify({ token, name, password }),
+      }),
+  },
+
+  invitations: {
+    get: (token: string) => fetchApi<{ invitation: PublicInvitation }>(`/invitations/${encodeURIComponent(token)}`),
+    list: (teamId: string) => {
+      const params = new URLSearchParams({ teamId });
+      return fetchApi<{ invitations: Invitation[] }>(`/invitations?${params}`);
+    },
+    create: (data: { email: string; teamId: string; role: string }) =>
+      fetchApi<{ invitation: Invitation }>('/invitations', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
+    delete: (id: string) => fetchApi<{ ok: boolean }>(`/invitations/${id}`, { method: 'DELETE' }),
   },
 
   admin: {
