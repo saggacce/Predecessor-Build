@@ -211,3 +211,132 @@ export async function searchPlayers(query: string, limit = 20) {
     },
   });
 }
+
+// ── Advanced per-player metrics ───────────────────────────────────────────────
+
+export interface PlayerAdvancedMetrics {
+  sampleSize: number;
+  eventStreamSampleSize: number;
+  goldSharePct: number | null;
+  damageSharePct: number | null;
+  killSharePct: number | null;
+  efficiencyGap: number | null;
+  earlyDeathRate: number | null;
+  firstDeathRate: number | null;
+}
+
+export async function getPlayerAdvancedMetrics(playerId: string): Promise<PlayerAdvancedMetrics> {
+  const player = await db.player.findUnique({ where: { id: playerId }, select: { id: true } });
+  if (!player) throw new AppError(404, `Player not found: ${playerId}`, 'PLAYER_NOT_FOUND');
+
+  // All MatchPlayer records for this player (last 100)
+  const myMPs = await db.matchPlayer.findMany({
+    where: { playerId },
+    select: {
+      matchId: true, team: true, kills: true, gold: true, heroDamage: true, assists: true,
+      match: { select: { winningTeam: true, eventStreamSynced: true, duration: true } },
+    },
+    orderBy: { match: { startTime: 'desc' } },
+    take: 100,
+  });
+
+  if (myMPs.length === 0) return empty();
+
+  const matchIds = myMPs.map((m) => m.matchId);
+
+  // All team-mates in those matches (for share calculations)
+  const teamMPs = await db.matchPlayer.findMany({
+    where: { matchId: { in: matchIds } },
+    select: { matchId: true, team: true, kills: true, gold: true, heroDamage: true },
+  });
+
+  // Group team-mates by matchId
+  const teamByMatch = new Map<string, typeof teamMPs>();
+  for (const mp of teamMPs) {
+    const arr = teamByMatch.get(mp.matchId) ?? [];
+    arr.push(mp);
+    teamByMatch.set(mp.matchId, arr);
+  }
+
+  // HeroKill events for matches with event stream
+  const eventMatchIds = myMPs.filter((m) => m.match.eventStreamSynced).map((m) => m.matchId);
+
+  const heroKills = eventMatchIds.length > 0
+    ? await db.heroKill.findMany({
+        where: { matchId: { in: eventMatchIds } },
+        select: { matchId: true, gameTime: true, killedPlayerId: true, killedTeam: true },
+      })
+    : [];
+
+  const killsByMatch = new Map<string, typeof heroKills>();
+  for (const k of heroKills) {
+    const arr = killsByMatch.get(k.matchId) ?? [];
+    arr.push(k);
+    killsByMatch.set(k.matchId, arr);
+  }
+
+  // ── Share metrics (all matches with gold/damage data) ─────────────────────
+  const goldShares: number[] = [];
+  const dmgShares: number[] = [];
+  const killShares: number[] = [];
+
+  for (const mp of myMPs) {
+    const teammates = (teamByMatch.get(mp.matchId) ?? []).filter((t) => t.team === mp.team);
+    const teamGold = teammates.reduce((s, t) => s + (t.gold ?? 0), 0);
+    const teamDmg  = teammates.reduce((s, t) => s + (t.heroDamage ?? 0), 0);
+    const teamKills = teammates.reduce((s, t) => s + t.kills, 0);
+
+    if (mp.gold != null && teamGold > 0) goldShares.push((mp.gold / teamGold) * 100);
+    if (mp.heroDamage != null && teamDmg > 0) dmgShares.push((mp.heroDamage / teamDmg) * 100);
+    if (teamKills > 0) killShares.push((mp.kills / teamKills) * 100);
+  }
+
+  const avg = (arr: number[]) =>
+    arr.length > 0 ? Math.round((arr.reduce((s, v) => s + v, 0) / arr.length) * 10) / 10 : null;
+
+  const goldSharePct = avg(goldShares);
+  const damageSharePct = avg(dmgShares);
+  const killSharePct = avg(killShares);
+  const efficiencyGap = damageSharePct !== null && goldSharePct !== null
+    ? Math.round((damageSharePct - goldSharePct) * 10) / 10
+    : null;
+
+  // ── Early death rate (deaths in first 10 min / total matches) ────────────
+  const earlyDeaths = heroKills.filter(
+    (k) => k.killedPlayerId === playerId && k.gameTime < 600,
+  ).length;
+  const earlyDeathRate = eventMatchIds.length > 0
+    ? Math.round((earlyDeaths / eventMatchIds.length) * 100) / 100
+    : null;
+
+  // ── First death rate (was player first death of their team in match) ──────
+  let firstDeathCount = 0;
+  for (const mp of myMPs.filter((m) => m.match.eventStreamSynced)) {
+    const kills = (killsByMatch.get(mp.matchId) ?? [])
+      .filter((k) => k.killedTeam === mp.team)
+      .sort((a, b) => a.gameTime - b.gameTime);
+    if (kills.length > 0 && kills[0].killedPlayerId === playerId) firstDeathCount++;
+  }
+  const firstDeathRate = eventMatchIds.length > 0
+    ? Math.round((firstDeathCount / eventMatchIds.length) * 100) / 100
+    : null;
+
+  return {
+    sampleSize: myMPs.length,
+    eventStreamSampleSize: eventMatchIds.length,
+    goldSharePct,
+    damageSharePct,
+    killSharePct,
+    efficiencyGap,
+    earlyDeathRate,
+    firstDeathRate,
+  };
+}
+
+function empty(): PlayerAdvancedMetrics {
+  return {
+    sampleSize: 0, eventStreamSampleSize: 0,
+    goldSharePct: null, damageSharePct: null, killSharePct: null,
+    efficiencyGap: null, earlyDeathRate: null, firstDeathRate: null,
+  };
+}
