@@ -299,9 +299,12 @@ export default function TeamAnalysis() {
                 <p style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '0.5rem' }}>
                   {type === 'OWN' ? 'Our Teams' : 'Rival Teams'}
                 </p>
-                {group.map((team) => (
+                {group.map((team) => {
+                  const accentColor = team.type === 'OWN' ? 'var(--accent-teal-bright)' : 'var(--accent-loss)';
+                  return (
                   <div
                     key={team.id}
+                    className="team-list-row"
                     style={{
                       display: 'flex', alignItems: 'center',
                       marginBottom: '0.5rem',
@@ -311,6 +314,7 @@ export default function TeamAnalysis() {
                       overflow: 'hidden',
                     }}
                   >
+                    <div style={{ width: 3, alignSelf: 'stretch', background: accentColor, flexShrink: 0, opacity: selected?.id === team.id ? 1 : 0.55 }} />
                     <button
                       onClick={() => void handleSelectTeam(team.id)}
                       style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.75rem 1rem', background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-primary)', textAlign: 'left' }}
@@ -321,12 +325,13 @@ export default function TeamAnalysis() {
                         {team.abbreviation && <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{team.abbreviation}</div>}
                       </div>
                     </button>
-                    <div style={{ display: 'flex', gap: '0.25rem', paddingRight: '0.5rem' }}>
+                    <div style={{ display: 'flex', gap: '0.5rem', paddingRight: '0.5rem' }}>
                       <IconBtn icon={<Pencil size={13} />} onClick={() => { void handleSelectTeam(team.id).then(() => openEdit(team)); }} title="Edit" />
                       <IconBtn icon={<Trash2 size={13} />} onClick={() => void handleDeleteTeam(team)} title="Delete" danger />
                     </div>
                   </div>
-                ))}
+                  );
+                })}
               </div>
             );
           })}
@@ -822,7 +827,9 @@ function PerformanceTab({ teamId, analysis, loading, onRefresh }: {
               <div style={{ textAlign: 'center', fontFamily: 'var(--font-mono)', fontSize: '0.75rem' }}>
                 <span style={{ color: p.winRate >= 55 ? 'var(--accent-win)' : p.winRate < 45 ? 'var(--accent-loss)' : 'var(--text-primary)', fontWeight: 700 }}>{p.winRate.toFixed(1)}%</span>
                 {recentWR !== null && recentTotal >= 5 && (
-                  <div style={{ fontSize: '0.6rem', color: 'var(--text-muted)' }}>last {recentTotal}: {recentWR}%</div>
+                  <div style={{ fontSize: '0.6rem', color: recentWR > p.winRate ? 'var(--accent-win)' : recentWR < p.winRate ? 'var(--accent-loss)' : 'var(--text-muted)' }}>
+                    last {recentTotal}: {recentWR}%
+                  </div>
                 )}
               </div>
               <PerfCell value={p.kda > 0 ? p.kda.toFixed(2) : '—'} highlight={p.kda >= 3} />
@@ -896,16 +903,19 @@ function PerformanceTab({ teamId, analysis, loading, onRefresh }: {
                 {p.customName ?? p.displayName}
               </div>
               <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
-                {p.topHeroes.map((h) => (
-                  <div key={h.slug} title={`${h.name} · ${h.matches} games · ${h.winRate.toFixed(1)}% WR`} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.2rem' }}>
-                    <div style={{ width: 32, height: 32, borderRadius: 6, overflow: 'hidden', border: '1px solid var(--border-color)', background: 'var(--bg-dark)' }}>
+                {p.topHeroes.map((h) => {
+                  const isPocketPick = h.matches < 10 && h.winRate > 65;
+                  return (
+                  <div key={h.slug} title={`${h.name} · ${h.matches} games · ${h.winRate.toFixed(1)}% WR${isPocketPick ? ' · Pocket pick' : ''}`} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.2rem' }}>
+                    <div style={{ width: 32, height: 32, borderRadius: 6, overflow: 'hidden', border: isPocketPick ? '1px solid var(--accent-prime)' : '1px solid var(--border-color)', background: 'var(--bg-dark)', boxShadow: isPocketPick ? '0 0 6px rgba(240,180,41,0.4)' : 'none' }}>
                       <img src={`/heroes/${h.slug}.webp`} alt={h.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                     </div>
-                    <div style={{ fontSize: '0.55rem', fontFamily: 'var(--font-mono)', color: h.winRate >= 55 ? 'var(--accent-win)' : h.winRate < 45 ? 'var(--accent-loss)' : 'var(--text-muted)' }}>
+                    <div style={{ fontSize: '0.55rem', fontFamily: 'var(--font-mono)', color: isPocketPick ? 'var(--accent-prime)' : h.winRate >= 55 ? 'var(--accent-win)' : h.winRate < 45 ? 'var(--accent-loss)' : 'var(--text-muted)' }}>
                       {h.winRate.toFixed(0)}%
                     </div>
                   </div>
-                ))}
+                  );
+                })}
                 {p.topHeroes.length === 0 && <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>No hero data</span>}
               </div>
             </div>
