@@ -9,7 +9,7 @@ import {
   syncIncompleteMatches,
   resyncMatch,
 } from '../services/sync-service.js';
-import { getValidToken } from './auth.js';
+import { getValidToken, exchangeToken, COOKIE_REFRESH } from './auth.js';
 import { requireAuth } from '../middleware/require-auth.js';
 import { requirePlatformAdmin } from '../middleware/require-platform-admin.js';
 
@@ -163,23 +163,52 @@ interface EventStreamJob {
   skipped: number;
   startedAt: string | null;
   lastActivity: string | null;
+  tokenError: boolean;
 }
 
 let eventStreamJob: EventStreamJob = {
   running: false, total: 0, synced: 0, errors: 0, skipped: 0,
-  startedAt: null, lastActivity: null,
+  startedAt: null, lastActivity: null, tokenError: false,
 };
 
-async function runEventStreamSync(userToken: string) {
+async function refreshPredggToken(refreshToken: string): Promise<string | null> {
+  const result = await exchangeToken({ grant_type: 'refresh_token', refresh_token: refreshToken });
+  if (result.ok && result.data.access_token) {
+    logger.info('event stream sync: pred.gg token refreshed successfully');
+    return result.data.access_token;
+  }
+  logger.warn({ error: result.data.error }, 'event stream sync: token refresh failed');
+  return null;
+}
+
+async function runEventStreamSync(userToken: string, predggRefreshToken: string | undefined) {
   const BATCH = 20;
   const CONCURRENCY = 3;
+  // Refresh token every 50 minutes (pred.gg tokens last ~1h)
+  const TOKEN_REFRESH_INTERVAL_MS = 50 * 60 * 1000;
 
   const total = await db.match.count({ where: { eventStreamSynced: false, matchPlayers: { some: {} } } });
-  eventStreamJob = { running: true, total, synced: 0, errors: 0, skipped: 0, startedAt: new Date().toISOString(), lastActivity: new Date().toISOString() };
+  eventStreamJob = { running: true, total, synced: 0, errors: 0, skipped: 0, startedAt: new Date().toISOString(), lastActivity: new Date().toISOString(), tokenError: false };
 
   logger.info({ total }, 'event stream background sync started');
 
+  let activeToken = userToken;
+  let lastTokenRefresh = Date.now();
+  let consecutiveErrors = 0;
+
   while (eventStreamJob.running) {
+    // Refresh token proactively every 50 min
+    if (predggRefreshToken && Date.now() - lastTokenRefresh > TOKEN_REFRESH_INTERVAL_MS) {
+      const newToken = await refreshPredggToken(predggRefreshToken);
+      if (newToken) {
+        activeToken = newToken;
+        lastTokenRefresh = Date.now();
+        consecutiveErrors = 0;
+      } else {
+        logger.warn('event stream sync: could not refresh token, continuing with existing');
+      }
+    }
+
     const pending = await db.match.findMany({
       where: { eventStreamSynced: false, matchPlayers: { some: {} } },
       select: { predggUuid: true },
@@ -193,19 +222,48 @@ async function runEventStreamSync(userToken: string) {
       break;
     }
 
+    let batchSynced = 0;
     for (let i = 0; i < pending.length; i += CONCURRENCY) {
       if (!eventStreamJob.running) break;
       const chunk = pending.slice(i, i + CONCURRENCY);
       const results = await Promise.allSettled(
-        chunk.map((m) => resyncMatch(db, m.predggUuid, userToken, true))
+        chunk.map((m) => resyncMatch(db, m.predggUuid, activeToken, true))
       );
       for (const r of results) {
-        if (r.status === 'fulfilled') eventStreamJob.synced++;
+        if (r.status === 'fulfilled') { eventStreamJob.synced++; batchSynced++; }
         else eventStreamJob.errors++;
       }
       eventStreamJob.lastActivity = new Date().toISOString();
-      // Small delay to respect pred.gg rate limits
-      await new Promise((resolve) => setTimeout(resolve, 300));
+      await new Promise((resolve) => setTimeout(resolve, 400));
+    }
+
+    // If the entire batch failed, the token is likely expired
+    if (batchSynced === 0 && pending.length > 0) {
+      consecutiveErrors++;
+      if (consecutiveErrors >= 3) {
+        // Try emergency token refresh
+        if (predggRefreshToken) {
+          logger.warn('event stream sync: 3 consecutive empty batches — refreshing token');
+          const newToken = await refreshPredggToken(predggRefreshToken);
+          if (newToken) {
+            activeToken = newToken;
+            lastTokenRefresh = Date.now();
+            consecutiveErrors = 0;
+          } else {
+            logger.error('event stream sync: token expired and refresh failed — stopping');
+            eventStreamJob.running = false;
+            eventStreamJob.tokenError = true;
+            break;
+          }
+        } else {
+          logger.error('event stream sync: token expired and no refresh token available — stopping');
+          eventStreamJob.running = false;
+          eventStreamJob.tokenError = true;
+          break;
+        }
+      }
+    } else {
+      consecutiveErrors = 0;
     }
   }
 }
@@ -226,8 +284,10 @@ adminRouter.post('/sync-event-streams/start', async (req, res, next) => {
       res.status(400).json({ error: { message: 'pred.gg session required — log in via pred.gg first', code: 'PREDGG_AUTH_REQUIRED' } });
       return;
     }
+    // Capture refresh token so the background job can renew the Bearer token automatically
+    const predggRefreshToken = (req as any).cookies?.[COOKIE_REFRESH] as string | undefined;
     // Fire and forget — runs in background
-    void runEventStreamSync(userToken).catch((err) => {
+    void runEventStreamSync(userToken, predggRefreshToken).catch((err) => {
       logger.error({ err }, 'event stream background sync crashed');
       eventStreamJob.running = false;
     });
