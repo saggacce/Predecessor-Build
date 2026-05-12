@@ -344,17 +344,29 @@ function SyncStatusTab() {
       </div>
 
       {/* Event Stream Background Sync */}
-      <div className="glass-card" style={{ borderLeft: isRunning ? '3px solid var(--accent-blue)' : undefined }}>
+      <div className="glass-card" style={{ borderLeft: job.tokenError ? '3px solid var(--accent-loss)' : isRunning ? '3px solid var(--accent-blue)' : undefined }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1rem' }}>
-          <RefreshCw size={16} style={{ color: isRunning ? 'var(--accent-blue)' : 'var(--text-muted)', animation: isRunning ? 'spin 1s linear infinite' : 'none', flexShrink: 0 }} />
+          <RefreshCw size={16} style={{ color: isRunning ? 'var(--accent-blue)' : job.tokenError ? 'var(--accent-loss)' : 'var(--text-muted)', animation: isRunning ? 'spin 1s linear infinite' : 'none', flexShrink: 0 }} />
           <span style={{ fontWeight: 700, fontSize: '0.9rem' }}>Event Stream Background Sync</span>
           {isRunning && (
             <span style={{ fontSize: '0.65rem', fontWeight: 700, color: 'var(--accent-blue)', background: 'rgba(91,156,246,0.15)', border: '1px solid rgba(91,156,246,0.4)', borderRadius: '999px', padding: '0.15rem 0.55rem', animation: 'ledPulse 1.5s ease-in-out infinite', ['--pulse-color' as string]: 'var(--accent-blue)' }}>
               EN CURSO
             </span>
           )}
+          {job.tokenError && !isRunning && (
+            <span style={{ fontSize: '0.65rem', fontWeight: 700, color: 'var(--accent-loss)', background: 'rgba(248,113,113,0.1)', border: '1px solid rgba(248,113,113,0.3)', borderRadius: '999px', padding: '0.15rem 0.55rem' }}>
+              TOKEN EXPIRADO
+            </span>
+          )}
           {isRunning && <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)', marginLeft: 'auto', fontFamily: 'var(--font-mono)' }}>↻ cada 2s</span>}
         </div>
+
+        {job.tokenError && !isRunning && (
+          <div style={{ marginBottom: '1rem', padding: '0.75rem 1rem', background: 'rgba(248,113,113,0.06)', border: '1px solid rgba(248,113,113,0.2)', borderRadius: 8, fontSize: '0.82rem', color: 'var(--accent-loss)', lineHeight: 1.6 }}>
+            La sesión de pred.gg expiró durante el sync. {job.synced > 0 && `Se sincronizaron ${job.synced} partidas antes de la expiración. `}
+            Asegúrate de estar logueado en pred.gg y vuelve a iniciar — continuará desde donde lo dejó.
+          </div>
+        )}
 
         {/* Progress — always visible when running */}
         {isRunning && (

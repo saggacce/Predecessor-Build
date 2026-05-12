@@ -208,7 +208,7 @@ function tokenBody(params: TokenGrant, attempt: TokenAuthAttempt): URLSearchPara
   return body;
 }
 
-async function exchangeToken(params: TokenGrant): Promise<{
+export async function exchangeToken(params: TokenGrant): Promise<{
   ok: boolean;
   status: number;
   endpoint: string;

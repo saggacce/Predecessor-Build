@@ -662,6 +662,7 @@ export interface EventStreamJob {
   skipped: number;
   startedAt: string | null;
   lastActivity: string | null;
+  tokenError: boolean;
 }
 
 export interface SyncLog {
