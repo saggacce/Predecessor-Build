@@ -94,7 +94,7 @@ export default function MatchDetail() {
       <header className="header" style={{ marginBottom: '1rem' }}>
         <button
           onClick={() => fromState?.fromPlayerId
-            ? navigate('/players', { state: { autoLoadPlayerId: fromState.fromPlayerId } })
+            ? navigate('/analysis/players', { state: { autoLoadPlayerId: fromState.fromPlayerId } })
             : navigate(-1)
           }
           style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: '0.875rem', marginBottom: '0.75rem', padding: 0 }}
@@ -371,7 +371,7 @@ function PlayerRow({ player, isAram, teamColor, maxDamage, teamKills, matchDurat
     }}>
       {/* Player column: hero avatar + text */}
       <div
-        onClick={() => player.playerId && navigate('/players', { state: { autoLoadPlayerId: player.playerId } })}
+        onClick={() => player.playerId && navigate('/analysis/players', { state: { autoLoadPlayerId: player.playerId } })}
         style={{ flex: '0 0 210px', display: 'flex', alignItems: 'center', gap: '0.55rem', minWidth: 0, cursor: player.playerId ? 'pointer' : 'default' }}
       >
         <HeroAvatarWithTooltip
@@ -1860,7 +1860,7 @@ function StatPlayerCell({ player, teamColor }: { player: MatchPlayerDetail; team
   const displayedName = player.customName ?? player.playerName;
   return (
     <div
-      onClick={() => player.playerId && navigate('/players', { state: { autoLoadPlayerId: player.playerId } })}
+      onClick={() => player.playerId && navigate('/analysis/players', { state: { autoLoadPlayerId: player.playerId } })}
       style={{ flex: '0 0 200px', display: 'flex', alignItems: 'center', gap: '0.45rem', minWidth: 0, cursor: player.playerId ? 'pointer' : 'default' }}
     >
       <div style={{ width: 30, height: 30, borderRadius: 6, overflow: 'hidden', background: 'var(--bg-dark)', flexShrink: 0, border: `1px solid ${teamColor}40` }}>
