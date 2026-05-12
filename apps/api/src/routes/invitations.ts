@@ -109,8 +109,14 @@ invitationsRouter.get('/:token', async (req, res, next) => {
   try {
     const token = String(req.params.token);
     const invitation = await db.invitation.findUnique({ where: { token } });
-    if (!invitation || invitation.usedAt || invitation.expiresAt <= new Date()) {
+    if (!invitation) {
       throw new AppError(404, 'Invitation not found', 'INVITATION_NOT_FOUND');
+    }
+    if (invitation.usedAt) {
+      throw new AppError(410, 'This invitation has already been used', 'INVITATION_USED');
+    }
+    if (invitation.expiresAt <= new Date()) {
+      throw new AppError(410, 'This invitation has expired. Please ask your manager for a new one.', 'INVITATION_EXPIRED');
     }
 
     res.json({ invitation: publicInvitation(invitation) });
