@@ -288,7 +288,7 @@ export default function PlayerScouting() {
                 className="btn-primary"
                 style={{ padding: '0.75rem 2rem' }}
               >
-                Fetch from pred.gg
+                Search in pred.gg
               </button>
             </>
           ) : (
@@ -559,7 +559,7 @@ function PlayerProfilePanel({
         {/* Core stats */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(115px, 1fr))', gap: '0.65rem', marginTop: '1.25rem' }}>
           <SummaryMetric label="Matches" value={matches !== null ? formatCompactNumber(matches) : '-'} />
-          <SummaryMetric label="Win Rate" value={winRate !== null ? `${winRate.toFixed(1)}%` : '-'} />
+          <SummaryMetric label="Win Rate" value={winRate !== null ? `${winRate.toFixed(1)}%` : '-'} color={winRate !== null ? winRateColor(winRate) : undefined} />
           <SummaryMetric label="KDA" value={kda !== null ? kda.toFixed(2) : '-'} />
           <SummaryMetric label="Hero Damage" value={heroDamage !== null ? formatCompactNumber(heroDamage) : '-'} />
           {(() => {
@@ -569,8 +569,11 @@ function PlayerProfilePanel({
               : null;
             const csMatches = profile.recentMatches.filter((m) => m.laneMinionsKilled !== null);
             const avgCs = csMatches.length > 0 ? Math.round(csMatches.reduce((s, m) => s + (m.laneMinionsKilled ?? 0), 0) / csMatches.length) : null;
+            const dpmMatches = profile.recentMatches.filter((m) => m.heroDamage !== null && m.duration > 0);
+            const avgDpm = dpmMatches.length > 0 ? Math.round(dpmMatches.reduce((s, m) => s + m.heroDamage! / (m.duration / 60), 0) / dpmMatches.length) : null;
             return (<>
               {avgGpm !== null && !isNaN(avgGpm) && <SummaryMetric label="Avg GPM" value={String(avgGpm)} highlight />}
+              {avgDpm !== null && !isNaN(avgDpm) && <SummaryMetric label="Avg DPM" value={String(avgDpm)} />}
               {avgCs !== null && <SummaryMetric label="Avg CS" value={String(avgCs)} />}
               {typeof gs.doubleKills === 'number' && gs.doubleKills > 0 && <SummaryMetric label="Double Kills" value={String(gs.doubleKills)} />}
               {typeof gs.tripleKills === 'number' && gs.tripleKills > 0 && <SummaryMetric label="Triple Kills" value={String(gs.tripleKills)} highlight />}
@@ -637,11 +640,18 @@ function PlayerProfilePanel({
   );
 }
 
-function SummaryMetric({ label, value, highlight }: { label: string; value: string; highlight?: boolean }) {
+function winRateColor(wr: number): string {
+  if (wr >= 55) return 'var(--accent-win)';
+  if (wr < 45) return 'var(--accent-loss)';
+  return 'var(--text-primary)';
+}
+
+function SummaryMetric({ label, value, highlight, color }: { label: string; value: string; highlight?: boolean; color?: string }) {
+  const valueColor = color ?? (highlight ? 'var(--accent-prime)' : 'var(--text-primary)');
   return (
     <div style={{ border: `1px solid ${highlight ? 'rgba(240,179,41,0.3)' : 'var(--border-color)'}`, borderRadius: 'var(--radius-sm)', padding: '0.75rem 0.8rem', background: highlight ? 'rgba(240,179,41,0.05)' : 'rgba(10,12,16,0.5)' }}>
       <div style={{ color: 'var(--text-dim)', fontSize: '0.67rem', fontWeight: 700, marginBottom: '0.3rem', textTransform: 'uppercase', letterSpacing: '0.07em' }}>{label}</div>
-      <div style={{ fontFamily: 'var(--font-mono)', color: highlight ? 'var(--accent-prime)' : 'var(--text-primary)', fontWeight: 500, fontSize: '1.1rem', letterSpacing: '-0.01em' }}>{value}</div>
+      <div style={{ fontFamily: 'var(--font-mono)', color: valueColor, fontWeight: 500, fontSize: '1.1rem', letterSpacing: '-0.01em' }}>{value}</div>
     </div>
   );
 }
@@ -794,9 +804,8 @@ function PlayerGoalsSection({ playerId, playerName }: { playerId: string; player
     setSelectedTeamId('');
     apiClient.teams.list('OWN')
       .then(({ teams: ownTeams }) => {
-        const containingTeams = ownTeams.filter((team) => team.roster.some((member) => member.playerId === playerId));
-        setTeams(containingTeams);
-        setSelectedTeamId(containingTeams[0]?.id ?? '');
+        setTeams(ownTeams);
+        setSelectedTeamId(ownTeams[0]?.id ?? '');
       })
       .catch(() => toast.error('Failed to load player goal context.'))
       .finally(() => setLoading(false));
@@ -883,7 +892,7 @@ function PlayerGoalsSection({ playerId, playerName }: { playerId: string; player
   if (teams.length === 0) {
     return (
       <div style={{ border: '1px solid var(--border-color)', borderRadius: 'var(--radius-sm)', padding: '1rem', color: 'var(--text-muted)', background: 'rgba(255,255,255,0.03)' }}>
-        Add {playerName} to an own-team roster before assigning individual goals.
+        No own teams found. Create a team first to assign player goals.
       </div>
     );
   }
@@ -1210,18 +1219,22 @@ function HeroStatCard({ hero }: { hero: PlayerProfile['heroStats'][number] }) {
   const winrate = typeof hero.winRate === 'number' ? hero.winRate : matches > 0 ? Math.round((hero.wins / matches) * 1000) / 10 : 0;
   const deaths = Math.max(hero.deaths, 1);
   const kda = (hero.kills + hero.assists) / deaths;
+  const isPocketPick = matches >= 20 && winrate >= 60;
 
   return (
-    <div style={{ border: '1px solid var(--border-color)', borderRadius: 'var(--radius-sm)', padding: '0.85rem', background: 'rgba(255,255,255,0.03)' }}>
+    <div style={{ border: isPocketPick ? '1px solid rgba(240,179,41,0.55)' : '1px solid var(--border-color)', borderRadius: 'var(--radius-sm)', padding: '0.85rem', background: isPocketPick ? 'rgba(240,179,41,0.04)' : 'rgba(255,255,255,0.03)' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.75rem' }}>
         <HeroAvatarWithTooltip slug={hero.heroData.slug} name={hero.heroData.name} imageUrl={hero.heroData.imageUrl} meta={meta} size={54} rounded={12} />
-        <div style={{ minWidth: 0 }}>
+        <div style={{ minWidth: 0, flex: 1 }}>
           <div style={{ fontWeight: 700, fontSize: '0.88rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{meta?.displayName ?? hero.heroData.name}</div>
-          <div style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-muted)', fontSize: '0.72rem' }}>{matches} games</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginTop: '0.2rem' }}>
+            <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-muted)', fontSize: '0.72rem' }}>{matches} games</span>
+            {isPocketPick && <span style={{ fontSize: '0.6rem', fontWeight: 700, color: 'var(--accent-prime)', background: 'rgba(240,179,41,0.15)', border: '1px solid rgba(240,179,41,0.4)', borderRadius: '999px', padding: '0.1rem 0.45rem', letterSpacing: '0.04em' }}>POCKET</span>}
+          </div>
         </div>
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.5rem', fontSize: '0.8rem' }}>
-        <MiniMetric label="WR" value={`${winrate.toFixed(1)}%`} />
+        <MiniMetric label="WR" value={`${winrate.toFixed(1)}%`} color={winRateColor(winrate)} />
         <MiniMetric label="W/L" value={`${hero.wins}/${hero.losses}`} />
         <MiniMetric label="KDA" value={kda.toFixed(2)} />
         {matches > 0 && typeof hero.heroDamage === 'number' && (
@@ -1538,11 +1551,11 @@ function MatchRow({
   );
 }
 
-function MiniMetric({ label, value }: { label: string; value: string }) {
+function MiniMetric({ label, value, color }: { label: string; value: string; color?: string }) {
   return (
     <div style={{ border: '1px solid var(--border-color)', borderRadius: 'var(--radius-sm)', padding: '0.4rem 0.45rem', background: 'rgba(10,12,16,0.4)' }}>
       <div style={{ color: 'var(--text-dim)', fontSize: '0.63rem', fontWeight: 700, marginBottom: '0.18rem', textTransform: 'uppercase', letterSpacing: '0.06em' }}>{label}</div>
-      <div style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-primary)', fontWeight: 500, fontSize: '0.82rem' }}>{value}</div>
+      <div style={{ fontFamily: 'var(--font-mono)', color: color ?? 'var(--text-primary)', fontWeight: 500, fontSize: '0.82rem' }}>{value}</div>
     </div>
   );
 }
