@@ -53,15 +53,18 @@ export default function PlayerScouting() {
   const [profilePhase, setProfilePhase] = useState<ProfilePhase>({ tag: 'idle' });
   const [platformFilter, setPlatformFilter] = useState<'all' | 'pc' | 'console'>('all');
 
-  // Auto-open player profile when navigated back from match detail
+  // Auto-open player profile when navigated back from match detail.
+  // Depends on location.key (changes on every navigation) so it re-runs
+  // even if the component was already mounted at the /players route.
   useEffect(() => {
     const state = location.state as { autoLoadPlayerId?: string } | null;
-    if (state?.autoLoadPlayerId) {
-      void handleSelectPlayer(state.autoLoadPlayerId);
+    const id = state?.autoLoadPlayerId;
+    if (id) {
       window.history.replaceState({}, ''); // clear state so refresh doesn't re-trigger
+      void handleSelectPlayer(id);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [location.key]);
 
   async function handleSearch(e: React.FormEvent) {
     e.preventDefault();
