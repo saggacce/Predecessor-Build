@@ -1400,6 +1400,61 @@ export async function repairEventStreamPlayerIds(db: PrismaClient): Promise<Even
   return { heroKillsUpdated, objectiveKillsUpdated, wardEventsUpdated, placeholdersCreated };
 }
 
+const PLAYER_RECENT_MATCHES_QUERY = `
+  query PlayerRecentMatches($playerId: ID!, $limit: Int!) {
+    player(by: { id: $playerId }) {
+      id
+      name
+      matchesPaginated(limit: $limit) {
+        results {
+          id role team kills deaths assists gold heroDamage totalDamageDealt
+          wardsPlaced wardsDestroyed laneMinionsKilled
+          hero { slug }
+          match { id startTime duration gameMode region winningTeam version { id name gameString releaseDate patchType } }
+        }
+      }
+    }
+  }
+`;
+
+/**
+ * Fetches recent matches for a single player (by their pred.gg ID) and persists new ones.
+ * Lightweight: no snapshot creation, just match data.
+ * Returns the count of newly inserted matches.
+ */
+export async function syncRecentMatchesForPlayer(
+  db: PrismaClient,
+  predggId: string,
+  userToken: string,
+  limit = 20,
+): Promise<{ newMatches: number }> {
+  const data = await predggQuery<{
+    player: { id: string; name: string; matchesPaginated: { results: PredggMatchStat[] } } | null;
+  }>(PLAYER_RECENT_MATCHES_QUERY, { playerId: predggId, limit }, userToken);
+
+  if (!data?.player) return { newMatches: 0 };
+
+  const matches = data.player.matchesPaginated?.results ?? [];
+  if (matches.length === 0) return { newMatches: 0 };
+
+  const player = await db.player.findUnique({ where: { predggId }, select: { id: true, displayName: true } });
+  if (!player) return { newMatches: 0 };
+
+  const candidateUuids = matches.map((m) => m.match?.id).filter(Boolean) as string[];
+  const existing = await db.match.findMany({
+    where: { predggUuid: { in: candidateUuids } },
+    select: { predggUuid: true },
+  });
+  const existingSet = new Set(existing.map((m) => m.predggUuid));
+  const newMatches = candidateUuids.filter((uuid) => !existingSet.has(uuid)).length;
+
+  const now = new Date();
+  await persistRecentMatches(db, player.id, player.displayName, matches, now);
+  await db.player.update({ where: { predggId }, data: { lastSynced: now } });
+
+  return { newMatches };
+}
+
 export async function syncIncompleteMatches(db: PrismaClient): Promise<{ synced: number; errors: number }> {
   const start = Date.now();
 

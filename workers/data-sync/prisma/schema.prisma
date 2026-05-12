@@ -360,6 +360,12 @@ model LlmAnalysis {
   team Team @relation(fields: [teamId], references: [id], onDelete: Cascade)
 }
 
+model PlatformCredential {
+  key       String   @id  // e.g. "predgg_refresh_token"
+  value     String
+  updatedAt DateTime @updatedAt
+}
+
 model VodLink {
   id                  String   @id @default(cuid())
   matchId             String?

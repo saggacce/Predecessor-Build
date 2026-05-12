@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
-import { Copy, Plus, Shield, Trash2, UserPlus, Database, ScrollText, RefreshCw, CheckCircle, XCircle, AlertTriangle, Activity, Play, Square } from 'lucide-react';
+import { Copy, Plus, Shield, Trash2, UserPlus, Database, ScrollText, RefreshCw, CheckCircle, XCircle, AlertTriangle, Activity, Play, Square, Clock } from 'lucide-react';
 import { toast } from 'sonner';
-import { ApiErrorResponse, apiClient, type Invitation, type TeamProfile, type SyncLog, type SyncStatus } from '../api/client';
+import { ApiErrorResponse, apiClient, type Invitation, type TeamProfile, type SyncLog, type SyncStatus, type CronJob } from '../api/client';
 import { useAuth } from '../hooks/useAuth';
 
 const ROLES = ['MANAGER', 'COACH', 'ANALISTA', 'JUGADOR'] as const;
@@ -233,6 +233,7 @@ function SyncStatusTab() {
   const [loading, setLoading] = useState(true);
   const [jobLoading, setJobLoading] = useState(false);
   const [optimisticRunning, setOptimisticRunning] = useState(false);
+  const [cronLoading, setCronLoading] = useState(false);
 
   async function refresh() {
     try {
@@ -285,10 +286,38 @@ function SyncStatusTab() {
     } finally { setJobLoading(false); }
   }
 
+  async function handleCronToggle() {
+    if (!status) return;
+    setCronLoading(true);
+    try {
+      if (status.cronJob.enabled) {
+        await apiClient.admin.stopCron();
+        toast.success('Cron detenido');
+      } else {
+        await apiClient.admin.startCron();
+        toast.success('Cron activado — sincronizará cada 2h');
+      }
+      await refresh();
+    } catch (err) {
+      toast.error(err instanceof ApiErrorResponse ? err.error.message : 'Error al cambiar estado del cron');
+    } finally { setCronLoading(false); }
+  }
+
+  async function handleCronRunNow() {
+    setCronLoading(true);
+    try {
+      await apiClient.admin.runCronNow();
+      toast.success('Sync manual lanzado — comprueba los resultados en unos segundos');
+      setTimeout(() => void refresh(), 3000);
+    } catch (err) {
+      toast.error(err instanceof ApiErrorResponse ? err.error.message : 'Error al lanzar sync manual');
+    } finally { setCronLoading(false); }
+  }
+
   if (loading) return <div style={{ padding: '1.5rem', color: 'var(--text-muted)' }}>Cargando estado de sincronización...</div>;
   if (!status) return <div style={{ padding: '1.5rem', color: 'var(--accent-loss)' }}>Error al cargar estado</div>;
 
-  const { players, matches, eventStreamJob: job } = status;
+  const { players, matches, eventStreamJob: job, cronJob } = status;
   const isRunning = job.running || optimisticRunning;
   const playerSyncPct = players.total > 0 ? Math.round(((players.total - players.stale - players.hidden) / players.total) * 100) : 0;
   const matchCompletePct = matches.total > 0 ? Math.round((matches.complete / matches.total) * 100) : 0;
@@ -427,6 +456,58 @@ function SyncStatusTab() {
             </span>
           )}
         </div>
+      </div>
+
+      {/* Global auto-sync cron */}
+      <CronStatusCard cronJob={cronJob} loading={cronLoading} onToggle={() => void handleCronToggle()} onRunNow={() => void handleCronRunNow()} />
+
+    </div>
+  );
+}
+
+function CronStatusCard({ cronJob, loading, onToggle, onRunNow }: { cronJob: CronJob; loading: boolean; onToggle: () => void; onRunNow: () => void }) {
+  const lastResult = cronJob.lastRunResult;
+  return (
+    <div className="glass-card" style={{ borderLeft: cronJob.enabled ? '3px solid var(--accent-teal-bright)' : undefined }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1rem' }}>
+        <Clock size={16} style={{ color: cronJob.enabled ? 'var(--accent-teal-bright)' : 'var(--text-muted)', flexShrink: 0 }} />
+        <span style={{ fontWeight: 700, fontSize: '0.9rem' }}>Auto-Sync Global (cron cada 2h)</span>
+        {cronJob.enabled && (
+          <span style={{ fontSize: '0.65rem', fontWeight: 700, color: 'var(--accent-teal-bright)', background: 'rgba(56,212,200,0.12)', border: '1px solid rgba(56,212,200,0.35)', borderRadius: '999px', padding: '0.15rem 0.55rem' }}>
+            ACTIVO
+          </span>
+        )}
+        {cronJob.running && (
+          <RefreshCw size={12} style={{ color: 'var(--accent-teal-bright)', animation: 'spin 1s linear infinite' }} />
+        )}
+      </div>
+      <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginBottom: '1rem', lineHeight: 1.6 }}>
+        Busca partidas recientes de todos los jugadores en pred.gg cada 2 horas y las sincroniza automáticamente.
+        Requiere que el token de pred.gg esté guardado (se guarda al iniciar el Event Stream Sync).
+      </p>
+      {lastResult && (
+        <div style={{ display: 'flex', gap: '1.5rem', fontSize: '0.72rem', fontFamily: 'var(--font-mono)', marginBottom: '1rem', padding: '0.65rem 1rem', background: 'rgba(255,255,255,0.03)', borderRadius: 8 }}>
+          <span><span style={{ color: 'var(--accent-win)', fontWeight: 700 }}>{lastResult.newMatches}</span> <span style={{ color: 'var(--text-muted)' }}>nuevas partidas</span></span>
+          <span><span style={{ color: 'var(--text-primary)', fontWeight: 700 }}>{lastResult.players}</span> <span style={{ color: 'var(--text-muted)' }}>jugadores</span></span>
+          {lastResult.errors > 0 && <span><span style={{ color: 'var(--accent-loss)', fontWeight: 700 }}>{lastResult.errors}</span> <span style={{ color: 'var(--text-muted)' }}>errores</span></span>}
+          {cronJob.lastRunAt && <span style={{ color: 'var(--text-muted)' }}>última vez: {new Date(cronJob.lastRunAt).toLocaleTimeString()}</span>}
+          {cronJob.nextRunAt && cronJob.enabled && <span style={{ color: 'var(--text-muted)' }}>próxima: {new Date(cronJob.nextRunAt).toLocaleTimeString()}</span>}
+        </div>
+      )}
+      {!lastResult && cronJob.enabled && cronJob.nextRunAt && (
+        <p style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginBottom: '1rem', fontFamily: 'var(--font-mono)' }}>
+          Primera ejecución: {new Date(cronJob.nextRunAt).toLocaleTimeString()}
+        </p>
+      )}
+      <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+        <button onClick={onToggle} disabled={loading} className={cronJob.enabled ? 'btn-secondary' : 'btn-primary'} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          {loading ? <RefreshCw size={13} style={{ animation: 'spin 0.6s linear infinite' }} /> : cronJob.enabled ? <Square size={13} /> : <Play size={13} />}
+          {cronJob.enabled ? 'Desactivar cron' : 'Activar cron (cada 2h)'}
+        </button>
+        <button onClick={onRunNow} disabled={loading || cronJob.running} className="btn-secondary" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          <RefreshCw size={13} style={{ animation: cronJob.running ? 'spin 1s linear infinite' : 'none' }} />
+          Ejecutar ahora
+        </button>
       </div>
     </div>
   );

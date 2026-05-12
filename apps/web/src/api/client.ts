@@ -648,10 +648,19 @@ export interface AdminSyncStaleResult {
   timestamp: string;
 }
 
+export interface CronJob {
+  enabled: boolean;
+  running: boolean;
+  lastRunAt: string | null;
+  lastRunResult: { newMatches: number; players: number; errors: number } | null;
+  nextRunAt: string | null;
+}
+
 export interface SyncStatus {
   players: { total: number; synced: number; stale: number; hidden: number };
   matches: { total: number; complete: number; partial: number; incomplete: number };
   eventStreamJob: EventStreamJob;
+  cronJob: CronJob;
 }
 
 export interface EventStreamJob {
@@ -896,11 +905,20 @@ export const apiClient = {
     eventStreamSyncStatus: () => fetchApi<EventStreamJob>('/admin/sync-event-streams/status'),
     fixHeroKillPlayerIds: () =>
       fetchApi<{ heroKillsUpdated: number; objectiveKillsUpdated: number; wardEventsUpdated: number; placeholdersCreated: number; elapsed: number }>('/admin/fix-herokill-player-ids', { method: 'POST' }),
+    startCron: () => fetchApi<{ ok: boolean; cron: CronJob }>('/admin/sync-cron/start', { method: 'POST' }),
+    stopCron: () => fetchApi<{ ok: boolean; cron: CronJob }>('/admin/sync-cron/stop', { method: 'POST' }),
+    runCronNow: () => fetchApi<{ ok: boolean; message: string }>('/admin/sync-cron/run-now', { method: 'POST' }),
+    cronStatus: () => fetchApi<CronJob>('/admin/sync-cron/status'),
     syncLogs: (limit = 50, entity?: string, status?: string) => {
       const params = new URLSearchParams({ limit: String(limit) });
       if (entity) params.set('entity', entity);
       if (status) params.set('status', status);
       return fetchApi<{ logs: SyncLog[]; total: number }>(`/admin/sync-logs?${params}`);
     },
+  },
+
+  sync: {
+    myMatches: () =>
+      fetchApi<{ newMatches: number; message: string }>('/sync/my-matches', { method: 'POST' }),
   },
 };

@@ -7,6 +7,7 @@ import {
   syncVersionsFromPredgg,
   syncStalePlayers,
   syncIncompleteMatches,
+  syncRecentMatchesForPlayer,
   resyncMatch,
 } from '../services/sync-service.js';
 import { getValidToken, exchangeToken, COOKIE_REFRESH } from './auth.js';
@@ -106,6 +107,109 @@ adminRouter.post('/fix-herokill-player-ids', async (_req, res, next) => {
   }
 });
 
+// ── Global auto-sync cron ─────────────────────────────────────────────────────
+
+interface CronJob {
+  enabled: boolean;
+  running: boolean;
+  lastRunAt: string | null;
+  lastRunResult: { newMatches: number; players: number; errors: number } | null;
+  nextRunAt: string | null;
+}
+
+let cronJob: CronJob = {
+  enabled: false, running: false, lastRunAt: null, lastRunResult: null, nextRunAt: null,
+};
+let cronTimer: ReturnType<typeof setInterval> | null = null;
+const CRON_INTERVAL_MS = parseInt(process.env.SYNC_CRON_INTERVAL_MS ?? String(2 * 60 * 60 * 1000), 10);
+
+async function runGlobalSync(): Promise<void> {
+  if (cronJob.running) return;
+  cronJob.running = true;
+  cronJob.lastRunAt = new Date().toISOString();
+  logger.info({ intervalMs: CRON_INTERVAL_MS }, 'global sync cron: run started');
+
+  try {
+    const cred = await db.platformCredential.findUnique({ where: { key: 'predgg_refresh_token' } });
+    if (!cred) {
+      logger.warn('global sync cron: no platform credential stored — skipping');
+      return;
+    }
+
+    const tokenResult = await exchangeToken({ grant_type: 'refresh_token', refresh_token: cred.value });
+    if (!tokenResult.ok || !tokenResult.data.access_token) {
+      logger.warn({ error: tokenResult.data.error }, 'global sync cron: token refresh failed — skipping');
+      return;
+    }
+    const token = tokenResult.data.access_token;
+
+    const players = await db.player.findMany({
+      where: { displayName: { not: 'HIDDEN' }, predggId: { not: '' } },
+      select: { predggId: true, displayName: true },
+    });
+
+    let totalNewMatches = 0;
+    let errors = 0;
+
+    for (const player of players) {
+      try {
+        const result = await syncRecentMatchesForPlayer(db, player.predggId, token, 10);
+        totalNewMatches += result.newMatches;
+        await new Promise((resolve) => setTimeout(resolve, 200));
+      } catch (err) {
+        logger.warn({ predggId: player.predggId, err }, 'global sync cron: failed to sync player');
+        errors++;
+      }
+    }
+
+    cronJob.lastRunResult = { newMatches: totalNewMatches, players: players.length, errors };
+    logger.info(cronJob.lastRunResult, 'global sync cron: run complete');
+  } finally {
+    cronJob.running = false;
+    if (cronJob.enabled) {
+      cronJob.nextRunAt = new Date(Date.now() + CRON_INTERVAL_MS).toISOString();
+    }
+  }
+}
+
+function startGlobalCron(): void {
+  if (cronTimer) clearInterval(cronTimer);
+  cronJob.enabled = true;
+  cronJob.nextRunAt = new Date(Date.now() + CRON_INTERVAL_MS).toISOString();
+  cronTimer = setInterval(() => { void runGlobalSync(); }, CRON_INTERVAL_MS);
+  logger.info({ intervalMs: CRON_INTERVAL_MS }, 'global sync cron started');
+}
+
+function stopGlobalCron(): void {
+  if (cronTimer) { clearInterval(cronTimer); cronTimer = null; }
+  cronJob.enabled = false;
+  cronJob.nextRunAt = null;
+  logger.info('global sync cron stopped');
+}
+
+adminRouter.post('/sync-cron/start', (_req, res) => {
+  startGlobalCron();
+  res.json({ ok: true, cron: cronJob });
+});
+
+adminRouter.post('/sync-cron/stop', (_req, res) => {
+  stopGlobalCron();
+  res.json({ ok: true, cron: cronJob });
+});
+
+adminRouter.post('/sync-cron/run-now', async (_req, res, next) => {
+  try {
+    void runGlobalSync();
+    res.json({ ok: true, message: 'Manual sync triggered' });
+  } catch (err) {
+    next(err);
+  }
+});
+
+adminRouter.get('/sync-cron/status', (_req, res) => {
+  res.json(cronJob);
+});
+
 /**
  * GET /admin/sync-status
  * Returns player and match sync statistics for the admin dashboard.
@@ -147,6 +251,7 @@ adminRouter.get('/sync-status', async (_req, res, next) => {
         incomplete: matchesNoPlayers,
       },
       eventStreamJob: eventStreamJob,
+      cronJob: cronJob,
     });
   } catch (err) {
     next(err);
@@ -286,6 +391,14 @@ adminRouter.post('/sync-event-streams/start', async (req, res, next) => {
     }
     // Capture refresh token so the background job can renew the Bearer token automatically
     const predggRefreshToken = (req as any).cookies?.[COOKIE_REFRESH] as string | undefined;
+    // Persist refresh token as platform credential for cron and on-demand sync
+    if (predggRefreshToken) {
+      await db.platformCredential.upsert({
+        where: { key: 'predgg_refresh_token' },
+        update: { value: predggRefreshToken },
+        create: { key: 'predgg_refresh_token', value: predggRefreshToken },
+      }).catch((err) => logger.warn({ err }, 'failed to save platform credential'));
+    }
     // Fire and forget — runs in background
     void runEventStreamSync(userToken, predggRefreshToken).catch((err) => {
       logger.error({ err }, 'event stream background sync crashed');
