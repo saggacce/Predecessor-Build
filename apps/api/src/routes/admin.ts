@@ -139,6 +139,9 @@ async function runGlobalSync(): Promise<void> {
     const tokenResult = await exchangeToken({ grant_type: 'refresh_token', refresh_token: cred.value });
     if (!tokenResult.ok || !tokenResult.data.access_token) {
       logger.warn({ error: tokenResult.data.error }, 'global sync cron: token refresh failed — skipping');
+      await db.syncLog.create({
+        data: { entity: 'sync:cron', entityId: 'global', operation: 'run', status: 'error', error: 'token refresh failed — re-inicia el Event Stream Sync para renovar' },
+      }).catch(() => null);
       return;
     }
     const token = tokenResult.data.access_token;
@@ -162,8 +165,18 @@ async function runGlobalSync(): Promise<void> {
       }
     }
 
-    cronJob.lastRunResult = { newMatches: totalNewMatches, players: players.length, errors };
-    logger.info(cronJob.lastRunResult, 'global sync cron: run complete');
+    const result = { newMatches: totalNewMatches, players: players.length, errors };
+    cronJob.lastRunResult = result;
+    logger.info(result, 'global sync cron: run complete');
+    await db.syncLog.create({
+      data: {
+        entity: 'sync:cron',
+        entityId: 'global',
+        operation: 'run',
+        status: errors > 0 ? 'partial' : 'ok',
+        error: errors > 0 ? `${errors} jugadores fallaron` : null,
+      },
+    }).catch((err) => logger.warn({ err }, 'failed to write cron sync log'));
   } finally {
     cronJob.running = false;
     if (cronJob.enabled) {

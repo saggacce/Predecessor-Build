@@ -234,11 +234,16 @@ function SyncStatusTab() {
   const [jobLoading, setJobLoading] = useState(false);
   const [optimisticRunning, setOptimisticRunning] = useState(false);
   const [cronLoading, setCronLoading] = useState(false);
+  const [syncHistory, setSyncHistory] = useState<SyncLog[]>([]);
 
   async function refresh() {
     try {
-      const s = await apiClient.admin.syncStatus();
+      const [s, logs] = await Promise.all([
+        apiClient.admin.syncStatus(),
+        apiClient.admin.syncLogs(10, 'sync:cron').catch(() => ({ logs: [] })),
+      ]);
       setStatus(s);
+      setSyncHistory(logs.logs);
       if (s.eventStreamJob.running) setOptimisticRunning(true);
     } catch { /* silent */ }
     finally { setLoading(false); }
@@ -459,13 +464,13 @@ function SyncStatusTab() {
       </div>
 
       {/* Global auto-sync cron */}
-      <CronStatusCard cronJob={cronJob} loading={cronLoading} onToggle={() => void handleCronToggle()} onRunNow={() => void handleCronRunNow()} />
+      <CronStatusCard cronJob={cronJob} loading={cronLoading} onToggle={() => void handleCronToggle()} onRunNow={() => void handleCronRunNow()} history={syncHistory} />
 
     </div>
   );
 }
 
-function CronStatusCard({ cronJob, loading, onToggle, onRunNow }: { cronJob: CronJob; loading: boolean; onToggle: () => void; onRunNow: () => void }) {
+function CronStatusCard({ cronJob, loading, onToggle, onRunNow, history }: { cronJob: CronJob; loading: boolean; onToggle: () => void; onRunNow: () => void; history: SyncLog[] }) {
   const lastResult = cronJob.lastRunResult;
   return (
     <div className="glass-card" style={{ borderLeft: cronJob.enabled ? '3px solid var(--accent-teal-bright)' : undefined }}>
@@ -499,7 +504,7 @@ function CronStatusCard({ cronJob, loading, onToggle, onRunNow }: { cronJob: Cro
           Primera ejecución: {new Date(cronJob.nextRunAt).toLocaleTimeString()}
         </p>
       )}
-      <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+      <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', marginBottom: history.length > 0 ? '1.25rem' : undefined }}>
         <button onClick={onToggle} disabled={loading} className={cronJob.enabled ? 'btn-secondary' : 'btn-primary'} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
           {loading ? <RefreshCw size={13} style={{ animation: 'spin 0.6s linear infinite' }} /> : cronJob.enabled ? <Square size={13} /> : <Play size={13} />}
           {cronJob.enabled ? 'Desactivar cron' : 'Activar cron (cada 2h)'}
@@ -509,6 +514,29 @@ function CronStatusCard({ cronJob, loading, onToggle, onRunNow }: { cronJob: Cro
           Ejecutar ahora
         </button>
       </div>
+      {history.length > 0 && (
+        <div>
+          <div style={{ fontSize: '0.68rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '0.5rem' }}>Historial reciente</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
+            {history.map((log) => (
+              <div key={log.id} style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', fontSize: '0.75rem', padding: '0.35rem 0.7rem', background: 'rgba(255,255,255,0.025)', borderRadius: 6 }}>
+                {log.status === 'ok'
+                  ? <CheckCircle size={12} style={{ color: 'var(--accent-win)', flexShrink: 0 }} />
+                  : log.status === 'partial'
+                    ? <AlertTriangle size={12} style={{ color: 'var(--accent-prime)', flexShrink: 0 }} />
+                    : <XCircle size={12} style={{ color: 'var(--accent-loss)', flexShrink: 0 }} />
+                }
+                <span style={{ color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', fontSize: '0.68rem', flexShrink: 0 }}>
+                  {new Date(log.syncedAt).toLocaleString('es-ES', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                </span>
+                <span style={{ color: log.status === 'ok' ? 'var(--text-secondary)' : log.status === 'partial' ? 'var(--accent-prime)' : 'var(--accent-loss)', flex: 1 }}>
+                  {log.status === 'ok' ? 'Completado sin errores' : log.error ?? log.status}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

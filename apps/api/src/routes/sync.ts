@@ -64,6 +64,9 @@ syncRouter.post('/my-matches', requireAuth, async (req, res, next) => {
     const result = await syncRecentMatchesForPlayer(db, player.predggId, tokenResult.data.access_token, 20);
 
     logger.info({ userId, predggId: player.predggId, ...result }, 'user-triggered match sync complete');
+    await db.syncLog.create({
+      data: { entity: 'sync:on-demand', entityId: player.predggId, operation: 'run', status: 'ok' },
+    }).catch(() => null);
 
     res.json({
       newMatches: result.newMatches,
