@@ -620,6 +620,7 @@ export interface Invitation {
   email: string;
   teamId: string;
   role: 'MANAGER' | 'COACH' | 'ANALISTA' | 'JUGADOR' | string;
+  playerId?: string | null;
   expiresAt: string;
   usedAt?: string | null;
   createdAt?: string;
@@ -629,6 +630,7 @@ export interface PublicInvitation {
   email: string;
   teamId: string;
   role: string;
+  playerId?: string | null;
   expiresAt: string;
 }
 
@@ -873,7 +875,7 @@ export const apiClient = {
       const params = new URLSearchParams({ teamId });
       return fetchApi<{ invitations: Invitation[] }>(`/invitations?${params}`);
     },
-    create: (data: { email: string; teamId: string; role: string }) =>
+    create: (data: { email: string; teamId: string; role: string; playerId?: string }) =>
       fetchApi<{ invitation: Invitation }>('/invitations', {
         method: 'POST',
         body: JSON.stringify(data),

@@ -14,17 +14,19 @@ const createInvitationSchema = z.object({
   email: z.string().email().transform((email) => email.toLowerCase()),
   teamId: z.string().min(1),
   role: invitationRoleSchema,
+  playerId: z.string().min(1).optional(),
 });
 
 const listInvitationSchema = z.object({
   teamId: z.string().min(1),
 });
 
-function publicInvitation(invitation: { email: string; teamId: string; role: string; expiresAt: Date }) {
+function publicInvitation(invitation: { email: string; teamId: string; role: string; playerId?: string | null; expiresAt: Date }) {
   return {
     email: invitation.email,
     teamId: invitation.teamId,
     role: invitation.role,
+    playerId: invitation.playerId ?? null,
     expiresAt: invitation.expiresAt,
   };
 }
@@ -55,6 +57,7 @@ invitationsRouter.post('/', requireAuth, requireRole(['MANAGER']), async (req, r
         email: data.email,
         teamId: data.teamId,
         role: data.role,
+        playerId: data.playerId ?? null,
         invitedById: req.user!.userId,
         expiresAt,
       },
@@ -90,6 +93,7 @@ invitationsRouter.get('/', requireAuth, requireRole(['MANAGER']), async (req, re
         email: true,
         teamId: true,
         role: true,
+        playerId: true,
         expiresAt: true,
         usedAt: true,
         createdAt: true,
@@ -105,8 +109,14 @@ invitationsRouter.get('/:token', async (req, res, next) => {
   try {
     const token = String(req.params.token);
     const invitation = await db.invitation.findUnique({ where: { token } });
-    if (!invitation || invitation.usedAt || invitation.expiresAt <= new Date()) {
+    if (!invitation) {
       throw new AppError(404, 'Invitation not found', 'INVITATION_NOT_FOUND');
+    }
+    if (invitation.usedAt) {
+      throw new AppError(410, 'This invitation has already been used', 'INVITATION_USED');
+    }
+    if (invitation.expiresAt <= new Date()) {
+      throw new AppError(410, 'This invitation has expired. Please ask your manager for a new one.', 'INVITATION_EXPIRED');
     }
 
     res.json({ invitation: publicInvitation(invitation) });

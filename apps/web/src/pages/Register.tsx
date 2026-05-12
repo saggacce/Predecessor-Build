@@ -1,14 +1,26 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { Link, useParams } from 'react-router';
-import { BadgeCheck, KeyRound, UserPlus } from 'lucide-react';
+import { BadgeCheck, KeyRound, UserPlus, Clock, Ban } from 'lucide-react';
 import { toast } from 'sonner';
 import { ApiErrorResponse, apiClient, type PublicInvitation } from '../api/client';
+
+type InvitationErrorType = 'expired' | 'used' | 'not_found' | 'unknown';
+
+function getErrorType(err: unknown): InvitationErrorType {
+  if (err instanceof ApiErrorResponse) {
+    if (err.error.code === 'INVITATION_EXPIRED') return 'expired';
+    if (err.error.code === 'INVITATION_USED') return 'used';
+    if (err.error.code === 'INVITATION_NOT_FOUND') return 'not_found';
+  }
+  return 'unknown';
+}
 
 export default function Register() {
   const { token = '' } = useParams();
   const [invitation, setInvitation] = useState<PublicInvitation | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [errorType, setErrorType] = useState<InvitationErrorType | null>(null);
   const [name, setName] = useState('');
   const [password, setPassword] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -27,8 +39,10 @@ export default function Register() {
         setError(null);
       })
       .catch((err) => {
+        const type = getErrorType(err);
         const message = err instanceof ApiErrorResponse ? err.error.message : 'Invitation not found';
         setError(message);
+        setErrorType(type);
       })
       .finally(() => setLoading(false));
   }, [token]);
@@ -54,16 +68,30 @@ export default function Register() {
   }
 
   if (error || !invitation) {
+    const isExpired = errorType === 'expired';
+    const isUsed = errorType === 'used';
     return (
       <div style={{ maxWidth: '460px', margin: '2rem auto' }}>
-        <div className="glass-card" style={{ display: 'grid', gap: '1rem' }}>
-          <h1 className="header-title">Invitation unavailable</h1>
+        <div className="glass-card" style={{ display: 'grid', gap: '1rem', textAlign: 'center' }}>
+          {isExpired
+            ? <Clock size={36} style={{ color: 'var(--accent-prime)', margin: '0 auto' }} />
+            : isUsed
+            ? <Ban size={36} style={{ color: 'var(--accent-loss)', margin: '0 auto' }} />
+            : <KeyRound size={36} style={{ color: 'var(--text-muted)', margin: '0 auto' }} />
+          }
+          <h1 className="header-title">
+            {isExpired ? 'Invitation expired' : isUsed ? 'Invitation already used' : 'Invitation unavailable'}
+          </h1>
           <p style={{ color: 'var(--text-muted)', fontSize: '0.86rem', lineHeight: 1.6 }}>
-            {error ?? 'This invitation is invalid, expired or already used.'}
+            {isExpired
+              ? 'This invitation link has expired. Contact your manager or coach to send you a new one.'
+              : isUsed
+              ? 'This invitation has already been used to create an account. Try logging in instead.'
+              : (error ?? 'This invitation link is invalid or no longer available.')}
           </p>
           <Link className="btn-secondary" to="/login">
             <KeyRound size={16} />
-            Go to login
+            {isUsed ? 'Go to login' : 'Back to login'}
           </Link>
         </div>
       </div>

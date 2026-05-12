@@ -141,15 +141,15 @@ describe('GET /invitations/:token', () => {
     }));
   });
 
-  it('returns 404 for an expired token', async () => {
+  it('returns 410 with INVITATION_EXPIRED for an expired token', async () => {
     mockInvitation.findUnique.mockResolvedValue(invitationRecord({
       expiresAt: new Date(Date.now() - 60_000),
     }));
 
     const res = await request(app).get('/invitations/invite-token');
 
-    expect(res.status).toBe(404);
-    expect(res.body.error.code).toBe('INVITATION_NOT_FOUND');
+    expect(res.status).toBe(410);
+    expect(res.body.error.code).toBe('INVITATION_EXPIRED');
   });
 });
 

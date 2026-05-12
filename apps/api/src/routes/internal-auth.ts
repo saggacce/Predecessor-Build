@@ -214,6 +214,7 @@ internalAuthRouter.post('/register', registerRateLimit, async (req, res, next) =
           userId: createdUser.id,
           teamId: invitation.teamId,
           role: invitation.role,
+          playerId: invitation.playerId ?? null,
         },
         select: { teamId: true, role: true, playerId: true },
       });
