@@ -85,6 +85,7 @@ function StaffTab({ user, isPlatformAdmin }: { user: NonNullable<ReturnType<type
   const [invitations, setInvitations] = useState<Invitation[]>([]);
   const [email, setEmail] = useState('');
   const [role, setRole] = useState<(typeof ROLES)[number]>('COACH');
+  const [playerId, setPlayerId] = useState('');
   const [loading, setLoading] = useState(false);
   const [creating, setCreating] = useState(false);
 
@@ -118,10 +119,11 @@ function StaffTab({ user, isPlatformAdmin }: { user: NonNullable<ReturnType<type
     if (!teamId) return;
     setCreating(true);
     try {
-      const res = await apiClient.invitations.create({ email, teamId, role });
+      const res = await apiClient.invitations.create({ email, teamId, role, playerId: playerId || undefined });
       setInvitations((prev) => [res.invitation, ...prev]);
       setEmail('');
       setRole('COACH');
+      setPlayerId('');
       await navigator.clipboard?.writeText(invitationUrl(res.invitation.token));
       toast.success('Invitation created and link copied.');
     } catch (err) {
@@ -152,10 +154,26 @@ function StaffTab({ user, isPlatformAdmin }: { user: NonNullable<ReturnType<type
         </label>
         <label style={{ display: 'grid', gap: '0.4rem', fontSize: '0.76rem', color: 'var(--text-muted)', fontWeight: 700 }}>
           Role
-          <select className="input" value={role} onChange={(e) => setRole(e.target.value as (typeof ROLES)[number])}>
+          <select className="input" value={role} onChange={(e) => { setRole(e.target.value as (typeof ROLES)[number]); setPlayerId(''); }}>
             {ROLES.map((r) => <option key={r} value={r}>{r}</option>)}
           </select>
         </label>
+        {role === 'JUGADOR' && (
+          <label style={{ display: 'grid', gap: '0.4rem', fontSize: '0.76rem', color: 'var(--text-muted)', fontWeight: 700 }}>
+            Jugador en la BD
+            <select className="input" value={playerId} onChange={(e) => setPlayerId(e.target.value)}>
+              <option value="">Sin vincular (vincular más tarde)</option>
+              {(selectedTeam?.roster ?? []).map((m) => (
+                <option key={m.playerId} value={m.playerId}>
+                  {m.customName ?? m.displayName}
+                </option>
+              ))}
+            </select>
+            <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)', fontWeight: 400 }}>
+              Selecciona el jugador del roster para vincular su cuenta automáticamente al registrarse.
+            </span>
+          </label>
+        )}
         <button className="btn-primary" type="submit" disabled={creating || manageableTeams.length === 0}>
           <Plus size={16} />{creating ? 'Creating...' : 'Create invitation'}
         </button>

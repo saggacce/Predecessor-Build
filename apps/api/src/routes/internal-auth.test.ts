@@ -205,7 +205,7 @@ describe('POST /internal-auth/register', () => {
     expect(res.body.user.email).toBe('new@example.com');
     expect(res.body.user.passwordHash).toBeUndefined();
     expect(mockDb.__tx.teamMembership.create).toHaveBeenCalledWith({
-      data: { userId: 'new-user-1', teamId: 'team-1', role: 'COACH' },
+      data: { userId: 'new-user-1', teamId: 'team-1', role: 'COACH', playerId: null },
       select: { teamId: true, role: true, playerId: true },
     });
     const cookies = res.headers['set-cookie'] as unknown as string[];
