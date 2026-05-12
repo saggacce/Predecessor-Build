@@ -280,6 +280,7 @@ model Invitation {
   email       String
   teamId      String
   role        String    // MANAGER | COACH | ANALISTA | JUGADOR
+  playerId    String?   // optional — links to Player for JUGADOR role
   invitedById String
   invitedBy   User      @relation("InvitedBy", fields: [invitedById], references: [id])
   expiresAt   DateTime

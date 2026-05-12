@@ -14,17 +14,19 @@ const createInvitationSchema = z.object({
   email: z.string().email().transform((email) => email.toLowerCase()),
   teamId: z.string().min(1),
   role: invitationRoleSchema,
+  playerId: z.string().min(1).optional(),
 });
 
 const listInvitationSchema = z.object({
   teamId: z.string().min(1),
 });
 
-function publicInvitation(invitation: { email: string; teamId: string; role: string; expiresAt: Date }) {
+function publicInvitation(invitation: { email: string; teamId: string; role: string; playerId?: string | null; expiresAt: Date }) {
   return {
     email: invitation.email,
     teamId: invitation.teamId,
     role: invitation.role,
+    playerId: invitation.playerId ?? null,
     expiresAt: invitation.expiresAt,
   };
 }
@@ -55,6 +57,7 @@ invitationsRouter.post('/', requireAuth, requireRole(['MANAGER']), async (req, r
         email: data.email,
         teamId: data.teamId,
         role: data.role,
+        playerId: data.playerId ?? null,
         invitedById: req.user!.userId,
         expiresAt,
       },
@@ -90,6 +93,7 @@ invitationsRouter.get('/', requireAuth, requireRole(['MANAGER']), async (req, re
         email: true,
         teamId: true,
         role: true,
+        playerId: true,
         expiresAt: true,
         usedAt: true,
         createdAt: true,
