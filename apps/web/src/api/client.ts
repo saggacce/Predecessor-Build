@@ -848,6 +848,8 @@ export const apiClient = {
       fetchApi<PlayerGoal>('/review/goals/player', { method: 'POST', body: JSON.stringify(data) }),
     updatePlayer: (id: string, data: { title?: string; description?: string | null; metricId?: string | null; targetValue?: number | null; currentValue?: number | null; coachNote?: string | null; visibility?: string; status?: string }) =>
       fetchApi<PlayerGoal>(`/review/goals/player/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+    deletePlayer: (id: string) =>
+      fetchApi<{ ok: boolean }>(`/review/goals/player/${id}`, { method: 'DELETE' }),
   },
 
   auth: {

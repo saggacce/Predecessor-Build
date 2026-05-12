@@ -884,6 +884,17 @@ function PlayerGoalsSection({ playerId, playerName }: { playerId: string; player
     }
   }
 
+  async function handleDeleteGoal(goalId: string) {
+    if (!window.confirm('Delete this goal?')) return;
+    try {
+      await apiClient.goals.deletePlayer(goalId);
+      setGoals((current) => current.filter((g) => g.id !== goalId));
+      toast.success('Goal deleted.');
+    } catch {
+      toast.error('Failed to delete goal.');
+    }
+  }
+
   if (loading && !selectedTeamId) {
     return (
       <div style={{ border: '1px solid var(--border-color)', borderRadius: 'var(--radius-sm)', padding: '1rem', color: 'var(--text-muted)', background: 'rgba(255,255,255,0.03)' }}>
@@ -979,6 +990,7 @@ function PlayerGoalsSection({ playerId, playerName }: { playerId: string; player
                     {goal.status !== 'ACHIEVED' && (
                       <button type="button" className="btn-secondary" onClick={() => handleUpdateGoal(goal.id, { status: 'ACHIEVED' })} style={{ fontSize: '0.72rem', color: 'var(--accent-win)' }}>Close</button>
                     )}
+                    <button type="button" className="btn-secondary" onClick={() => void handleDeleteGoal(goal.id)} style={{ fontSize: '0.72rem', color: 'var(--accent-loss)' }}>Delete</button>
                   </div>
                 )}
               </div>
