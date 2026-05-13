@@ -139,11 +139,9 @@ export default function ScrimReport() {
     .sort((a, b) => b.winRate - a.winRate || b.games - a.games)
     .slice(0, 5);
 
-  const ALL_OBJ_TYPES = ['FANGTOOTH', 'PRIMAL_FANGTOOTH', 'ORB_PRIME', 'MINI_PRIME', 'SHAPER'] as const;
-  const majorObjControl = ALL_OBJ_TYPES.map((type) => {
-    const found = (rivalAnalysis?.objectiveControl ?? []).find((o) => o.entityType === type);
-    return found ?? { entityType: type, controlPct: 0, avgGameTimeSecs: null, count: 0 };
-  });
+  const majorObjControl = (rivalAnalysis?.objectiveControl ?? []).filter((o) =>
+    ['FANGTOOTH', 'PRIMAL_FANGTOOTH', 'ORB_PRIME', 'MINI_PRIME'].includes(o.entityType)
+  );
 
   return (
     <div>
@@ -179,7 +177,7 @@ export default function ScrimReport() {
       </div>
 
       {report && (
-        <div ref={containerRef} style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', background: isFullScreen ? 'var(--bg-dark)' : undefined, padding: isFullScreen ? '2rem 3rem' : undefined, overflowY: isFullScreen ? 'auto' : undefined, maxWidth: isFullScreen ? '1200px' : undefined, margin: isFullScreen ? '0 auto' : undefined, width: isFullScreen ? '100%' : undefined, boxSizing: 'border-box' }}>
+        <div ref={containerRef} style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', background: isFullScreen ? 'var(--bg-dark)' : undefined, padding: isFullScreen ? '2rem' : undefined, overflowY: isFullScreen ? 'auto' : undefined }}>
 
           {/* VS header */}
           <div className="glass-card" style={{ padding: '1.25rem 1.5rem' }}>
@@ -281,22 +279,17 @@ export default function ScrimReport() {
                 </button>
               </div>
             ) : (
-              <div style={{ display: 'flex', gap: '0.65rem', flexWrap: 'wrap' }}>
+              <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
                 {majorObjControl.map((o) => {
-                  const label: Record<string, string> = { FANGTOOTH: 'Fangtooth', PRIMAL_FANGTOOTH: 'Primal FT', ORB_PRIME: 'Orb Prime', MINI_PRIME: 'Mini Prime', SHAPER: 'Shaper' };
-                  const color: Record<string, string> = { FANGTOOTH: '#ef4444', PRIMAL_FANGTOOTH: '#b91c1c', ORB_PRIME: '#7c3aed', MINI_PRIME: '#a78bfa', SHAPER: '#c084fc' };
-                  const c = color[o.entityType] ?? '#64748b';
-                  const l = label[o.entityType] ?? o.entityType;
-                  const hasData = o.controlPct > 0 || (o as { count?: number }).count > 0;
+                  const label = { FANGTOOTH: 'Fangtooth', PRIMAL_FANGTOOTH: 'Primal FT', ORB_PRIME: 'Orb Prime', MINI_PRIME: 'Mini Prime' }[o.entityType] ?? o.entityType;
+                  const color = { FANGTOOTH: '#ef4444', PRIMAL_FANGTOOTH: '#b91c1c', ORB_PRIME: '#7c3aed', MINI_PRIME: '#a78bfa' }[o.entityType] ?? '#64748b';
                   return (
-                    <div key={o.entityType} style={{ flex: '1 1 120px', padding: '0.75rem', border: `1px solid ${hasData ? c + '33' : 'var(--border-color)'}`, borderRadius: '8px', background: hasData ? `${c}08` : 'transparent', opacity: hasData ? 1 : 0.45 }}>
-                      <div style={{ fontSize: '0.72rem', fontWeight: 700, color: hasData ? c : 'var(--text-muted)', marginBottom: '0.35rem' }}>{l}</div>
-                      <div style={{ fontFamily: 'var(--font-mono)', fontSize: '1.1rem', fontWeight: 700, color: !hasData ? 'var(--text-muted)' : o.controlPct >= 60 ? 'var(--accent-loss)' : o.controlPct <= 40 ? 'var(--accent-win)' : 'var(--accent-prime)' }}>
-                        {hasData ? `${o.controlPct}%` : '—'}
-                      </div>
+                    <div key={o.entityType} style={{ flex: '1 1 130px', padding: '0.75rem', border: `1px solid ${color}33`, borderRadius: '8px', background: `${color}08` }}>
+                      <div style={{ fontSize: '0.72rem', fontWeight: 700, color, marginBottom: '0.35rem' }}>{label}</div>
+                      <div style={{ fontFamily: 'var(--font-mono)', fontSize: '1.1rem', fontWeight: 700, color: o.controlPct >= 60 ? 'var(--accent-loss)' : o.controlPct <= 40 ? 'var(--accent-win)' : 'var(--accent-prime)' }}>{o.controlPct}%</div>
                       <div style={{ fontSize: '0.62rem', color: 'var(--text-muted)', marginTop: '0.2rem' }}>
-                        {!hasData ? 'sin datos' : o.controlPct >= 60 ? '⚠ Ellos dominan' : o.controlPct <= 40 ? '✓ Ventaja nuestra' : '↔ Disputado'}
-                        {o.avgGameTimeSecs ? ` · avg ${Math.floor(o.avgGameTimeSecs / 60)}:${String(o.avgGameTimeSecs % 60).padStart(2, '0')}` : ''}
+                        {o.controlPct >= 60 ? '⚠ They control this' : o.controlPct <= 40 ? '✓ We win this' : '↔ Contested'}
+                        {o.avgGameTimeSecs && ` · avg ${Math.floor(o.avgGameTimeSecs / 60)}:${String(o.avgGameTimeSecs % 60).padStart(2, '0')}`}
                       </div>
                     </div>
                   );
@@ -416,7 +409,7 @@ function buildPrintHTML(report: ScrimReportData, analysis: TeamAnalysis | null):
   @media print { body { padding: 0; } }
 </style></head><body>
 <h1>Scrim Report</h1>
-<p class="meta">${report.ownTeam.name} vs ${report.rivalTeam.name} · Generated ${new Date(report.generatedAt).toLocaleString()} · PrimeSight</p>
+<p class="meta">${report.ownTeam.name} vs ${report.rivalTeam.name} · Generated ${new Date(report.generatedAt).toLocaleString()} · Rift Line</p>
 
 <div class="section">
 <h2>Intelligence Notes</h2>
@@ -451,7 +444,7 @@ ${majorObjs.map((o) => {
 </div>
 </div>
 
-<div class="footer">PrimeSight — Competitive Intelligence · Staff confidential</div>
+<div class="footer">Rift Line — Competitive Intel · Staff confidential</div>
 </body></html>`;
 }
 
@@ -504,7 +497,7 @@ function buildTextReport(report: ScrimReportData, analysis: TeamAnalysis | null)
     lines.push('');
   });
 
-  lines.push('— PrimeSight Competitive Intelligence —');
+  lines.push('— Rift Line Competitive Intel —');
   return lines.join('\n');
 }
 

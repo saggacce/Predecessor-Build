@@ -50,7 +50,7 @@ function WorkspaceHeader() {
     <header className="workspace-header" aria-label="Workspace status">
       <div>
         <div className="workspace-title">Predecessor competitive workspace</div>
-        <div className="workspace-subtitle">Scouting, roster analysis and scrim preparation</div>
+        <div className="workspace-subtitle">Competitive Intel · by Synapsight</div>
       </div>
       <div className="workspace-meta">
         {latestPatch && (
@@ -282,8 +282,8 @@ function Sidebar() {
             <img src="/favicon.svg" alt="" />
           </div>
           <div>
-            <div className="logo-name">PrimeSight</div>
-            <div className="sidebar-subtitle">Competitive Intelligence</div>
+            <div className="logo-name">Rift Line</div>
+            <div className="sidebar-subtitle">Competitive Intel</div>
           </div>
         </div>
       </div>

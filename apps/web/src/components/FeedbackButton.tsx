@@ -88,7 +88,7 @@ export function FeedbackButton() {
               Reportar problema / Enviar sugerencia
             </h2>
             <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', margin: '0 0 1.25rem' }}>
-              Tu reporte llega directamente al equipo de administración de PrimeSight.
+              Tu reporte llega directamente al equipo de administración de Rift Line.
             </p>
 
             <form onSubmit={submit} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
