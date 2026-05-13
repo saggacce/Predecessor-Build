@@ -282,7 +282,7 @@ function Sidebar() {
             <img src="/favicon.svg" alt="" />
           </div>
           <div>
-            <div className="logo-name">RiftLine</div>
+<div className="logo-name">RiftLine</div>
             <div className="sidebar-subtitle">Competitive Intel</div>
           </div>
         </div>
@@ -391,6 +391,19 @@ export default function App() {
 function AppContent() {
   const { internalAuthenticated, internalLoading } = useAuth();
   const location = useLocation();
+
+  // Holographic hover — update --mouse-x/y on every .glass-card
+  useEffect(() => {
+    function onMouseMove(e: MouseEvent) {
+      const target = (e.target as Element).closest('.glass-card') as HTMLElement | null;
+      if (!target) return;
+      const r = target.getBoundingClientRect();
+      target.style.setProperty('--mouse-x', `${((e.clientX - r.left) / r.width * 100).toFixed(1)}%`);
+      target.style.setProperty('--mouse-y', `${((e.clientY - r.top) / r.height * 100).toFixed(1)}%`);
+    }
+    document.addEventListener('mousemove', onMouseMove, { passive: true });
+    return () => document.removeEventListener('mousemove', onMouseMove);
+  }, []);
 
   // Unauthenticated: show landing/login/register without sidebar
   if (!internalLoading && !internalAuthenticated) {
