@@ -336,7 +336,12 @@ function DataControlsTab() {
   const controls = [
     { key: 'versions', label: 'Sync Versions', desc: 'Fetch all game versions from pred.gg and upsert into DB.',
       fn: async () => { const r = await apiClient.admin.syncVersions(); return `${r.synced} version${r.synced !== 1 ? 's' : ''} synced in ${(r.elapsed / 1000).toFixed(1)}s`; } },
-    { key: 'stale', label: 'Sync Stale Players', desc: 'Re-sync players whose data is outdated (batch of 20).',
+    { key: 'staleAll', label: 'Sync All Stale Players', desc: 'Re-sincroniza TODOS los jugadores con datos >24h en batches automáticos. Tarda varios minutos.',
+      fn: async () => {
+        const r = await apiClient.admin.syncStaleAll();
+        return `${r.totalSynced.toLocaleString()} jugadores sincronizados · ${r.totalErrors} errores · ${r.batches} batches`;
+      } },
+    { key: 'stale', label: 'Sync Stale Players (1 batch)', desc: 'Re-sync players whose data is outdated (batch of 30).',
       fn: async () => { const r = await apiClient.admin.syncStale(); return `${r.synced} synced · ${r.skipped} skipped · ${r.errors} errors`; } },
     { key: 'incomplete', label: 'Sync Incomplete Matches', desc: 'Fetch full 10-player rosters for matches with missing players.',
       fn: async () => { const r = await apiClient.admin.syncIncompleteMatches(); return `${r.synced} matches synced · ${r.errors} errors`; } },

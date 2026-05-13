@@ -1338,76 +1338,44 @@ export interface EventStreamPlayerIdRepairResult {
 }
 
 export async function repairEventStreamPlayerIds(db: PrismaClient): Promise<EventStreamPlayerIdRepairResult> {
-  const [heroKills, objectiveKills, wardEvents] = await Promise.all([
-    db.heroKill.findMany({
-      where: {
-        OR: [
-          { killerPlayerId: { not: null } },
-          { killedPlayerId: { not: null } },
-        ],
-      },
-      select: { id: true, killerPlayerId: true, killedPlayerId: true },
-    }),
-    db.objectiveKill.findMany({
-      where: { killerPlayerId: { not: null } },
-      select: { id: true, killerPlayerId: true },
-    }),
-    db.wardEvent.findMany({
-      where: { playerId: { not: null } },
-      select: { id: true, playerId: true },
-    }),
+  // Use raw SQL UPDATE...FROM for efficiency — loading 5M+ records into memory causes OOM.
+  // Each statement updates only rows where the playerId is a pred.gg UUID (not an internal cuid),
+  // joining against the Player table to resolve the correct internal id.
+
+  const [heroKillerResult, heroKilledResult, objectiveResult, wardResult] = await Promise.all([
+    db.$executeRaw`
+      UPDATE "HeroKill" hk
+      SET "killerPlayerId" = p.id
+      FROM "Player" p
+      WHERE hk."killerPlayerId" = p."predggId"
+        AND hk."killerPlayerId" IS DISTINCT FROM p.id
+    `,
+    db.$executeRaw`
+      UPDATE "HeroKill" hk
+      SET "killedPlayerId" = p.id
+      FROM "Player" p
+      WHERE hk."killedPlayerId" = p."predggId"
+        AND hk."killedPlayerId" IS DISTINCT FROM p.id
+    `,
+    db.$executeRaw`
+      UPDATE "ObjectiveKill" ok
+      SET "killerPlayerId" = p.id
+      FROM "Player" p
+      WHERE ok."killerPlayerId" = p."predggId"
+        AND ok."killerPlayerId" IS DISTINCT FROM p.id
+    `,
+    db.$executeRaw`
+      UPDATE "WardEvent" we
+      SET "playerId" = p.id
+      FROM "Player" p
+      WHERE we."playerId" = p."predggId"
+        AND we."playerId" IS DISTINCT FROM p.id
+    `,
   ]);
 
-  const rawIds = new Set<string>();
-  for (const kill of heroKills) {
-    if (kill.killerPlayerId) rawIds.add(kill.killerPlayerId);
-    if (kill.killedPlayerId) rawIds.add(kill.killedPlayerId);
-  }
-  for (const objective of objectiveKills) {
-    if (objective.killerPlayerId) rawIds.add(objective.killerPlayerId);
-  }
-  for (const ward of wardEvents) {
-    if (ward.playerId) rawIds.add(ward.playerId);
-  }
-
-  const { playerIdMap, placeholdersCreated } = await resolveEventStreamPlayerIds(db, Array.from(rawIds));
-  let heroKillsUpdated = 0;
-  let objectiveKillsUpdated = 0;
-  let wardEventsUpdated = 0;
-
-  for (const kill of heroKills) {
-    const killerPlayerId = kill.killerPlayerId ? (playerIdMap.get(kill.killerPlayerId) ?? kill.killerPlayerId) : null;
-    const killedPlayerId = kill.killedPlayerId ? (playerIdMap.get(kill.killedPlayerId) ?? kill.killedPlayerId) : null;
-    if (killerPlayerId !== kill.killerPlayerId || killedPlayerId !== kill.killedPlayerId) {
-      await db.heroKill.update({
-        where: { id: kill.id },
-        data: { killerPlayerId, killedPlayerId },
-      });
-      heroKillsUpdated++;
-    }
-  }
-
-  for (const objective of objectiveKills) {
-    const killerPlayerId = objective.killerPlayerId ? (playerIdMap.get(objective.killerPlayerId) ?? objective.killerPlayerId) : null;
-    if (killerPlayerId !== objective.killerPlayerId) {
-      await db.objectiveKill.update({
-        where: { id: objective.id },
-        data: { killerPlayerId },
-      });
-      objectiveKillsUpdated++;
-    }
-  }
-
-  for (const ward of wardEvents) {
-    const playerId = ward.playerId ? (playerIdMap.get(ward.playerId) ?? ward.playerId) : null;
-    if (playerId !== ward.playerId) {
-      await db.wardEvent.update({
-        where: { id: ward.id },
-        data: { playerId },
-      });
-      wardEventsUpdated++;
-    }
-  }
+  const heroKillsUpdated = Number(heroKillerResult) + Number(heroKilledResult);
+  const objectiveKillsUpdated = Number(objectiveResult);
+  const wardEventsUpdated = Number(wardResult);
 
   await db.syncLog.create({
     data: {
@@ -1418,103 +1386,7 @@ export async function repairEventStreamPlayerIds(db: PrismaClient): Promise<Even
     },
   });
 
-  return { heroKillsUpdated, objectiveKillsUpdated, wardEventsUpdated, placeholdersCreated };
+  return { heroKillsUpdated, objectiveKillsUpdated, wardEventsUpdated, placeholdersCreated: 0 };
 }
 
-const PLAYER_RECENT_MATCHES_QUERY = `
-  query PlayerRecentMatches($playerId: ID!, $limit: Int!) {
-    player(by: { id: $playerId }) {
-      id
-      name
-      matchesPaginated(limit: $limit) {
-        results {
-          id role team kills deaths assists gold heroDamage totalDamageDealt
-          wardsPlaced wardsDestroyed laneMinionsKilled
-          hero { slug }
-          match { id startTime duration gameMode region winningTeam version { id name gameString releaseDate patchType } }
-        }
-      }
-    }
-  }
-`;
 
-/**
- * Fetches recent matches for a single player (by their pred.gg ID) and persists new ones.
- * Lightweight: no snapshot creation, just match data.
- * Returns the count of newly inserted matches.
- */
-export async function syncRecentMatchesForPlayer(
-  db: PrismaClient,
-  predggId: string,
-  userToken: string,
-  limit = 20,
-): Promise<{ newMatches: number; newMatchUuids: string[] }> {
-  const data = await predggQuery<{
-    player: { id: string; name: string; matchesPaginated: { results: PredggMatchStat[] } } | null;
-  }>(PLAYER_RECENT_MATCHES_QUERY, { playerId: predggId, limit }, userToken);
-
-  if (!data?.player) return { newMatches: 0, newMatchUuids: [] };
-
-  const matches = data.player.matchesPaginated?.results ?? [];
-  if (matches.length === 0) return { newMatches: 0, newMatchUuids: [] };
-
-  const player = await db.player.findUnique({ where: { predggId }, select: { id: true, displayName: true } });
-  if (!player) return { newMatches: 0, newMatchUuids: [] };
-
-  const candidateUuids = matches.map((m) => m.match?.id).filter(Boolean) as string[];
-  const existing = await db.match.findMany({
-    where: { predggUuid: { in: candidateUuids } },
-    select: { predggUuid: true },
-  });
-  const existingSet = new Set(existing.map((m) => m.predggUuid));
-  const newMatchUuids = candidateUuids.filter((uuid) => !existingSet.has(uuid));
-
-  const now = new Date();
-  await persistRecentMatches(db, player.id, player.displayName, matches, now);
-  await db.player.update({ where: { predggId }, data: { lastSynced: now } });
-
-  return { newMatches: newMatchUuids.length, newMatchUuids };
-}
-
-export async function syncIncompleteMatches(db: PrismaClient): Promise<{ synced: number; errors: number }> {
-  const start = Date.now();
-
-  // Find matches with fewer than 10 MatchPlayers (incomplete roster)
-  const incomplete = await db.match.findMany({
-    where: { matchPlayers: { none: { id: { gt: '' } } } },
-    select: { id: true, predggUuid: true, _count: { select: { matchPlayers: true } } },
-  });
-
-  const allMatches = await db.match.findMany({
-    select: { id: true, predggUuid: true, _count: { select: { matchPlayers: true } } },
-    where: { matchPlayers: { some: {} } },
-  });
-
-  // Also include matches with players that have a UUID but no linked Player record
-  const missingUuid = await db.match.findMany({
-    where: { matchPlayers: { some: { predggPlayerUuid: { not: null }, playerId: null } } },
-    select: { id: true, predggUuid: true, _count: { select: { matchPlayers: true } } },
-  });
-
-  const seen = new Set<string>();
-  const toResync = [...incomplete, ...allMatches.filter((m) => m._count.matchPlayers < 10), ...missingUuid]
-    .filter((m) => { if (seen.has(m.id)) return false; seen.add(m.id); return true; });
-
-  logger.info({ count: toResync.length }, 'incomplete matches found — resyncing');
-
-  let synced = 0;
-  let errors = 0;
-
-  for (const match of toResync) {
-    try {
-      await resyncMatch(db, match.predggUuid);
-      synced++;
-    } catch (err) {
-      logger.warn({ matchId: match.id, err }, 'failed to resync incomplete match');
-      errors++;
-    }
-  }
-
-  logger.info({ synced, errors, elapsed: Date.now() - start }, 'incomplete matches resync complete');
-  return { synced, errors };
-}

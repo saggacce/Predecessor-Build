@@ -78,6 +78,52 @@ const logsQuerySchema = z.object({
 });
 
 /**
+ * POST /admin/sync-stale-all
+ * Syncs ALL stale players in batches of 30 with 2s delays between batches.
+ * Long-running — streams progress via SSE or just returns when done.
+ */
+adminRouter.post('/sync-stale-all', requireAuth, requirePlatformAdmin, async (req, res, next) => {
+  try {
+    const userToken = await getValidToken(req, res);
+    if (!userToken) {
+      res.status(400).json({ error: { message: 'pred.gg session required', code: 'NO_TOKEN' } });
+      return;
+    }
+
+    const staleThreshold = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const totalStale = await db.player.count({
+      where: { lastSynced: { lt: staleThreshold }, displayName: { not: 'HIDDEN' } },
+    });
+
+    let totalSynced = 0;
+    let totalErrors = 0;
+    let batches = 0;
+
+    while (true) {
+      const result = await syncStalePlayers(db, userToken);
+      totalSynced += result.synced;
+      totalErrors += result.errors;
+      batches++;
+      if (result.synced === 0 && result.skipped === 0) break; // no more stale
+      if (batches > 2000) break; // safety cap
+      await new Promise((resolve) => setTimeout(resolve, 1500)); // 1.5s between batches
+    }
+
+    await db.syncLog.create({
+      data: {
+        entity: 'player', entityId: 'all-stale',
+        operation: 'sync-stale-all', status: totalErrors > 0 ? 'partial' : 'ok',
+        error: totalErrors > 0 ? `${totalErrors} errors` : null,
+        source: 'admin',
+      },
+    });
+
+    res.json({ ok: true, totalStale, totalSynced, totalErrors, batches });
+  } catch (err) { next(err); }
+});
+
+
+/**
  * POST /admin/sync-incomplete-matches
  * Re-fetches all matches that have fewer than 10 MatchPlayers.
  */

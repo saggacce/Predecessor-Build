@@ -1000,6 +1000,8 @@ export const apiClient = {
       fetchApi<{ ok: boolean; synced: number; errors: number }>('/admin/sync-heroes', { method: 'POST' }),
     syncVersions: () =>
       fetchApi<AdminSyncVersionsResult>('/admin/sync-versions', { method: 'POST' }),
+    syncStaleAll: () =>
+      fetchApi<{ ok: boolean; totalStale: number; totalSynced: number; totalErrors: number; batches: number }>('/admin/sync-stale-all', { method: 'POST' }),
     syncStale: () =>
       fetchApi<AdminSyncStaleResult>('/admin/sync-stale', { method: 'POST' }),
     syncIncompleteMatches: () =>
