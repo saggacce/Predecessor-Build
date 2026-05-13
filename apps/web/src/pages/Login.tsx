@@ -4,8 +4,6 @@ import { LogIn } from 'lucide-react';
 import { toast } from 'sonner';
 import { ApiErrorResponse, apiClient } from '../api/client';
 
-const BG_HEROES = ['gideon', 'kallari', 'countess', 'aurora', 'the-fey', 'serath'];
-
 const DiscordIcon = () => (
   <svg width="28" height="22" viewBox="0 0 245 240" fill="#fff">
     <path d="M104.4 103.9c-5.7 0-10.2 5-10.2 11.1s4.6 11.1 10.2 11.1c5.7 0 10.2-5 10.2-11.1.1-6.1-4.5-11.1-10.2-11.1zm36.5 0c-5.7 0-10.2 5-10.2 11.1s4.6 11.1 10.2 11.1c5.7 0 10.2-5 10.2-11.1s-4.5-11.1-10.2-11.1z"/>
@@ -61,37 +59,7 @@ export default function Login() {
   }
 
   return (
-    <div style={{ minHeight: '100vh', width: '100vw', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'fixed', inset: 0, zIndex: 50, overflow: 'hidden' }}>
-
-      {/* Color orbs */}
-      <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}>
-        <div style={{ position: 'absolute', top: '-15%', left: '-10%', width: 600, height: 600, borderRadius: '50%', background: 'radial-gradient(circle, rgba(167,139,250,0.18) 0%, transparent 65%)' }} />
-        <div style={{ position: 'absolute', bottom: '-20%', right: '-10%', width: 700, height: 700, borderRadius: '50%', background: 'radial-gradient(circle, rgba(56,212,200,0.12) 0%, transparent 65%)' }} />
-        <div style={{ position: 'absolute', top: '35%', right: '22%', width: 350, height: 350, borderRadius: '50%', background: 'radial-gradient(circle, rgba(91,156,246,0.10) 0%, transparent 65%)' }} />
-      </div>
-
-      {/* Hero portraits — left */}
-      <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: '26%', display: 'flex', flexDirection: 'column', pointerEvents: 'none' }}>
-        {BG_HEROES.slice(0, 3).map((slug) => (
-          <div key={slug} style={{ flex: 1, overflow: 'hidden', opacity: 0.22 }}>
-            <img src={`/heroes/${slug}.webp`} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', filter: 'blur(5px) saturate(0.5)', transform: 'scale(1.12)' }} onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
-          </div>
-        ))}
-        <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to right, transparent 20%, var(--bg-dark) 85%)' }} />
-      </div>
-
-      {/* Hero portraits — right */}
-      <div style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: '26%', display: 'flex', flexDirection: 'column', pointerEvents: 'none' }}>
-        {BG_HEROES.slice(3).map((slug) => (
-          <div key={slug} style={{ flex: 1, overflow: 'hidden', opacity: 0.22 }}>
-            <img src={`/heroes/${slug}.webp`} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', filter: 'blur(5px) saturate(0.5)', transform: 'scale(1.12)' }} onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
-          </div>
-        ))}
-        <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to left, transparent 20%, var(--bg-dark) 85%)' }} />
-      </div>
-
-      {/* Grid */}
-      <div style={{ position: 'absolute', inset: 0, backgroundImage: 'radial-gradient(circle, rgba(255,255,255,0.025) 1px, transparent 1px)', backgroundSize: '40px 40px', pointerEvents: 'none' }} />
+    <div style={{ minHeight: '100vh', width: '100vw', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'fixed', inset: 0, zIndex: 50 }}>
 
       {/* Card */}
       <div style={{ position: 'relative', zIndex: 10, width: '100%', maxWidth: 400, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2rem', padding: '1.5rem' }}>
