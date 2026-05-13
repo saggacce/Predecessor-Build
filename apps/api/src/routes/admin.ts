@@ -544,16 +544,28 @@ adminRouter.get('/users', async (_req, res, next) => {
 });
 
 /**
- * PATCH /admin/users/:id — toggle active or change globalRole
+ * PATCH /admin/users/:id — update user fields (name, email, globalRole, isActive, tier)
  */
 adminRouter.patch('/users/:id', async (req, res, next) => {
   try {
-    const { isActive, globalRole } = req.body as { isActive?: boolean; globalRole?: string };
+    const body = z.object({
+      name: z.string().min(2).max(60).optional(),
+      email: z.string().email().optional(),
+      isActive: z.boolean().optional(),
+      globalRole: z.enum(['PLATFORM_ADMIN', 'VIEWER']).optional(),
+      tier: z.enum(['FREE', 'PRO', 'TEAM', 'ENTERPRISE']).optional(),
+      tierExpiresAt: z.string().datetime().optional().nullable(),
+    }).parse(req.body);
+
     const user = await db.user.update({
       where: { id: req.params.id },
       data: {
-        ...(typeof isActive === 'boolean' && { isActive }),
-        ...(globalRole && { globalRole }),
+        ...(body.name && { name: body.name }),
+        ...(body.email && { email: body.email }),
+        ...(typeof body.isActive === 'boolean' && { isActive: body.isActive }),
+        ...(body.globalRole && { globalRole: body.globalRole }),
+        ...(body.tier && { tier: body.tier }),
+        ...(body.tierExpiresAt !== undefined && { tierExpiresAt: body.tierExpiresAt ? new Date(body.tierExpiresAt) : null }),
       },
       include: { memberships: { include: { team: { select: { id: true, name: true } } } } },
     });

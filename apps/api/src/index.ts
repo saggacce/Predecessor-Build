@@ -29,6 +29,7 @@ import { reviewRouter } from './routes/review.js';
 import { vodRouter } from './routes/vod.js';
 import { mapZonesRouter } from './routes/map-zones.js';
 import { syncRouter } from './routes/sync.js';
+import { profileRouter } from './routes/profile.js';
 import { errorHandler } from './middleware/error-handler.js';
 import { disconnectDb } from './db.js';
 import { logger } from './logger.js';
@@ -75,6 +76,7 @@ app.use('/review', reviewRouter);
 app.use('/vod', vodRouter);
 app.use('/map-zones', mapZonesRouter);
 app.use('/sync', syncRouter);
+app.use('/profile', profileRouter);
 
 app.use(errorHandler);
 
