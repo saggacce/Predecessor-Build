@@ -26,6 +26,22 @@ export default function AuditLogsPage() {
   const [statusFilter, setStatusFilter] = useState('');
   const [sourceFilter, setSourceFilter] = useState('');
 
+  const isAdmin = !internalLoading && !!user && user.globalRole === 'PLATFORM_ADMIN';
+
+  // Hooks must be before any early returns
+  useEffect(() => {
+    if (!isAdmin) return;
+    setLoading(true);
+    apiClient.admin.syncLogs(300, entityFilter || undefined, statusFilter || undefined)
+      .then((res) => {
+        const filtered = sourceFilter ? res.logs.filter((l: SyncLog) => l.source === sourceFilter) : res.logs;
+        setLogs(filtered);
+        setTotal(res.total);
+      })
+      .catch(() => toast.error('Failed to load audit logs'))
+      .finally(() => setLoading(false));
+  }, [entityFilter, statusFilter, sourceFilter, isAdmin]);
+
   if (internalLoading) return <div style={{ padding: '2rem', color: 'var(--text-muted)' }}>Checking session...</div>;
 
   if (!user || user.globalRole !== 'PLATFORM_ADMIN') {
@@ -41,32 +57,15 @@ export default function AuditLogsPage() {
     );
   }
 
-  async function fetchLogs() {
-    setLoading(true);
-    try {
-      const res = await apiClient.admin.syncLogs(300, entityFilter || undefined, statusFilter || undefined);
-      const filtered = sourceFilter ? res.logs.filter((l) => l.source === sourceFilter) : res.logs;
-      setLogs(filtered);
-      setTotal(res.total);
-    } catch {
-      toast.error('Failed to load audit logs');
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  useEffect(() => { void fetchLogs(); }, [entityFilter, statusFilter, sourceFilter]);
-
   return (
     <div>
       <header className="header">
         <h1 className="header-title">Audit Logs</h1>
         <p style={{ color: 'var(--text-muted)', fontSize: '0.86rem', marginTop: '0.35rem' }}>
-          Historial de operaciones de sincronización con módulo, usuario y error detallado.
+          Historial de operaciones con módulo, usuario y error detallado.
         </p>
       </header>
 
-      {/* Filters */}
       <div className="glass-card" style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap', marginBottom: '1rem' }}>
         <select className="input" value={sourceFilter} onChange={(e) => setSourceFilter(e.target.value)} style={{ flex: '1 1 140px' }}>
           <option value="">Todos los módulos</option>
@@ -80,20 +79,14 @@ export default function AuditLogsPage() {
           <option value="">Todos los estados</option>
           {['ok', 'success', 'error', 'partial', 'skipped'].map((s) => <option key={s} value={s}>{s}</option>)}
         </select>
-        <button onClick={() => void fetchLogs()} className="btn-secondary" style={{ whiteSpace: 'nowrap' }}>Actualizar</button>
         <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.72rem', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
           {total} total · {logs.length} mostrados
         </span>
       </div>
 
-      {/* Table */}
       <div className="glass-card" style={{ padding: 0, overflow: 'clip' }}>
         <div style={{ display: 'grid', gridTemplateColumns: '150px 120px 1fr 80px 120px', padding: '0.4rem 1rem', fontSize: '0.62rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', borderBottom: '1px solid var(--border-color)', background: 'var(--bg-card)', position: 'sticky', top: 0 }}>
-          <span>Fecha y hora</span>
-          <span>Módulo</span>
-          <span>Detalle / Error</span>
-          <span>Estado</span>
-          <span>Usuario</span>
+          <span>Fecha y hora</span><span>Módulo</span><span>Detalle / Error</span><span>Estado</span><span>Usuario</span>
         </div>
         {loading ? (
           <div style={{ padding: '1.5rem', color: 'var(--text-muted)' }}>Cargando...</div>

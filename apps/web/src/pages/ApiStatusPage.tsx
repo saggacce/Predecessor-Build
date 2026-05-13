@@ -1,29 +1,44 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { CheckCircle, XCircle, AlertTriangle, RefreshCw, Radio, Shield } from 'lucide-react';
 import { apiClient } from '../api/client';
 import { useAuth } from '../hooks/useAuth';
 
-interface PredggStatus {
-  status: 'ok' | 'error';
-  responseMs: number | null;
-  error: string | null;
-  endpoint: string;
-}
-
 interface ApiStatusData {
-  predgg: PredggStatus;
-  syncErrors: {
-    total: number;
-    last24h: number;
-    bySource: Array<{ source: string | null; _count: { id: number } }>;
-  };
+  predgg: { status: 'ok' | 'error'; responseMs: number | null; error: string | null; endpoint: string };
+  syncErrors: { total: number; last24h: number; bySource: Array<{ source: string | null; _count: { id: number } }> };
   lastSuccessfulSync: { syncedAt: string; entity: string; source: string | null } | null;
 }
+
+const SOURCE_LABELS: Record<string, string> = {
+  'event-stream': 'Event Stream', 'cron': 'Cron', 'user': 'Usuario', 'admin': 'Admin',
+};
 
 export default function ApiStatusPage() {
   const { user, internalLoading } = useAuth();
   const [data, setData] = useState<ApiStatusData | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
+
+  const isAdmin = !internalLoading && !!user && user.globalRole === 'PLATFORM_ADMIN';
+
+  // All hooks before any early returns
+  const doRefresh = useCallback(() => {
+    if (!isAdmin) return;
+    setLoading(true);
+    (apiClient as any).admin.apiStatus()
+      .then((res: ApiStatusData) => setData(res))
+      .catch(() => null)
+      .finally(() => setLoading(false));
+  }, [isAdmin]);
+
+  useEffect(() => {
+    doRefresh();
+  }, [doRefresh]);
+
+  useEffect(() => {
+    if (!isAdmin) return;
+    const t = setInterval(doRefresh, 30000);
+    return () => clearInterval(t);
+  }, [isAdmin, doRefresh]);
 
   if (internalLoading) return <div style={{ padding: '2rem', color: 'var(--text-muted)' }}>Checking session...</div>;
 
@@ -39,27 +54,6 @@ export default function ApiStatusPage() {
     );
   }
 
-  async function refresh() {
-    setLoading(true);
-    try {
-      const res = await (apiClient as any).admin.apiStatus() as ApiStatusData;
-      setData(res);
-    } catch { /* silent */ }
-    finally { setLoading(false); }
-  }
-
-  useEffect(() => { void refresh(); }, []);
-
-  // Auto-refresh every 30s
-  useEffect(() => {
-    const t = setInterval(() => void refresh(), 30000);
-    return () => clearInterval(t);
-  }, []);
-
-  const SOURCE_LABELS: Record<string, string> = {
-    'event-stream': 'Event Stream', 'cron': 'Cron', 'user': 'Usuario', 'admin': 'Admin',
-  };
-
   return (
     <div>
       <header className="header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
@@ -69,7 +63,7 @@ export default function ApiStatusPage() {
             Estado de conexión con pred.gg y resumen de errores de sincronización.
           </p>
         </div>
-        <button onClick={() => void refresh()} disabled={loading} className="btn-secondary" style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+        <button onClick={doRefresh} disabled={loading} className="btn-secondary" style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
           <RefreshCw size={13} style={{ animation: loading ? 'spin 0.8s linear infinite' : 'none' }} />
           Actualizar
         </button>
@@ -80,30 +74,27 @@ export default function ApiStatusPage() {
           {[1, 2].map((i) => <div key={i} className="glass-card" style={{ height: 100, background: 'rgba(255,255,255,0.02)' }} />)}
         </div>
       ) : !data ? (
-        <div style={{ padding: '1.5rem', color: 'var(--accent-loss)' }}>Error al cargar el estado.</div>
+        <div style={{ padding: '1.5rem', color: 'var(--accent-loss)' }}>
+          Error al cargar el estado. Reinicia el servidor si acabas de desplegar cambios.
+        </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
 
-          {/* pred.gg connection */}
           <div className="glass-card" style={{ borderLeft: `3px solid ${data.predgg.status === 'ok' ? 'var(--accent-win)' : 'var(--accent-loss)'}` }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1rem' }}>
               <Radio size={18} style={{ color: data.predgg.status === 'ok' ? 'var(--accent-win)' : 'var(--accent-loss)', flexShrink: 0 }} />
               <span style={{ fontWeight: 700, fontSize: '1rem' }}>pred.gg API</span>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                {data.predgg.status === 'ok'
-                  ? <><CheckCircle size={14} style={{ color: 'var(--accent-win)' }} /><span style={{ color: 'var(--accent-win)', fontWeight: 700 }}>Conectado</span></>
-                  : <><XCircle size={14} style={{ color: 'var(--accent-loss)' }} /><span style={{ color: 'var(--accent-loss)', fontWeight: 700 }}>Sin conexión</span></>
-                }
-              </div>
+              {data.predgg.status === 'ok'
+                ? <><CheckCircle size={14} style={{ color: 'var(--accent-win)' }} /><span style={{ color: 'var(--accent-win)', fontWeight: 700 }}>Conectado</span></>
+                : <><XCircle size={14} style={{ color: 'var(--accent-loss)' }} /><span style={{ color: 'var(--accent-loss)', fontWeight: 700 }}>Sin conexión</span></>
+              }
               {data.predgg.responseMs !== null && (
                 <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.78rem', color: 'var(--text-muted)', marginLeft: 'auto' }}>
                   {data.predgg.responseMs}ms
                 </span>
               )}
             </div>
-            <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
-              {data.predgg.endpoint}
-            </div>
+            <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>{data.predgg.endpoint}</div>
             {data.predgg.error && (
               <div style={{ marginTop: '0.75rem', padding: '0.6rem 0.85rem', background: 'rgba(248,113,113,0.06)', border: '1px solid rgba(248,113,113,0.2)', borderRadius: 8, fontSize: '0.78rem', color: 'var(--accent-loss)' }}>
                 {data.predgg.error}
@@ -111,7 +102,6 @@ export default function ApiStatusPage() {
             )}
           </div>
 
-          {/* Sync error summary */}
           <div className="glass-card">
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1.25rem' }}>
               <AlertTriangle size={18} style={{ color: data.syncErrors.last24h > 0 ? 'var(--accent-prime)' : 'var(--text-muted)' }} />
@@ -146,7 +136,6 @@ export default function ApiStatusPage() {
             )}
           </div>
 
-          {/* Last successful sync */}
           {data.lastSuccessfulSync && (
             <div className="glass-card" style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
               <CheckCircle size={16} style={{ color: 'var(--accent-win)', flexShrink: 0 }} />
@@ -159,7 +148,6 @@ export default function ApiStatusPage() {
             </div>
           )}
 
-          {/* Auto-refresh note */}
           <p style={{ fontSize: '0.68rem', color: 'var(--text-muted)', textAlign: 'right', fontFamily: 'var(--font-mono)' }}>↻ actualización automática cada 30s</p>
         </div>
       )}
