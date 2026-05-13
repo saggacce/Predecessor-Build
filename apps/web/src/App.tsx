@@ -27,6 +27,9 @@ import UsersPage from './pages/UsersPage';
 import ProfilePage from './pages/ProfilePage';
 import ApiStatusPage from './pages/ApiStatusPage';
 import ConfigPage from './pages/ConfigPage';
+import FeedbackPage from './pages/FeedbackPage';
+import { FeedbackButton } from './components/FeedbackButton';
+import LandingPage from './pages/LandingPage';
 import { useAuth } from './hooks/useAuth';
 import { apiClient } from './api/client';
 import './App.css';
@@ -91,9 +94,10 @@ interface SidebarSectionProps {
   section: SidebarSection;
   isOpen: boolean;
   onToggle: () => void;
+  badgeCount?: number;
 }
 
-function SidebarSectionEl({ section, isOpen, onToggle }: SidebarSectionProps) {
+function SidebarSectionEl({ section, isOpen, onToggle, badgeCount = 0 }: SidebarSectionProps) {
   const location = useLocation();
 
   const isActive = section.to
@@ -121,7 +125,7 @@ function SidebarSectionEl({ section, isOpen, onToggle }: SidebarSectionProps) {
         aria-expanded={isOpen}
       >
         <span className="nav-section-icon">{section.icon}</span>
-        <span className="nav-section-label">{section.label}</span>
+        <span className="nav-section-label" style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>{section.label}{badgeCount > 0 && <span style={{ fontSize: '0.55rem', fontWeight: 800, background: 'var(--accent-loss)', color: '#fff', borderRadius: 999, padding: '1px 5px', lineHeight: 1.5 }}>{badgeCount}</span>}</span>
         <span className="nav-section-chevron">
           {isOpen ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
         </span>
@@ -211,6 +215,7 @@ const sections: SidebarSection[] = [
       { to: '/admin/api-status', label: 'API Status' },
       { to: '/admin/audit-logs', label: 'Audit Logs' },
       { to: '/admin/config', label: 'Configuración' },
+      { to: '/admin/feedback', label: 'Feedback' },
     ],
   },
 ];
@@ -218,6 +223,15 @@ const sections: SidebarSection[] = [
 function Sidebar() {
   const { authenticated, loading, user, internalLoading } = useAuth();
   const location = useLocation();
+  const [feedbackUnread, setFeedbackUnread] = useState(0);
+
+  // Load unread feedback count for platform admins
+  useEffect(() => {
+    if (!user || user.globalRole !== 'PLATFORM_ADMIN') return;
+    apiClient.feedback.unreadCount()
+      .then(({ count }) => setFeedbackUnread(count))
+      .catch(() => null);
+  }, [user, location.pathname]); // refresh when navigating away from feedback page
 
   // Accordion: only one section open at a time
   const getInitialOpen = () => {
@@ -302,6 +316,7 @@ function Sidebar() {
                 section={filteredSection}
                 isOpen={openSection === section.id}
                 onToggle={() => setOpenSection((prev) => prev === section.id ? null : section.id)}
+                badgeCount={section.id === 'admin' && feedbackUnread > 0 ? feedbackUnread : 0}
               />
             );
           })}
@@ -337,24 +352,24 @@ function Sidebar() {
 
         <div className="sidebar-auth-divider" />
 
-        {loading ? (
-          <div className="session-state muted">
-            <Loader size={14} style={{ animation: 'spin 1s linear infinite' }} />
-            Checking pred.gg...
-          </div>
-        ) : authenticated ? (
-          <button onClick={handlePredggLogout} className="btn-auth btn-auth-logout" type="button">
-            <LogOut size={16} /> Logout pred.gg
-          </button>
-        ) : (
-          <a href={apiClient.auth.loginUrl()} className="btn-auth btn-auth-login">
-            <LogIn size={16} /> Login with pred.gg
-          </a>
+        {/* pred.gg auth — only visible to platform admins (token used for sync) */}
+        {user?.globalRole === 'PLATFORM_ADMIN' && (
+          loading ? (
+            <div className="session-state muted">
+              <Loader size={14} style={{ animation: 'spin 1s linear infinite' }} />
+              Checking pred.gg...
+            </div>
+          ) : authenticated ? (
+            <button onClick={handlePredggLogout} className="btn-auth btn-auth-logout" type="button">
+              <LogOut size={16} /> Logout pred.gg
+            </button>
+          ) : (
+            <a href={apiClient.auth.loginUrl()} className="btn-auth btn-auth-login">
+              <LogIn size={16} /> Login with pred.gg
+            </a>
+          )
         )}
-        {!loading && !authenticated && (
-          <p className="sidebar-note">Login to enable player search and stats</p>
-        )}
-        {!loading && authenticated && (
+        {user?.globalRole === 'PLATFORM_ADMIN' && !loading && authenticated && (
           <p className="sidebar-note connected">pred.gg connected</p>
         )}
       </div>
@@ -367,8 +382,34 @@ function Sidebar() {
 export default function App() {
   return (
     <BrowserRouter>
+      <AppContent />
+      <Toaster position="bottom-right" theme="dark" richColors closeButton />
+    </BrowserRouter>
+  );
+}
+
+function AppContent() {
+  const { internalAuthenticated, internalLoading } = useAuth();
+  const location = useLocation();
+
+  // Show landing page for unauthenticated users (except login/register routes)
+  const publicRoutes = ['/login', '/register', '/unauthorized'];
+  const isPublicRoute = publicRoutes.some((r) => location.pathname.startsWith(r));
+
+  if (!internalLoading && !internalAuthenticated && !isPublicRoute) {
+    return (
+      <Routes>
+        <Route path="*" element={<LandingPage />} />
+        <Route path="/login" element={<Login />} />
+        <Route path="/register/:token" element={<Register />} />
+      </Routes>
+    );
+  }
+
+  return (
       <div className="app-container">
         <Sidebar />
+        <FeedbackButton />
         <main className="main-content">
           <WorkspaceHeader />
           <Routes>
@@ -413,6 +454,7 @@ export default function App() {
             <Route path="/admin/config" element={<ConfigPage />} />
             <Route path="/admin/api-status" element={<ApiStatusPage />} />
             <Route path="/admin/audit-logs" element={<AuditLogsPage />} />
+            <Route path="/admin/feedback" element={<FeedbackPage />} />
 
             {/* Backward compatibility redirects */}
             <Route path="/players" element={<Navigate to="/analysis/players" replace />} />
@@ -422,7 +464,5 @@ export default function App() {
           </Routes>
         </main>
       </div>
-      <Toaster position="bottom-right" theme="dark" richColors closeButton />
-    </BrowserRouter>
   );
 }
