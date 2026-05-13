@@ -392,16 +392,13 @@ function AppContent() {
   const { internalAuthenticated, internalLoading } = useAuth();
   const location = useLocation();
 
-  // Show landing page for unauthenticated users (except login/register routes)
-  const publicRoutes = ['/login', '/register', '/unauthorized'];
-  const isPublicRoute = publicRoutes.some((r) => location.pathname.startsWith(r));
-
-  if (!internalLoading && !internalAuthenticated && !isPublicRoute) {
+  // Unauthenticated: show landing/login/register without sidebar
+  if (!internalLoading && !internalAuthenticated) {
     return (
       <Routes>
-        <Route path="*" element={<LandingPage />} />
         <Route path="/login" element={<Login />} />
         <Route path="/register/:token" element={<Register />} />
+        <Route path="*" element={<LandingPage />} />
       </Routes>
     );
   }
