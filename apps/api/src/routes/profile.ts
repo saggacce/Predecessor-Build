@@ -32,7 +32,7 @@ const SAFE_USER_SELECT = {
 // GET /profile — own profile
 profileRouter.get('/', async (req, res, next) => {
   try {
-    const userId = (req as { user?: { id: string } }).user!.id;
+    const userId = req.user!.userId;
     const user = await db.user.findUnique({ where: { id: userId }, select: SAFE_USER_SELECT });
     if (!user) { res.status(404).json({ error: { message: 'User not found' } }); return; }
     res.json({ user });
@@ -42,7 +42,7 @@ profileRouter.get('/', async (req, res, next) => {
 // PATCH /profile — update own profile fields
 profileRouter.patch('/', async (req, res, next) => {
   try {
-    const userId = (req as { user?: { id: string } }).user!.id;
+    const userId = req.user!.userId;
     const body = z.object({
       name: z.string().min(2).max(60).optional(),
       bio: z.string().max(300).optional().nullable(),
@@ -62,7 +62,7 @@ profileRouter.patch('/', async (req, res, next) => {
 // PATCH /profile/email — change own email
 profileRouter.patch('/email', async (req, res, next) => {
   try {
-    const userId = (req as { user?: { id: string } }).user!.id;
+    const userId = req.user!.userId;
     const { email, currentPassword } = z.object({
       email: z.string().email().max(120),
       currentPassword: z.string().min(1),
@@ -91,7 +91,7 @@ profileRouter.patch('/email', async (req, res, next) => {
 // PATCH /profile/password — change own password
 profileRouter.patch('/password', async (req, res, next) => {
   try {
-    const userId = (req as { user?: { id: string } }).user!.id;
+    const userId = req.user!.userId;
     const { currentPassword, newPassword } = z.object({
       currentPassword: z.string().min(1),
       newPassword: z.string().min(8).max(128),
@@ -112,7 +112,7 @@ profileRouter.patch('/password', async (req, res, next) => {
 // DELETE /profile/social/:provider — disconnect a social account
 profileRouter.delete('/social/:provider', async (req, res, next) => {
   try {
-    const userId = (req as { user?: { id: string } }).user!.id;
+    const userId = req.user!.userId;
     const { provider } = z.object({
       provider: z.enum(['discord', 'epic', 'steam']),
     }).parse(req.params);
@@ -131,7 +131,7 @@ profileRouter.delete('/social/:provider', async (req, res, next) => {
 // GET /profile/access — effective tier access for the authenticated user
 profileRouter.get('/access', async (req, res, next) => {
   try {
-    const userId = (req as { user?: { id: string } }).user!.id;
+    const userId = req.user!.userId;
     const user = await db.user.findUnique({
       where: { id: userId },
       select: {

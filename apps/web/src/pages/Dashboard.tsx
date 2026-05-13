@@ -390,7 +390,7 @@ export default function Dashboard() {
                     {playerProfile.heroStats.length > 0 && (
                       <div className="glass-card" style={{ textAlign: 'center', padding: '1rem' }}>
                         <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.9rem', fontWeight: 700, color: 'var(--accent-blue)', textTransform: 'capitalize' }}>
-                          {playerProfile.heroStats[0].heroData?.slug ?? '—'}
+                          {playerProfile.heroStats[0].heroData?.name ?? playerProfile.heroStats[0].heroData?.slug ?? '—'}
                         </div>
                         <div style={{ fontSize: '0.62rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginTop: '0.15rem' }}>Main Hero</div>
                       </div>
@@ -421,10 +421,12 @@ export default function Dashboard() {
               )}
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '0.75rem' }}>
                 {ownMembership?.playerId && (
-                  <QuickLink to={`/analysis/players?id=${ownMembership.playerId}`} icon={<Users size={16} />} label="Mi perfil" description="Historial, héroes y métricas" color="var(--accent-teal-bright)" />
+                  <QuickLink to={`/analysis/players?id=${ownMembership.playerId}`} icon={<Users size={16} />} label="Mi perfil en el juego" description="Stats, héroes, evolución de forma" color="var(--accent-teal-bright)" />
                 )}
-                <QuickLink to="/tools/review" icon={<Star size={16} />} label="Mis objetivos" description="Goals personales y de equipo" color="var(--accent-prime)" />
-                <QuickLink to="/matches" icon={<BookOpen size={16} />} label="Partidas" description="Últimas partidas del equipo" color="var(--accent-violet)" />
+                <QuickLink to="/tools/review" icon={<Star size={16} />} label="Mis objetivos" description="Player Goals del equipo" color="var(--accent-prime)" />
+                {ownMembership?.playerId && (
+                  <QuickLink to={`/analysis/players?id=${ownMembership.playerId}`} icon={<BookOpen size={16} />} label="Mis partidas" description="Historial completo de partidas" color="var(--accent-violet)" />
+                )}
               </div>
             </>
           )}
@@ -442,13 +444,9 @@ export default function Dashboard() {
         </>
       )}
 
-      {/* ── No team ─────────────────────────────────────────────────────── */}
+      {/* ── Standalone PLAYER (no team) ──────────────────────────────────── */}
       {!isPlatformAdmin && !ownTeam && (
-        <div className="glass-card" style={{ textAlign: 'center', padding: '2.5rem', color: 'var(--text-muted)' }}>
-          <Users size={32} style={{ margin: '0 auto 0.75rem', opacity: 0.3 }} />
-          <p style={{ fontSize: '0.9rem', marginBottom: '0.5rem' }}>No estás asignado a ningún equipo.</p>
-          <p style={{ fontSize: '0.78rem' }}>Contacta a tu manager o admin para recibir una invitación.</p>
-        </div>
+        <PlayerStandaloneView />
       )}
     </div>
   );
@@ -485,3 +483,98 @@ function PlayerSyncWidget() {
   return null;
 }
 export { PlayerSyncWidget };
+
+// ── Standalone Player view (PLAYER globalRole, no team) ───────────────────────
+function PlayerStandaloneView() {
+  const { user } = useAuth();
+  const [profile, setProfile] = useState<PlayerProfile | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  const linkedId = (user as { linkedPlayerId?: string | null })?.linkedPlayerId;
+
+  useEffect(() => {
+    if (!linkedId) return;
+    setLoading(true);
+    apiClient.players.get(linkedId)
+      .then(setProfile)
+      .catch(() => null)
+      .finally(() => setLoading(false));
+  }, [linkedId]);
+
+  if (!linkedId) {
+    return (
+      <div className="glass-card" style={{ textAlign: 'center', padding: '2.5rem', color: 'var(--text-muted)' }}>
+        <Users size={32} style={{ margin: '0 auto 0.75rem', opacity: 0.3 }} />
+        <p style={{ fontSize: '0.9rem', marginBottom: '0.5rem' }}>No tienes un perfil de jugador vinculado.</p>
+        <p style={{ fontSize: '0.78rem' }}>Contacta al administrador para vincular tu cuenta de pred.gg.</p>
+      </div>
+    );
+  }
+
+  if (loading) return <div style={{ padding: '2rem', color: 'var(--text-muted)', textAlign: 'center' }}>Cargando tu perfil…</div>;
+
+  if (!profile) return null;
+
+  const wr = profile.generalStats?.winRate ? Math.round(profile.generalStats.winRate as number) : null;
+  const kda = profile.generalStats?.kda ? (profile.generalStats.kda as number).toFixed(2) : null;
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+      {/* Stats */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '1rem' }}>
+        {[
+          { label: 'KDA', value: kda ?? '—', color: 'var(--accent-teal-bright)' },
+          { label: 'Win Rate', value: wr ? `${wr}%` : '—', color: wr && wr >= 50 ? 'var(--accent-win)' : 'var(--accent-loss)' },
+          { label: 'Partidas', value: profile.recentMatches.length, color: 'var(--text-primary)' },
+          ...(profile.heroStats[0] ? [{ label: 'Main Hero', value: profile.heroStats[0].heroData?.name ?? profile.heroStats[0].heroData?.slug ?? '—', color: 'var(--accent-blue)' }] : []),
+        ].map(({ label, value, color }) => (
+          <div key={label} className="glass-card" style={{ textAlign: 'center', padding: '1rem' }}>
+            <div style={{ fontFamily: 'var(--font-mono)', fontSize: label === 'Main Hero' ? '0.85rem' : '1.4rem', fontWeight: 700, color }}>{String(value)}</div>
+            <div style={{ fontSize: '0.62rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginTop: '0.15rem' }}>{label}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Last 5 matches */}
+      {profile.recentMatches.length > 0 && (
+        <div className="glass-card" style={{ padding: '1rem 1.25rem' }}>
+          <div style={{ fontSize: '0.68rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '0.75rem' }}>Últimas partidas</div>
+          <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+            {profile.recentMatches.slice(0, 8).map((m, i) => (
+              <div key={i} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.25rem' }}>
+                <div style={{ width: 36, height: 36, borderRadius: 6, background: m.result === 'win' ? 'rgba(74,222,128,0.12)' : 'rgba(248,113,113,0.12)', border: `1px solid ${m.result === 'win' ? 'var(--accent-win)' : 'var(--accent-loss)'}33`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <span style={{ fontSize: '0.62rem', fontWeight: 700, color: m.result === 'win' ? 'var(--accent-win)' : 'var(--accent-loss)', fontFamily: 'var(--font-mono)' }}>{m.result === 'win' ? 'W' : 'L'}</span>
+                </div>
+                <span style={{ fontSize: '0.5rem', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>{m.kills}/{m.deaths}/{m.assists}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Quick links */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '0.75rem' }}>
+        <Link to={`/analysis/players?id=${linkedId}`} style={{ textDecoration: 'none' }}>
+          <div className="glass-card landing-feature-card" style={{ display: 'flex', alignItems: 'center', gap: '0.85rem', padding: '0.9rem 1.1rem', cursor: 'pointer', borderLeft: '3px solid var(--accent-teal-bright)' }}>
+            <Users size={18} style={{ color: 'var(--accent-teal-bright)', flexShrink: 0 }} />
+            <div>
+              <div style={{ fontWeight: 700, fontSize: '0.85rem', color: 'var(--text-primary)' }}>Mi perfil completo</div>
+              <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '0.1rem' }}>Stats, héroes, evolución</div>
+            </div>
+            <ArrowRight size={14} style={{ color: 'var(--text-muted)', marginLeft: 'auto', flexShrink: 0 }} />
+          </div>
+        </Link>
+        <Link to={`/analysis/players?id=${linkedId}`} style={{ textDecoration: 'none' }}>
+          <div className="glass-card landing-feature-card" style={{ display: 'flex', alignItems: 'center', gap: '0.85rem', padding: '0.9rem 1.1rem', cursor: 'pointer', borderLeft: '3px solid var(--accent-violet)' }}>
+            <BookOpen size={18} style={{ color: 'var(--accent-violet)', flexShrink: 0 }} />
+            <div>
+              <div style={{ fontWeight: 700, fontSize: '0.85rem', color: 'var(--text-primary)' }}>Mis partidas</div>
+              <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '0.1rem' }}>Historial completo</div>
+            </div>
+            <ArrowRight size={14} style={{ color: 'var(--text-muted)', marginLeft: 'auto', flexShrink: 0 }} />
+          </div>
+        </Link>
+      </div>
+    </div>
+  );
+}
