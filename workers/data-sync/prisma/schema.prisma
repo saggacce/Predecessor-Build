@@ -435,3 +435,18 @@ model VodLink {
   visibility          String   @default("staff")
   createdAt           DateTime @default(now())
 }
+
+model FeedbackReport {
+  id          String   @id @default(cuid())
+  type        String   // 'bug' | 'suggestion' | 'improvement'
+  section     String   // app section where the issue occurred
+  description String
+  screenshotBase64 String? // optional, base64 encoded image (max 2MB)
+  status      String   @default("NEW") // 'NEW' | 'REVIEWED' | 'DISMISSED'
+  userId      String?  // nullable — not all users have internal accounts
+  userName    String?  // display name at time of submission
+  userEmail   String?
+  createdAt   DateTime @default(now())
+  reviewedAt  DateTime?
+  reviewNote  String?  // optional admin note on resolution
+}

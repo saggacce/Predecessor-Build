@@ -159,6 +159,20 @@ export interface EffectiveAccess {
   playerTier: PlayerTier;
 }
 
+export interface FeedbackItem {
+  id: string;
+  type: 'bug' | 'suggestion' | 'improvement';
+  section: string;
+  description: string;
+  status: 'NEW' | 'REVIEWED' | 'DISMISSED';
+  userId: string | null;
+  userName: string | null;
+  userEmail: string | null;
+  createdAt: string;
+  reviewedAt: string | null;
+  reviewNote: string | null;
+}
+
 export interface UserProfile {
   id: string;
   email: string;
@@ -825,6 +839,22 @@ export const apiClient = {
 
   heroes: {
     meta: () => fetchApi<{ heroes: HeroMeta[] }>('/hero-meta'),
+  },
+
+  feedback: {
+    submit: (data: { type: 'bug' | 'suggestion' | 'improvement'; section: string; description: string; screenshotBase64?: string | null }) =>
+      fetchApi<{ ok: boolean; id: string }>('/feedback', { method: 'POST', body: JSON.stringify(data) }),
+    unreadCount: () => fetchApi<{ count: number }>('/feedback/unread-count'),
+    list: (status?: string, type?: string) => {
+      const params = new URLSearchParams();
+      if (status) params.set('status', status);
+      if (type) params.set('type', type);
+      return fetchApi<{ reports: FeedbackItem[] }>(`/feedback?${params}`);
+    },
+    getDetail: (id: string) => fetchApi<{ report: FeedbackItem & { screenshotBase64?: string | null } }>(`/feedback/${id}`),
+    update: (id: string, data: { status?: 'NEW' | 'REVIEWED' | 'DISMISSED'; reviewNote?: string | null }) =>
+      fetchApi<{ report: FeedbackItem }>(`/feedback/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+    sections: () => fetchApi<{ sections: string[] }>('/feedback/sections'),
   },
 
   profile: {
