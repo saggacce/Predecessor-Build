@@ -355,9 +355,14 @@ function FocusOfTheDay({ teamId }: { teamId: string }) {
         <Sparkles size={15} style={{ color: 'var(--accent-violet)', flexShrink: 0 }} />
         <span style={{ fontWeight: 700, fontSize: '0.88rem', color: 'var(--text-primary)' }}>Focus of the Day</span>
         {state === 'idle' && (
-          <button onClick={() => void generate()} className="btn-secondary" style={{ marginLeft: 'auto', fontSize: '0.72rem', padding: '0.25rem 0.65rem', flex: 'unset' }}>
-            Analizar
-          </button>
+          <div style={{ marginLeft: 'auto', position: 'relative' }} title="Esta funcionalidad estará disponible próximamente">
+            <button disabled className="btn-secondary" style={{ fontSize: '0.72rem', padding: '0.25rem 0.65rem', flex: 'unset', opacity: 0.45, cursor: 'not-allowed' }}>
+              Analizar
+            </button>
+            <span style={{ position: 'absolute', bottom: 'calc(100% + 6px)', right: 0, whiteSpace: 'nowrap', fontSize: '0.62rem', fontWeight: 600, color: 'var(--accent-prime)', background: 'var(--bg-card)', border: '1px solid var(--border-color)', borderRadius: 4, padding: '2px 6px', pointerEvents: 'none' }}>
+              Próximamente
+            </span>
+          </div>
         )}
         {state === 'streaming' && (
           <span style={{ marginLeft: 'auto', fontSize: '0.68rem', color: 'var(--accent-violet)', fontFamily: 'var(--font-mono)', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
