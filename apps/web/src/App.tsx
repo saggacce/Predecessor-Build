@@ -288,15 +288,17 @@ function Sidebar() {
       </div>
 
       <nav className="sidebar-nav">
-        {sections.map((section) => (
-          <SidebarSectionEl
-            key={section.id}
-            section={section}
-            isOpen={openSection === section.id}
-            onToggle={() => setOpenSection((prev) => prev === section.id ? null : section.id)}
-            badgeCount={section.id === 'admin' && feedbackUnread > 0 ? feedbackUnread : 0}
-          />
-        ))}
+        {sections
+          .filter((section) => section.id !== 'admin' || user?.globalRole === 'PLATFORM_ADMIN')
+          .map((section) => (
+            <SidebarSectionEl
+              key={section.id}
+              section={section}
+              isOpen={openSection === section.id}
+              onToggle={() => setOpenSection((prev) => prev === section.id ? null : section.id)}
+              badgeCount={section.id === 'admin' && feedbackUnread > 0 ? feedbackUnread : 0}
+            />
+          ))}
       </nav>
 
       <div className="sidebar-auth">
