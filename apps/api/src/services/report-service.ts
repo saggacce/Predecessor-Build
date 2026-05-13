@@ -1,6 +1,6 @@
 import { db } from '../db.js';
 import { AppError } from '../middleware/error-handler.js';
-import { getTeamProfile, getRivalScoutingReport } from './team-service.js';
+import { getTeamProfile, getTeamRivalScouting as getRivalScoutingReport } from './team-service.js';
 import { getPlayerProfile } from './player-service.js';
 import { logger } from '../logger.js';
 

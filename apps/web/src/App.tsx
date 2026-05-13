@@ -275,14 +275,36 @@ function Sidebar() {
       </div>
 
       <nav className="sidebar-nav">
-        {sections.map((section) => (
-          <SidebarSectionEl
-            key={section.id}
-            section={section}
-            isOpen={openSection === section.id}
-            onToggle={() => setOpenSection((prev) => prev === section.id ? null : section.id)}
-          />
-        ))}
+        {sections
+          .filter((section) => {
+            const isPlayer = user?.globalRole === 'PLAYER';
+            const hasTeam = (user?.memberships?.length ?? 0) > 0;
+            const isStandalone = isPlayer || (!hasTeam && user?.globalRole !== 'PLATFORM_ADMIN');
+            if (section.id === 'admin') return user?.globalRole === 'PLATFORM_ADMIN';
+            if (['tools', 'management'].includes(section.id) && isStandalone) return false;
+            return true;
+          })
+          .map((section) => {
+            const isPlayer = user?.globalRole === 'PLAYER';
+            const hasTeam = (user?.memberships?.length ?? 0) > 0;
+            const isStandalone = isPlayer || (!hasTeam && user?.globalRole !== 'PLATFORM_ADMIN');
+            const filteredSection = isStandalone && section.items ? {
+              ...section,
+              items: section.id === 'analysis'
+                ? section.items.filter((i) => i.to.startsWith('/analysis/players'))
+                : section.id === 'reports'
+                ? section.items.filter((i) => i.to.includes('player') || i.to.includes('weekly'))
+                : section.items,
+            } : section;
+            return (
+              <SidebarSectionEl
+                key={section.id}
+                section={filteredSection}
+                isOpen={openSection === section.id}
+                onToggle={() => setOpenSection((prev) => prev === section.id ? null : section.id)}
+              />
+            );
+          })}
       </nav>
 
       <div className="sidebar-auth">
