@@ -244,7 +244,7 @@ function SyncStatusTab() {
       ]);
       setStatus(s);
       setSyncHistory(logs.logs);
-      if (s.eventStreamJob.running) setOptimisticRunning(true);
+      if (!s.eventStreamJob.running) setOptimisticRunning(false);
     } catch { /* silent */ }
     finally { setLoading(false); }
   }
@@ -491,11 +491,12 @@ function CronStatusCard({ cronJob, loading, onToggle, onRunNow, history }: { cro
         Requiere que el token de pred.gg esté guardado (se guarda al iniciar el Event Stream Sync).
       </p>
       {lastResult && (
-        <div style={{ display: 'flex', gap: '1.5rem', fontSize: '0.72rem', fontFamily: 'var(--font-mono)', marginBottom: '1rem', padding: '0.65rem 1rem', background: 'rgba(255,255,255,0.03)', borderRadius: 8 }}>
+        <div style={{ display: 'flex', gap: '1.5rem', fontSize: '0.72rem', fontFamily: 'var(--font-mono)', marginBottom: '1rem', padding: '0.65rem 1rem', background: 'rgba(255,255,255,0.03)', borderRadius: 8, flexWrap: 'wrap' }}>
           <span><span style={{ color: 'var(--accent-win)', fontWeight: 700 }}>{lastResult.newMatches}</span> <span style={{ color: 'var(--text-muted)' }}>nuevas partidas</span></span>
+          {lastResult.eventStreamSynced > 0 && <span><span style={{ color: 'var(--accent-blue)', fontWeight: 700 }}>{lastResult.eventStreamSynced}</span> <span style={{ color: 'var(--text-muted)' }}>event stream</span></span>}
           <span><span style={{ color: 'var(--text-primary)', fontWeight: 700 }}>{lastResult.players}</span> <span style={{ color: 'var(--text-muted)' }}>jugadores</span></span>
           {lastResult.errors > 0 && <span><span style={{ color: 'var(--accent-loss)', fontWeight: 700 }}>{lastResult.errors}</span> <span style={{ color: 'var(--text-muted)' }}>errores</span></span>}
-          {cronJob.lastRunAt && <span style={{ color: 'var(--text-muted)' }}>última vez: {new Date(cronJob.lastRunAt).toLocaleTimeString()}</span>}
+          {cronJob.lastRunAt && <span style={{ color: 'var(--text-muted)' }}>última: {new Date(cronJob.lastRunAt).toLocaleTimeString()}</span>}
           {cronJob.nextRunAt && cronJob.enabled && <span style={{ color: 'var(--text-muted)' }}>próxima: {new Date(cronJob.nextRunAt).toLocaleTimeString()}</span>}
         </div>
       )}
@@ -627,9 +628,16 @@ function DataControlsTab() {
 // ── Audit Logs Tab ────────────────────────────────────────────────────────────
 
 const STATUS_COLORS: Record<string, string> = {
-  success: 'var(--accent-win)',
+  success: 'var(--accent-win)', ok: 'var(--accent-win)',
   error: 'var(--accent-loss)',
-  skipped: 'var(--accent-prime)',
+  skipped: 'var(--accent-prime)', partial: 'var(--accent-prime)',
+};
+
+const SOURCE_LABELS: Record<string, { label: string; color: string }> = {
+  'event-stream': { label: 'Event Stream', color: 'var(--accent-blue)' },
+  'cron':         { label: 'Cron',         color: 'var(--accent-teal-bright)' },
+  'user':         { label: 'Usuario',      color: 'var(--accent-violet)' },
+  'admin':        { label: 'Admin',        color: 'var(--accent-prime)' },
 };
 
 function AuditLogsTab() {
@@ -638,12 +646,14 @@ function AuditLogsTab() {
   const [loading, setLoading] = useState(false);
   const [entityFilter, setEntityFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
+  const [sourceFilter, setSourceFilter] = useState('');
 
   async function fetchLogs() {
     setLoading(true);
     try {
-      const res = await apiClient.admin.syncLogs(100, entityFilter || undefined, statusFilter || undefined);
-      setLogs(res.logs);
+      const res = await apiClient.admin.syncLogs(200, entityFilter || undefined, statusFilter || undefined);
+      const filtered = sourceFilter ? res.logs.filter((l) => l.source === sourceFilter) : res.logs;
+      setLogs(filtered);
       setTotal(res.total);
     } catch {
       toast.error('Failed to load audit logs');
@@ -652,52 +662,66 @@ function AuditLogsTab() {
     }
   }
 
-  useEffect(() => { void fetchLogs(); }, [entityFilter, statusFilter]);
+  useEffect(() => { void fetchLogs(); }, [entityFilter, statusFilter, sourceFilter]);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-      {/* Filters */}
       <div className="glass-card" style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap' }}>
-        <select className="input" value={entityFilter} onChange={(e) => setEntityFilter(e.target.value)} style={{ flex: '1 1 160px' }}>
-          <option value="">All entities</option>
-          {['player', 'match', 'version', 'auth'].map((e) => <option key={e} value={e}>{e}</option>)}
+        <select className="input" value={sourceFilter} onChange={(e) => setSourceFilter(e.target.value)} style={{ flex: '1 1 140px' }}>
+          <option value="">Todos los módulos</option>
+          {Object.entries(SOURCE_LABELS).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
         </select>
-        <select className="input" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} style={{ flex: '1 1 140px' }}>
-          <option value="">All statuses</option>
-          {['success', 'error', 'skipped'].map((s) => <option key={s} value={s}>{s}</option>)}
+        <select className="input" value={entityFilter} onChange={(e) => setEntityFilter(e.target.value)} style={{ flex: '1 1 140px' }}>
+          <option value="">Todas las entidades</option>
+          {['player', 'match', 'version', 'auth', 'sync:cron', 'sync:on-demand', 'Invitation'].map((e) => <option key={e} value={e}>{e}</option>)}
         </select>
-        <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.72rem', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
-          {total} entries
-        </span>
+        <select className="input" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} style={{ flex: '1 1 120px' }}>
+          <option value="">Todos los estados</option>
+          {['ok', 'success', 'error', 'partial', 'skipped'].map((s) => <option key={s} value={s}>{s}</option>)}
+        </select>
+        <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.72rem', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>{total} total · {logs.length} mostrados</span>
       </div>
 
-      {/* Table */}
       <div className="glass-card" style={{ padding: 0, overflow: 'clip' }}>
-        <div style={{ display: 'grid', gridTemplateColumns: '110px 120px 120px 90px 1fr', padding: '0.35rem 1rem', fontSize: '0.62rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', borderBottom: '1px solid var(--border-color)', background: 'var(--bg-card)', position: 'sticky', top: 0 }}>
-          <span>Time</span><span>Entity</span><span>Operation</span><span>Status</span><span>Details</span>
+        <div style={{ display: 'grid', gridTemplateColumns: '130px 110px 1fr 80px auto', padding: '0.35rem 1rem', fontSize: '0.62rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', borderBottom: '1px solid var(--border-color)', background: 'var(--bg-card)', position: 'sticky', top: 0 }}>
+          <span>Fecha y hora</span><span>Módulo</span><span>Detalle / Error</span><span>Estado</span><span>Usuario</span>
         </div>
         {loading ? (
-          <div style={{ padding: '1.5rem', color: 'var(--text-muted)', fontSize: '0.875rem' }}>Loading...</div>
+          <div style={{ padding: '1.5rem', color: 'var(--text-muted)', fontSize: '0.875rem' }}>Cargando...</div>
         ) : logs.length === 0 ? (
-          <div style={{ padding: '1.5rem', color: 'var(--text-muted)', fontSize: '0.875rem' }}>No logs found.</div>
-        ) : (
-          logs.map((log) => (
-            <div key={log.id} style={{ display: 'grid', gridTemplateColumns: '110px 120px 120px 90px 1fr', padding: '0.5rem 1rem', borderBottom: '1px solid var(--border-color)', alignItems: 'start', fontSize: '0.78rem' }}>
+          <div style={{ padding: '1.5rem', color: 'var(--text-muted)', fontSize: '0.875rem' }}>No se encontraron registros.</div>
+        ) : logs.map((log) => {
+          const src = log.source ? SOURCE_LABELS[log.source] : null;
+          const isError = log.status === 'error';
+          return (
+            <div key={log.id} style={{ display: 'grid', gridTemplateColumns: '130px 110px 1fr 80px auto', padding: '0.5rem 1rem', borderBottom: '1px solid var(--border-color)', alignItems: 'start', fontSize: '0.76rem', background: isError ? 'rgba(248,113,113,0.03)' : undefined }}>
               <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.68rem', color: 'var(--text-muted)' }}>
-                {new Date(log.syncedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                {new Date(log.syncedAt).toLocaleString('es-ES', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' })}
               </span>
-              <span style={{ color: 'var(--text-secondary)' }}>{log.entity}</span>
-              <span style={{ color: 'var(--text-muted)', fontSize: '0.72rem' }}>{log.operation}</span>
+              <span>
+                {src
+                  ? <span style={{ fontSize: '0.65rem', fontWeight: 700, color: src.color, background: `${src.color}18`, border: `1px solid ${src.color}40`, borderRadius: 999, padding: '0.1rem 0.45rem' }}>{src.label}</span>
+                  : <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>{log.entity}</span>
+                }
+              </span>
+              <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.68rem', color: isError ? 'var(--accent-loss)' : 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {log.error ?? `${log.entity} · ${log.operation} · ${log.entityId.slice(0, 20)}`}
+              </span>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
-                {log.status === 'success' ? <CheckCircle size={11} style={{ color: 'var(--accent-win)', flexShrink: 0 }} /> : log.status === 'error' ? <XCircle size={11} style={{ color: 'var(--accent-loss)', flexShrink: 0 }} /> : <AlertTriangle size={11} style={{ color: 'var(--accent-prime)', flexShrink: 0 }} />}
+                {isError || log.status === 'error'
+                  ? <XCircle size={11} style={{ color: 'var(--accent-loss)', flexShrink: 0 }} />
+                  : log.status === 'partial' || log.status === 'skipped'
+                    ? <AlertTriangle size={11} style={{ color: 'var(--accent-prime)', flexShrink: 0 }} />
+                    : <CheckCircle size={11} style={{ color: 'var(--accent-win)', flexShrink: 0 }} />
+                }
                 <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.68rem', color: STATUS_COLORS[log.status] ?? 'var(--text-muted)' }}>{log.status}</span>
               </div>
-              <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.68rem', color: log.error ? 'var(--accent-loss)' : 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                {log.error ?? log.entityId}
+              <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.68rem', color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>
+                {log.userName ?? '—'}
               </span>
             </div>
-          ))
-        )}
+          );
+        })}
       </div>
     </div>
   );

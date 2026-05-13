@@ -652,7 +652,7 @@ export interface CronJob {
   enabled: boolean;
   running: boolean;
   lastRunAt: string | null;
-  lastRunResult: { newMatches: number; players: number; errors: number } | null;
+  lastRunResult: { newMatches: number; eventStreamSynced: number; players: number; errors: number } | null;
   nextRunAt: string | null;
 }
 
@@ -682,6 +682,8 @@ export interface SyncLog {
   status: string;
   syncedAt: string;
   error?: string | null;
+  source?: string | null;
+  userName?: string | null;
 }
 
 // ── Fetch helper ─────────────────────────────────────────────────────────────

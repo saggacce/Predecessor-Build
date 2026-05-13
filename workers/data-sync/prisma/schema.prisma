@@ -92,9 +92,10 @@ model Match {
   winningTeam String?
   versionId   String?
   version     Version? @relation(fields: [versionId], references: [id])
-  syncedAt           DateTime
-  rosterSynced       Boolean  @default(false)
-  eventStreamSynced  Boolean  @default(false)
+  syncedAt              DateTime
+  rosterSynced          Boolean  @default(false)
+  eventStreamSynced     Boolean  @default(false)
+  eventStreamFailed     Boolean  @default(false)
 
   matchPlayers        MatchPlayer[]
   heroKills           HeroKill[]
@@ -246,6 +247,8 @@ model SyncLog {
   status    String
   syncedAt  DateTime @default(now())
   error     String?
+  source    String?  // 'event-stream' | 'cron' | 'user' | 'admin'
+  userName  String?  // display name when triggered by a user
 }
 
 model User {

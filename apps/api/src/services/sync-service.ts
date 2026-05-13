@@ -1144,13 +1144,28 @@ export async function syncMatchEventStream(
     }
   }
 
-  const data = await predggQuery<{ match: EventStreamMatchData | null }>(
-    MATCH_EVENT_STREAM_QUERY,
-    { uuid: predggUuid },
-    userToken,
-  );
+  let data: { match: EventStreamMatchData | null };
+  try {
+    data = await predggQuery<{ match: EventStreamMatchData | null }>(
+      MATCH_EVENT_STREAM_QUERY,
+      { uuid: predggUuid },
+      userToken,
+    );
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (msg.includes('401') || msg.includes('403') || msg.includes('Unauthorized') || msg.includes('Forbidden')) {
+      throw err; // Auth error — let caller handle token refresh
+    }
+    // API error that won't be fixed by retrying — mark as failed to skip in future runs
+    await db.match.update({ where: { id: matchId }, data: { eventStreamFailed: true } }).catch(() => null);
+    throw err;
+  }
 
-  if (!data.match) throw new Error(`Event stream: match ${predggUuid} not found`);
+  if (!data.match) {
+    // Match no longer exists on pred.gg — mark to skip in future runs
+    await db.match.update({ where: { id: matchId }, data: { eventStreamFailed: true } }).catch(() => null);
+    throw new Error(`Event stream: match ${predggUuid} not found on pred.gg`);
+  }
   const es = data.match;
 
   // Clear existing event stream data for this match before re-inserting
@@ -1427,18 +1442,18 @@ export async function syncRecentMatchesForPlayer(
   predggId: string,
   userToken: string,
   limit = 20,
-): Promise<{ newMatches: number }> {
+): Promise<{ newMatches: number; newMatchUuids: string[] }> {
   const data = await predggQuery<{
     player: { id: string; name: string; matchesPaginated: { results: PredggMatchStat[] } } | null;
   }>(PLAYER_RECENT_MATCHES_QUERY, { playerId: predggId, limit }, userToken);
 
-  if (!data?.player) return { newMatches: 0 };
+  if (!data?.player) return { newMatches: 0, newMatchUuids: [] };
 
   const matches = data.player.matchesPaginated?.results ?? [];
-  if (matches.length === 0) return { newMatches: 0 };
+  if (matches.length === 0) return { newMatches: 0, newMatchUuids: [] };
 
   const player = await db.player.findUnique({ where: { predggId }, select: { id: true, displayName: true } });
-  if (!player) return { newMatches: 0 };
+  if (!player) return { newMatches: 0, newMatchUuids: [] };
 
   const candidateUuids = matches.map((m) => m.match?.id).filter(Boolean) as string[];
   const existing = await db.match.findMany({
@@ -1446,13 +1461,13 @@ export async function syncRecentMatchesForPlayer(
     select: { predggUuid: true },
   });
   const existingSet = new Set(existing.map((m) => m.predggUuid));
-  const newMatches = candidateUuids.filter((uuid) => !existingSet.has(uuid)).length;
+  const newMatchUuids = candidateUuids.filter((uuid) => !existingSet.has(uuid));
 
   const now = new Date();
   await persistRecentMatches(db, player.id, player.displayName, matches, now);
   await db.player.update({ where: { predggId }, data: { lastSynced: now } });
 
-  return { newMatches };
+  return { newMatches: newMatchUuids.length, newMatchUuids };
 }
 
 export async function syncIncompleteMatches(db: PrismaClient): Promise<{ synced: number; errors: number }> {
