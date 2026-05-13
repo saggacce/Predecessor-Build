@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useNavigate, Navigate } from 'react-router';
+import { useNavigate } from 'react-router';
 import { Film } from 'lucide-react';
 import { apiClient } from '../api/client';
 import { useAuth } from '../hooks/useAuth';
@@ -46,16 +46,19 @@ export default function MatchList() {
   // ── Conditional renders after all hooks ───────────────────────────
 
   // Standalone player with linked profile → go directly to their scouting page
-  // Standalone PLAYER with linked profile → their player scouting
-  if (isStandalonePlayer && linkedPlayerId) {
-    return <Navigate to="/analysis/players" state={{ autoLoadPlayerId: linkedPlayerId }} replace />;
-  }
+  // Redirect to player profile via effect (not render-phase Navigate which can crash)
+  const jugadorPlayerId = user?.memberships?.find(m => m.role === 'JUGADOR')?.playerId ?? null;
+  const playerProfileId = (isStandalonePlayer && linkedPlayerId) ? linkedPlayerId
+    : jugadorPlayerId ?? null;
 
-  // JUGADOR in a team → show their own player profile (via navigation state)
-  const jugadorPlayerId = user?.memberships?.find(m => m.role === 'JUGADOR')?.playerId;
-  if (jugadorPlayerId) {
-    return <Navigate to="/analysis/players" state={{ autoLoadPlayerId: jugadorPlayerId }} replace />;
-  }
+  useEffect(() => {
+    if (playerProfileId) {
+      navigate('/analysis/players', {
+        state: { autoLoadPlayerId: playerProfileId },
+        replace: true,
+      });
+    }
+  }, [playerProfileId, navigate]);
 
   // Standalone player without linked profile → show link CTA
   if (isStandalonePlayer && !linkedPlayerId) {

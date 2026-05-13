@@ -598,7 +598,7 @@ function PlayerStandaloneView() {
 
       {/* Quick links */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '0.75rem' }}>
-        <Link to={`/analysis/players?id=${linkedId}`} style={{ textDecoration: 'none' }}>
+        <Link to="/analysis/players" state={{ autoLoadPlayerId: linkedId }} style={{ textDecoration: 'none' }}>
           <div className="glass-card landing-feature-card" style={{ display: 'flex', alignItems: 'center', gap: '0.85rem', padding: '0.9rem 1.1rem', cursor: 'pointer', borderLeft: '3px solid var(--accent-teal-bright)' }}>
             <Users size={18} style={{ color: 'var(--accent-teal-bright)', flexShrink: 0 }} />
             <div>
@@ -608,7 +608,7 @@ function PlayerStandaloneView() {
             <ArrowRight size={14} style={{ color: 'var(--text-muted)', marginLeft: 'auto', flexShrink: 0 }} />
           </div>
         </Link>
-        <Link to={`/analysis/players?id=${linkedId}`} style={{ textDecoration: 'none' }}>
+        <Link to="/analysis/players" state={{ autoLoadPlayerId: linkedId }} style={{ textDecoration: 'none' }}>
           <div className="glass-card landing-feature-card" style={{ display: 'flex', alignItems: 'center', gap: '0.85rem', padding: '0.9rem 1.1rem', cursor: 'pointer', borderLeft: '3px solid var(--accent-violet)' }}>
             <BookOpen size={18} style={{ color: 'var(--accent-violet)', flexShrink: 0 }} />
             <div>
