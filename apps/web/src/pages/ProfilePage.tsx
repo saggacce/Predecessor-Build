@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Camera, Key, Link2, Link2Off, Save, Shield, Star, User } from 'lucide-react';
 import { toast } from 'sonner';
 import { apiClient, type UserProfile } from '../api/client';
+import { useAuth } from '../hooks/useAuth';
 import { LinkPlayerModal } from '../components/LinkPlayerModal';
 
 const PLAYER_TIER_CONFIG = {
@@ -34,6 +35,7 @@ export default function ProfilePage() {
   const [avatarUrl, setAvatarUrl] = useState('');
   const [timezone, setTimezone] = useState('');
   const [savingProfile, setSavingProfile] = useState(false);
+  const { refreshInternalSession } = useAuth();
   const [showLinkModal, setShowLinkModal] = useState(false);
 
   // Password form

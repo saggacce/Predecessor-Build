@@ -495,7 +495,7 @@ export { PlayerSyncWidget };
 
 // ── Standalone Player view (PLAYER globalRole, no team) ───────────────────────
 function PlayerStandaloneView() {
-  const { user } = useAuth();
+  const { user, refreshInternalSession } = useAuth();
   const linkedId = (user as { linkedPlayerId?: string | null })?.linkedPlayerId;
 
   // All hooks before any conditional returns
@@ -503,6 +503,13 @@ function PlayerStandaloneView() {
   const [loading, setLoading] = useState(false);
   const [showLinkModal, setShowLinkModal] = useState(false);
   const [linkedIdState, setLinkedIdState] = useState(linkedId);
+
+  // Sync linkedIdState when auth state updates (e.g. after refreshInternalSession)
+  useEffect(() => {
+    if (linkedId && !linkedIdState) {
+      setLinkedIdState(linkedId);
+    }
+  }, [linkedId, linkedIdState]);
 
   useEffect(() => {
     if (!linkedId) return;
@@ -534,7 +541,7 @@ function PlayerStandaloneView() {
         </div>
         {showLinkModal && (
           <LinkPlayerModal
-            onLinked={(pid) => { setLinkedIdState(pid); setShowLinkModal(false); }}
+            onLinked={(pid) => { setLinkedIdState(pid); setShowLinkModal(false); void refreshInternalSession(); }}
             onClose={() => setShowLinkModal(false)}
           />
         )}
