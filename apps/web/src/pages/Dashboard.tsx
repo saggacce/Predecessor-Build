@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router';
-import { Server, Zap, RefreshCw, CheckCircle, XCircle, ArrowRight, Users, Sparkles, ThumbsUp, ThumbsDown, Send } from 'lucide-react';
+import { Server, Zap, RefreshCw, CheckCircle, XCircle, ArrowRight, Users, Sparkles, ThumbsUp, ThumbsDown, Send, Download } from 'lucide-react';
 import { toast } from 'sonner';
 import { apiClient, ApiErrorResponse, type TeamProfile, type TeamAnalysis } from '../api/client';
 import { useAuth } from '../hooks/useAuth';
@@ -99,6 +99,9 @@ export default function Dashboard() {
       {ownTeam && (
         <FocusOfTheDay teamId={ownTeam.id} />
       )}
+
+      {/* Player sync button — only visible if user has a linked player */}
+      <PlayerSyncWidget />
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1rem' }}>
 
@@ -425,6 +428,72 @@ function FocusOfTheDay({ teamId }: { teamId: string }) {
           <CheckCircle size={11} /> Feedback guardado
         </div>
       )}
+    </div>
+  );
+}
+
+// ── Player Sync Widget ────────────────────────────────────────────────────────
+
+function PlayerSyncWidget() {
+  const { user } = useAuth();
+  const [state, setState] = useState<'idle' | 'syncing' | 'done' | 'error'>('idle');
+  const [message, setMessage] = useState('');
+  const [cooldownSeconds, setCooldownSeconds] = useState(0);
+
+  const hasLinkedPlayer = user?.memberships.some((m) => m.playerId !== null) ?? false;
+  if (!hasLinkedPlayer) return null;
+
+  useEffect(() => {
+    if (cooldownSeconds <= 0) return;
+    const t = setInterval(() => setCooldownSeconds((s) => Math.max(0, s - 1)), 1000);
+    return () => clearInterval(t);
+  }, [cooldownSeconds]);
+
+  async function handleSync() {
+    setState('syncing');
+    try {
+      const res = await apiClient.sync.myMatches();
+      setMessage(res.message);
+      setState('done');
+      setTimeout(() => setState('idle'), 4000);
+    } catch (err) {
+      if (err instanceof ApiErrorResponse && err.status === 429) {
+        const seconds = (err.error as { retryAfterSeconds?: number }).retryAfterSeconds ?? 300;
+        setCooldownSeconds(seconds);
+        setState('idle');
+        toast.error(`Demasiadas peticiones — espera ${Math.ceil(seconds / 60)} min`);
+      } else {
+        const msg = err instanceof ApiErrorResponse ? err.error.message : 'Error al sincronizar';
+        setMessage(msg);
+        setState('error');
+        setTimeout(() => setState('idle'), 4000);
+      }
+    }
+  }
+
+  const isDisabled = state === 'syncing' || cooldownSeconds > 0;
+
+  return (
+    <div className="glass-card" style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1rem' }}>
+      <Download size={16} style={{ color: 'var(--accent-teal-bright)', flexShrink: 0 }} />
+      <div style={{ flex: 1 }}>
+        <div style={{ fontWeight: 600, fontSize: '0.875rem', color: 'var(--text-primary)' }}>Mis partidas</div>
+        <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '0.15rem' }}>
+          {state === 'done' && <span style={{ color: 'var(--accent-win)' }}>{message}</span>}
+          {state === 'error' && <span style={{ color: 'var(--accent-loss)' }}>{message}</span>}
+          {cooldownSeconds > 0 && <span>Disponible en {cooldownSeconds}s</span>}
+          {state === 'idle' && cooldownSeconds === 0 && 'Sincroniza tus últimas partidas desde pred.gg'}
+        </div>
+      </div>
+      <button
+        onClick={() => void handleSync()}
+        disabled={isDisabled}
+        className="btn-primary"
+        style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.8rem', padding: '0.4rem 0.9rem', flex: 'unset', opacity: isDisabled ? 0.6 : 1 }}
+      >
+        <RefreshCw size={13} style={{ animation: state === 'syncing' ? 'spin 0.8s linear infinite' : 'none' }} />
+        {state === 'syncing' ? 'Sincronizando...' : 'Actualizar'}
+      </button>
     </div>
   );
 }
