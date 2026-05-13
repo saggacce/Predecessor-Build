@@ -17,11 +17,11 @@ type FocusState = 'idle' | 'streaming' | 'done' | 'error';
 type FeedbackState = 'none' | 'positive' | 'negative';
 
 // ── Shared quick-link card ────────────────────────────────────────────────────
-function QuickLink({ to, icon, label, description, color = 'var(--accent-blue)' }: {
-  to: string; icon: React.ReactNode; label: string; description: string; color?: string;
+function QuickLink({ to, state, icon, label, description, color = 'var(--accent-blue)' }: {
+  to: string; state?: Record<string, unknown>; icon: React.ReactNode; label: string; description: string; color?: string;
 }) {
   return (
-    <Link to={to} style={{ textDecoration: 'none' }}>
+    <Link to={to} state={state} style={{ textDecoration: 'none' }}>
       <div className="glass-card" style={{ display: 'flex', alignItems: 'center', gap: '0.85rem', padding: '0.9rem 1.1rem', cursor: 'pointer', borderLeft: `3px solid ${color}`, transition: 'opacity 0.15s' }}
         onMouseEnter={(e) => { (e.currentTarget as HTMLDivElement).style.opacity = '0.82'; }}
         onMouseLeave={(e) => { (e.currentTarget as HTMLDivElement).style.opacity = '1'; }}>
@@ -430,11 +430,11 @@ export default function Dashboard() {
               )}
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '0.75rem' }}>
                 {ownMembership?.playerId && (
-                  <QuickLink to={`/analysis/players?id=${ownMembership.playerId}`} icon={<Users size={16} />} label="Mi perfil en el juego" description="Stats, héroes, evolución de forma" color="var(--accent-teal-bright)" />
+                  <QuickLink to="/analysis/players" state={{ autoLoadPlayerId: ownMembership.playerId }} icon={<Users size={16} />} label="Mi perfil en el juego" description="Stats, héroes, evolución de forma" color="var(--accent-teal-bright)" />
                 )}
                 <QuickLink to="/tools/review" icon={<Star size={16} />} label="Mis objetivos" description="Player Goals del equipo" color="var(--accent-prime)" />
                 {ownMembership?.playerId && (
-                  <QuickLink to={`/analysis/players?id=${ownMembership.playerId}`} icon={<BookOpen size={16} />} label="Mis partidas" description="Historial completo de partidas" color="var(--accent-violet)" />
+                  <QuickLink to="/analysis/players" state={{ autoLoadPlayerId: ownMembership.playerId }} icon={<BookOpen size={16} />} label="Mis partidas" description="Historial completo de partidas" color="var(--accent-violet)" />
                 )}
               </div>
             </>

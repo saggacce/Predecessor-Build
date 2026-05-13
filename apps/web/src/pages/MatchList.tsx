@@ -46,8 +46,15 @@ export default function MatchList() {
   // ── Conditional renders after all hooks ───────────────────────────
 
   // Standalone player with linked profile → go directly to their scouting page
+  // Standalone PLAYER with linked profile → their player scouting
   if (isStandalonePlayer && linkedPlayerId) {
-    return <Navigate to={`/analysis/players?id=${linkedPlayerId}`} replace />;
+    return <Navigate to="/analysis/players" state={{ autoLoadPlayerId: linkedPlayerId }} replace />;
+  }
+
+  // JUGADOR in a team → show their own player profile (via navigation state)
+  const jugadorPlayerId = user?.memberships?.find(m => m.role === 'JUGADOR')?.playerId;
+  if (jugadorPlayerId) {
+    return <Navigate to="/analysis/players" state={{ autoLoadPlayerId: jugadorPlayerId }} replace />;
   }
 
   // Standalone player without linked profile → show link CTA
