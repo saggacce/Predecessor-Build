@@ -278,7 +278,8 @@ adminRouter.get('/sync-status', async (_req, res, next) => {
     const matchesNoPlayers = Number(noPlayersResult[0]?.count ?? 0);
 
     const matchesWithPlayers = totalMatches - matchesNoPlayers;
-    const matchesPartial = matchesWithPlayers - matchesWithStream;
+    const matchesFailed = await db.match.count({ where: { eventStreamFailed: true } });
+    const matchesPartial = Math.max(0, matchesWithPlayers - matchesWithStream - matchesFailed);
 
     res.json({
       players: {
@@ -291,6 +292,7 @@ adminRouter.get('/sync-status', async (_req, res, next) => {
         total: totalMatches,
         complete: matchesWithStream,
         partial: matchesPartial,
+        failed: matchesFailed,
         incomplete: matchesNoPlayers,
       },
       eventStreamJob: eventStreamJob,

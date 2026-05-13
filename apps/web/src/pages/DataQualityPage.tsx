@@ -177,7 +177,8 @@ function SyncStatusTab() {
           <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.72rem', color: 'var(--text-muted)', marginLeft: 'auto' }}>{matches.total.toLocaleString()} total</span>
         </div>
         <SyncRow label="Complete (players + event stream)" value={matches.complete} total={matches.total} color="var(--accent-win)" />
-        <SyncRow label="Partial (sin event stream)" value={matches.partial} total={matches.total} color="var(--accent-prime)" warning />
+        <SyncRow label="Pending (sin event stream)" value={matches.partial} total={matches.total} color="var(--accent-prime)" warning />
+        <SyncRow label="No disponible en pred.gg" value={(matches as any).failed ?? 0} total={matches.total} color="var(--text-muted)" />
         <SyncRow label="Incomplete (sin players)" value={matches.incomplete} total={matches.total} color="var(--accent-loss)" warning />
         <ProgressBar pct={matchPct} color={matchPct === 100 ? 'var(--accent-win)' : 'var(--accent-violet)'} />
       </div>
@@ -220,7 +221,7 @@ function SyncStatusTab() {
             {jobLoading ? <RefreshCw size={13} style={{ animation: 'spin 0.6s linear infinite' }} /> : isRunning ? <Square size={13} /> : <Play size={13} />}
             {jobLoading ? (isRunning ? 'Deteniendo...' : 'Iniciando...') : isRunning ? 'Detener' : 'Iniciar Event Stream Sync'}
           </button>
-          {!isRunning && matches.partial > 0 && <span style={{ fontSize: '0.72rem', color: 'var(--accent-prime)', alignSelf: 'center' }}>{matches.partial.toLocaleString()} partidas pendientes</span>}
+          {!isRunning && matches.partial > 0 && <span style={{ fontSize: '0.72rem', color: 'var(--accent-prime)', alignSelf: 'center' }}>{matches.partial.toLocaleString()} partidas pendientes{(matches as any).failed > 0 ? ` · ${(matches as any).failed.toLocaleString()} no disponibles en pred.gg` : ''}</span>}
         </div>
       </div>
 

@@ -4,24 +4,53 @@ import { Film } from 'lucide-react';
 import { apiClient } from '../api/client';
 import { useAuth } from '../hooks/useAuth';
 import { LinkPlayerModal } from '../components/LinkPlayerModal';
-import { useNavigate as useNav } from 'react-router';
 import type { TeamProfile, TeamMatch } from '../api/client';
 
 export default function MatchList() {
   const navigate = useNavigate();
   const { user } = useAuth();
 
-  // PLAYER (standalone, no team) — redirect to their own player scouting profile
+  // ── All hooks must be declared unconditionally before any returns ──
+  const [showLinkModal, setShowLinkModal] = useState(false);
+  const [teams, setTeams] = useState<TeamProfile[]>([]);
+  const [selectedTeamId, setSelectedTeamId] = useState('');
+  const [matches, setMatches] = useState<TeamMatch[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [matchLoading, setMatchLoading] = useState(false);
+
   const linkedPlayerId = (user as { linkedPlayerId?: string | null })?.linkedPlayerId;
   const hasTeam = (user?.memberships?.length ?? 0) > 0;
   const isStandalonePlayer = user?.globalRole === 'PLAYER' || (!hasTeam && user?.globalRole !== 'PLATFORM_ADMIN');
 
+  useEffect(() => {
+    if (isStandalonePlayer) return; // don't fetch team data for standalone players
+    apiClient.teams.list()
+      .then((r) => {
+        const all = r.teams as unknown as TeamProfile[];
+        setTeams(all);
+        if (all.length > 0) setSelectedTeamId(all[0].id);
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, [isStandalonePlayer]);
+
+  useEffect(() => {
+    if (!selectedTeamId || isStandalonePlayer) return;
+    setMatchLoading(true);
+    apiClient.teams.getAnalysis(selectedTeamId)
+      .then((a) => setMatches((a as unknown as { teamMatches?: TeamMatch[] }).teamMatches ?? []))
+      .catch(() => setMatches([]))
+      .finally(() => setMatchLoading(false));
+  }, [selectedTeamId, isStandalonePlayer]);
+
+  // ── Conditional renders after all hooks ───────────────────────────
+
+  // Standalone player with linked profile → go directly to their scouting page
   if (isStandalonePlayer && linkedPlayerId) {
     return <Navigate to={`/analysis/players?id=${linkedPlayerId}`} replace />;
   }
 
-  const [showLinkModal, setShowLinkModal] = useState(false);
-
+  // Standalone player without linked profile → show link CTA
   if (isStandalonePlayer && !linkedPlayerId) {
     return (
       <>
@@ -52,111 +81,60 @@ export default function MatchList() {
       </>
     );
   }
-  const [teams, setTeams] = useState<TeamProfile[]>([]);
-  const [selectedTeamId, setSelectedTeamId] = useState('');
-  const [matches, setMatches] = useState<TeamMatch[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [matchLoading, setMatchLoading] = useState(false);
 
-  useEffect(() => {
-    apiClient.teams.list()
-      .then((r) => {
-        const all = r.teams as unknown as TeamProfile[];
-        setTeams(all);
-        if (all.length > 0) setSelectedTeamId(all[0].id);
-      })
-      .catch(() => {})
-      .finally(() => setLoading(false));
-  }, []);
-
-  useEffect(() => {
-    if (!selectedTeamId) return;
-    setMatchLoading(true);
-    apiClient.teams.getAnalysis(selectedTeamId)
-      .then((a) => setMatches(a.teamMatches ?? []))
-      .catch(() => setMatches([]))
-      .finally(() => setMatchLoading(false));
-  }, [selectedTeamId]);
-
-  function fmtDuration(secs: number) {
-    const m = Math.floor(secs / 60);
-    const s = secs % 60;
-    return `${m}:${s.toString().padStart(2, '0')}`;
+  // ── Team match list ────────────────────────────────────────────────
+  if (loading) {
+    return <div style={{ padding: '2rem', color: 'var(--text-muted)' }}>Cargando equipos...</div>;
   }
 
   return (
     <div>
       <header className="header">
-        <h1 className="header-title">Match History</h1>
-        <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem', marginTop: '0.25rem' }}>
-          Historial de partidas por equipo.
-        </p>
+        <h1 className="header-title">Matches</h1>
       </header>
 
-      {loading ? (
-        <div style={{ color: 'var(--text-muted)', padding: '1rem' }}>Cargando equipos...</div>
-      ) : teams.length === 0 ? (
-        <div className="glass-card" style={{ color: 'var(--text-muted)' }}>
-          No hay equipos. Crea uno en Team Analysis primero.
-        </div>
-      ) : (
-        <>
-          {/* Team selector */}
-          <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1.25rem', flexWrap: 'wrap' }}>
-            {teams.map((t) => (
-              <button
-                key={t.id}
-                onClick={() => setSelectedTeamId(t.id)}
-                className={selectedTeamId === t.id ? 'btn-primary' : 'btn-secondary'}
-                style={{ fontSize: '0.82rem' }}
-              >
-                {t.name}
-              </button>
-            ))}
-          </div>
+      <div className="glass-card" style={{ marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '1rem' }}>
+        <Film size={16} style={{ color: 'var(--accent-blue)', flexShrink: 0 }} />
+        <select
+          value={selectedTeamId}
+          onChange={(e) => setSelectedTeamId(e.target.value)}
+          style={{ flex: 1, maxWidth: 320, padding: '0.45rem 0.65rem', background: 'var(--bg-dark)', border: '1px solid var(--border-color)', borderRadius: 7, color: 'var(--text-primary)', fontSize: '0.85rem' }}
+        >
+          {teams.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+        </select>
+      </div>
 
-          {/* Match list */}
-          {matchLoading ? (
-            <div style={{ color: 'var(--text-muted)' }}>Cargando partidas...</div>
-          ) : matches.length === 0 ? (
-            <div className="glass-card" style={{ color: 'var(--text-muted)' }}>
-              No hay partidas registradas para este equipo.
-            </div>
-          ) : (
-            <div className="glass-card" style={{ padding: 0, overflow: 'clip' }}>
-              <div style={{ display: 'grid', gridTemplateColumns: '140px 80px 70px 80px 1fr', padding: '0.4rem 1rem', fontSize: '0.62rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', borderBottom: '1px solid var(--border-color)', background: 'var(--bg-card)' }}>
-                <span>Fecha</span><span>Modo</span><span>Duración</span><span>Resultado</span><span>Parche</span>
-              </div>
-              {matches.slice(0, 50).map((m) => {
-                const won = m.won;
-                const resultColor = won === true ? 'var(--accent-win)' : won === false ? 'var(--accent-loss)' : 'var(--text-muted)';
-                return (
-                  <div
-                    key={m.matchId}
-                    onClick={() => navigate(`/matches/${m.matchId}`)}
-                    style={{ display: 'grid', gridTemplateColumns: '140px 80px 70px 80px 1fr', padding: '0.55rem 1rem', borderBottom: '1px solid var(--border-color)', cursor: 'pointer', alignItems: 'center', fontSize: '0.8rem', transition: 'background 0.1s' }}
-                    onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(255,255,255,0.03)')}
-                    onMouseLeave={(e) => (e.currentTarget.style.background = '')}
-                  >
-                    <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.72rem', color: 'var(--text-muted)' }}>
-                      {new Date(m.startTime).toLocaleDateString('es-ES', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
-                    </span>
-                    <span style={{ fontSize: '0.72rem', color: 'var(--text-secondary)' }}>{m.gameMode}</span>
-                    <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.72rem', color: 'var(--text-muted)' }}>{fmtDuration(m.duration)}</span>
-                    <span style={{ fontWeight: 700, color: resultColor, fontSize: '0.75rem' }}>
-                      {won === true ? 'Victoria' : won === false ? 'Derrota' : '—'}
-                    </span>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                      <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>{m.version ?? '—'}</span>
-                      <Film size={11} style={{ color: 'var(--accent-blue)', marginLeft: 'auto' }} />
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </>
+      {matchLoading && <div style={{ padding: '1rem', color: 'var(--text-muted)' }}>Cargando partidas...</div>}
+
+      {!matchLoading && matches.length === 0 && (
+        <div className="glass-card" style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>
+          No hay partidas registradas para este equipo.
+        </div>
       )}
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+        {matches.map((m) => (
+          <button
+            key={m.id}
+            onClick={() => navigate(`/matches/${m.id}`)}
+            style={{ display: 'flex', alignItems: 'center', gap: '1rem', padding: '0.85rem 1.1rem', background: 'var(--bg-card)', border: '1px solid var(--border-color)', borderRadius: 8, cursor: 'pointer', textAlign: 'left', width: '100%', transition: 'border-color 0.15s' }}
+            onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--border-strong)'; }}
+            onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--border-color)'; }}
+          >
+            <div style={{ flex: 1 }}>
+              <div style={{ fontWeight: 600, fontSize: '0.85rem', color: 'var(--text-primary)' }}>
+                {new Date(m.startTime).toLocaleDateString('es-ES', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+              </div>
+              <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '0.15rem' }}>
+                {m.gameMode} · {Math.floor((m.duration ?? 0) / 60)}m{((m.duration ?? 0) % 60).toString().padStart(2, '0')}s
+              </div>
+            </div>
+            <div style={{ fontSize: '0.72rem', fontWeight: 700, color: (m as unknown as { won?: boolean }).won === true ? 'var(--accent-win)' : (m as unknown as { won?: boolean }).won === false ? 'var(--accent-loss)' : 'var(--text-muted)', background: (m as unknown as { won?: boolean }).won === true ? 'rgba(74,222,128,0.1)' : (m as unknown as { won?: boolean }).won === false ? 'rgba(248,113,113,0.1)' : 'transparent', padding: '0.2rem 0.5rem', borderRadius: 5 }}>
+              {(m as unknown as { won?: boolean }).won === true ? 'WIN' : (m as unknown as { won?: boolean }).won === false ? 'LOSS' : '—'}
+            </div>
+          </button>
+        ))}
+      </div>
     </div>
   );
 }

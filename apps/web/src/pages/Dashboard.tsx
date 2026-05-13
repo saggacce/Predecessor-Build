@@ -101,26 +101,32 @@ export default function Dashboard() {
   useEffect(() => {
     if (!internalAuthenticated) return;
 
-    // Always fetch: own team + health + patch
+    // Fetch health + patch for everyone; team data only if user has team memberships
+    const hasTeamMemberships = (user?.memberships?.length ?? 0) > 0;
     void (async () => {
-      const [teamRes, health, patch] = await Promise.allSettled([
-        apiClient.teams.list('OWN'),
+      const [health, patch] = await Promise.allSettled([
         apiClient.admin.apiStatus(),
         apiClient.patches.latest(),
       ]);
-      if (teamRes.status === 'fulfilled') {
-        const team = teamRes.value.teams?.[0] ?? null;
-        setOwnTeam(team);
-        if (team) {
-          const [analysis] = await Promise.allSettled([apiClient.teams.getAnalysis(team.id)]);
-          if (analysis.status === 'fulfilled') setOwnAnalysis(analysis.value);
-        }
-      }
       if (health.status === 'fulfilled') setHealthStatus('ok');
       else setHealthStatus('error');
       if (patch.status === 'fulfilled') {
-        const versions = (patch.value as { versions?: VersionRecord[] }).versions;
-        if (versions?.length) setLatestPatch(versions[0]);
+        setLatestPatch(patch.value as unknown as VersionRecord);
+      }
+
+      // Only fetch team data for users who actually belong to a team
+      if (hasTeamMemberships) {
+        const [teamRes] = await Promise.allSettled([apiClient.teams.list('OWN')]);
+        if (teamRes.status === 'fulfilled') {
+          // Only use teams the user is actually a member of
+          const userTeamIds = new Set(user?.memberships?.map((m) => m.teamId) ?? []);
+          const team = (teamRes.value.teams ?? []).find((t) => userTeamIds.has(t.id)) ?? null;
+          setOwnTeam(team);
+          if (team) {
+            const [analysis] = await Promise.allSettled([apiClient.teams.getAnalysis(team.id)]);
+            if (analysis.status === 'fulfilled') setOwnAnalysis(analysis.value);
+          }
+        }
       }
     })();
 
