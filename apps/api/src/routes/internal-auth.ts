@@ -50,6 +50,7 @@ function toSessionUser(user: UserWithMemberships): SessionUser {
     email: user.email,
     name: user.name,
     globalRole: user.globalRole,
+    linkedPlayerId: user.linkedPlayerId ?? null,
     memberships: user.memberships.map((membership) => ({
       teamId: membership.teamId,
       role: membership.role,
@@ -64,6 +65,7 @@ function toResponseUser(user: UserWithMemberships) {
     email: user.email,
     name: user.name,
     globalRole: user.globalRole,
+    linkedPlayerId: user.linkedPlayerId ?? null,
     memberships: user.memberships.map((membership) => ({
       teamId: membership.teamId,
       role: membership.role,
@@ -110,6 +112,7 @@ internalAuthRouter.post('/login', loginRateLimit, async (req, res, next) => {
       where: { email },
       include: {
         memberships: { select: { teamId: true, role: true, playerId: true } },
+        linkedPlayerId: true,
       },
     });
 
@@ -159,6 +162,7 @@ internalAuthRouter.post('/refresh', async (req, res, next) => {
       where: { id: payload.userId },
       include: {
         memberships: { select: { teamId: true, role: true, playerId: true } },
+        linkedPlayerId: true,
       },
     });
     if (!user || !user.isActive) {

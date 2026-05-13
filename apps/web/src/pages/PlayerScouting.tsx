@@ -802,7 +802,21 @@ function PlayerGoalsSection({ playerId, playerName }: { playerId: string; player
   const [editStatus, setEditStatus] = React.useState('ACTIVE');
   const [editNote, setEditNote] = React.useState('');
 
+  const { user: authUser } = useAuth();
+  const canManageGoals = authUser?.globalRole === 'PLATFORM_ADMIN' ||
+    (authUser?.memberships?.length ?? 0) > 0;
+
+  // Don't render for users without team access
+  if (!loading && !canManageGoals) {
+    return (
+      <div style={{ padding: '0.75rem 1rem', background: 'var(--bg-dark)', borderRadius: 7, border: '1px solid var(--border-color)', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+        Los objetivos de jugador son visibles para el staff del equipo.
+      </div>
+    );
+  }
+
   React.useEffect(() => {
+    if (!canManageGoals) { setLoading(false); return; }
     setLoading(true);
     setGoals([]);
     setSelectedTeamId('');
@@ -811,9 +825,9 @@ function PlayerGoalsSection({ playerId, playerName }: { playerId: string; player
         setTeams(ownTeams);
         setSelectedTeamId(ownTeams[0]?.id ?? '');
       })
-      .catch(() => toast.error('Failed to load player goal context.'))
+      .catch(() => setLoading(false))
       .finally(() => setLoading(false));
-  }, [playerId]);
+  }, [playerId, canManageGoals]);
 
   React.useEffect(() => {
     if (!selectedTeamId) return;
