@@ -261,6 +261,24 @@ model User {
   createdAt    DateTime @default(now())
   lastLoginAt  DateTime?
 
+  // Profile
+  avatarUrl    String?
+  bio          String?
+  timezone     String?
+
+  // Membership tier — future feature gating
+  // FREE | PRO | TEAM | ENTERPRISE
+  tier         String   @default("FREE")
+  tierExpiresAt DateTime?
+
+  // Social connections — OAuth flows implemented per-provider
+  discordId       String? @unique
+  discordUsername String?
+  epicGamesId     String? @unique
+  epicGamesUsername String?
+  steamId         String? @unique
+  steamUsername   String?
+
   memberships     TeamMembership[]
   sentInvitations Invitation[] @relation("InvitedBy")
 }

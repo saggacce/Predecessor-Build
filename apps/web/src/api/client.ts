@@ -151,6 +151,28 @@ export interface PlatformConfigEntry {
   updatedBy: string | null;
 }
 
+export interface UserProfile {
+  id: string;
+  email: string;
+  name: string;
+  globalRole: string;
+  isActive: boolean;
+  createdAt: string;
+  lastLoginAt: string | null;
+  avatarUrl: string | null;
+  bio: string | null;
+  timezone: string | null;
+  tier: 'FREE' | 'PRO' | 'TEAM' | 'ENTERPRISE';
+  tierExpiresAt: string | null;
+  discordId: string | null;
+  discordUsername: string | null;
+  epicGamesId: string | null;
+  epicGamesUsername: string | null;
+  steamId: string | null;
+  steamUsername: string | null;
+  memberships: Array<{ role: string; team: { id: string; name: string; type: string } }>;
+}
+
 export interface HeroMeta {
   slug: string;
   displayName: string;
@@ -792,6 +814,18 @@ export const apiClient = {
 
   heroes: {
     meta: () => fetchApi<{ heroes: HeroMeta[] }>('/hero-meta'),
+  },
+
+  profile: {
+    get: () => fetchApi<{ user: UserProfile }>('/profile'),
+    update: (data: { name?: string; bio?: string | null; avatarUrl?: string | null; timezone?: string | null }) =>
+      fetchApi<{ user: UserProfile }>('/profile', { method: 'PATCH', body: JSON.stringify(data) }),
+    changeEmail: (email: string, currentPassword: string) =>
+      fetchApi<{ user: UserProfile }>('/profile/email', { method: 'PATCH', body: JSON.stringify({ email, currentPassword }) }),
+    changePassword: (currentPassword: string, newPassword: string) =>
+      fetchApi<{ ok: boolean }>('/profile/password', { method: 'PATCH', body: JSON.stringify({ currentPassword, newPassword }) }),
+    disconnectSocial: (provider: 'discord' | 'epic' | 'steam') =>
+      fetchApi<{ ok: boolean }>(`/profile/social/${provider}`, { method: 'DELETE' }),
   },
 
   matches: {

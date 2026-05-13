@@ -24,6 +24,7 @@ import StaffManagement from './pages/StaffManagement';
 import DataQualityPage from './pages/DataQualityPage';
 import AuditLogsPage from './pages/AuditLogsPage';
 import UsersPage from './pages/UsersPage';
+import ProfilePage from './pages/ProfilePage';
 import ApiStatusPage from './pages/ApiStatusPage';
 import ConfigPage from './pages/ConfigPage';
 import { useAuth } from './hooks/useAuth';
@@ -292,7 +293,12 @@ function Sidebar() {
           </div>
         ) : user ? (
           <div className="internal-session-card">
-            <div className="internal-session-name">{user.name}</div>
+            <Link to="/profile" style={{ textDecoration: 'none', display: 'block' }}>
+              <div className="internal-session-name" style={{ color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                {user.name}
+                <span style={{ fontSize: '0.58rem', color: 'var(--text-muted)', fontWeight: 400 }}>· perfil</span>
+              </div>
+            </Link>
             <div className="internal-session-email">{user.email}</div>
             <div className="internal-session-row">
               <span className="internal-role-badge">{roleLabel}</span>
@@ -380,6 +386,7 @@ export default function App() {
 
             {/* Platform Admin */}
             <Route path="/admin/users" element={<UsersPage />} />
+            <Route path="/profile" element={<ProfilePage />} />
             <Route path="/admin/data-quality" element={<DataQualityPage />} />
             <Route path="/admin/config" element={<ConfigPage />} />
             <Route path="/admin/api-status" element={<ApiStatusPage />} />
