@@ -106,7 +106,7 @@ export default function Dashboard() {
       const [teamRes, health, patch] = await Promise.allSettled([
         apiClient.teams.list('OWN'),
         apiClient.admin.apiStatus(),
-        apiClient.patches.list(),
+        apiClient.patches.latest(),
       ]);
       if (teamRes.status === 'fulfilled') {
         const team = teamRes.value.teams?.[0] ?? null;
@@ -488,10 +488,13 @@ export { PlayerSyncWidget };
 // ── Standalone Player view (PLAYER globalRole, no team) ───────────────────────
 function PlayerStandaloneView() {
   const { user } = useAuth();
+  const linkedId = (user as { linkedPlayerId?: string | null })?.linkedPlayerId;
+
+  // All hooks before any conditional returns
   const [profile, setProfile] = useState<PlayerProfile | null>(null);
   const [loading, setLoading] = useState(false);
-
-  const linkedId = (user as { linkedPlayerId?: string | null })?.linkedPlayerId;
+  const [showLinkModal, setShowLinkModal] = useState(false);
+  const [linkedIdState, setLinkedIdState] = useState(linkedId);
 
   useEffect(() => {
     if (!linkedId) return;
@@ -501,9 +504,6 @@ function PlayerStandaloneView() {
       .catch(() => null)
       .finally(() => setLoading(false));
   }, [linkedId]);
-
-  const [showLinkModal, setShowLinkModal] = useState(false);
-  const [linkedIdState, setLinkedIdState] = useState(linkedId);
 
   if (!linkedIdState) {
     return (
