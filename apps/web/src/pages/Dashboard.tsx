@@ -141,13 +141,15 @@ export default function Dashboard() {
   useEffect(() => {
     const pid = ownMembership?.playerId;
     if (!isJugador || !pid) return;
-    apiClient.players.get(pid).then(setPlayerProfile).catch(() => null);
+    apiClient.players.getProfile(pid).then(setPlayerProfile).catch(() => null);
   }, [isJugador, ownMembership?.playerId]);
 
   // Fetch review queue count for MANAGER / COACH
   useEffect(() => {
     if (!isManager && !isCoach) return;
-    apiClient.review.list({ status: 'PENDING' }).then((r) => setReviewCount(r.items?.length ?? 0)).catch(() => null);
+    if (ownTeam) {
+      apiClient.review.list(ownTeam.id, { status: 'PENDING' }).then((r) => setReviewCount(r.items?.length ?? 0)).catch(() => null);
+    }
   }, [isManager, isCoach]);
 
   const isSyncing = syncState.tag === 'running';
@@ -505,7 +507,7 @@ function PlayerStandaloneView() {
   useEffect(() => {
     if (!linkedId) return;
     setLoading(true);
-    apiClient.players.get(linkedId)
+    apiClient.players.getProfile(linkedId)
       .then(setProfile)
       .catch(() => null)
       .finally(() => setLoading(false));
