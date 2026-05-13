@@ -372,6 +372,29 @@ function Sidebar() {
   );
 }
 
+// ── Weekly Reports — role-aware ───────────────────────────────────────────────
+function WeeklyReportsPage() {
+  const { user } = useAuth();
+  const hasTeam = (user?.memberships?.length ?? 0) > 0;
+  const isStandalonePlayer = user?.globalRole === 'PLAYER' || (!hasTeam && user?.globalRole !== 'PLATFORM_ADMIN');
+
+  if (isStandalonePlayer) {
+    return (
+      <ComingSoon
+        section="Weekly Reports"
+        description="Aggregated weekly performance summary."
+      />
+    );
+  }
+
+  return (
+    <ComingSoon
+      section="Weekly Team Reports"
+      description="Aggregated weekly performance summary for the coaching staff."
+    />
+  );
+}
+
 // ── App ───────────────────────────────────────────────────────────────────────
 
 export default function App() {
@@ -446,7 +469,7 @@ function AppContent() {
 
             {/* Reports */}
             <Route path="/reports/scrim" element={<ScrimReport />} />
-            <Route path="/reports/weekly" element={<ComingSoon section="Weekly Team Reports" description="Aggregated weekly performance summary for the coaching staff." />} />
+            <Route path="/reports/weekly" element={<WeeklyReportsPage />} />
             <Route path="/reports/players" element={<ComingSoon section="Player Development Reports" description="Individual player progress reports over time." />} />
             <Route path="/reports/rival" element={<Navigate to="/analysis/rival" replace />} />
 
