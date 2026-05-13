@@ -652,7 +652,7 @@ export interface CronJob {
   enabled: boolean;
   running: boolean;
   lastRunAt: string | null;
-  lastRunResult: { newMatches: number; players: number; errors: number } | null;
+  lastRunResult: { newMatches: number; eventStreamSynced: number; players: number; errors: number } | null;
   nextRunAt: string | null;
 }
 
@@ -682,6 +682,8 @@ export interface SyncLog {
   status: string;
   syncedAt: string;
   error?: string | null;
+  source?: string | null;
+  userName?: string | null;
 }
 
 // ── Fetch helper ─────────────────────────────────────────────────────────────
@@ -911,10 +913,15 @@ export const apiClient = {
     stopCron: () => fetchApi<{ ok: boolean; cron: CronJob }>('/admin/sync-cron/stop', { method: 'POST' }),
     runCronNow: () => fetchApi<{ ok: boolean; message: string }>('/admin/sync-cron/run-now', { method: 'POST' }),
     cronStatus: () => fetchApi<CronJob>('/admin/sync-cron/status'),
-    syncLogs: (limit = 50, entity?: string, status?: string) => {
+    users: () => fetchApi<{ users: unknown[] }>('/admin/users'),
+    updateUser: (id: string, data: { isActive?: boolean; globalRole?: string }) =>
+      fetchApi<{ user: unknown }>(`/admin/users/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+    apiStatus: () => fetchApi<unknown>('/admin/api-status'),
+    syncLogs: (limit = 50, entity?: string, status?: string, source?: string) => {
       const params = new URLSearchParams({ limit: String(limit) });
       if (entity) params.set('entity', entity);
       if (status) params.set('status', status);
+      if (source) params.set('source', source);
       return fetchApi<{ logs: SyncLog[]; total: number }>(`/admin/sync-logs?${params}`);
     },
   },

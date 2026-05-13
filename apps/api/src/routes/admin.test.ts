@@ -5,7 +5,7 @@ import { authCookie } from '../test/auth-cookie.js';
 
 vi.mock('../db.js', () => ({
   db: {
-    syncLog: { findMany: vi.fn().mockResolvedValue([]) },
+    syncLog: { findMany: vi.fn().mockResolvedValue([]), count: vi.fn().mockResolvedValue(0), create: vi.fn().mockResolvedValue({}), groupBy: vi.fn().mockResolvedValue([]) },
     version: { upsert: vi.fn().mockResolvedValue({}) },
     player: { findMany: vi.fn().mockResolvedValue([]) },
   },

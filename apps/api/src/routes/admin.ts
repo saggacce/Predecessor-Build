@@ -8,6 +8,7 @@ import {
   syncStalePlayers,
   syncIncompleteMatches,
   syncRecentMatchesForPlayer,
+  syncMatchEventStream,
   resyncMatch,
 } from '../services/sync-service.js';
 import { getValidToken, exchangeToken, COOKIE_REFRESH } from './auth.js';
@@ -152,12 +153,33 @@ async function runGlobalSync(): Promise<void> {
     });
 
     let totalNewMatches = 0;
+    let eventStreamSynced = 0;
     let errors = 0;
+    const canSyncEventStream = !eventStreamJob.running;
+
+    if (!canSyncEventStream) {
+      logger.info('global sync cron: event stream sync is running — skipping event stream for new matches');
+    }
 
     for (const player of players) {
       try {
         const result = await syncRecentMatchesForPlayer(db, player.predggId, token, 10);
         totalNewMatches += result.newMatches;
+
+        // Sync event stream for newly discovered matches (only if event stream sync is not running)
+        if (canSyncEventStream && result.newMatchUuids.length > 0) {
+          for (const uuid of result.newMatchUuids) {
+            const match = await db.match.findUnique({ where: { predggUuid: uuid }, select: { id: true } });
+            if (!match) continue;
+            try {
+              await syncMatchEventStream(db, match.id, uuid, token);
+              eventStreamSynced++;
+            } catch (err) {
+              logger.warn({ uuid, err }, 'global sync cron: event stream sync failed for new match');
+            }
+          }
+        }
+
         await new Promise((resolve) => setTimeout(resolve, 200));
       } catch (err) {
         logger.warn({ predggId: player.predggId, err }, 'global sync cron: failed to sync player');
@@ -165,7 +187,7 @@ async function runGlobalSync(): Promise<void> {
       }
     }
 
-    const result = { newMatches: totalNewMatches, players: players.length, errors };
+    const result = { newMatches: totalNewMatches, eventStreamSynced, players: players.length, errors };
     cronJob.lastRunResult = result;
     logger.info(result, 'global sync cron: run complete');
     await db.syncLog.create({
@@ -175,6 +197,7 @@ async function runGlobalSync(): Promise<void> {
         operation: 'run',
         status: errors > 0 ? 'partial' : 'ok',
         error: errors > 0 ? `${errors} jugadores fallaron` : null,
+        source: 'cron',
       },
     }).catch((err) => logger.warn({ err }, 'failed to write cron sync log'));
   } finally {
@@ -309,7 +332,7 @@ async function runEventStreamSync(userToken: string, predggRefreshToken: string 
   // Refresh token every 50 minutes (pred.gg tokens last ~1h)
   const TOKEN_REFRESH_INTERVAL_MS = 50 * 60 * 1000;
 
-  const total = await db.match.count({ where: { eventStreamSynced: false, matchPlayers: { some: {} } } });
+  const total = await db.match.count({ where: { eventStreamSynced: false, eventStreamFailed: false, matchPlayers: { some: {} } } });
   eventStreamJob = { running: true, total, synced: 0, errors: 0, skipped: 0, startedAt: new Date().toISOString(), lastActivity: new Date().toISOString(), tokenError: false };
 
   logger.info({ total }, 'event stream background sync started');
@@ -317,6 +340,8 @@ async function runEventStreamSync(userToken: string, predggRefreshToken: string 
   let activeToken = userToken;
   let lastTokenRefresh = Date.now();
   let consecutiveErrors = 0;
+  let tokenRefreshAttempts = 0;
+  const MAX_TOKEN_REFRESH_ATTEMPTS = 3;
 
   while (eventStreamJob.running) {
     // Refresh token proactively every 50 min
@@ -326,14 +351,15 @@ async function runEventStreamSync(userToken: string, predggRefreshToken: string 
         activeToken = newToken;
         lastTokenRefresh = Date.now();
         consecutiveErrors = 0;
+        tokenRefreshAttempts = 0;
       } else {
         logger.warn('event stream sync: could not refresh token, continuing with existing');
       }
     }
 
     const pending = await db.match.findMany({
-      where: { eventStreamSynced: false, matchPlayers: { some: {} } },
-      select: { predggUuid: true },
+      where: { eventStreamSynced: false, eventStreamFailed: false, matchPlayers: { some: {} } },
+      select: { id: true, predggUuid: true },
       orderBy: { startTime: 'desc' },
       take: BATCH,
     });
@@ -349,11 +375,27 @@ async function runEventStreamSync(userToken: string, predggRefreshToken: string 
       if (!eventStreamJob.running) break;
       const chunk = pending.slice(i, i + CONCURRENCY);
       const results = await Promise.allSettled(
-        chunk.map((m) => resyncMatch(db, m.predggUuid, activeToken, true))
+        chunk.map((m) => syncMatchEventStream(db, m.id, m.predggUuid, activeToken))
       );
-      for (const r of results) {
-        if (r.status === 'fulfilled') { eventStreamJob.synced++; batchSynced++; }
-        else eventStreamJob.errors++;
+      for (let j = 0; j < results.length; j++) {
+        const r = results[j];
+        if (r.status === 'fulfilled') {
+          eventStreamJob.synced++;
+          batchSynced++;
+        } else {
+          const errMsg = r.reason instanceof Error ? r.reason.message : String(r.reason);
+          const isNotFound = errMsg.includes('not found');
+          logger.warn({ uuid: chunk[j].predggUuid, error: errMsg }, 'event stream: match sync failed');
+          if (isNotFound) {
+            eventStreamJob.skipped++;
+          } else {
+            eventStreamJob.errors++;
+          }
+          // Log to SyncLog for audit trail
+          await db.syncLog.create({
+            data: { entity: 'match', entityId: chunk[j].predggUuid, operation: 'event-stream', status: 'error', error: errMsg.slice(0, 500), source: 'event-stream' },
+          }).catch(() => null);
+        }
       }
       eventStreamJob.lastActivity = new Date().toISOString();
       await new Promise((resolve) => setTimeout(resolve, 400));
@@ -364,9 +406,10 @@ async function runEventStreamSync(userToken: string, predggRefreshToken: string 
       consecutiveErrors++;
       if (consecutiveErrors >= 3) {
         // Try emergency token refresh
-        if (predggRefreshToken) {
-          logger.warn('event stream sync: 3 consecutive empty batches — refreshing token');
+        if (predggRefreshToken && tokenRefreshAttempts < MAX_TOKEN_REFRESH_ATTEMPTS) {
+          logger.warn({ tokenRefreshAttempts }, 'event stream sync: 3 consecutive empty batches — refreshing token');
           const newToken = await refreshPredggToken(predggRefreshToken);
+          tokenRefreshAttempts++;
           if (newToken) {
             activeToken = newToken;
             lastTokenRefresh = Date.now();
@@ -378,7 +421,7 @@ async function runEventStreamSync(userToken: string, predggRefreshToken: string 
             break;
           }
         } else {
-          logger.error('event stream sync: token expired and no refresh token available — stopping');
+          logger.error({ tokenRefreshAttempts }, 'event stream sync: max token refresh attempts reached or no refresh token — stopping');
           eventStreamJob.running = false;
           eventStreamJob.tokenError = true;
           break;
@@ -443,21 +486,97 @@ adminRouter.get('/sync-event-streams/status', async (_req, res) => {
 });
 
 /**
- * GET /admin/sync-logs?limit=50&entity=player&status=error
+ * GET /admin/sync-logs?limit=50&entity=player&status=error&source=cron
  */
+const logsQuerySchemaFull = logsQuerySchema.extend({ source: z.string().optional() });
+
 adminRouter.get('/sync-logs', async (req, res, next) => {
   try {
-    const { limit, entity, status } = logsQuerySchema.parse(req.query);
+    const { limit, entity, status, source } = logsQuerySchemaFull.parse(req.query);
+    const total = await db.syncLog.count({
+      where: { ...(entity && { entity }), ...(status && { status }), ...(source && { source }) },
+    });
     const logs = await db.syncLog.findMany({
-      where: {
-        ...(entity && { entity }),
-        ...(status && { status }),
-      },
+      where: { ...(entity && { entity }), ...(status && { status }), ...(source && { source }) },
       orderBy: { syncedAt: 'desc' },
       take: limit,
     });
-    res.json({ logs, total: logs.length });
+    res.json({ logs, total });
   } catch (err) {
     next(err);
   }
+});
+
+/**
+ * GET /admin/users — list all platform users with memberships
+ */
+adminRouter.get('/users', async (_req, res, next) => {
+  try {
+    const users = await db.user.findMany({
+      include: {
+        memberships: { include: { team: { select: { id: true, name: true } } } },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+    res.json({ users });
+  } catch (err) { next(err); }
+});
+
+/**
+ * PATCH /admin/users/:id — toggle active or change globalRole
+ */
+adminRouter.patch('/users/:id', async (req, res, next) => {
+  try {
+    const { isActive, globalRole } = req.body as { isActive?: boolean; globalRole?: string };
+    const user = await db.user.update({
+      where: { id: req.params.id },
+      data: {
+        ...(typeof isActive === 'boolean' && { isActive }),
+        ...(globalRole && { globalRole }),
+      },
+      include: { memberships: { include: { team: { select: { id: true, name: true } } } } },
+    });
+    res.json({ user });
+  } catch (err) { next(err); }
+});
+
+/**
+ * GET /admin/api-status — pred.gg connectivity + sync error stats
+ */
+adminRouter.get('/api-status', async (_req, res, next) => {
+  try {
+    const GQL_URL = process.env.PRED_GG_GQL_URL ?? 'https://pred.gg/gql';
+    const pingStart = Date.now();
+    let predggStatus: 'ok' | 'error' = 'error';
+    let predggMs: number | null = null;
+    let predggError: string | null = null;
+    try {
+      const r = await fetch(GQL_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query: '{ versions { id } }' }),
+        signal: AbortSignal.timeout(5000),
+      });
+      predggMs = Date.now() - pingStart;
+      predggStatus = r.ok ? 'ok' : 'error';
+      if (!r.ok) predggError = `HTTP ${r.status}`;
+    } catch (err) {
+      predggMs = Date.now() - pingStart;
+      predggError = err instanceof Error ? err.message : 'Connection failed';
+    }
+
+    const dayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const [totalErrors, recentErrors, lastSuccess, recentBySource] = await Promise.all([
+      db.syncLog.count({ where: { status: 'error' } }),
+      db.syncLog.count({ where: { status: 'error', syncedAt: { gte: dayAgo } } }),
+      db.syncLog.findFirst({ where: { status: { in: ['ok', 'success'] } }, orderBy: { syncedAt: 'desc' }, select: { syncedAt: true, entity: true, source: true } }),
+      db.syncLog.groupBy({ by: ['source'], where: { status: 'error', syncedAt: { gte: dayAgo } }, _count: { id: true } }),
+    ]);
+
+    res.json({
+      predgg: { status: predggStatus, responseMs: predggMs, error: predggError, endpoint: GQL_URL },
+      syncErrors: { total: totalErrors, last24h: recentErrors, bySource: recentBySource },
+      lastSuccessfulSync: lastSuccess,
+    });
+  } catch (err) { next(err); }
 });
