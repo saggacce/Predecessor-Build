@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { useNavigate, useLocation } from 'react-router';
 import { HeroAvatarWithTooltip } from '../components/HeroAvatar';
 import { RankIcon, getRankColor } from '../components/RankIcon';
-import { useHeroMeta } from '../hooks/useHeroMeta';
+import { useHeroMeta, normalizeHeroSlug } from '../hooks/useHeroMeta';
 import {
   Activity,
   AlertCircle,
@@ -1099,7 +1099,6 @@ function DeltaBadge({ current, previous, format, label }: { current: number; pre
 }
 
 function EvolutionSection({ matches }: { matches: RecentMatch[] }) {
-  const heroMetaMap = useHeroMeta();
   const [modeFilter, setModeFilter] = useState<string>('ALL');
   const modes = ['ALL', ...Array.from(new Set(matches.map((m) => m.gameMode))).sort()];
   const filtered = modeFilter === 'ALL' ? matches : matches.filter((m) => m.gameMode === modeFilter);
@@ -1166,7 +1165,7 @@ function EvolutionSection({ matches }: { matches: RecentMatch[] }) {
           return (
             <div key={i} title={`${m.heroName ?? m.heroSlug} · ${isWin ? 'WIN' : isLoss ? 'LOSS' : '?'}`} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px' }}>
               <div style={{ width: 26, height: 26, borderRadius: 5, overflow: 'hidden', border: `2px solid ${isWin ? 'var(--accent-win)' : isLoss ? 'var(--accent-loss)' : 'var(--border-color)'}`, background: 'var(--bg-dark)', opacity: i === 0 ? 1 : 1 - i * 0.02 }}>
-                {(heroMetaMap.get(m.heroSlug)?.imageUrl ?? m.heroImageUrl) && <img src={heroMetaMap.get(m.heroSlug)?.imageUrl ?? m.heroImageUrl!} alt={m.heroSlug} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />}
+                <img src={`/heroes/${normalizeHeroSlug(m.heroSlug)}.webp`} alt={m.heroSlug} style={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
               </div>
               <div style={{ width: 6, height: 6, borderRadius: '50%', background: isWin ? 'var(--accent-win)' : isLoss ? 'var(--accent-loss)' : 'var(--border-color)' }} />
             </div>
@@ -1214,7 +1213,7 @@ function EvolutionSection({ matches }: { matches: RecentMatch[] }) {
               return (
                 <div key={h.slug} title={`${h.name ?? h.slug} — ${h.games} games, ${wr}% WR`} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.25rem' }}>
                   <div style={{ width: 36, height: 36, borderRadius: 7, overflow: 'hidden', border: `2px solid ${wrColor}55`, background: 'var(--bg-dark)', position: 'relative' }}>
-                    {(heroMetaMap.get(h.slug)?.imageUrl ?? h.imageUrl) && <img src={heroMetaMap.get(h.slug)?.imageUrl ?? h.imageUrl!} alt={h.name ?? h.slug} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />}
+                    <img src={`/heroes/${normalizeHeroSlug(h.slug)}.webp`} alt={h.name ?? h.slug} style={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
                     <div style={{ position: 'absolute', bottom: 0, right: 0, background: 'rgba(0,0,0,0.75)', fontSize: '0.5rem', fontFamily: 'var(--font-mono)', fontWeight: 700, color: wrColor, padding: '0 2px', lineHeight: 1.4 }}>{h.games}</div>
                   </div>
                   <div style={{ fontSize: '0.6rem', fontFamily: 'var(--font-mono)', color: wrColor, fontWeight: 700 }}>{wr}%</div>
@@ -1615,9 +1614,9 @@ function HeroAvatar({
   const [localFailed, setLocalFailed] = useState(false);
   const [cdnFailed, setCdnFailed] = useState(false);
   const heroMeta = useHeroMeta();
-  const omedaSrc = hero?.slug ? (heroMeta.get(hero.slug)?.imageUrl ?? null) : null;
-  const cdnSrc = normalizeHeroAsset(hero?.imageUrl);
-  const src = omedaSrc ?? (!cdnFailed ? cdnSrc : null);
+  const localSrc = hero?.slug ? `/heroes/${normalizeHeroSlug(hero.slug)}.webp` : null;
+  const cdnSrc = heroMeta.get(hero?.slug ?? '')?.imageUrl ?? normalizeHeroAsset(hero?.imageUrl);
+  const src = !localFailed && localSrc ? localSrc : (!cdnFailed ? cdnSrc : null);
   const label = hero?.name ?? hero?.slug ?? 'Hero';
   const initials = label
     .split(/[\s_-]+/)
