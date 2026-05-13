@@ -178,17 +178,26 @@ internalAuthRouter.post('/refresh', async (req, res, next) => {
   }
 });
 
-internalAuthRouter.get('/me', requireAuth, (req, res) => {
-  const user = req.user!;
-  res.json({
-    user: {
-      id: user.userId,
-      email: user.email,
-      name: user.name,
-      globalRole: user.globalRole,
-      memberships: user.memberships,
-    },
-  });
+internalAuthRouter.get('/me', requireAuth, async (req, res, next) => {
+  try {
+    const user = req.user!;
+    // Fetch fields not stored in JWT from DB
+    const dbUser = await db.user.findUnique({
+      where: { id: user.userId },
+      select: { linkedPlayerId: true, avatarUrl: true },
+    });
+    res.json({
+      user: {
+        id: user.userId,
+        email: user.email,
+        name: user.name,
+        globalRole: user.globalRole,
+        linkedPlayerId: dbUser?.linkedPlayerId ?? null,
+        avatarUrl: dbUser?.avatarUrl ?? null,
+        memberships: user.memberships,
+      },
+    });
+  } catch (err) { next(err); }
 });
 
 internalAuthRouter.post('/register', registerRateLimit, async (req, res, next) => {

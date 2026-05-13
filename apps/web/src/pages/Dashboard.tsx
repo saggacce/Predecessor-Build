@@ -526,7 +526,7 @@ function PlayerStandaloneView() {
         </div>
         {showLinkModal && (
           <LinkPlayerModal
-            onLinked={(pid) => { setLinkedIdState(pid); setShowLinkModal(false); window.location.reload(); }}
+            onLinked={(pid) => { setLinkedIdState(pid); setShowLinkModal(false); }}
             onClose={() => setShowLinkModal(false)}
           />
         )}

@@ -3,6 +3,8 @@ import { useNavigate, Navigate } from 'react-router';
 import { Film } from 'lucide-react';
 import { apiClient } from '../api/client';
 import { useAuth } from '../hooks/useAuth';
+import { LinkPlayerModal } from '../components/LinkPlayerModal';
+import { useNavigate as useNav } from 'react-router';
 import type { TeamProfile, TeamMatch } from '../api/client';
 
 export default function MatchList() {
@@ -18,8 +20,37 @@ export default function MatchList() {
     return <Navigate to={`/analysis/players?id=${linkedPlayerId}`} replace />;
   }
 
+  const [showLinkModal, setShowLinkModal] = useState(false);
+
   if (isStandalonePlayer && !linkedPlayerId) {
-    return <Navigate to="/analysis/players" replace />;
+    return (
+      <>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '50vh' }}>
+          <div className="glass-card" style={{ textAlign: 'center', padding: '2.5rem', maxWidth: 420 }}>
+            <div style={{ fontSize: '2rem', marginBottom: '0.85rem' }}>🎮</div>
+            <p style={{ fontSize: '0.92rem', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '0.4rem' }}>
+              Vincula tu perfil de jugador
+            </p>
+            <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginBottom: '1.25rem', lineHeight: 1.6 }}>
+              Para ver tus partidas, busca tu nombre en Predecessor y vincúlalo a tu cuenta.
+            </p>
+            <button
+              onClick={() => setShowLinkModal(true)}
+              className="btn-primary"
+              style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.88rem', padding: '0.55rem 1.25rem' }}
+            >
+              Buscar mi perfil en Predecessor
+            </button>
+          </div>
+        </div>
+        {showLinkModal && (
+          <LinkPlayerModal
+            onLinked={(pid) => { setShowLinkModal(false); navigate(\`/analysis/players?id=\${pid}\`); }}
+            onClose={() => setShowLinkModal(false)}
+          />
+        )}
+      </>
+    );
   }
   const [teams, setTeams] = useState<TeamProfile[]>([]);
   const [selectedTeamId, setSelectedTeamId] = useState('');
