@@ -25,13 +25,19 @@ const OWN_TEAM_NAME = '[QA] Alpha';
 const RIVAL_TEAM_NAME = '[QA] Beta';
 const MATCH_COUNT = 20; // más partidas = mejor muestra estadística
 
-// Héroe fijo por rol y equipo — garantiza MIN_HERO_GAMES >= 3
-const OWN_HEROES: Record<string, string> = {
-  carry:   'drongo',
-  jungle:  'wraith',
-  midlane: 'zinx',
-  offlane: 'countess',
-  support: 'feng-mao',
+// Héroes por rol: índice 0 = principal (16+ partidas), índice 1 = alternativo (4+ partidas)
+// Los héroes alternnativos se comparten entre roles para generar Hero Overlap:
+//   drongo (carry alt) ← compartido con offlane alt
+//   zinx (midlane main) ← compartido con carry main … no
+// Solapamientos intencionados:
+//   'serath'  → carry alt + offlane alt  (overlap entre 2 jugadores)
+//   'wraith'  → jungle main + support alt (overlap entre 2 jugadores)
+const OWN_HEROES: Record<string, string[]> = {
+  carry:   ['drongo', 'serath'],   // serath compartido con offlane
+  jungle:  ['wraith', 'gadget'],
+  midlane: ['zinx', 'murdock'],
+  offlane: ['countess', 'serath'], // serath compartido con carry
+  support: ['feng-mao', 'wraith'], // wraith compartido con jungle
 };
 
 const RIVAL_HEROES: Record<string, string> = {
@@ -149,16 +155,16 @@ async function seed() {
 
   // ── Players — héroe fijo por rol ───────────────────────────────────────────
 
-  const ownPlayers: { id: string; role: string; heroSlug: string }[] = [];
+  const ownPlayers: { id: string; role: string; heroes: string[] }[] = [];
   const rivalPlayers: { id: string; role: string; heroSlug: string }[] = [];
 
   for (const role of ROLES) {
     const ownPlayer = await db.player.upsert({
       where: { predggId: `qa-own-${role}` },
-      create: { predggId: `qa-own-${role}`, predggUuid: `qa-own-${role}-uuid`, displayName: `${QA_TAG} ${role}-${OWN_HEROES[role]}`, lastSynced: new Date() },
+      create: { predggId: `qa-own-${role}`, predggUuid: `qa-own-${role}-uuid`, displayName: `${QA_TAG} ${role}-${OWN_HEROES[role][0]}`, lastSynced: new Date() },
       update: {},
     });
-    ownPlayers.push({ id: ownPlayer.id, role, heroSlug: OWN_HEROES[role] });
+    ownPlayers.push({ id: ownPlayer.id, role, heroes: OWN_HEROES[role] });
     const existingOwn = await db.teamRoster.findFirst({ where: { teamId: ownTeam.id, playerId: ownPlayer.id } });
     if (!existingOwn) await db.teamRoster.create({ data: { teamId: ownTeam.id, playerId: ownPlayer.id, role } });
 
@@ -171,7 +177,7 @@ async function seed() {
     const existingRival = await db.teamRoster.findFirst({ where: { teamId: rivalTeam.id, playerId: rivalPlayer.id } });
     if (!existingRival) await db.teamRoster.create({ data: { teamId: rivalTeam.id, playerId: rivalPlayer.id, role } });
   }
-  console.log(`  ✓ 10 jugadores con héroes fijos (OWN: ${Object.values(OWN_HEROES).join(', ')})`);
+  console.log(`  ✓ 10 jugadores con héroes fijos (OWN: ${Object.values(OWN_HEROES).map(h => h[0]).join(', ')})`);
 
   // ── Version ────────────────────────────────────────────────────────────────
 
@@ -240,7 +246,7 @@ async function seed() {
           playerName: `QA-${p.role}`,
           team: ownSide,
           role: p.role,
-          heroSlug: p.heroSlug, // FIXED hero per player
+          heroSlug: Math.random() > 0.25 ? p.heroes[0] : p.heroes[1], // 75% principal, 25% alternativo → overlap
           kills,
           deaths,
           assists,
@@ -272,7 +278,7 @@ async function seed() {
           playerName: `QA-rival-${p.role}`,
           team: rivalSide,
           role: p.role,
-          heroSlug: p.heroSlug, // FIXED hero per player
+          heroSlug: p.heroSlug,
           kills,
           deaths,
           assists: rand(1, 14),
@@ -478,7 +484,7 @@ async function seed() {
   console.log('✅ Datos QA listos. Para borrarlos: npx tsx scripts/seed-qa.ts --clean');
   console.log('');
   console.log('📋 Resumen:');
-  console.log(`   Equipo OWN:   ${OWN_TEAM_NAME} (héroes: ${Object.values(OWN_HEROES).join(', ')})`);
+  console.log(`   Equipo OWN:   ${OWN_TEAM_NAME} (héroes: ${Object.values(OWN_HEROES).map(h => h[0]).join(', ')})`);
   console.log(`   Equipo RIVAL: ${RIVAL_TEAM_NAME}`);
   console.log(`   Partidas:     ${MATCH_COUNT} (~${ranked} RANKED, ~${standard} STANDARD)`);
   console.log(`   Wins OWN:     13 / Losses: 7 (65% WR)`);
