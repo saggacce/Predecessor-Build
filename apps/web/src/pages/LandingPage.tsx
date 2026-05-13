@@ -89,9 +89,9 @@ export default function LandingPage() {
         {/* Header */}
         <header style={{ width:'100%', maxWidth:960, display:'flex', alignItems:'center', justifyContent:'space-between', padding:'1.5rem', position:'relative', zIndex:10, animation:'fadeIn 0.6s ease both' }}>
           <div style={{ display:'flex', alignItems:'center', gap:'0.65rem' }}>
-            <img src="/favicon.svg" alt="Rift Line" style={{ width:34, height:34 }} />
+            <img src="/favicon.svg" alt="RiftLine" style={{ width:34, height:34 }} />
             <div>
-              <div style={{ fontWeight:800, fontSize:'1.05rem', color:'var(--text-primary)', letterSpacing:'-0.01em', lineHeight:1.1 }}>Rift Line</div>
+              <div style={{ fontWeight:900, fontSize:'1.35rem', color:'var(--text-primary)', letterSpacing:'-0.03em', lineHeight:1 }}>RiftLine</div>
               <div style={{ fontSize:'0.58rem', color:'var(--accent-teal-bright)', letterSpacing:'0.08em', fontWeight:600, textTransform:'uppercase', marginTop:'0.1rem' }}>Competitive Intel</div>
             </div>
           </div>
@@ -166,7 +166,7 @@ export default function LandingPage() {
         <section style={{ maxWidth:600, width:'100%', textAlign:'center', padding:'0 1.5rem 5rem', position:'relative', zIndex:10, animation:'fadeUp 0.6s ease 0.8s both' }}>
           <div style={{ background:'linear-gradient(135deg,rgba(56,212,200,0.06),rgba(91,156,246,0.06))', border:'1px solid rgba(255,255,255,0.08)', borderRadius:16, padding:'2.5rem 2rem' }}>
             <h2 style={{ fontSize:'1.4rem', fontWeight:800, color:'var(--text-primary)', margin:'0 0 0.6rem', letterSpacing:'-0.02em' }}>¿Listo para analizar?</h2>
-            <p style={{ fontSize:'0.85rem', color:'var(--text-muted)', margin:'0 0 1.5rem', lineHeight:1.6 }}>Accede con tu cuenta de Rift Line o contacta a tu manager para recibir una invitación.</p>
+            <p style={{ fontSize:'0.85rem', color:'var(--text-muted)', margin:'0 0 1.5rem', lineHeight:1.6 }}>Accede con tu cuenta de RiftLine o contacta a tu manager para recibir una invitación.</p>
             <Link to="/login" className="landing-cta-btn" style={{ textDecoration:'none', display:'inline-flex', alignItems:'center', gap:'0.4rem', fontSize:'0.95rem', fontWeight:700, padding:'0.7rem 1.75rem', borderRadius:8, background:'linear-gradient(135deg,#5b9cf6,#4a85e0)', color:'#fff' }}>
               Iniciar sesión <ArrowRight size={16} />
             </Link>
@@ -174,7 +174,7 @@ export default function LandingPage() {
         </section>
 
         <footer style={{ width:'100%', textAlign:'center', padding:'1.5rem', borderTop:'1px solid rgba(255,255,255,0.05)', fontSize:'0.68rem', color:'var(--text-muted)', position:'relative', zIndex:10 }}>
-          Rift Line by Synapsight · Competitive Intel · Acceso restringido
+          RiftLine by Synapsight · Competitive Intel · Acceso restringido
         </footer>
       </div>
     </>

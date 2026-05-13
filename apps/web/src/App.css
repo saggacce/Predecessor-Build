@@ -46,11 +46,11 @@
 }
 
 .logo-name {
-  font-size: 1.06rem;
+  font-size: 1.18rem;
   font-weight: 800;
   line-height: 1;
   letter-spacing: -0.01em;
-  /* violet → blue gradient for Rift Line brand */
+  /* violet → blue gradient for RiftLine brand */
   background: linear-gradient(120deg, #c4b5fd 0%, var(--accent-violet) 45%, var(--accent-blue) 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;

@@ -29,7 +29,7 @@ export default function Login() {
       <header className="header">
         <h1 className="header-title">Login</h1>
         <p style={{ color: 'var(--text-muted)', fontSize: '0.86rem', marginTop: '0.35rem' }}>
-          Internal Rift Line session.
+          Internal RiftLine session.
         </p>
       </header>
 

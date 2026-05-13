@@ -409,7 +409,7 @@ function buildPrintHTML(report: ScrimReportData, analysis: TeamAnalysis | null):
   @media print { body { padding: 0; } }
 </style></head><body>
 <h1>Scrim Report</h1>
-<p class="meta">${report.ownTeam.name} vs ${report.rivalTeam.name} · Generated ${new Date(report.generatedAt).toLocaleString()} · Rift Line</p>
+<p class="meta">${report.ownTeam.name} vs ${report.rivalTeam.name} · Generated ${new Date(report.generatedAt).toLocaleString()} · RiftLine</p>
 
 <div class="section">
 <h2>Intelligence Notes</h2>
@@ -444,7 +444,7 @@ ${majorObjs.map((o) => {
 </div>
 </div>
 
-<div class="footer">Rift Line — Competitive Intel · Staff confidential</div>
+<div class="footer">RiftLine — Competitive Intel · Staff confidential</div>
 </body></html>`;
 }
 
@@ -497,7 +497,7 @@ function buildTextReport(report: ScrimReportData, analysis: TeamAnalysis | null)
     lines.push('');
   });
 
-  lines.push('— Rift Line Competitive Intel —');
+  lines.push('— RiftLine Competitive Intel —');
   return lines.join('\n');
 }
 

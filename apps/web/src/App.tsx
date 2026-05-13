@@ -282,7 +282,7 @@ function Sidebar() {
             <img src="/favicon.svg" alt="" />
           </div>
           <div>
-            <div className="logo-name">Rift Line</div>
+            <div className="logo-name">RiftLine</div>
             <div className="sidebar-subtitle">Competitive Intel</div>
           </div>
         </div>
