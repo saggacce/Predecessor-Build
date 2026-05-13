@@ -282,7 +282,7 @@ function Sidebar() {
             <img src="/favicon.svg" alt="" />
           </div>
           <div>
-            <div className="logo-name">Rift Line</div>
+<div className="logo-name">RiftLine</div>
             <div className="sidebar-subtitle">Competitive Intel</div>
           </div>
         </div>
@@ -392,10 +392,6 @@ function AppContent() {
   const { internalAuthenticated, internalLoading } = useAuth();
   const location = useLocation();
 
-  // Show landing page for unauthenticated users (except login/register routes)
-  const publicRoutes = ['/login', '/register', '/unauthorized'];
-  const isPublicRoute = publicRoutes.some((r) => location.pathname.startsWith(r));
-
   // Holographic hover — update --mouse-x/y on every .glass-card
   useEffect(() => {
     function onMouseMove(e: MouseEvent) {
@@ -409,12 +405,13 @@ function AppContent() {
     return () => document.removeEventListener('mousemove', onMouseMove);
   }, []);
 
-  if (!internalLoading && !internalAuthenticated && !isPublicRoute) {
+  // Unauthenticated: show landing/login/register without sidebar
+  if (!internalLoading && !internalAuthenticated) {
     return (
       <Routes>
-        <Route path="*" element={<LandingPage />} />
         <Route path="/login" element={<Login />} />
         <Route path="/register/:token" element={<Register />} />
+        <Route path="*" element={<LandingPage />} />
       </Routes>
     );
   }
