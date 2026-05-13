@@ -20,6 +20,15 @@ const SEVERITY_ORDER: Record<Insight['severity'], number> = {
 
 const MAJOR_OBJECTIVES = ['FANGTOOTH', 'PRIMAL_FANGTOOTH', 'ORB_PRIME', 'MINI_PRIME', 'SHAPER'];
 
+// ── Minimum sample sizes for statistical confidence ───────────────────────────
+const MIN_EVENT_MATCHES = 10;       // team matches with full event stream
+const MIN_OBJ_OPPORTUNITIES = 15;   // objectives analyzed for vision/conversion rules
+const MIN_WARD_EVENTS = 25;         // ward events for vision backup rules
+const MIN_PLAYER_MATCHES = 30;      // individual player match history
+const MIN_CALC_PTS = 7;             // usable data points within a 10-match window
+const MIN_CHAIN_OCC = 5;            // chain rule occurrences (obj-after-death, etc.)
+const MIN_OBJ_TYPE = 8;             // minimum of a specific objective type secured
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function pct(n: number, d: number) {
@@ -160,7 +169,7 @@ export async function getTeamInsights(teamId: string): Promise<Insight[]> {
   // ─────────────────────────────────────────────────────────────────────────
   // RULE 1 — Critical deaths before major objective
   // ─────────────────────────────────────────────────────────────────────────
-  if (eventMatchIds.length >= 3) {
+  if (eventMatchIds.length >= MIN_EVENT_MATCHES) {
     const majorObjs = objKills.filter((o) => MAJOR_OBJECTIVES.includes(o.entityType));
 
     let matchesWithCritDeath = 0;
@@ -219,7 +228,7 @@ export async function getTeamInsights(teamId: string): Promise<Insight[]> {
   // ─────────────────────────────────────────────────────────────────────────
   // RULE 2 — Low vision before objective
   // ─────────────────────────────────────────────────────────────────────────
-  if (eventMatchIds.length >= 3) {
+  if (eventMatchIds.length >= MIN_EVENT_MATCHES) {
     const majorObjs = objKills.filter((o) => MAJOR_OBJECTIVES.includes(o.entityType));
     let objsWithNoVision = 0;
     let totalObjs = 0;
@@ -240,7 +249,7 @@ export async function getTeamInsights(teamId: string): Promise<Insight[]> {
     }
 
     const noVisionPct = pct(objsWithNoVision, totalObjs);
-    if (totalObjs >= 5 && noVisionPct >= 50) {
+    if (totalObjs >= MIN_OBJ_OPPORTUNITIES && noVisionPct >= 50) {
       insights.push({
         id: 'rule-low-vision-obj',
         severity: 'high',
@@ -266,7 +275,7 @@ export async function getTeamInsights(teamId: string): Promise<Insight[]> {
   // ─────────────────────────────────────────────────────────────────────────
   // RULE 3 — Vision cleaned before objective
   // ─────────────────────────────────────────────────────────────────────────
-  if (eventMatchIds.length >= 3) {
+  if (eventMatchIds.length >= MIN_EVENT_MATCHES) {
     const majorObjs = objKills.filter((o) => MAJOR_OBJECTIVES.includes(o.entityType));
     let objsWithCleanedVision = 0;
     let totalObjs = 0;
@@ -287,7 +296,7 @@ export async function getTeamInsights(teamId: string): Promise<Insight[]> {
     }
 
     const cleanedPct = pct(objsWithCleanedVision, totalObjs);
-    if (totalObjs >= 5 && cleanedPct >= 40) {
+    if (totalObjs >= MIN_OBJ_OPPORTUNITIES && cleanedPct >= 40) {
       insights.push({
         id: 'rule-vision-cleaned',
         severity: 'high',
@@ -313,7 +322,7 @@ export async function getTeamInsights(teamId: string): Promise<Insight[]> {
   // ─────────────────────────────────────────────────────────────────────────
   // RULE 4 — Prime not converted
   // ─────────────────────────────────────────────────────────────────────────
-  if (eventMatchIds.length >= 3) {
+  if (eventMatchIds.length >= MIN_EVENT_MATCHES) {
     const primes = objKills.filter((o) => o.entityType === 'ORB_PRIME');
     const teamPrimes = primes.filter((o) => o.killerTeam === teamSideMap.get(o.matchId));
 
@@ -332,7 +341,7 @@ export async function getTeamInsights(teamId: string): Promise<Insight[]> {
     }
 
     const notConvPct = pct(notConverted, teamPrimes.length);
-    if (teamPrimes.length >= 3 && notConvPct >= 50) {
+    if (teamPrimes.length >= MIN_OBJ_TYPE && notConvPct >= 50) {
       insights.push({
         id: 'rule-prime-no-conv',
         severity: 'high',
@@ -359,7 +368,7 @@ export async function getTeamInsights(teamId: string): Promise<Insight[]> {
   // RULE 5 — Draft dependency (pool < 2 héroes fiables)
   // ─────────────────────────────────────────────────────────────────────────
   for (const [playerId, mps] of mpByPlayer) {
-    if (mps.length < 8) continue;
+    if (mps.length < MIN_PLAYER_MATCHES) continue;
 
     const heroCount = new Map<string, number>();
     for (const mp of mps) heroCount.set(mp.heroSlug, (heroCount.get(mp.heroSlug) ?? 0) + 1);
@@ -397,7 +406,7 @@ export async function getTeamInsights(teamId: string): Promise<Insight[]> {
   // ─────────────────────────────────────────────────────────────────────────
   // RULE 6 — Throw pattern (gold lead lost)
   // ─────────────────────────────────────────────────────────────────────────
-  if (eventMatchIds.length >= 3) {
+  if (eventMatchIds.length >= MIN_EVENT_MATCHES) {
     let throwMatches = 0;
     for (const matchId of eventMatchIds) {
       const side = teamSideMap.get(matchId);
@@ -437,7 +446,7 @@ export async function getTeamInsights(teamId: string): Promise<Insight[]> {
       if (maxLead >= 3000) throwMatches++;
     }
 
-    if (throwMatches >= 2) {
+    if (throwMatches >= 4) {
       insights.push({
         id: 'rule-throw',
         severity: 'high',
@@ -464,7 +473,7 @@ export async function getTeamInsights(teamId: string): Promise<Insight[]> {
   // RULE 7 — Player slump
   // ─────────────────────────────────────────────────────────────────────────
   for (const [playerId, mps] of mpByPlayer) {
-    if (mps.length < 10) continue;
+    if (mps.length < MIN_PLAYER_MATCHES) continue;
 
     const snap = snapshots.get(playerId);
     const historicalKda = snap
@@ -518,7 +527,7 @@ export async function getTeamInsights(teamId: string): Promise<Insight[]> {
     if (!role || !WARD_BASELINE[role]) continue;
 
     const withWards = mps.filter((m) => m.wardsPlaced !== null && m.match.duration > 0);
-    if (withWards.length < 5) continue;
+    if (withWards.length < MIN_PLAYER_MATCHES) continue;
 
     const avgWardsPerMin =
       withWards.reduce((s, m) => s + (m.wardsPlaced! / (m.match.duration / 60)), 0) / withWards.length;
@@ -574,7 +583,7 @@ export async function getTeamInsights(teamId: string): Promise<Insight[]> {
   const ftCtrl = pct(ftData.team, ftTotal);
   const primeCtrl = pct(primeData.team, primeTotal);
 
-  if (ftTotal >= 5 && ftCtrl >= 70) {
+  if (ftTotal >= MIN_OBJ_OPPORTUNITIES && ftCtrl >= 70) {
     insights.push({
       id: 'rule-positive-ft',
       severity: isRival ? 'high' : 'positive',
@@ -593,7 +602,7 @@ export async function getTeamInsights(teamId: string): Promise<Insight[]> {
     });
   }
 
-  if (primeTotal >= 5 && primeCtrl >= 70) {
+  if (primeTotal >= MIN_OBJ_OPPORTUNITIES && primeCtrl >= 70) {
     insights.push({
       id: 'rule-positive-prime',
       severity: isRival ? 'high' : 'positive',
@@ -615,7 +624,7 @@ export async function getTeamInsights(teamId: string): Promise<Insight[]> {
   // ─────────────────────────────────────────────────────────────────────────
   // GROUP A — Deaths by role before major objectives
   // ─────────────────────────────────────────────────────────────────────────
-  if (eventMatchIds.length >= 3) {
+  if (eventMatchIds.length >= MIN_EVENT_MATCHES) {
     const majorObjs = objKills.filter((o) => MAJOR_OBJECTIVES.includes(o.entityType));
 
     const roleRules: Array<{ role: string; id: string; label: string }> = [
@@ -707,7 +716,7 @@ export async function getTeamInsights(teamId: string): Promise<Insight[]> {
   // ─────────────────────────────────────────────────────────────────────────
   // GROUP B — Vision sub-rules
   // ─────────────────────────────────────────────────────────────────────────
-  if (eventMatchIds.length >= 3) {
+  if (eventMatchIds.length >= MIN_EVENT_MATCHES) {
     const majorObjs = objKills.filter((o) => MAJOR_OBJECTIVES.includes(o.entityType));
 
     // B1 — Late vision setup (<30s before objective)
@@ -726,7 +735,7 @@ export async function getTeamInsights(teamId: string): Promise<Insight[]> {
         if (wardsIn90.length > 0 && wardsIn90.length === wardsIn30.length) lateSetupObjs++;
       }
       const p = pct(lateSetupObjs, totalMajorObjs);
-      if (totalMajorObjs >= 5 && p >= 40) {
+      if (totalMajorObjs >= MIN_OBJ_OPPORTUNITIES && p >= 40) {
         insights.push({
           id: 'rule-late-vision-setup',
           severity: 'medium',
@@ -766,7 +775,7 @@ export async function getTeamInsights(teamId: string): Promise<Insight[]> {
         }
       }
       const p = pct(noBackupCount, totalDestructions);
-      if (totalDestructions >= 10 && p >= 50) {
+      if (totalDestructions >= MIN_WARD_EVENTS && p >= 50) {
         insights.push({
           id: 'rule-no-backup-vision',
           severity: 'medium',
@@ -807,7 +816,7 @@ export async function getTeamInsights(teamId: string): Promise<Insight[]> {
         if (!recoveryWard) visionLostObjs++;
       }
       const p = pct(visionLostObjs, totalObjsChecked);
-      if (totalObjsChecked >= 5 && p >= 40) {
+      if (totalObjsChecked >= MIN_OBJ_OPPORTUNITIES && p >= 40) {
         insights.push({
           id: 'rule-vision-lost-no-recovery',
           severity: 'high',
@@ -831,7 +840,7 @@ export async function getTeamInsights(teamId: string): Promise<Insight[]> {
   // ─────────────────────────────────────────────────────────────────────────
   // GROUP C — Conversion variants (Fangtooth, Shaper)
   // ─────────────────────────────────────────────────────────────────────────
-  if (eventMatchIds.length >= 3) {
+  if (eventMatchIds.length >= MIN_EVENT_MATCHES) {
     const conversionRules: Array<{ types: string[]; id: string; label: string; window: number }> = [
       { types: ['FANGTOOTH', 'PRIMAL_FANGTOOTH'], id: 'rule-fangtooth-no-structure', label: 'Fangtooth', window: 120 },
       { types: ['SHAPER'], id: 'rule-shaper-no-structure', label: 'Shaper', window: 150 },
@@ -840,7 +849,7 @@ export async function getTeamInsights(teamId: string): Promise<Insight[]> {
     for (const { types, id, label, window: convWindow } of conversionRules) {
       const objs = objKills.filter((o) => types.includes(o.entityType));
       const teamObjs = objs.filter((o) => o.killerTeam === teamSideMap.get(o.matchId));
-      if (teamObjs.length < 3) continue;
+      if (teamObjs.length < MIN_OBJ_TYPE) continue;
 
       let notConverted = 0;
       for (const obj of teamObjs) {
@@ -878,7 +887,7 @@ export async function getTeamInsights(teamId: string): Promise<Insight[]> {
   // ─────────────────────────────────────────────────────────────────────────
   // GROUP D — Objective chain rules
   // ─────────────────────────────────────────────────────────────────────────
-  if (eventMatchIds.length >= 3) {
+  if (eventMatchIds.length >= MIN_EVENT_MATCHES) {
     const majorObjs = objKills.filter((o) => MAJOR_OBJECTIVES.includes(o.entityType));
 
     // D1 — Objective lost after ally death
@@ -900,7 +909,7 @@ export async function getTeamInsights(teamId: string): Promise<Insight[]> {
         objLostEv.push(`${dName} murió → ${objAfter.entityType} en ${Math.round((objAfter.gameTime - death.gameTime) / 60)}min`);
       }
     }
-    if (objLostAfterDeathCount >= 2) {
+    if (objLostAfterDeathCount >= MIN_CHAIN_OCC) {
       insights.push({
         id: 'rule-obj-lost-after-death',
         severity: 'high',
@@ -937,7 +946,7 @@ export async function getTeamInsights(teamId: string): Promise<Insight[]> {
         objTakenEv.push(`${kName} mató → ${objAfter.entityType} en ${Math.round((objAfter.gameTime - kill.gameTime) / 60)}min`);
       }
     }
-    if (objTakenAfterKillCount >= 3) {
+    if (objTakenAfterKillCount >= MIN_CHAIN_OCC) {
       insights.push({
         id: 'rule-obj-taken-after-kill',
         severity: isRival ? 'high' : 'positive',
@@ -963,7 +972,7 @@ export async function getTeamInsights(teamId: string): Promise<Insight[]> {
   const positiveFormCandidates: Array<{ name: string; playerId: string; delta: number }> = [];
 
   for (const [playerId, mps] of mpByPlayer) {
-    if (mps.length < 10) continue;
+    if (mps.length < MIN_PLAYER_MATCHES) continue;
     const name = playerName.get(playerId) ?? 'Unknown';
     const last10 = mps.slice(0, 10);
     const prev10 = mps.slice(10, 20);
@@ -975,7 +984,7 @@ export async function getTeamInsights(teamId: string): Promise<Insight[]> {
     // GPM slump
     const last10Gpm = last10.filter((m) => m.match.duration > 0 && m.gold !== null);
     const prev10Gpm = prev10.filter((m) => m.match.duration > 0 && m.gold !== null);
-    if (last10Gpm.length >= 5 && prev10Gpm.length >= 5) {
+    if (last10Gpm.length >= MIN_CALC_PTS && prev10Gpm.length >= MIN_CALC_PTS) {
       const recentGpm = last10Gpm.reduce((s, m) => s + m.gold! / (m.match.duration / 60), 0) / last10Gpm.length;
       const prevGpm = prev10Gpm.reduce((s, m) => s + m.gold! / (m.match.duration / 60), 0) / prev10Gpm.length;
       if (recentGpm < prevGpm * 0.80 && recentGpm < 300) {
@@ -1002,7 +1011,7 @@ export async function getTeamInsights(teamId: string): Promise<Insight[]> {
     // DPM slump
     const last10Dpm = last10.filter((m) => m.match.duration > 0 && m.heroDamage !== null);
     const prev10Dpm = prev10.filter((m) => m.match.duration > 0 && m.heroDamage !== null);
-    if (last10Dpm.length >= 5 && prev10Dpm.length >= 5) {
+    if (last10Dpm.length >= MIN_CALC_PTS && prev10Dpm.length >= MIN_CALC_PTS) {
       const recentDpm = last10Dpm.reduce((s, m) => s + m.heroDamage! / (m.match.duration / 60), 0) / last10Dpm.length;
       const prevDpm = prev10Dpm.reduce((s, m) => s + m.heroDamage! / (m.match.duration / 60), 0) / prev10Dpm.length;
       if (recentDpm < prevDpm * 0.75 && recentDpm < 400) {
@@ -1031,7 +1040,7 @@ export async function getTeamInsights(teamId: string): Promise<Insight[]> {
       const tKey = `${m.matchId}:${m.team}`;
       return (teamKillsPerMatch.get(tKey) ?? 0) > 0;
     });
-    if (kpMps.length >= 5) {
+    if (kpMps.length >= MIN_CALC_PTS) {
       const avgKp =
         kpMps.reduce((s, m) => {
           const tk = teamKillsPerMatch.get(`${m.matchId}:${m.team}`) ?? 1;
@@ -1063,7 +1072,7 @@ export async function getTeamInsights(teamId: string): Promise<Insight[]> {
       const tKey = `${m.matchId}:${m.team}`;
       return (teamDeathsPerMatch.get(tKey) ?? 0) > 0;
     });
-    if (deathMps.length >= 5) {
+    if (deathMps.length >= MIN_CALC_PTS) {
       const avgDs =
         deathMps.reduce((s, m) => {
           const td = teamDeathsPerMatch.get(`${m.matchId}:${m.team}`) ?? 1;
@@ -1098,7 +1107,7 @@ export async function getTeamInsights(teamId: string): Promise<Insight[]> {
         return m.gold !== null && m.heroDamage !== null &&
           (teamGoldPerMatch.get(tKey) ?? 0) > 0 && (teamDmgPerMatch.get(tKey) ?? 0) > 0;
       });
-      if (gdMps.length >= 5) {
+      if (gdMps.length >= MIN_CALC_PTS) {
         const avgGoldShare =
           gdMps.reduce((s, m) => s + m.gold! / (teamGoldPerMatch.get(`${m.matchId}:${m.team}`) ?? 1), 0) / gdMps.length;
         const avgDmgShare =
@@ -1130,7 +1139,7 @@ export async function getTeamInsights(teamId: string): Promise<Insight[]> {
     }
 
     // Positive player form
-    if (historicalKda && historicalKda > 0 && mps.length >= 10) {
+    if (historicalKda && historicalKda > 0 && mps.length >= MIN_PLAYER_MATCHES) {
       const recentKda =
         last10.reduce((s, m) => s + (m.kills + m.assists) / Math.max(m.deaths, 1), 0) / last10.length;
       const delta = recentKda - historicalKda;
@@ -1191,7 +1200,7 @@ export async function getTeamInsights(teamId: string): Promise<Insight[]> {
     const physicalCount = [...playerDmgType.values()].filter((t) => t === 'physical').length;
     const totalClassified = playerDmgType.size;
 
-    if (totalClassified >= 3) {
+    if (totalClassified >= 4) {
       if (magicalCount === 0 && physicalCount >= 3) {
         insights.push({
           id: 'rule-draft-dmg-imbalance-ap',
@@ -1241,12 +1250,12 @@ export async function getTeamInsights(teamId: string): Promise<Insight[]> {
   // ─────────────────────────────────────────────────────────────────────────
   // GROUP G — Rival scouting: objective control patterns
   // ─────────────────────────────────────────────────────────────────────────
-  if (eventMatchIds.length >= 3) {
+  if (eventMatchIds.length >= MIN_EVENT_MATCHES) {
     const totalObjTeam = [...objControlMap.values()].reduce((s, d) => s + d.team, 0);
     const totalObjRival = [...objControlMap.values()].reduce((s, d) => s + d.rival, 0);
     const grandTotal = totalObjTeam + totalObjRival;
 
-    if (grandTotal >= 8) {
+    if (grandTotal >= MIN_OBJ_OPPORTUNITIES) {
       const teamObjPct = pct(totalObjTeam, grandTotal);
 
       // Rival objective focused (high control by the team being analyzed = threat if rival)
@@ -1291,7 +1300,7 @@ export async function getTeamInsights(teamId: string): Promise<Insight[]> {
   // ─────────────────────────────────────────────────────────────────────────
   // GROUP H — Positive variants
   // ─────────────────────────────────────────────────────────────────────────
-  if (eventMatchIds.length >= 3) {
+  if (eventMatchIds.length >= MIN_EVENT_MATCHES) {
     const majorObjs = objKills.filter((o) => MAJOR_OBJECTIVES.includes(o.entityType));
 
     // H1 — Good vision setup before objectives
@@ -1311,7 +1320,7 @@ export async function getTeamInsights(teamId: string): Promise<Insight[]> {
           if (wards.length >= 2) goodVisionObjs++;
         }
         const p = pct(goodVisionObjs, totalObjs);
-        if (totalObjs >= 5 && p >= 70) {
+        if (totalObjs >= MIN_OBJ_OPPORTUNITIES && p >= 70) {
           insights.push({
             id: 'rule-positive-vision-setup',
             severity: isRival ? 'high' : 'positive',
@@ -1337,7 +1346,7 @@ export async function getTeamInsights(teamId: string): Promise<Insight[]> {
       const primes = objKills.filter((o) => o.entityType === 'ORB_PRIME');
       const teamPrimes = primes.filter((o) => o.killerTeam === teamSideMap.get(o.matchId));
       const alreadyFlagged = insights.some((i) => i.id === 'rule-prime-no-conv');
-      if (!alreadyFlagged && teamPrimes.length >= 3) {
+      if (!alreadyFlagged && teamPrimes.length >= MIN_OBJ_TYPE) {
         let converted = 0;
         for (const prime of teamPrimes) {
           const side = teamSideMap.get(prime.matchId);
@@ -1373,15 +1382,15 @@ export async function getTeamInsights(teamId: string): Promise<Insight[]> {
 
   // ── Data status insight — always shown ───────────────────────────────────
   const totalMPs = [...mpByPlayer.values()].reduce((s, arr) => s + arr.length, 0);
-  const playersWithEnoughData = [...mpByPlayer.values()].filter((arr) => arr.length >= 8).length;
+  const playersWithEnoughData = [...mpByPlayer.values()].filter((arr) => arr.length >= MIN_PLAYER_MATCHES).length;
   const playerDataOk = playersWithEnoughData === rosterPlayerIds.length && rosterPlayerIds.length >= 1;
-  const eventDataOk = eventMatchIds.length >= 3;
+  const eventDataOk = eventMatchIds.length >= MIN_EVENT_MATCHES;
   const rosterOk = rosterPlayerIds.length >= 3;
 
   const statusEvidence: string[] = [
     `${rosterOk ? '✓' : '✗'} Roster: ${rosterPlayerIds.length} jugador(es) activos${rosterOk ? '' : ' — necesita ≥3'}`,
-    `${playerDataOk ? '✓' : '✗'} Datos individuales: ${playersWithEnoughData}/${rosterPlayerIds.length} jugadores con ≥8 partidas (${totalMPs} registros totales)`,
-    `${eventDataOk ? '✓' : '✗'} Event stream de equipo: ${eventMatchIds.length} partidas con ≥3 jugadores juntos sincronizadas${eventDataOk ? '' : ' — necesita ≥3'}`,
+    `${playerDataOk ? '✓' : '✗'} Datos individuales: ${playersWithEnoughData}/${rosterPlayerIds.length} jugadores con ≥${MIN_PLAYER_MATCHES} partidas (${totalMPs} registros totales)`,
+    `${eventDataOk ? '✓' : '✗'} Event stream de equipo: ${eventMatchIds.length} partidas sincronizadas${eventDataOk ? '' : ` — necesita ≥${MIN_EVENT_MATCHES}`}`,
   ];
 
   let statusBody: string;
@@ -1398,7 +1407,7 @@ export async function getTeamInsights(teamId: string): Promise<Insight[]> {
     statusRec = 'Añade al menos 3 jugadores al roster en la pestaña Roster.';
   } else {
     const lacking = rosterPlayerIds.length - playersWithEnoughData;
-    statusBody = `${lacking} jugador(es) tienen pocas partidas sincronizadas. Las reglas de draft, rendimiento y visión necesitan ≥8 partidas por jugador.`;
+    statusBody = `${lacking} jugador(es) tienen pocas partidas sincronizadas. Las reglas de rendimiento y visión necesitan ≥${MIN_PLAYER_MATCHES} partidas por jugador para ser estadísticamente fiables.`;
     statusRec = 'Ve al Dashboard y pulsa "Sync Players" para actualizar el historial de partidas de los jugadores.';
   }
 
