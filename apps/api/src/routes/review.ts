@@ -7,7 +7,7 @@ import { requireRole } from '../middleware/require-role.js';
 import {
   createReviewItem, listReviewItems, updateReviewItem, deleteReviewItem,
   createTeamGoal, listTeamGoals, updateTeamGoal, deleteTeamGoal,
-  createPlayerGoal, listPlayerGoals, updatePlayerGoal,
+  createPlayerGoal, listPlayerGoals, updatePlayerGoal, deletePlayerGoal,
 } from '../services/review-service.js';
 
 export const reviewRouter = Router();
@@ -208,5 +208,12 @@ reviewRouter.patch('/goals/player/:id', requireAuth, attachPlayerGoalTeamId, req
   try {
     const goal = await updatePlayerGoal(req.params.id, req.body);
     res.json(goal);
+  } catch (err) { next(err); }
+});
+
+reviewRouter.delete('/goals/player/:id', requireAuth, attachPlayerGoalTeamId, requireRole(staffRoles), async (req, res, next) => {
+  try {
+    await deletePlayerGoal(req.params.id);
+    res.json({ ok: true });
   } catch (err) { next(err); }
 });

@@ -174,3 +174,9 @@ export async function updatePlayerGoal(id: string, update: Partial<PlayerGoalInp
   if (!goal) throw new AppError(404, `Player goal not found: ${id}`, 'NOT_FOUND');
   return db.playerGoal.update({ where: { id }, data: { ...update, updatedAt: new Date() } });
 }
+
+export async function deletePlayerGoal(id: string) {
+  const goal = await db.playerGoal.findUnique({ where: { id } });
+  if (!goal) throw new AppError(404, `Player goal not found: ${id}`, 'NOT_FOUND');
+  return db.playerGoal.delete({ where: { id } });
+}
