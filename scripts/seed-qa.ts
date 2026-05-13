@@ -1,5 +1,6 @@
 /**
- * QA Seed Script — genera datos sintéticos para probar Team Analysis y todas las tabs.
+ * QA Seed Script — genera datos sintéticos realistas para probar todas las tabs
+ * de Team Analysis (Phase, Vision, Objective, Draft).
  *
  * Uso:
  *   npx tsx scripts/seed-qa.ts          # crear datos
@@ -22,21 +23,41 @@ const db = new PrismaClient();
 const QA_TAG = '[QA]';
 const OWN_TEAM_NAME = '[QA] Alpha';
 const RIVAL_TEAM_NAME = '[QA] Beta';
-const MATCH_COUNT = 15;
+const MATCH_COUNT = 20; // más partidas = mejor muestra estadística
 
-const HEROES = {
-  carry:    ['drongo', 'gadget', 'sparrow'],
-  jungle:   ['wraith', 'grux', 'phase'],
-  midlane:  ['zinx', 'murdock', 'serath'],
-  offlane:  ['countess', 'gideon', 'rampage'],
-  support:  ['feng-mao', 'belica', 'aurora'],
+// Héroe fijo por rol y equipo — garantiza MIN_HERO_GAMES >= 3
+const OWN_HEROES: Record<string, string> = {
+  carry:   'drongo',
+  jungle:  'wraith',
+  midlane: 'zinx',
+  offlane: 'countess',
+  support: 'feng-mao',
 };
+
+const RIVAL_HEROES: Record<string, string> = {
+  carry:   'gadget',
+  jungle:  'grux',
+  midlane: 'murdock',
+  offlane: 'gideon',
+  support: 'belica',
+};
+
+// Héroes de ban — pool más amplio para variedad
+const BAN_HEROES = ['serath', 'sparrow', 'phase', 'rampage', 'aurora', 'yin', 'zarus', 'howitzer', 'crunch', 'steel'];
 
 const ROLES = ['carry', 'jungle', 'midlane', 'offlane', 'support'] as const;
 
-const OBJECTIVES = ['FANGTOOTH', 'ORB_PRIME', 'SEEDLING_NORTH', 'SEEDLING_SOUTH'] as const;
+// Objetivos que SÍ reconoce getTeamVisionAnalysis y getTeamObjectiveAnalysis
+const MAJOR_OBJECTIVES = ['FANGTOOTH', 'ORB_PRIME'] as const;
 
-const STRUCTURE_TYPES = ['OUTER_TOWER', 'INNER_TOWER', 'INHIBITOR'] as const;
+// Ubicaciones aproximadas de objetivos en el mapa (coordenadas del juego)
+const OBJECTIVE_LOCATIONS: Record<string, { x: number; y: number }> = {
+  FANGTOOTH: { x: 0, y: 3500 },
+  ORB_PRIME: { x: 0, y: -3500 },
+};
+
+// Tipos de estructura en orden progresivo
+const STRUCTURE_SEQUENCE = ['OUTER_TOWER', 'OUTER_TOWER', 'INNER_TOWER', 'INHIBITOR'] as const;
 
 function rand(min: number, max: number) {
   return Math.floor(Math.random() * (max - min + 1)) + min;
@@ -47,7 +68,7 @@ function pick<T>(arr: readonly T[] | T[]): T {
 }
 
 function cuid() {
-  return Math.random().toString(36).slice(2) + Date.now().toString(36);
+  return Math.random().toString(36).slice(2, 11) + Date.now().toString(36);
 }
 
 // ── Clean ─────────────────────────────────────────────────────────────────────
@@ -55,12 +76,9 @@ function cuid() {
 async function clean() {
   console.log('🧹 Borrando datos QA...');
 
-  // Find QA teams
   const teams = await db.team.findMany({ where: { name: { startsWith: QA_TAG } } });
   const teamIds = teams.map((t) => t.id);
-
-  // Find QA players
-  const players = await db.player.findMany({ where: { displayName: { startsWith: QA_TAG } } });
+  const players = await db.player.findMany({ where: { predggId: { startsWith: 'qa-' } } });
   const playerIds = players.map((p) => p.id);
 
   if (teamIds.length === 0 && playerIds.length === 0) {
@@ -68,7 +86,6 @@ async function clean() {
     return;
   }
 
-  // Find all match IDs that have QA players
   const matchPlayers = await db.matchPlayer.findMany({
     where: { playerId: { in: playerIds } },
     select: { matchId: true },
@@ -76,7 +93,6 @@ async function clean() {
   });
   const matchIds = matchPlayers.map((mp) => mp.matchId);
 
-  // Delete in correct order (FK constraints)
   if (matchIds.length > 0) {
     await db.heroBan.deleteMany({ where: { matchId: { in: matchIds } } });
     await db.heroKill.deleteMany({ where: { matchId: { in: matchIds } } });
@@ -97,6 +113,7 @@ async function clean() {
   }
 
   if (teamIds.length > 0) {
+    await db.teamMembership.deleteMany({ where: { teamId: { in: teamIds } } });
     await db.teamRoster.deleteMany({ where: { teamId: { in: teamIds } } });
     await db.reviewItem.deleteMany({ where: { teamId: { in: teamIds } } });
     await db.teamGoal.deleteMany({ where: { teamId: { in: teamIds } } });
@@ -118,62 +135,51 @@ async function seed() {
   let ownTeam = await db.team.findFirst({ where: { name: OWN_TEAM_NAME } });
   let rivalTeam = await db.team.findFirst({ where: { name: RIVAL_TEAM_NAME } });
 
-  if (ownTeam && rivalTeam) {
-    console.log('ℹ️  Los equipos QA ya existen — actualizando partidas únicamente.');
-  } else {
-    ownTeam = ownTeam ?? await db.team.create({
+  if (!ownTeam) {
+    ownTeam = await db.team.create({
       data: { name: OWN_TEAM_NAME, abbreviation: 'QAA', type: 'OWN', region: 'EU' },
     });
-    rivalTeam = rivalTeam ?? await db.team.create({
+  }
+  if (!rivalTeam) {
+    rivalTeam = await db.team.create({
       data: { name: RIVAL_TEAM_NAME, abbreviation: 'QAB', type: 'RIVAL', region: 'EU' },
     });
-    console.log(`  ✓ Equipos: ${OWN_TEAM_NAME} / ${RIVAL_TEAM_NAME}`);
   }
+  console.log(`  ✓ Equipos: ${OWN_TEAM_NAME} / ${RIVAL_TEAM_NAME}`);
 
-  // ── Players ────────────────────────────────────────────────────────────────
+  // ── Players — héroe fijo por rol ───────────────────────────────────────────
 
-  const ownPlayers: { id: string; role: string }[] = [];
-  const rivalPlayers: { id: string; role: string }[] = [];
+  const ownPlayers: { id: string; role: string; heroSlug: string }[] = [];
+  const rivalPlayers: { id: string; role: string; heroSlug: string }[] = [];
 
   for (const role of ROLES) {
-    const heroSlug = pick(HEROES[role]);
-
-    // OWN player — upsert by stable predggId
     const ownPlayer = await db.player.upsert({
       where: { predggId: `qa-own-${role}` },
-      create: { predggId: `qa-own-${role}`, predggUuid: `qa-own-${role}-uuid`, displayName: `${QA_TAG} ${role}-${heroSlug}`, lastSynced: new Date() },
+      create: { predggId: `qa-own-${role}`, predggUuid: `qa-own-${role}-uuid`, displayName: `${QA_TAG} ${role}-${OWN_HEROES[role]}`, lastSynced: new Date() },
       update: {},
     });
-    ownPlayers.push({ id: ownPlayer.id, role });
+    ownPlayers.push({ id: ownPlayer.id, role, heroSlug: OWN_HEROES[role] });
     const existingOwn = await db.teamRoster.findFirst({ where: { teamId: ownTeam.id, playerId: ownPlayer.id } });
     if (!existingOwn) await db.teamRoster.create({ data: { teamId: ownTeam.id, playerId: ownPlayer.id, role } });
 
-    // RIVAL player
     const rivalPlayer = await db.player.upsert({
       where: { predggId: `qa-rival-${role}` },
       create: { predggId: `qa-rival-${role}`, predggUuid: `qa-rival-${role}-uuid`, displayName: `${QA_TAG} rival-${role}`, lastSynced: new Date() },
       update: {},
     });
-    rivalPlayers.push({ id: rivalPlayer.id, role });
+    rivalPlayers.push({ id: rivalPlayer.id, role, heroSlug: RIVAL_HEROES[role] });
     const existingRival = await db.teamRoster.findFirst({ where: { teamId: rivalTeam.id, playerId: rivalPlayer.id } });
     if (!existingRival) await db.teamRoster.create({ data: { teamId: rivalTeam.id, playerId: rivalPlayer.id, role } });
   }
-  console.log(`  ✓ 10 jugadores (5 OWN + 5 RIVAL) en roster`);
+  console.log(`  ✓ 10 jugadores con héroes fijos (OWN: ${Object.values(OWN_HEROES).join(', ')})`);
 
   // ── Version ────────────────────────────────────────────────────────────────
 
-  let version = await db.version.findFirst({ where: { predggId: 'qa-patch-1' } });
-  if (!version) {
-    version = await db.version.create({
-      data: {
-        predggId: 'qa-patch-1',
-        name: '0.20.0-QA',
-        releaseDate: new Date('2025-01-01'),
-        patchType: 'MAJOR',
-        syncedAt: new Date(),
-      },
-    });
-  }
+  const version = await db.version.upsert({
+    where: { predggId: 'qa-patch-1' },
+    create: { predggId: 'qa-patch-1', name: '0.20.0-QA', releaseDate: new Date('2025-01-01'), patchType: 'MAJOR', syncedAt: new Date() },
+    update: {},
+  });
 
   // ── Matches ────────────────────────────────────────────────────────────────
 
@@ -181,19 +187,19 @@ async function seed() {
   let matchesCreated = 0;
 
   for (let i = 0; i < MATCH_COUNT; i++) {
-    const matchUuid = `qa-match-${i + 1}-${Date.now()}`;
-    const existing = await db.match.findFirst({ where: { predggUuid: { startsWith: `qa-match-${i + 1}-` } } });
+    const matchKey = `qa-match-${i + 1}`;
+    const existing = await db.match.findFirst({ where: { predggUuid: { startsWith: matchKey } } });
     if (existing) continue;
 
-    // Alternating wins: OWN wins 9, RIVAL wins 6
+    const matchUuid = `${matchKey}-${Date.now()}`;
     const ownSide = i % 2 === 0 ? 'DUSK' : 'DAWN';
     const rivalSide = ownSide === 'DUSK' ? 'DAWN' : 'DUSK';
-    const ownWins = i < 9; // first 9 matches OWN wins
+    // OWN wins 13/20, loses 7/20 — good win rate for interesting analysis
+    const ownWins = i < 13;
     const winningTeam = ownWins ? ownSide : rivalSide;
-
-    const duration = rand(1400, 2800); // 23-46 min
-    const isRanked = i % 3 !== 0; // 10 ranked, 5 standard
-    const startTime = new Date(now - (MATCH_COUNT - i) * 24 * 60 * 60 * 1000); // spread over 15 days
+    const duration = rand(1500, 2600);
+    const isRanked = i % 4 !== 0; // 15 RANKED, 5 STANDARD
+    const startTime = new Date(now - (MATCH_COUNT - i) * 22 * 60 * 60 * 1000);
 
     const match = await db.match.create({
       data: {
@@ -212,51 +218,51 @@ async function seed() {
 
     // ── MatchPlayers ──────────────────────────────────────────────────────
 
+    const minuteDuration = Math.floor(duration / 60);
+
     for (const p of ownPlayers) {
-      const heroSlug = pick(HEROES[p.role as keyof typeof HEROES]);
-      const kills = rand(0, 12);
-      const deaths = rand(0, 8);
-      const assists = rand(0, 18);
-      const gold = rand(8000, 22000);
-      const heroDamage = rand(50000, 250000);
-      const minutes = Math.floor(duration / 60);
-      const goldInterval = Array.from({ length: minutes }, (_, m) =>
-        Math.round(gold * ((m + 1) / minutes) + rand(-500, 500))
-      );
+      const kills = rand(1, 12);
+      const deaths = rand(0, 7);
+      const assists = rand(2, 18);
+      const gold = rand(10000, 22000);
+      const heroDamage = rand(60000, 280000);
+      // Gold curve: gradual increase with some variance
+      const goldInterval = Array.from({ length: minuteDuration }, (_, m) => {
+        const progress = (m + 1) / minuteDuration;
+        return Math.round(gold * (0.3 + 0.7 * progress) + rand(-800, 800));
+      });
 
       await db.matchPlayer.create({
         data: {
           matchId: match.id,
           playerId: p.id,
           predggPlayerUuid: `qa-own-${p.role}-uuid`,
-          playerName: `QA-own-${p.role}`,
+          playerName: `QA-${p.role}`,
           team: ownSide,
           role: p.role,
-          heroSlug,
+          heroSlug: p.heroSlug, // FIXED hero per player
           kills,
           deaths,
           assists,
           heroDamage,
-          totalDamage: Math.round(heroDamage * 1.2),
+          totalDamage: Math.round(heroDamage * 1.25),
           gold,
-          wardsPlaced: rand(2, 12),
-          wardsDestroyed: rand(0, 6),
+          wardsPlaced: rand(3, 14),
+          wardsDestroyed: rand(0, 7),
           level: rand(18, 25),
-          laneMinionsKilled: p.role === 'carry' || p.role === 'midlane' ? rand(80, 180) : rand(10, 50),
-          goldSpent: Math.round(gold * 0.92),
+          laneMinionsKilled: p.role === 'carry' || p.role === 'midlane' ? rand(90, 190) : rand(10, 55),
+          goldSpent: Math.round(gold * 0.93),
           inventoryItems: [],
           goldEarnedAtInterval: goldInterval,
         },
-      }).catch(() => null); // skip if unique constraint fails
+      }).catch(() => null);
     }
 
     for (const p of rivalPlayers) {
-      const heroSlug = pick(HEROES[p.role as keyof typeof HEROES]);
       const kills = rand(0, 10);
-      const deaths = rand(0, 10);
-      const assists = rand(0, 15);
-      const gold = rand(7000, 20000);
-      const heroDamage = rand(40000, 220000);
+      const deaths = rand(1, 9);
+      const gold = rand(7000, 19000);
+      const heroDamage = rand(40000, 230000);
 
       await db.matchPlayer.create({
         data: {
@@ -266,14 +272,14 @@ async function seed() {
           playerName: `QA-rival-${p.role}`,
           team: rivalSide,
           role: p.role,
-          heroSlug,
+          heroSlug: p.heroSlug, // FIXED hero per player
           kills,
           deaths,
-          assists,
+          assists: rand(1, 14),
           heroDamage,
           totalDamage: Math.round(heroDamage * 1.2),
           gold,
-          wardsPlaced: rand(1, 10),
+          wardsPlaced: rand(2, 11),
           wardsDestroyed: rand(0, 5),
           level: rand(17, 24),
           laneMinionsKilled: p.role === 'carry' || p.role === 'midlane' ? rand(70, 170) : rand(8, 45),
@@ -283,11 +289,11 @@ async function seed() {
       }).catch(() => null);
     }
 
-    // ── HeroKills ─────────────────────────────────────────────────────────
+    // ── HeroKills — distribuidos por fases (early/mid/late) ───────────────
 
-    const killCount = rand(18, 35);
+    const killCount = rand(22, 40);
     for (let k = 0; k < killCount; k++) {
-      const killerIsOwn = Math.random() > 0.45;
+      const killerIsOwn = ownWins ? Math.random() > 0.38 : Math.random() > 0.62;
       const killerTeam = killerIsOwn ? ownSide : rivalSide;
       const killedTeam = killerIsOwn ? rivalSide : ownSide;
       const killerPlayer = killerIsOwn ? pick(ownPlayers) : pick(rivalPlayers);
@@ -301,70 +307,111 @@ async function seed() {
           gameTime,
           killerTeam,
           killedTeam,
-          killerHeroSlug: pick(HEROES[killerPlayer.role as keyof typeof HEROES]),
-          killedHeroSlug: pick(HEROES[killedPlayer.role as keyof typeof HEROES]),
+          killerHeroSlug: killerPlayer.heroSlug,
+          killedHeroSlug: killedPlayer.heroSlug,
           killerPlayerId: killerPlayer.id,
           killedPlayerId: killedPlayer.id,
-          locationX: rand(-8000, 8000),
-          locationY: rand(-8000, 8000),
+          locationX: rand(-7000, 7000),
+          locationY: rand(-7000, 7000),
           locationZ: 0,
         },
       });
     }
 
-    // ── ObjectiveKills ────────────────────────────────────────────────────
+    // ── ObjectiveKills — solo FANGTOOTH y ORB_PRIME (MAJOR_OBJECTIVES) ────
+    // Spawn times: FANGTOOTH ~5min, ORB_PRIME ~7min, respawn ~4min each
 
-    const objTimings = [300, 480, 660, 840, 1020, 1200, 1380, 1560].filter((t) => t < duration);
-    for (const baseTime of objTimings.slice(0, rand(3, 6))) {
-      const ownTakes = Math.random() > 0.4;
-      const killerTeam = ownTakes ? ownSide : rivalSide;
-      const killerPlayer = ownTakes ? pick(ownPlayers) : pick(rivalPlayers);
-      const entityType = pick(OBJECTIVES);
+    const objEvents: Array<{ entityType: string; gameTime: number; killerTeam: string; playerId: string; loc: { x: number; y: number } }> = [];
 
-      await db.objectiveKill.create({
-        data: {
-          id: cuid(),
-          matchId: match.id,
-          gameTime: baseTime + rand(-30, 30),
-          entityType,
-          killerTeam,
-          killerPlayerId: killerPlayer.id,
-          locationX: rand(-3000, 3000),
-          locationY: rand(-3000, 3000),
-          locationZ: 0,
-        },
-      });
+    for (const objType of MAJOR_OBJECTIVES) {
+      const loc = OBJECTIVE_LOCATIONS[objType];
+      const firstSpawn = objType === 'FANGTOOTH' ? 300 : 420;
+      let spawnTime = firstSpawn;
+
+      while (spawnTime < duration - 60) {
+        const ownTakes = ownWins ? Math.random() > 0.35 : Math.random() > 0.65;
+        const killerTeam = ownTakes ? ownSide : rivalSide;
+        const killerPlayer = ownTakes ? pick(ownPlayers) : pick(rivalPlayers);
+        const eventTime = spawnTime + rand(0, 60);
+
+        objEvents.push({ entityType: objType, gameTime: eventTime, killerTeam, playerId: killerPlayer.id, loc });
+
+        await db.objectiveKill.create({
+          data: {
+            id: cuid(),
+            matchId: match.id,
+            gameTime: eventTime,
+            entityType: objType,
+            killerTeam,
+            killerPlayerId: killerPlayer.id,
+            locationX: loc.x + rand(-200, 200),
+            locationY: loc.y + rand(-200, 200),
+            locationZ: 0,
+          },
+        });
+
+        spawnTime += objType === 'FANGTOOTH' ? rand(220, 260) : rand(220, 260);
+      }
     }
 
-    // ── StructureDestructions ─────────────────────────────────────────────
+    // ── StructureDestructions — alineadas con objetivos + fase ────────────
+    // Fix: estructuras se destruyen 30-90s después de cada objetivo
 
-    const structureTimings = [600, 900, 1200, 1500, 1800].filter((t) => t < duration);
-    for (const baseTime of structureTimings.slice(0, rand(2, 4))) {
-      const destroyerIsOwn = ownWins ? Math.random() > 0.35 : Math.random() > 0.65;
-      const destructionTeam = destroyerIsOwn ? ownSide : rivalSide;
+    // Always at least one OUTER_TOWER in early game
+    const destroyerIsOwn = ownWins;
+    await db.structureDestruction.create({
+      data: {
+        id: cuid(),
+        matchId: match.id,
+        gameTime: rand(420, 600), // 7-10 min: primer tower
+        structureType: 'OUTER_TOWER',
+        destructionTeam: destroyerIsOwn ? ownSide : rivalSide,
+        locationX: rand(-3000, 3000),
+        locationY: rand(-3000, 3000),
+        locationZ: 0,
+      },
+    });
+
+    // Additional structures after major objectives
+    let structIdx = 1; // start from OUTER_TOWER (already did one)
+    for (const obj of objEvents.slice(0, 4)) {
+      if (structIdx >= STRUCTURE_SEQUENCE.length) break;
+      const destructionTeam = obj.killerTeam; // winner of objective destroys structure
+      const structureTime = obj.gameTime + rand(30, 90);
+      if (structureTime >= duration) break;
 
       await db.structureDestruction.create({
         data: {
           id: cuid(),
           matchId: match.id,
-          gameTime: baseTime + rand(-60, 60),
-          structureType: pick(STRUCTURE_TYPES),
+          gameTime: structureTime,
+          structureType: STRUCTURE_SEQUENCE[structIdx],
           destructionTeam,
-          locationX: rand(-5000, 5000),
-          locationY: rand(-5000, 5000),
+          locationX: rand(-4000, 4000),
+          locationY: rand(-4000, 4000),
           locationZ: 0,
         },
       });
+      structIdx++;
     }
 
-    // ── WardEvents ────────────────────────────────────────────────────────
+    // ── WardEvents — cerca de objetivos para vision analysis ──────────────
+    // Fix: wards colocados cerca de las ubicaciones reales de objetivos
 
-    const wardTypes = ['STEALTH', 'ORACLE', 'SENTRY', 'SONAR_DRONE'];
-    const wardCount = rand(20, 40);
+    const wardTypes = ['STEALTH', 'ORACLE', 'SENTRY'];
+    const wardCount = rand(25, 45);
+
     for (let w = 0; w < wardCount; w++) {
       const isOwn = Math.random() > 0.5;
       const team = isOwn ? ownSide : rivalSide;
       const player = isOwn ? pick(ownPlayers) : pick(rivalPlayers);
+
+      // 60% of wards near objectives (within VISION_RADIUS=3000), 40% elsewhere
+      const nearObjective = Math.random() > 0.4;
+      const objLoc = nearObjective ? OBJECTIVE_LOCATIONS[pick(MAJOR_OBJECTIVES)] : null;
+      const x = objLoc ? objLoc.x + rand(-2000, 2000) : rand(-8000, 8000);
+      const y = objLoc ? objLoc.y + rand(-2000, 2000) : rand(-8000, 8000);
+
       const placementTime = rand(60, duration - 60);
 
       await db.wardEvent.create({
@@ -376,46 +423,47 @@ async function seed() {
           wardType: pick(wardTypes),
           team,
           playerId: player.id,
-          locationX: rand(-8000, 8000),
-          locationY: rand(-8000, 8000),
+          locationX: x,
+          locationY: y,
           locationZ: 0,
         },
       });
 
-      // ~60% of wards get destroyed
-      if (Math.random() > 0.4) {
-        const destroyerIsOwn = !isOwn;
-        const destroyerPlayer = destroyerIsOwn ? pick(ownPlayers) : pick(rivalPlayers);
+      // ~55% of wards get destroyed
+      if (Math.random() > 0.45) {
+        const destroyerIsOwn2 = !isOwn;
+        const destroyerPlayer = destroyerIsOwn2 ? pick(ownPlayers) : pick(rivalPlayers);
         await db.wardEvent.create({
           data: {
             id: cuid(),
             matchId: match.id,
-            gameTime: placementTime + rand(30, 300),
+            gameTime: placementTime + rand(20, 240),
             eventType: 'DESTRUCTION',
             wardType: pick(wardTypes),
-            team: destroyerIsOwn ? ownSide : rivalSide,
+            team: destroyerIsOwn2 ? ownSide : rivalSide,
             playerId: destroyerPlayer.id,
-            locationX: rand(-8000, 8000),
-            locationY: rand(-8000, 8000),
+            locationX: x + rand(-100, 100),
+            locationY: y + rand(-100, 100),
             locationZ: 0,
           },
         });
       }
     }
 
-    // ── HeroBans (RANKED only) ────────────────────────────────────────────
+    // ── HeroBans (RANKED only) — pool variado ─────────────────────────────
 
     if (isRanked) {
-      const allHeroes = Object.values(HEROES).flat();
       const banned = new Set<string>();
+      // Each team bans 3 heroes
       for (const side of [ownSide, rivalSide]) {
-        for (let b = 0; b < 3; b++) {
-          let heroSlug = pick(allHeroes);
-          while (banned.has(heroSlug)) heroSlug = pick(allHeroes);
-          banned.add(heroSlug);
-          await db.heroBan.create({
-            data: { id: cuid(), matchId: match.id, heroSlug, team: side },
-          });
+        let attempts = 0;
+        while (banned.size < (side === ownSide ? 3 : 6) && attempts < 20) {
+          const heroSlug = pick(BAN_HEROES);
+          if (!banned.has(heroSlug)) {
+            banned.add(heroSlug);
+            await db.heroBan.create({ data: { id: cuid(), matchId: match.id, heroSlug, team: side } });
+          }
+          attempts++;
         }
       }
     }
@@ -423,18 +471,20 @@ async function seed() {
     matchesCreated++;
   }
 
+  const ranked = Math.round(MATCH_COUNT * 0.75);
+  const standard = MATCH_COUNT - ranked;
   console.log(`  ✓ ${matchesCreated} partidas generadas (${MATCH_COUNT - matchesCreated} ya existían)`);
   console.log('');
   console.log('✅ Datos QA listos. Para borrarlos: npx tsx scripts/seed-qa.ts --clean');
   console.log('');
   console.log('📋 Resumen:');
-  console.log(`   Equipo OWN:   ${OWN_TEAM_NAME}`);
+  console.log(`   Equipo OWN:   ${OWN_TEAM_NAME} (héroes: ${Object.values(OWN_HEROES).join(', ')})`);
   console.log(`   Equipo RIVAL: ${RIVAL_TEAM_NAME}`);
-  console.log(`   Partidas:     ${MATCH_COUNT} (${MATCH_COUNT - Math.floor(MATCH_COUNT / 3)} RANKED, ${Math.floor(MATCH_COUNT / 3)} STANDARD)`);
-  console.log(`   Wins OWN:     9 / Losses: 6`);
+  console.log(`   Partidas:     ${MATCH_COUNT} (~${ranked} RANKED, ~${standard} STANDARD)`);
+  console.log(`   Wins OWN:     13 / Losses: 7 (65% WR)`);
   console.log('');
-  console.log('💡 Tabs disponibles: Team Analysis · Phase Analysis · Vision Analysis');
-  console.log('                     Objective Analysis · Draft Analysis · Scrim Report');
+  console.log('💡 Tabs con datos: Team Analysis · Phase Analysis · Vision Analysis');
+  console.log('                   Objective Analysis · Draft Analysis · Scrim Report');
 }
 
 // ── Main ──────────────────────────────────────────────────────────────────────
