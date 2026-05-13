@@ -89,7 +89,7 @@ export default function LandingPage() {
         {/* Header */}
         <header style={{ width:'100%', maxWidth:960, display:'flex', alignItems:'center', justifyContent:'space-between', padding:'1.5rem', position:'relative', zIndex:10, animation:'fadeIn 0.6s ease both' }}>
           <div style={{ display:'flex', alignItems:'center', gap:'0.65rem' }}>
-            <img src="/favicon.svg" alt="RiftLine" style={{ width:72, height:72 }} />
+            <img src="/favicon.svg" alt="RiftLine" style={{ width:100, height:100 }} />
             <div>
               <div style={{ fontWeight:900, fontSize:'1.75rem', color:'var(--text-primary)', letterSpacing:'-0.04em', lineHeight:1 }}>RiftLine</div>
               <div style={{ fontSize:'0.68rem', color:'var(--accent-teal-bright)', letterSpacing:'0.08em', fontWeight:600, textTransform:'uppercase', marginTop:'0.2rem' }}>Competitive Intel</div>
