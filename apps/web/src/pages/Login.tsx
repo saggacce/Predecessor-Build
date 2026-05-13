@@ -5,9 +5,11 @@ import { toast } from 'sonner';
 import { ApiErrorResponse, apiClient } from '../api/client';
 
 // ── Social provider icons ─────────────────────────────────────────────────────
+// Discord Clyde mascot (official shape)
 const DiscordIcon = () => (
-  <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor">
-    <path d="M20.317 4.37a19.791 19.791 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057c.002.022.013.04.028.053a19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028c.462-.63.874-1.295 1.226-1.994a.076.076 0 0 0-.041-.106 13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.008-.128 10.2 10.2 0 0 0 .372-.292.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127 12.299 12.299 0 0 1-1.873.892.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.839 19.839 0 0 0 6.002-3.03.077.077 0 0 0 .028-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.03z"/>
+  <svg width="26" height="20" viewBox="0 0 245 240" fill="#fff">
+    <path d="M104.4 103.9c-5.7 0-10.2 5-10.2 11.1s4.6 11.1 10.2 11.1c5.7 0 10.2-5 10.2-11.1.1-6.1-4.5-11.1-10.2-11.1zm36.5 0c-5.7 0-10.2 5-10.2 11.1s4.6 11.1 10.2 11.1c5.7 0 10.2-5 10.2-11.1s-4.5-11.1-10.2-11.1z"/>
+    <path d="M189.5 20h-134C44.2 20 35 29.2 35 40.6v135.2c0 11.4 9.2 20.6 20.5 20.6h113.4l-5.3-18.5 12.8 11.9 12.1 11.2 21.5 19V40.6c0-11.4-9.2-20.6-20.5-20.6zm-38.6 130.6s-3.6-4.3-6.6-8.1c13.1-3.7 18.1-11.9 18.1-11.9-4.1 2.7-8 4.6-11.5 5.9-5 2.1-9.8 3.5-14.5 4.3-9.6 1.8-18.4 1.3-25.9-.1-5.7-1.1-10.6-2.7-14.7-4.3-2.3-.9-4.8-2-7.3-3.4-.3-.2-.6-.3-.9-.5-.2-.1-.3-.2-.4-.3-1.8-1-2.8-1.7-2.8-1.7s4.8 8 17.5 11.8c-3 3.8-6.7 8.3-6.7 8.3-22.1-.7-30.5-15.2-30.5-15.2 0-32.2 14.4-58.3 14.4-58.3 14.4-10.8 28.1-10.5 28.1-10.5l1 1.2c-18 5.2-26.3 13.1-26.3 13.1s2.2-1.2 5.9-2.9c10.7-4.7 19.2-6 22.7-6.3.6-.1 1.1-.2 1.7-.2 6.1-.8 13-.9 20.2-.1 9.5 1.1 19.7 3.9 30.1 9.6 0 0-7.9-7.5-24.9-12.7l1.4-1.6s13.7-.3 28.1 10.5c0 0 14.4 26.1 14.4 58.3 0 0-8.5 14.5-30.6 15.2z"/>
   </svg>
 );
 
@@ -17,17 +19,24 @@ const SteamIcon = () => (
   </svg>
 );
 
-// Correct Epic Games logo — the official stylized "E" mark
+// Epic Games shield logo
 const EpicIcon = () => (
-  <svg width="22" height="22" viewBox="0 0 128 128" fill="currentColor">
-    <path d="M19.2 0v100.184L35.328 111.36V17.066H98.56v17.067H52.395v17.067H98.56v17.066H52.395V85.33H98.56v17.067H35.328l-16.129 11.178L35.328 128H108.8V0H19.2z"/>
+  <svg width="22" height="26" viewBox="0 0 200 240" fill="#fff">
+    {/* Shield outline */}
+    <path d="M100 0 L190 30 L190 140 Q190 200 100 240 Q10 200 10 140 L10 30 Z" fill="none" stroke="#fff" strokeWidth="12"/>
+    {/* EPIC text */}
+    <text x="100" y="115" textAnchor="middle" fill="#fff" fontSize="62" fontWeight="900" fontFamily="Arial Black, sans-serif" letterSpacing="-2">EPIC</text>
+    {/* GAMES text */}
+    <text x="100" y="158" textAnchor="middle" fill="#fff" fontSize="28" fontWeight="700" fontFamily="Arial, sans-serif" letterSpacing="6">GAMES</text>
+    {/* Bottom arrow */}
+    <path d="M85 185 L100 205 L115 185 Z" fill="#fff"/>
   </svg>
 );
 
 const PROVIDERS = [
-  { id: 'discord', label: 'Discord',    Icon: DiscordIcon, color: '#5865F2' },
-  { id: 'steam',   label: 'Steam',      Icon: SteamIcon,   color: '#66c0f4' },
-  { id: 'epic',    label: 'Epic Games', Icon: EpicIcon,    color: '#e0e0e0' },
+  { id: 'discord', label: 'Discord',    Icon: DiscordIcon, bg: '#5865F2', iconColor: '#fff' },
+  { id: 'steam',   label: 'Steam',      Icon: SteamIcon,   bg: '#1b2838', iconColor: '#66c0f4' },
+  { id: 'epic',    label: 'Epic Games', Icon: EpicIcon,    bg: '#0f0f0f', iconColor: '#fff' },
 ] as const;
 
 export default function Login() {
@@ -111,25 +120,24 @@ export default function Login() {
 
           {/* Social icon buttons */}
           <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'center' }}>
-            {PROVIDERS.map(({ id, label, Icon, color }) => (
+            {PROVIDERS.map(({ id, label, Icon, bg, iconColor }) => (
               <div key={id} style={{ position: 'relative' }}>
                 <button
                   disabled
-                  onMouseEnter={() => setTooltip(id)}
-                  onMouseLeave={() => setTooltip(null)}
                   style={{
                     width: 52, height: 52,
                     borderRadius: 12,
-                    border: '1px solid var(--border-color)',
-                    background: 'rgba(255,255,255,0.03)',
-                    color,
+                    border: 'none',
+                    background: bg,
+                    color: iconColor,
                     cursor: 'not-allowed',
-                    opacity: 0.45,
+                    opacity: 0.5,
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    transition: 'opacity 0.15s, border-color 0.15s',
+                    transition: 'opacity 0.15s, transform 0.15s',
+                    boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
                   }}
-                  onMouseEnter={(e) => { setTooltip(id); (e.currentTarget as HTMLButtonElement).style.opacity = '0.7'; (e.currentTarget as HTMLButtonElement).style.borderColor = color + '55'; }}
-                  onMouseLeave={(e) => { setTooltip(null); (e.currentTarget as HTMLButtonElement).style.opacity = '0.45'; (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--border-color)'; }}
+                  onMouseEnter={(e) => { setTooltip(id); (e.currentTarget as HTMLButtonElement).style.opacity = '0.8'; }}
+                  onMouseLeave={(e) => { setTooltip(null); (e.currentTarget as HTMLButtonElement).style.opacity = '0.5'; }}
                 >
                   <Icon />
                 </button>
