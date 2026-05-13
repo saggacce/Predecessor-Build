@@ -51,6 +51,7 @@ function toSessionUser(user: UserWithMemberships): SessionUser {
     name: user.name,
     globalRole: user.globalRole,
     linkedPlayerId: user.linkedPlayerId ?? null,
+    avatarUrl: user.avatarUrl ?? null,
     memberships: user.memberships.map((membership) => ({
       teamId: membership.teamId,
       role: membership.role,
@@ -66,6 +67,7 @@ function toResponseUser(user: UserWithMemberships) {
     name: user.name,
     globalRole: user.globalRole,
     linkedPlayerId: user.linkedPlayerId ?? null,
+    avatarUrl: user.avatarUrl ?? null,
     memberships: user.memberships.map((membership) => ({
       teamId: membership.teamId,
       role: membership.role,

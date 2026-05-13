@@ -39,6 +39,7 @@ import './App.css';
 function WorkspaceHeader() {
   const { authenticated, user } = useAuth();
   const [latestPatch, setLatestPatch] = useState<VersionRecord | null>(null);
+  const isAdmin = user?.globalRole === 'PLATFORM_ADMIN';
 
   useEffect(() => {
     void apiClient.patches.latest()
@@ -46,26 +47,49 @@ function WorkspaceHeader() {
       .catch(() => setLatestPatch(null));
   }, []);
 
+  const initials = user?.name
+    ? user.name.split(/\s+/).map((p) => p[0]).join('').slice(0, 2).toUpperCase()
+    : '?';
+
   return (
     <header className="workspace-header" aria-label="Workspace status">
-      <div>
-        <div className="workspace-title">Predecessor competitive workspace</div>
-        <div className="workspace-subtitle">Competitive Intel · by Synapsight</div>
-      </div>
+      {/* Left — only shown for admins */}
+      {isAdmin ? (
+        <div>
+          <div className="workspace-title">Predecessor competitive workspace</div>
+          <div className="workspace-subtitle">Competitive Intel · by Synapsight</div>
+        </div>
+      ) : (
+        <div />
+      )}
+
       <div className="workspace-meta">
+        {/* Patch badge — everyone */}
         {latestPatch && (
           <div className="workspace-chip">
             <Zap size={13} />
             Patch v{latestPatch.name}
           </div>
         )}
-        <div className={`workspace-chip ${authenticated ? 'connected' : ''}`}>
-          <Radio size={13} />
-          {authenticated ? 'pred.gg connected' : 'pred.gg login required'}
-        </div>
+
+        {/* pred.gg status — admins only */}
+        {isAdmin && (
+          <div className={`workspace-chip ${authenticated ? 'connected' : ''}`}>
+            <Radio size={13} />
+            {authenticated ? 'pred.gg connected' : 'pred.gg disconnected'}
+          </div>
+        )}
+
+        {/* User chip with avatar */}
         {user && (
-          <div className="workspace-chip connected">
-            <KeyRound size={13} />
+          <div className="workspace-chip connected" style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', padding: '0.2rem 0.55rem 0.2rem 0.2rem' }}>
+            {/* Avatar */}
+            <div style={{ width: 22, height: 22, borderRadius: '50%', overflow: 'hidden', background: 'rgba(167,139,250,0.25)', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              {user.avatarUrl
+                ? <img src={user.avatarUrl} alt={user.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                : <span style={{ fontSize: '0.5rem', fontWeight: 700, color: 'var(--accent-violet)', fontFamily: 'var(--font-mono)' }}>{initials}</span>
+              }
+            </div>
             {user.name}
           </div>
         )}

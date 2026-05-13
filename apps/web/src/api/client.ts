@@ -675,6 +675,7 @@ export interface SessionUser {
   name: string;
   globalRole: 'PLATFORM_ADMIN' | 'PLAYER' | 'VIEWER' | string;
   linkedPlayerId: string | null;
+  avatarUrl?: string | null;
   memberships: SessionMembership[];
 }
 
