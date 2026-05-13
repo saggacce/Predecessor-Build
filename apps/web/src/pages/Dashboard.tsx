@@ -4,6 +4,7 @@ import { Server, Zap, RefreshCw, CheckCircle, XCircle, ArrowRight, Users, Sparkl
 import { toast } from 'sonner';
 import { apiClient, ApiErrorResponse, type TeamProfile, type TeamAnalysis, type PlayerProfile } from '../api/client';
 import { useAuth } from '../hooks/useAuth';
+import { LinkPlayerModal } from '../components/LinkPlayerModal';
 import type { VersionRecord } from '@predecessor/data-model';
 
 type SyncState =
@@ -501,13 +502,35 @@ function PlayerStandaloneView() {
       .finally(() => setLoading(false));
   }, [linkedId]);
 
-  if (!linkedId) {
+  const [showLinkModal, setShowLinkModal] = useState(false);
+  const [linkedIdState, setLinkedIdState] = useState(linkedId);
+
+  if (!linkedIdState) {
     return (
-      <div className="glass-card" style={{ textAlign: 'center', padding: '2.5rem', color: 'var(--text-muted)' }}>
-        <Users size={32} style={{ margin: '0 auto 0.75rem', opacity: 0.3 }} />
-        <p style={{ fontSize: '0.9rem', marginBottom: '0.5rem' }}>No tienes un perfil de jugador vinculado.</p>
-        <p style={{ fontSize: '0.78rem' }}>Contacta al administrador para vincular tu cuenta de pred.gg.</p>
-      </div>
+      <>
+        <div className="glass-card" style={{ textAlign: 'center', padding: '2.5rem' }}>
+          <Users size={36} style={{ margin: '0 auto 0.85rem', opacity: 0.3, color: 'var(--accent-teal-bright)' }} />
+          <p style={{ fontSize: '0.92rem', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '0.4rem' }}>
+            Vincula tu perfil de jugador
+          </p>
+          <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginBottom: '1.25rem', lineHeight: 1.6 }}>
+            Para ver tus estadísticas de Predecessor, busca tu nombre de jugador y vincúlalo a tu cuenta.
+          </p>
+          <button
+            onClick={() => setShowLinkModal(true)}
+            className="btn-primary"
+            style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.88rem', padding: '0.55rem 1.25rem' }}
+          >
+            Buscar mi perfil en Predecessor
+          </button>
+        </div>
+        {showLinkModal && (
+          <LinkPlayerModal
+            onLinked={(pid) => { setLinkedIdState(pid); setShowLinkModal(false); window.location.reload(); }}
+            onClose={() => setShowLinkModal(false)}
+          />
+        )}
+      </>
     );
   }
 

@@ -151,3 +151,48 @@ profileRouter.get('/access', async (req, res, next) => {
     res.json({ access, features });
   } catch (err) { next(err); }
 });
+
+// POST /profile/link-player — self-link to a Player record
+profileRouter.post('/link-player', async (req, res, next) => {
+  try {
+    const userId = req.user!.userId;
+    const { playerId } = z.object({ playerId: z.string().min(1) }).parse(req.body);
+
+    // Verify player exists
+    const player = await db.player.findUnique({
+      where: { id: playerId },
+      select: { id: true, displayName: true, customName: true, predggId: true },
+    });
+    if (!player) {
+      res.status(404).json({ error: { message: 'Jugador no encontrado', code: 'PLAYER_NOT_FOUND' } });
+      return;
+    }
+
+    // Check not already claimed by another user
+    const existing = await db.user.findFirst({
+      where: { linkedPlayerId: playerId, NOT: { id: userId } },
+      select: { id: true, name: true },
+    });
+    if (existing) {
+      res.status(409).json({ error: { message: 'Este perfil ya está vinculado a otra cuenta', code: 'PLAYER_ALREADY_LINKED' } });
+      return;
+    }
+
+    const updated = await db.user.update({
+      where: { id: userId },
+      data: { linkedPlayerId: playerId },
+      select: SAFE_USER_SELECT,
+    });
+
+    res.json({ user: updated, player });
+  } catch (err) { next(err); }
+});
+
+// DELETE /profile/link-player — unlink player
+profileRouter.delete('/link-player', async (req, res, next) => {
+  try {
+    const userId = req.user!.userId;
+    await db.user.update({ where: { id: userId }, data: { linkedPlayerId: null } });
+    res.json({ ok: true });
+  } catch (err) { next(err); }
+});

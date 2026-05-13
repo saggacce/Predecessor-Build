@@ -1,11 +1,26 @@
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router';
+import { useNavigate, Navigate } from 'react-router';
 import { Film } from 'lucide-react';
 import { apiClient } from '../api/client';
+import { useAuth } from '../hooks/useAuth';
 import type { TeamProfile, TeamMatch } from '../api/client';
 
 export default function MatchList() {
   const navigate = useNavigate();
+  const { user } = useAuth();
+
+  // PLAYER (standalone, no team) — redirect to their own player scouting profile
+  const linkedPlayerId = (user as { linkedPlayerId?: string | null })?.linkedPlayerId;
+  const hasTeam = (user?.memberships?.length ?? 0) > 0;
+  const isStandalonePlayer = user?.globalRole === 'PLAYER' || (!hasTeam && user?.globalRole !== 'PLATFORM_ADMIN');
+
+  if (isStandalonePlayer && linkedPlayerId) {
+    return <Navigate to={`/analysis/players?id=${linkedPlayerId}`} replace />;
+  }
+
+  if (isStandalonePlayer && !linkedPlayerId) {
+    return <Navigate to="/analysis/players" replace />;
+  }
   const [teams, setTeams] = useState<TeamProfile[]>([]);
   const [selectedTeamId, setSelectedTeamId] = useState('');
   const [matches, setMatches] = useState<TeamMatch[]>([]);
