@@ -88,9 +88,12 @@ export default function LandingPage() {
 
         {/* Header */}
         <header style={{ width:'100%', maxWidth:960, display:'flex', alignItems:'center', justifyContent:'space-between', padding:'1.5rem', position:'relative', zIndex:10, animation:'fadeIn 0.6s ease both' }}>
-          <div style={{ display:'flex', alignItems:'center', gap:'0.6rem' }}>
-            <img src="/favicon.svg" alt="Rift Line" style={{ width:30, height:30 }} />
-            <span style={{ fontWeight:800, fontSize:'1.1rem', color:'var(--text-primary)', letterSpacing:'-0.01em' }}>Rift Line</span>
+          <div style={{ display:'flex', alignItems:'center', gap:'0.65rem' }}>
+            <img src="/favicon.svg" alt="Rift Line" style={{ width:34, height:34 }} />
+            <div>
+              <div style={{ fontWeight:800, fontSize:'1.05rem', color:'var(--text-primary)', letterSpacing:'-0.01em', lineHeight:1.1 }}>Rift Line</div>
+              <div style={{ fontSize:'0.58rem', color:'var(--accent-teal-bright)', letterSpacing:'0.08em', fontWeight:600, textTransform:'uppercase', marginTop:'0.1rem' }}>Competitive Intel</div>
+            </div>
           </div>
           <Link to="/login" style={{ textDecoration:'none', fontSize:'0.85rem', fontWeight:700, padding:'0.45rem 1.1rem', border:'1px solid rgba(255,255,255,0.12)', borderRadius:7, color:'var(--text-primary)', background:'rgba(255,255,255,0.05)', transition:'background 0.15s' }}
             onMouseEnter={(e)=>{(e.currentTarget as HTMLAnchorElement).style.background='rgba(255,255,255,0.1)';}}
@@ -102,10 +105,7 @@ export default function LandingPage() {
         {/* Hero */}
         <section style={{ maxWidth:960, width:'100%', padding:'4rem 1.5rem 2rem', display:'grid', gridTemplateColumns:'1fr 1fr', gap:'3rem', alignItems:'center', position:'relative', zIndex:10 }}>
           <div>
-            <div style={{ display:'inline-flex', alignItems:'center', gap:'0.5rem', background:'rgba(56,212,200,0.08)', border:'1px solid rgba(56,212,200,0.2)', borderRadius:999, padding:'0.3rem 0.85rem', marginBottom:'1.5rem', animation:'fadeUp 0.5s ease both' }}>
-              <div style={{ width:7, height:7, borderRadius:'50%', background:'var(--accent-teal-bright)', animation:'pulse-ring 2s infinite' }} />
-              <span style={{ fontSize:'0.68rem', fontWeight:700, color:'var(--accent-teal-bright)', letterSpacing:'0.06em' }}>COMPETITIVE INTEL · PREDECESSOR</span>
-            </div>
+
             <h1 style={{ fontSize:'clamp(1.8rem,3.5vw,2.8rem)', fontWeight:900, color:'var(--text-primary)', lineHeight:1.1, margin:'0 0 1.1rem', letterSpacing:'-0.025em', animation:'fadeUp 0.6s ease 0.1s both' }}>
               Inteligencia competitiva<br />
               <span style={{ background:'linear-gradient(135deg,#38d4c8 0%,#5b9cf6 50%,#a78bfa 100%)', backgroundSize:'200% auto', WebkitBackgroundClip:'text', WebkitTextFillColor:'transparent', animation:'shimmer 4s linear infinite' }}>
