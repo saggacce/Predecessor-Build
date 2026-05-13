@@ -72,6 +72,7 @@ export default function ProfilePage() {
         timezone: timezone || null,
       });
       setProfile(user);
+      void refreshInternalSession(); // update name/avatar in header badge
       toast.success('Perfil actualizado');
     } catch { toast.error('Error al guardar'); }
     finally { setSavingProfile(false); }

@@ -184,13 +184,13 @@ internalAuthRouter.get('/me', requireAuth, async (req, res, next) => {
     // Fetch fields not stored in JWT from DB
     const dbUser = await db.user.findUnique({
       where: { id: user.userId },
-      select: { linkedPlayerId: true, avatarUrl: true },
+      select: { linkedPlayerId: true, avatarUrl: true, name: true, email: true },
     });
     res.json({
       user: {
         id: user.userId,
-        email: user.email,
-        name: user.name,
+        email: dbUser?.email ?? user.email,   // fresh from DB (may have changed via /profile)
+        name: dbUser?.name ?? user.name,     // fresh from DB
         globalRole: user.globalRole,
         linkedPlayerId: dbUser?.linkedPlayerId ?? null,
         avatarUrl: dbUser?.avatarUrl ?? null,
