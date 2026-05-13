@@ -137,6 +137,20 @@ export interface PlayerSeasons {
   ratings: SeasonRating[];
 }
 
+export interface PlatformConfigEntry {
+  key: string;
+  value: number;
+  defaultValue: number;
+  minValue: number | null;
+  maxValue: number | null;
+  label: string;
+  description: string;
+  group: string;
+  unit: string | null;
+  updatedAt: string;
+  updatedBy: string | null;
+}
+
 export interface HeroMeta {
   slug: string;
   displayName: string;
@@ -921,6 +935,11 @@ export const apiClient = {
     updateUser: (id: string, data: { isActive?: boolean; globalRole?: string }) =>
       fetchApi<{ user: unknown }>(`/admin/users/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
     apiStatus: () => fetchApi<unknown>('/admin/api-status'),
+    getConfig: () => fetchApi<{ config: PlatformConfigEntry[] }>('/admin/config'),
+    updateConfig: (key: string, value: number) =>
+      fetchApi<{ config: PlatformConfigEntry }>(`/admin/config/${key}`, { method: 'PATCH', body: JSON.stringify({ value }) }),
+    resetConfig: (key: string) =>
+      fetchApi<{ config: PlatformConfigEntry }>(`/admin/config/${key}/reset`, { method: 'POST' }),
     syncLogs: (limit = 50, entity?: string, status?: string, source?: string) => {
       const params = new URLSearchParams({ limit: String(limit) });
       if (entity) params.set('entity', entity);

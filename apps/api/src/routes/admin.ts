@@ -13,6 +13,7 @@ import {
 } from '../services/sync-service.js';
 import { syncHeroMeta } from '../services/hero-meta-service.js';
 import { invalidateHeroMetaCache } from './hero-meta.js';
+import { getAllConfig, updateConfigValue, resetConfigValue } from '../services/config-service.js';
 import { getValidToken, exchangeToken, COOKIE_REFRESH } from './auth.js';
 import { requireAuth } from '../middleware/require-auth.js';
 import { requirePlatformAdmin } from '../middleware/require-platform-admin.js';
@@ -614,4 +615,40 @@ adminRouter.post('/sync-heroes', requireAuth, requirePlatformAdmin, async (_req,
   } catch (err) {
     next(err);
   }
+});
+
+/**
+ * GET /admin/config
+ * Returns all platform config entries.
+ */
+adminRouter.get('/config', requireAuth, requirePlatformAdmin, async (_req, res, next) => {
+  try {
+    const config = await getAllConfig(db);
+    res.json({ config });
+  } catch (err) { next(err); }
+});
+
+/**
+ * PATCH /admin/config/:key
+ * Update a single config value.
+ */
+adminRouter.patch('/config/:key', requireAuth, requirePlatformAdmin, async (req, res, next) => {
+  try {
+    const { value } = z.object({ value: z.number() }).parse(req.body);
+    const userId = (req as { user?: { id: string } }).user?.id ?? 'unknown';
+    const updated = await updateConfigValue(db, req.params.key, value, userId);
+    res.json({ config: updated });
+  } catch (err) { next(err); }
+});
+
+/**
+ * POST /admin/config/:key/reset
+ * Reset a single config value to its default.
+ */
+adminRouter.post('/config/:key/reset', requireAuth, requirePlatformAdmin, async (req, res, next) => {
+  try {
+    const userId = (req as { user?: { id: string } }).user?.id ?? 'unknown';
+    const updated = await resetConfigValue(db, req.params.key, userId);
+    res.json({ config: updated });
+  } catch (err) { next(err); }
 });

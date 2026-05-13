@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { Link } from 'react-router';
 import { RankIcon } from '../components/RankIcon';
 import { useHeroMeta, normalizeHeroSlug } from '../hooks/useHeroMeta';
+import { useConfig } from '../hooks/useConfig';
 import {
   Users,
   Shield,
@@ -927,6 +928,10 @@ function DraftHeroPool({ playerDepth, playerById }: {
   playerDepth: TeamDraftAnalysis['playerDepth']; playerById: Map<string, TeamProfile['roster'][number]>;
 }) {
   const heroMeta = useHeroMeta();
+  const config = useConfig();
+  const pocketPickWr = config.get('display_pocket_pick_wr') ?? 65;
+  const pocketPickMaxGames = config.get('display_pocket_pick_max_games') ?? 10;
+  const narrowDepth = config.get('display_hero_pool_narrow_depth') ?? 2;
   if (playerDepth.length === 0) return <DraftEmptyState text="No hero pool data found for this roster." />;
   const sorted = [...playerDepth].sort((a, b) => b.heroCount - a.heroCount);
   return (
@@ -943,7 +948,7 @@ function DraftHeroPool({ playerDepth, playerById }: {
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(145px, 1fr))', gap: '0.5rem' }}>
               {player.topHeroes.map((hero) => {
-                const isPocketPick = hero.games <= 5 && hero.winRate >= 65;
+                const isPocketPick = hero.games <= pocketPickMaxGames && hero.winRate >= pocketPickWr;
                 return (
                 <div key={hero.heroSlug} style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', minWidth: 0, border: `1px solid ${isPocketPick ? 'rgba(240,180,41,0.45)' : 'var(--border-color)'}`, borderRadius: 6, padding: '0.4rem', background: isPocketPick ? 'rgba(240,180,41,0.06)' : 'var(--bg-dark)' }}>
                   <HeroIcon heroSlug={hero.heroSlug} size={30} />
@@ -1538,7 +1543,7 @@ function PerformanceTab({ teamId, analysis, loading, onRefresh }: {
               </div>
               <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
                 {p.topHeroes.map((h) => {
-                  const isPocketPick = h.matches < 10 && h.winRate > 65;
+                  const isPocketPick = h.matches < pocketPickMaxGames && h.winRate > pocketPickWr;
                   return (
                   <div key={h.slug} title={`${h.name} · ${h.matches} games · ${h.winRate.toFixed(1)}% WR${isPocketPick ? ' · Pocket pick' : ''}`} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.2rem' }}>
                     <div style={{ width: 32, height: 32, borderRadius: 6, overflow: 'hidden', border: isPocketPick ? '1px solid var(--accent-prime)' : '1px solid var(--border-color)', background: 'var(--bg-dark)', boxShadow: isPocketPick ? '0 0 6px rgba(240,180,41,0.4)' : 'none' }}>
@@ -1749,7 +1754,7 @@ function ScoutingReport({ playerStats, heroPool }: { playerStats: PlayerAnalysis
                     <img src={`/heroes/${normalizeHeroSlug(h.heroSlug)}.webp`} alt={h.heroSlug} style={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
                   </div>
                 ))}
-                {depth <= 2 && (
+                {depth <= narrowDepth && (
                   <span title="Narrow hero pool — high ban vulnerability" style={{ fontSize: '0.6rem', color: '#f97316', marginLeft: '4px' }}>⚠ narrow pool</span>
                 )}
               </div>

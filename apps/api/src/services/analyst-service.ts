@@ -1,6 +1,7 @@
 import { type PrismaClient } from '@prisma/client';
 import { db } from '../db.js';
 import { AppError } from '../middleware/error-handler.js';
+import { getConfigMap } from './config-service.js';
 
 export interface Insight {
   id: string;
@@ -58,6 +59,25 @@ export async function getTeamInsights(teamId: string): Promise<Insight[]> {
 
   const rosterPlayerIds = team.roster.map((r) => r.player.id);
   if (rosterPlayerIds.length === 0) return [];
+
+  // Load platform config (5-min cache) — overrides module-level constants
+  const cfg = await getConfigMap(db);
+  const MIN_EVENT_MATCHES = cfg.get('analyst_min_event_matches') ?? 10;
+  const MIN_OBJ_OPPORTUNITIES = cfg.get('analyst_min_obj_opportunities') ?? 15;
+  const MIN_WARD_EVENTS = cfg.get('analyst_min_ward_events') ?? 25;
+  const MIN_PLAYER_MATCHES = cfg.get('analyst_min_player_matches') ?? 30;
+  const MIN_CHAIN_OCC = cfg.get('analyst_min_chain_occ') ?? 5;
+  const MIN_OBJ_TYPE = cfg.get('analyst_min_obj_type') ?? 8;
+  const DEATH_WINDOW = cfg.get('analyst_death_window_secs') ?? 60;
+  const VISION_WINDOW = cfg.get('analyst_vision_window_secs') ?? 90;
+  const THROW_GOLD_LEAD = cfg.get('analyst_throw_gold_lead') ?? 3000;
+  const WARD_BASELINE: Record<string, number> = {
+    support: cfg.get('analyst_ward_baseline_support') ?? 1.0,
+    jungle: cfg.get('analyst_ward_baseline_jungle') ?? 0.5,
+    midlane: cfg.get('analyst_ward_baseline_midlane') ?? 0.35,
+    offlane: cfg.get('analyst_ward_baseline_offlane') ?? 0.30,
+    carry: cfg.get('analyst_ward_baseline_carry') ?? 0.25,
+  };
 
   // Player name map for evidence messages
   const playerName = new Map(
@@ -182,7 +202,7 @@ export async function getTeamInsights(teamId: string): Promise<Insight[]> {
       let hasCritDeath = false;
       for (const obj of matchObjs) {
         const windowKills = matchKills.filter(
-          (k) => k.gameTime >= obj.gameTime - 60 && k.gameTime < obj.gameTime,
+          (k) => k.gameTime >= obj.gameTime - DEATH_WINDOW && k.gameTime < obj.gameTime,
         );
         for (const k of windowKills) {
           if (k.killedPlayerId && rosterPlayerIds.includes(k.killedPlayerId)) {
@@ -242,7 +262,7 @@ export async function getTeamInsights(teamId: string): Promise<Insight[]> {
           w.matchId === obj.matchId &&
           w.eventType === 'PLACEMENT' &&
           w.team === side &&
-          w.gameTime >= obj.gameTime - 90 &&
+          w.gameTime >= obj.gameTime - VISION_WINDOW &&
           w.gameTime < obj.gameTime,
       );
       if (wardsPlacedBefore.length === 0) objsWithNoVision++;
@@ -443,7 +463,7 @@ export async function getTeamInsights(teamId: string): Promise<Insight[]> {
         const rivalGold = rivalIntervals.reduce((s, a) => s + (a[i] ?? 0), 0);
         maxLead = Math.max(maxLead, ownGold - rivalGold);
       }
-      if (maxLead >= 3000) throwMatches++;
+      if (maxLead >= THROW_GOLD_LEAD) throwMatches++;
     }
 
     if (throwMatches >= 4) {
@@ -517,9 +537,7 @@ export async function getTeamInsights(teamId: string): Promise<Insight[]> {
   // ─────────────────────────────────────────────────────────────────────────
   // RULE 8 — Vision gaps (wards/min below role baseline)
   // ─────────────────────────────────────────────────────────────────────────
-  const WARD_BASELINE: Record<string, number> = {
-    support: 1.0, jungle: 0.5, midlane: 0.35, carry: 0.25, offlane: 0.3,
-  };
+  // WARD_BASELINE is now loaded from config above
 
   const lowVisionPlayers: string[] = [];
   for (const [playerId, mps] of mpByPlayer) {
@@ -642,7 +660,7 @@ export async function getTeamInsights(teamId: string): Promise<Insight[]> {
         let hit = false;
         for (const obj of matchObjs) {
           const windowDeaths = matchDeaths.filter(
-            (k) => k.gameTime >= obj.gameTime - 60 && k.gameTime < obj.gameTime,
+            (k) => k.gameTime >= obj.gameTime - DEATH_WINDOW && k.gameTime < obj.gameTime,
           );
           for (const d of windowDeaths) {
             if (playerRole.get(d.killedPlayerId ?? '') === role) {
@@ -683,7 +701,7 @@ export async function getTeamInsights(teamId: string): Promise<Insight[]> {
       let hit = false;
       for (const obj of matchObjs) {
         const windowDeaths = matchDeaths.filter(
-          (k) => k.gameTime >= obj.gameTime - 60 && k.gameTime < obj.gameTime,
+          (k) => k.gameTime >= obj.gameTime - DEATH_WINDOW && k.gameTime < obj.gameTime,
         );
         if (windowDeaths.length >= 2) {
           hit = true;
@@ -729,7 +747,7 @@ export async function getTeamInsights(teamId: string): Promise<Insight[]> {
         totalMajorObjs++;
         const wardsIn90 = wardEvents.filter(
           (w) => w.matchId === obj.matchId && w.eventType === 'PLACEMENT' && w.team === side &&
-            w.gameTime >= obj.gameTime - 90 && w.gameTime < obj.gameTime,
+            w.gameTime >= obj.gameTime - VISION_WINDOW && w.gameTime < obj.gameTime,
         );
         const wardsIn30 = wardsIn90.filter((w) => w.gameTime >= obj.gameTime - 30);
         if (wardsIn90.length > 0 && wardsIn90.length === wardsIn30.length) lateSetupObjs++;
@@ -1315,7 +1333,7 @@ export async function getTeamInsights(teamId: string): Promise<Insight[]> {
           totalObjs++;
           const wards = wardEvents.filter(
             (w) => w.matchId === obj.matchId && w.eventType === 'PLACEMENT' && w.team === side &&
-              w.gameTime >= obj.gameTime - 90 && w.gameTime < obj.gameTime,
+              w.gameTime >= obj.gameTime - VISION_WINDOW && w.gameTime < obj.gameTime,
           );
           if (wards.length >= 2) goodVisionObjs++;
         }
