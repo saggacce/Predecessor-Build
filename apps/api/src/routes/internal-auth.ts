@@ -112,7 +112,7 @@ internalAuthRouter.post('/login', loginRateLimit, async (req, res, next) => {
       where: { email },
       include: {
         memberships: { select: { teamId: true, role: true, playerId: true } },
-        linkedPlayerId: true,
+
       },
     });
 
@@ -162,7 +162,7 @@ internalAuthRouter.post('/refresh', async (req, res, next) => {
       where: { id: payload.userId },
       include: {
         memberships: { select: { teamId: true, role: true, playerId: true } },
-        linkedPlayerId: true,
+
       },
     });
     if (!user || !user.isActive) {
