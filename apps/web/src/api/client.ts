@@ -151,6 +151,14 @@ export interface PlatformConfigEntry {
   updatedBy: string | null;
 }
 
+export type TeamTier = 'FREE' | 'PRO' | 'TEAM' | 'ENTERPRISE';
+export type PlayerTier = 'FREE' | 'PRO' | 'PREMIUM';
+
+export interface EffectiveAccess {
+  teamTier: TeamTier;
+  playerTier: PlayerTier;
+}
+
 export interface UserProfile {
   id: string;
   email: string;
@@ -162,15 +170,18 @@ export interface UserProfile {
   avatarUrl: string | null;
   bio: string | null;
   timezone: string | null;
-  tier: 'FREE' | 'PRO' | 'TEAM' | 'ENTERPRISE';
-  tierExpiresAt: string | null;
+  playerTier: PlayerTier;
+  playerTierExpiresAt: string | null;
   discordId: string | null;
   discordUsername: string | null;
   epicGamesId: string | null;
   epicGamesUsername: string | null;
   steamId: string | null;
   steamUsername: string | null;
-  memberships: Array<{ role: string; team: { id: string; name: string; type: string } }>;
+  memberships: Array<{
+    role: string;
+    team: { id: string; name: string; type: string; teamTier: TeamTier; teamTierExpiresAt: string | null };
+  }>;
 }
 
 export interface HeroMeta {
@@ -826,6 +837,8 @@ export const apiClient = {
       fetchApi<{ ok: boolean }>('/profile/password', { method: 'PATCH', body: JSON.stringify({ currentPassword, newPassword }) }),
     disconnectSocial: (provider: 'discord' | 'epic' | 'steam') =>
       fetchApi<{ ok: boolean }>(`/profile/social/${provider}`, { method: 'DELETE' }),
+    getAccess: () =>
+      fetchApi<{ access: EffectiveAccess; features: Record<string, boolean> }>('/profile/access'),
   },
 
   matches: {
@@ -966,8 +979,10 @@ export const apiClient = {
     runCronNow: () => fetchApi<{ ok: boolean; message: string }>('/admin/sync-cron/run-now', { method: 'POST' }),
     cronStatus: () => fetchApi<CronJob>('/admin/sync-cron/status'),
     users: () => fetchApi<{ users: unknown[] }>('/admin/users'),
-    updateUser: (id: string, data: { isActive?: boolean; globalRole?: string }) =>
+    updateUser: (id: string, data: { isActive?: boolean; globalRole?: string; name?: string; email?: string; playerTier?: string; playerTierExpiresAt?: string | null }) =>
       fetchApi<{ user: unknown }>(`/admin/users/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+    updateTeamTier: (teamId: string, teamTier: string, teamTierExpiresAt?: string | null) =>
+      fetchApi<{ team: unknown }>(`/admin/teams/${teamId}/tier`, { method: 'PATCH', body: JSON.stringify({ teamTier, teamTierExpiresAt }) }),
     apiStatus: () => fetchApi<unknown>('/admin/api-status'),
     getConfig: () => fetchApi<{ config: PlatformConfigEntry[] }>('/admin/config'),
     updateConfig: (key: string, value: number) =>

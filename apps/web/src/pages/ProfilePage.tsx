@@ -3,7 +3,13 @@ import { Camera, Key, Link2, Link2Off, Save, Shield, Star, User } from 'lucide-r
 import { toast } from 'sonner';
 import { apiClient, type UserProfile } from '../api/client';
 
-const TIER_CONFIG = {
+const PLAYER_TIER_CONFIG = {
+  FREE:    { label: 'Free',    color: 'var(--text-muted)',        bg: 'rgba(100,116,139,0.1)' },
+  PRO:     { label: 'Pro',     color: 'var(--accent-blue)',       bg: 'rgba(91,156,246,0.12)' },
+  PREMIUM: { label: 'Premium', color: 'var(--accent-prime)',      bg: 'rgba(240,180,41,0.12)' },
+};
+
+const TEAM_TIER_CONFIG = {
   FREE:       { label: 'Free',       color: 'var(--text-muted)',          bg: 'rgba(100,116,139,0.1)' },
   PRO:        { label: 'Pro',        color: 'var(--accent-blue)',          bg: 'rgba(91,156,246,0.12)' },
   TEAM:       { label: 'Team',       color: 'var(--accent-teal-bright)',   bg: 'rgba(56,212,200,0.12)' },
@@ -114,7 +120,7 @@ export default function ProfilePage() {
   if (loading) return <div style={{ padding: '2rem', color: 'var(--text-muted)' }}>Cargando perfil…</div>;
   if (!profile) return <div style={{ padding: '2rem', color: 'var(--accent-loss)' }}>No se pudo cargar el perfil.</div>;
 
-  const tier = TIER_CONFIG[profile.tier] ?? TIER_CONFIG.FREE;
+  const playerTier = PLAYER_TIER_CONFIG[profile.playerTier] ?? PLAYER_TIER_CONFIG.FREE;
   const initials = profile.name.split(/\s+/).map((p) => p[0]).join('').slice(0, 2).toUpperCase();
 
   const TABS = [
@@ -137,8 +143,8 @@ export default function ProfilePage() {
         <div style={{ flex: 1 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', flexWrap: 'wrap' }}>
             <h1 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 800, color: 'var(--text-primary)' }}>{profile.name}</h1>
-            <span style={{ fontSize: '0.62rem', fontWeight: 700, color: tier.color, background: tier.bg, padding: '2px 8px', borderRadius: 999, border: `1px solid ${tier.color}40` }}>
-              {tier.label.toUpperCase()}
+            <span style={{ fontSize: '0.62rem', fontWeight: 700, color: playerTier.color, background: playerTier.bg, padding: '2px 8px', borderRadius: 999, border: `1px solid ${playerTier.color}40` }}>
+              {playerTier.label.toUpperCase()}
             </span>
             {profile.globalRole === 'PLATFORM_ADMIN' && (
               <span style={{ fontSize: '0.62rem', fontWeight: 700, color: 'var(--accent-teal-bright)', background: 'rgba(56,212,200,0.1)', padding: '2px 8px', borderRadius: 999, display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
@@ -290,48 +296,83 @@ export default function ProfilePage() {
       {/* Tab: Membresía */}
       {tab === 'membership' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+
+          {/* Player tier */}
           <div className="glass-card" style={{ padding: '1.25rem' }}>
-            <h2 style={{ margin: '0 0 1rem', fontSize: '0.9rem', fontWeight: 700 }}>Plan actual</h2>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', padding: '1rem', border: `1px solid ${tier.color}40`, borderRadius: 8, background: tier.bg, marginBottom: '1.25rem' }}>
-              <div style={{ width: 42, height: 42, borderRadius: 8, background: `${tier.color}20`, border: `1px solid ${tier.color}40`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <Star size={20} style={{ color: tier.color }} />
-              </div>
+            <h2 style={{ margin: '0 0 0.3rem', fontSize: '0.9rem', fontWeight: 700 }}>Tier de jugador</h2>
+            <p style={{ fontSize: '0.76rem', color: 'var(--text-muted)', margin: '0 0 1rem' }}>
+              Acceso a funciones personales: historial completo, métricas avanzadas, insights individuales y LLM coach.
+            </p>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', padding: '0.85rem 1rem', border: `1px solid ${playerTier.color}40`, borderRadius: 8, background: playerTier.bg, marginBottom: '1rem' }}>
+              <Star size={18} style={{ color: playerTier.color, flexShrink: 0 }} />
               <div>
-                <div style={{ fontWeight: 800, fontSize: '1rem', color: tier.color }}>{tier.label}</div>
-                <div style={{ fontSize: '0.73rem', color: 'var(--text-muted)' }}>
-                  {profile.tierExpiresAt
-                    ? `Válido hasta ${new Date(profile.tierExpiresAt).toLocaleDateString('es-ES', { year: 'numeric', month: 'long', day: 'numeric' })}`
-                    : profile.tier === 'FREE' ? 'Plan gratuito — sin fecha de expiración' : 'Plan activo — sin fecha de expiración'
+                <span style={{ fontWeight: 800, color: playerTier.color }}>{playerTier.label}</span>
+                <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginLeft: '0.75rem' }}>
+                  {profile.playerTierExpiresAt
+                    ? `hasta ${new Date(profile.playerTierExpiresAt).toLocaleDateString('es-ES', { month: 'short', year: 'numeric' })}`
+                    : profile.playerTier === 'FREE' ? 'gratuito' : 'sin expiración'
                   }
-                </div>
+                </span>
               </div>
             </div>
-
-            {/* Tier comparison */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '0.65rem' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.6rem' }}>
               {([
-                { tier: 'FREE', features: ['Análisis básico', 'Player Scouting', 'Team Analysis', '1 equipo OWN'], price: 'Gratis' },
-                { tier: 'PRO', features: ['Todo Free', 'Scrim Report avanzado', 'Export PDF', 'Historial completo'], price: 'Próximamente' },
-                { tier: 'TEAM', features: ['Todo Pro', 'Multi-equipo', 'Discord Bot', 'Review Queue compartida'], price: 'Próximamente' },
-                { tier: 'ENTERPRISE', features: ['Todo Team', 'API access', 'White-label', 'Soporte prioritario'], price: 'Próximamente' },
-              ] as const).map((plan) => {
-                const t = TIER_CONFIG[plan.tier];
-                const isCurrent = profile.tier === plan.tier;
+                { tier: 'FREE',    label: 'Free',    color: 'var(--text-muted)',    features: ['Últimas 20 partidas', 'Stats básicos', 'Hero pool propio'] },
+                { tier: 'PRO',     label: 'Pro',     color: 'var(--accent-blue)',   features: ['Historial completo', 'GPM, DPM, KP', 'Insights personales', 'Player Goals'] },
+                { tier: 'PREMIUM', label: 'Premium', color: 'var(--accent-prime)',  features: ['Todo Pro', 'LLM Coach personal', 'Focus of the Day', 'Análisis de tendencias'] },
+              ] as const).map(({ tier: t, label, color, features }) => {
+                const isCurrent = profile.playerTier === t;
                 return (
-                  <div key={plan.tier} style={{ padding: '0.85rem', border: `1px solid ${isCurrent ? t.color : 'var(--border-color)'}`, borderRadius: 8, background: isCurrent ? t.bg : 'transparent', opacity: plan.price === 'Próximamente' && !isCurrent ? 0.6 : 1 }}>
-                    <div style={{ fontWeight: 700, fontSize: '0.82rem', color: t.color, marginBottom: '0.5rem' }}>
-                      {t.label} {isCurrent && <span style={{ fontSize: '0.6rem', background: `${t.color}20`, borderRadius: 999, padding: '1px 6px', marginLeft: 4 }}>ACTUAL</span>}
+                  <div key={t} style={{ padding: '0.8rem', border: `1px solid ${isCurrent ? color : 'var(--border-color)'}`, borderRadius: 8, background: isCurrent ? `${color}12` : 'transparent' }}>
+                    <div style={{ fontWeight: 700, fontSize: '0.8rem', color, marginBottom: '0.5rem' }}>
+                      {label}{isCurrent && <span style={{ fontSize: '0.55rem', background: `${color}20`, borderRadius: 999, padding: '1px 5px', marginLeft: 4 }}>ACTUAL</span>}
                     </div>
-                    <div style={{ fontSize: '0.68rem', color: 'var(--accent-prime)', fontWeight: 600, marginBottom: '0.5rem' }}>{plan.price}</div>
-                    {plan.features.map((f) => (
-                      <div key={f} style={{ fontSize: '0.68rem', color: 'var(--text-muted)', marginBottom: '0.2rem' }}>✓ {f}</div>
-                    ))}
+                    {features.map((f) => <div key={f} style={{ fontSize: '0.65rem', color: 'var(--text-muted)', marginBottom: '0.15rem' }}>✓ {f}</div>)}
                   </div>
                 );
               })}
             </div>
-            <p style={{ fontSize: '0.73rem', color: 'var(--text-muted)', marginTop: '1rem', marginBottom: 0 }}>
-              Los planes Pro, Team y Enterprise estarán disponibles próximamente. Tu tier actual se asigna desde el panel de administración.
+          </div>
+
+          {/* Team tier — from memberships */}
+          <div className="glass-card" style={{ padding: '1.25rem' }}>
+            <h2 style={{ margin: '0 0 0.3rem', fontSize: '0.9rem', fontWeight: 700 }}>Tier de equipo</h2>
+            <p style={{ fontSize: '0.76rem', color: 'var(--text-muted)', margin: '0 0 1rem' }}>
+              Acceso a funciones colectivas: análisis de equipo, Scrim Report, Review Queue, Discord Bot. Lo gestiona el responsable del equipo.
+            </p>
+            {profile.memberships.filter((m) => m.team.type === 'OWN').length === 0 ? (
+              <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>No perteneces a ningún equipo OWN actualmente.</p>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                {profile.memberships.filter((m) => m.team.type === 'OWN').map((m) => {
+                  const tt = TEAM_TIER_CONFIG[m.team.teamTier as keyof typeof TEAM_TIER_CONFIG] ?? TEAM_TIER_CONFIG.FREE;
+                  return (
+                    <div key={m.team.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.75rem 1rem', border: `1px solid ${tt.color}30`, borderRadius: 8, background: tt.bg }}>
+                      <div>
+                        <span style={{ fontWeight: 600, fontSize: '0.85rem', color: 'var(--text-primary)' }}>{m.team.name}</span>
+                        <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginLeft: '0.6rem' }}>{m.role}</span>
+                      </div>
+                      <span style={{ fontSize: '0.72rem', fontWeight: 700, color: tt.color, background: `${tt.color}15`, padding: '2px 8px', borderRadius: 999 }}>{tt.label}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '0.5rem', marginTop: '1rem' }}>
+              {([
+                { tier: 'FREE',       label: 'Free',       color: 'var(--text-muted)',          features: ['Team Analysis', 'Rival Scouting', '3 rivales'] },
+                { tier: 'PRO',        label: 'Pro',        color: 'var(--accent-blue)',          features: ['Rivales ilimitados', 'Scrim Report', 'Review Queue', 'Insights'] },
+                { tier: 'TEAM',       label: 'Team',       color: 'var(--accent-teal-bright)',   features: ['Todo Pro', 'Discord Bot', 'LLM colectivo', 'Tactical Board'] },
+                { tier: 'ENTERPRISE', label: 'Enterprise', color: 'var(--accent-prime)',         features: ['Todo Team', 'API access', 'White-label', 'Soporte prio.'] },
+              ] as const).map(({ tier: t, label, color, features }) => (
+                <div key={t} style={{ padding: '0.7rem', border: `1px solid var(--border-color)`, borderRadius: 8 }}>
+                  <div style={{ fontWeight: 700, fontSize: '0.75rem', color, marginBottom: '0.4rem' }}>{label}</div>
+                  {features.map((f) => <div key={f} style={{ fontSize: '0.62rem', color: 'var(--text-muted)', marginBottom: '0.12rem' }}>✓ {f}</div>)}
+                </div>
+              ))}
+            </div>
+            <p style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '0.75rem', marginBottom: 0 }}>
+              El tier del equipo lo gestiona el Manager o un Platform Admin desde el panel de administración.
             </p>
           </div>
         </div>
