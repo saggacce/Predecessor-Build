@@ -1343,6 +1343,35 @@ export interface EventStreamPlayerIdRepairResult {
   placeholdersCreated: number;
 }
 
+/**
+ * Finds matches with fewer than 10 MatchPlayers and re-fetches their roster from pred.gg.
+ */
+export async function syncIncompleteMatches(db: PrismaClient): Promise<{ synced: number; errors: number; elapsed: number }> {
+  const start = Date.now();
+  const rows = await db.$queryRaw<Array<{ matchId: string; predggUuid: string; cnt: bigint }>>`
+    SELECT m.id AS "matchId", m."predggUuid", COUNT(mp.id)::bigint AS cnt
+    FROM "Match" m
+    LEFT JOIN "MatchPlayer" mp ON mp."matchId" = m.id
+    GROUP BY m.id, m."predggUuid"
+    HAVING COUNT(mp.id) < 10
+    LIMIT 200
+  `;
+
+  let synced = 0;
+  let errors = 0;
+  for (const row of rows) {
+    try {
+      await resyncMatch(db, row.matchId, row.predggUuid, true);
+      synced++;
+    } catch (err) {
+      logger.warn({ matchId: row.matchId, err }, 'syncIncompleteMatches: failed to resync match');
+      errors++;
+    }
+  }
+
+  return { synced, errors, elapsed: Date.now() - start };
+}
+
 export async function repairEventStreamPlayerIds(db: PrismaClient): Promise<EventStreamPlayerIdRepairResult> {
   // Use raw SQL UPDATE...FROM for efficiency — loading 5M+ records into memory causes OOM.
   // Each statement updates only rows where the playerId is a pred.gg UUID (not an internal cuid),
