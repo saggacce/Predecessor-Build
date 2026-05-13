@@ -244,7 +244,8 @@ function SyncStatusTab() {
       ]);
       setStatus(s);
       setSyncHistory(logs.logs);
-      if (s.eventStreamJob.running) setOptimisticRunning(true);
+      // Sync optimisticRunning with real state — clear it when job stops
+      if (!s.eventStreamJob.running) setOptimisticRunning(false);
     } catch { /* silent */ }
     finally { setLoading(false); }
   }
@@ -319,7 +320,13 @@ function SyncStatusTab() {
     } finally { setCronLoading(false); }
   }
 
-  if (loading) return <div style={{ padding: '1.5rem', color: 'var(--text-muted)' }}>Cargando estado de sincronización...</div>;
+  if (loading && !status) return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+      {[1, 2, 3].map((i) => (
+        <div key={i} className="glass-card" style={{ height: 120, background: 'rgba(255,255,255,0.02)', animation: 'pulse 1.5s ease-in-out infinite' }} />
+      ))}
+    </div>
+  );
   if (!status) return <div style={{ padding: '1.5rem', color: 'var(--accent-loss)' }}>Error al cargar estado</div>;
 
   const { players, matches, eventStreamJob: job, cronJob } = status;
