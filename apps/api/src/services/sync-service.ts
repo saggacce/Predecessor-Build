@@ -1346,6 +1346,49 @@ export interface EventStreamPlayerIdRepairResult {
 /**
  * Finds matches with fewer than 10 MatchPlayers and re-fetches their roster from pred.gg.
  */
+/**
+ * Fetches recent matches for a player by their predggId using a Bearer token.
+ * Returns { newMatches, newMatchUuids } for newly discovered matches.
+ */
+export async function syncRecentMatchesForPlayer(
+  db: PrismaClient,
+  predggId: string,
+  userToken: string,
+  matchLimit = 10,
+): Promise<{ newMatches: number; newMatchUuids: string[] }> {
+  let detail: PredggPlayerDetail | null = null;
+  try {
+    detail = await fetchPlayerDetail(predggId, userToken);
+  } catch (err) {
+    logger.warn({ predggId, err }, 'syncRecentMatchesForPlayer: detail fetch failed');
+    return { newMatches: 0, newMatchUuids: [] };
+  }
+
+  if (!detail) return { newMatches: 0, newMatchUuids: [] };
+
+  const matches = (detail.matchesPaginated?.results ?? []).slice(0, matchLimit);
+  if (matches.length === 0) return { newMatches: 0, newMatchUuids: [] };
+
+  // Find which of these matches are new (not in DB yet)
+  const uuids = matches.map((m) => m.match?.id).filter(Boolean) as string[];
+  const existing = await db.match.findMany({
+    where: { predggUuid: { in: uuids } },
+    select: { predggUuid: true },
+  });
+  const existingUuids = new Set(existing.map((m) => m.predggUuid));
+  const newMatchUuids = uuids.filter((u) => !existingUuids.has(u));
+
+  // Persist all matches for this player
+  const player = await db.player.findUnique({ where: { predggId }, select: { id: true, displayName: true } });
+  if (player) {
+    const now = new Date();
+    await persistRecentMatches(db, player.id, player.displayName, matches, now);
+    await db.player.update({ where: { predggId }, data: { lastSynced: now } });
+  }
+
+  return { newMatches: newMatchUuids.length, newMatchUuids };
+}
+
 export async function syncIncompleteMatches(db: PrismaClient): Promise<{ synced: number; errors: number; elapsed: number }> {
   const start = Date.now();
   const rows = await db.$queryRaw<Array<{ matchId: string; predggUuid: string; cnt: bigint }>>`
