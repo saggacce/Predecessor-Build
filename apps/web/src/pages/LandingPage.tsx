@@ -130,8 +130,8 @@ export default function LandingPage() {
           animation: 'fadeIn 0.6s ease both',
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
-            <img src="/favicon.svg" alt="PrimeSight" style={{ width: 30, height: 30 }} />
-            <span style={{ fontWeight: 800, fontSize: '1.1rem', color: 'var(--text-primary)', letterSpacing: '-0.01em' }}>PrimeSight</span>
+            <img src="/favicon.svg" alt="Rift Line" style={{ width: 30, height: 30 }} />
+            <span style={{ fontWeight: 800, fontSize: '1.1rem', color: 'var(--text-primary)', letterSpacing: '-0.01em' }}>Rift Line</span>
           </div>
           <Link to="/login" style={{
             textDecoration: 'none',
@@ -177,7 +177,7 @@ export default function LandingPage() {
                 animation: 'pulse-ring 2s infinite',
               }} />
               <span style={{ fontSize: '0.68rem', fontWeight: 700, color: 'var(--accent-teal-bright)', letterSpacing: '0.06em' }}>
-                COMPETITIVE INTELLIGENCE · PREDECESSOR
+                COMPETITIVE INTEL · PREDECESSOR
               </span>
             </div>
 
@@ -363,7 +363,7 @@ export default function LandingPage() {
               ¿Listo para analizar?
             </h2>
             <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', margin: '0 0 1.5rem', lineHeight: 1.6 }}>
-              Accede con tu cuenta de la plataforma o contacta a tu manager para recibir una invitación.
+              Accede con tu cuenta de Rift Line o contacta a tu manager para recibir una invitación.
             </p>
             <Link to="/login" className="landing-cta-btn" style={{
               textDecoration: 'none',
@@ -387,7 +387,7 @@ export default function LandingPage() {
           fontSize: '0.68rem', color: 'var(--text-muted)',
           position: 'relative', zIndex: 10,
         }}>
-          PrimeSight · Herramienta privada de inteligencia competitiva para Predecessor · Acceso restringido
+          Rift Line by Synapsight · Competitive Intel · Acceso restringido
         </footer>
       </div>
     </>
@@ -410,7 +410,7 @@ function AppMockup() {
         <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#ff5f57' }} />
         <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#febc2e' }} />
         <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#28c840' }} />
-        <span style={{ marginLeft: '0.5rem', fontSize: '0.65rem', color: 'rgba(255,255,255,0.2)', fontFamily: 'monospace' }}>PrimeSight — Team Analysis</span>
+        <span style={{ marginLeft: '0.5rem', fontSize: '0.65rem', color: 'rgba(255,255,255,0.2)', fontFamily: 'monospace' }}>Rift Line — Team Analysis</span>
       </div>
 
       <div style={{ padding: '1rem', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>

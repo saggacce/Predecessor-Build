@@ -29,7 +29,7 @@ export default function Login() {
       <header className="header">
         <h1 className="header-title">Login</h1>
         <p style={{ color: 'var(--text-muted)', fontSize: '0.86rem', marginTop: '0.35rem' }}>
-          Internal PrimeSight session.
+          Internal Rift Line session.
         </p>
       </header>
 

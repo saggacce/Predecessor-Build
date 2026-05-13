@@ -264,3 +264,59 @@ textarea:focus-visible {
     grid-template-columns: 1fr !important;
   }
 }
+
+/* ── Holographic hover — glass cards follow cursor ───────────────────── */
+/* JS in App.tsx sets --mouse-x / --mouse-y on each .glass-card */
+.glass-card {
+  --mouse-x: 50%;
+  --mouse-y: 50%;
+}
+
+.glass-card::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  z-index: 0;
+  opacity: 0;
+  transition: opacity 0.35s ease;
+  background: radial-gradient(
+    circle at var(--mouse-x) var(--mouse-y),
+    rgba(167, 139, 250, 0.10) 0%,
+    rgba(91, 156, 246, 0.06) 35%,
+    transparent 65%
+  );
+}
+
+.glass-card:hover::after {
+  opacity: 1;
+}
+
+/* ── Button active pulse ─────────────────────────────────────────────── */
+@keyframes btn-click-pulse {
+  0%   { box-shadow: 0 0 0 0   rgba(91, 156, 246, 0.75); }
+  100% { box-shadow: 0 0 0 14px rgba(91, 156, 246, 0); }
+}
+
+.btn-primary:active:not(:disabled) {
+  animation: btn-click-pulse 220ms ease-out forwards;
+}
+
+/* ── Route cross-fade ────────────────────────────────────────────────── */
+@keyframes page-fade-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.main-content > * {
+  animation: page-fade-in 0.22s ease both;
+}
+
+/* ── Conditional blur — low-power devices ────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}

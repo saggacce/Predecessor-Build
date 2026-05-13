@@ -50,7 +50,7 @@ function WorkspaceHeader() {
     <header className="workspace-header" aria-label="Workspace status">
       <div>
         <div className="workspace-title">Predecessor competitive workspace</div>
-        <div className="workspace-subtitle">Scouting, roster analysis and scrim preparation</div>
+        <div className="workspace-subtitle">Competitive Intel · by Synapsight</div>
       </div>
       <div className="workspace-meta">
         {latestPatch && (
@@ -282,8 +282,8 @@ function Sidebar() {
             <img src="/favicon.svg" alt="" />
           </div>
           <div>
-            <div className="logo-name">PrimeSight</div>
-            <div className="sidebar-subtitle">Competitive Intelligence</div>
+            <div className="logo-name">Rift Line</div>
+            <div className="sidebar-subtitle">Competitive Intel</div>
           </div>
         </div>
       </div>
@@ -395,6 +395,19 @@ function AppContent() {
   // Show landing page for unauthenticated users (except login/register routes)
   const publicRoutes = ['/login', '/register', '/unauthorized'];
   const isPublicRoute = publicRoutes.some((r) => location.pathname.startsWith(r));
+
+  // Holographic hover — update --mouse-x/y on every .glass-card
+  useEffect(() => {
+    function onMouseMove(e: MouseEvent) {
+      const target = (e.target as Element).closest('.glass-card') as HTMLElement | null;
+      if (!target) return;
+      const r = target.getBoundingClientRect();
+      target.style.setProperty('--mouse-x', `${((e.clientX - r.left) / r.width * 100).toFixed(1)}%`);
+      target.style.setProperty('--mouse-y', `${((e.clientY - r.top) / r.height * 100).toFixed(1)}%`);
+    }
+    document.addEventListener('mousemove', onMouseMove, { passive: true });
+    return () => document.removeEventListener('mousemove', onMouseMove);
+  }, []);
 
   if (!internalLoading && !internalAuthenticated && !isPublicRoute) {
     return (
