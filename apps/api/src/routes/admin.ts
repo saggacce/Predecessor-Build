@@ -482,21 +482,97 @@ adminRouter.get('/sync-event-streams/status', async (_req, res) => {
 });
 
 /**
- * GET /admin/sync-logs?limit=50&entity=player&status=error
+ * GET /admin/sync-logs?limit=50&entity=player&status=error&source=cron
  */
+const logsQuerySchemaFull = logsQuerySchema.extend({ source: z.string().optional() });
+
 adminRouter.get('/sync-logs', async (req, res, next) => {
   try {
-    const { limit, entity, status } = logsQuerySchema.parse(req.query);
+    const { limit, entity, status, source } = logsQuerySchemaFull.parse(req.query);
+    const total = await db.syncLog.count({
+      where: { ...(entity && { entity }), ...(status && { status }), ...(source && { source }) },
+    });
     const logs = await db.syncLog.findMany({
-      where: {
-        ...(entity && { entity }),
-        ...(status && { status }),
-      },
+      where: { ...(entity && { entity }), ...(status && { status }), ...(source && { source }) },
       orderBy: { syncedAt: 'desc' },
       take: limit,
     });
-    res.json({ logs, total: logs.length });
+    res.json({ logs, total });
   } catch (err) {
     next(err);
   }
+});
+
+/**
+ * GET /admin/users — list all platform users with memberships
+ */
+adminRouter.get('/users', async (_req, res, next) => {
+  try {
+    const users = await db.user.findMany({
+      include: {
+        memberships: { include: { team: { select: { id: true, name: true } } } },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+    res.json({ users });
+  } catch (err) { next(err); }
+});
+
+/**
+ * PATCH /admin/users/:id — toggle active or change globalRole
+ */
+adminRouter.patch('/users/:id', async (req, res, next) => {
+  try {
+    const { isActive, globalRole } = req.body as { isActive?: boolean; globalRole?: string };
+    const user = await db.user.update({
+      where: { id: req.params.id },
+      data: {
+        ...(typeof isActive === 'boolean' && { isActive }),
+        ...(globalRole && { globalRole }),
+      },
+      include: { memberships: { include: { team: { select: { id: true, name: true } } } } },
+    });
+    res.json({ user });
+  } catch (err) { next(err); }
+});
+
+/**
+ * GET /admin/api-status — pred.gg connectivity + sync error stats
+ */
+adminRouter.get('/api-status', async (_req, res, next) => {
+  try {
+    const GQL_URL = process.env.PRED_GG_GQL_URL ?? 'https://pred.gg/gql';
+    const pingStart = Date.now();
+    let predggStatus: 'ok' | 'error' = 'error';
+    let predggMs: number | null = null;
+    let predggError: string | null = null;
+    try {
+      const r = await fetch(GQL_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query: '{ versions { id } }' }),
+        signal: AbortSignal.timeout(5000),
+      });
+      predggMs = Date.now() - pingStart;
+      predggStatus = r.ok ? 'ok' : 'error';
+      if (!r.ok) predggError = `HTTP ${r.status}`;
+    } catch (err) {
+      predggMs = Date.now() - pingStart;
+      predggError = err instanceof Error ? err.message : 'Connection failed';
+    }
+
+    const dayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const [totalErrors, recentErrors, lastSuccess, recentBySource] = await Promise.all([
+      db.syncLog.count({ where: { status: 'error' } }),
+      db.syncLog.count({ where: { status: 'error', syncedAt: { gte: dayAgo } } }),
+      db.syncLog.findFirst({ where: { status: { in: ['ok', 'success'] } }, orderBy: { syncedAt: 'desc' }, select: { syncedAt: true, entity: true, source: true } }),
+      db.syncLog.groupBy({ by: ['source'], where: { status: 'error', syncedAt: { gte: dayAgo } }, _count: { id: true } }),
+    ]);
+
+    res.json({
+      predgg: { status: predggStatus, responseMs: predggMs, error: predggError, endpoint: GQL_URL },
+      syncErrors: { total: totalErrors, last24h: recentErrors, bySource: recentBySource },
+      lastSuccessfulSync: lastSuccess,
+    });
+  } catch (err) { next(err); }
 });

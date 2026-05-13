@@ -21,6 +21,10 @@ import Login from './pages/Login';
 import Register from './pages/Register';
 import Unauthorized from './pages/Unauthorized';
 import StaffManagement from './pages/StaffManagement';
+import DataQualityPage from './pages/DataQualityPage';
+import AuditLogsPage from './pages/AuditLogsPage';
+import UsersPage from './pages/UsersPage';
+import ApiStatusPage from './pages/ApiStatusPage';
 import { useAuth } from './hooks/useAuth';
 import { apiClient } from './api/client';
 import './App.css';
@@ -377,10 +381,10 @@ export default function App() {
             <Route path="/management/roles" element={<ComingSoon section="Roles & Permissions" description="Configure access levels per user and team." issue={76} />} />
 
             {/* Platform Admin */}
-            <Route path="/admin/users" element={<ComingSoon section="User Management" description="Platform-wide user administration." issue={78} />} />
-            <Route path="/admin/data-quality" element={<ComingSoon section="Data Quality" description="Monitor sync status, incomplete matches and data freshness." issue={78} />} />
-            <Route path="/admin/api-status" element={<ComingSoon section="API Status" description="pred.gg connection health, sync logs and error counts." issue={78} />} />
-            <Route path="/admin/audit-logs" element={<ComingSoon section="Audit Logs" description="History of platform operations and security events." issue={78} />} />
+            <Route path="/admin/users" element={<UsersPage />} />
+            <Route path="/admin/data-quality" element={<DataQualityPage />} />
+            <Route path="/admin/api-status" element={<ApiStatusPage />} />
+            <Route path="/admin/audit-logs" element={<AuditLogsPage />} />
 
             {/* Backward compatibility redirects */}
             <Route path="/players" element={<Navigate to="/analysis/players" replace />} />

@@ -913,6 +913,10 @@ export const apiClient = {
     stopCron: () => fetchApi<{ ok: boolean; cron: CronJob }>('/admin/sync-cron/stop', { method: 'POST' }),
     runCronNow: () => fetchApi<{ ok: boolean; message: string }>('/admin/sync-cron/run-now', { method: 'POST' }),
     cronStatus: () => fetchApi<CronJob>('/admin/sync-cron/status'),
+    users: () => fetchApi<{ users: unknown[] }>('/admin/users'),
+    updateUser: (id: string, data: { isActive?: boolean; globalRole?: string }) =>
+      fetchApi<{ user: unknown }>(`/admin/users/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+    apiStatus: () => fetchApi<unknown>('/admin/api-status'),
     syncLogs: (limit = 50, entity?: string, status?: string) => {
       const params = new URLSearchParams({ limit: String(limit) });
       if (entity) params.set('entity', entity);
