@@ -4,6 +4,7 @@ import { useNavigate, useLocation } from 'react-router';
 import { HeroAvatarWithTooltip } from '../components/HeroAvatar';
 import { RankIcon, getRankColor } from '../components/RankIcon';
 import { useHeroMeta, normalizeHeroSlug } from '../hooks/useHeroMeta';
+import { useConfig } from '../hooks/useConfig';
 import {
   Activity,
   AlertCircle,
@@ -1229,12 +1230,15 @@ function EvolutionSection({ matches }: { matches: RecentMatch[] }) {
 
 function HeroStatCard({ hero }: { hero: PlayerProfile['heroStats'][number] }) {
   const heroMeta = useHeroMeta();
+  const config = useConfig();
   const meta = heroMeta.get(hero.heroData.slug ?? '') ?? null;
   const matches = hero.matches ?? hero.wins + hero.losses;
   const winrate = typeof hero.winRate === 'number' ? hero.winRate : matches > 0 ? Math.round((hero.wins / matches) * 1000) / 10 : 0;
+  const pocketPickWr = config.get('display_pocket_pick_wr') ?? 60;
+  const pocketPickMinGames = config.get('display_pocket_pick_max_games') ?? 20;
   const deaths = Math.max(hero.deaths, 1);
   const kda = (hero.kills + hero.assists) / deaths;
-  const isPocketPick = matches >= 20 && winrate >= 60;
+  const isPocketPick = matches >= pocketPickMinGames && winrate >= pocketPickWr;
 
   return (
     <div style={{ border: isPocketPick ? '1px solid rgba(240,179,41,0.55)' : '1px solid var(--border-color)', borderRadius: 'var(--radius-sm)', padding: '0.85rem', background: isPocketPick ? 'rgba(240,179,41,0.04)' : 'rgba(255,255,255,0.03)' }}>

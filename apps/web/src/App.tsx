@@ -26,6 +26,7 @@ import AuditLogsPage from './pages/AuditLogsPage';
 import UsersPage from './pages/UsersPage';
 import ProfilePage from './pages/ProfilePage';
 import ApiStatusPage from './pages/ApiStatusPage';
+import ConfigPage from './pages/ConfigPage';
 import { useAuth } from './hooks/useAuth';
 import { apiClient } from './api/client';
 import './App.css';
@@ -209,6 +210,7 @@ const sections: SidebarSection[] = [
       { to: '/admin/data-quality', label: 'Data Quality' },
       { to: '/admin/api-status', label: 'API Status' },
       { to: '/admin/audit-logs', label: 'Audit Logs' },
+      { to: '/admin/config', label: 'Configuración' },
     ],
   },
 ];
@@ -386,6 +388,7 @@ export default function App() {
             <Route path="/admin/users" element={<UsersPage />} />
             <Route path="/profile" element={<ProfilePage />} />
             <Route path="/admin/data-quality" element={<DataQualityPage />} />
+            <Route path="/admin/config" element={<ConfigPage />} />
             <Route path="/admin/api-status" element={<ApiStatusPage />} />
             <Route path="/admin/audit-logs" element={<AuditLogsPage />} />
 

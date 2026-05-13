@@ -387,6 +387,20 @@ model PlatformCredential {
   updatedAt DateTime @updatedAt
 }
 
+model PlatformConfig {
+  key         String   @id
+  value       Float
+  defaultValue Float
+  minValue    Float?
+  maxValue    Float?
+  label       String
+  description String
+  group       String   // 'analyst' | 'display'
+  unit        String?  // 's', 'gold', '%', 'partidas', 'wards/min'
+  updatedAt   DateTime @updatedAt
+  updatedBy   String?
+}
+
 model HeroMeta {
   id          String   @id @default(cuid())
   slug        String   @unique  // pred.gg slug (canonical)
