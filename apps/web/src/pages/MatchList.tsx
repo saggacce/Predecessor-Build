@@ -45,7 +45,7 @@ export default function MatchList() {
         </div>
         {showLinkModal && (
           <LinkPlayerModal
-            onLinked={(pid) => { setShowLinkModal(false); navigate(\`/analysis/players?id=\${pid}\`); }}
+            onLinked={(pid) => { setShowLinkModal(false); navigate(`/analysis/players?id=${pid}`); }}
             onClose={() => setShowLinkModal(false)}
           />
         )}
