@@ -76,7 +76,7 @@ export async function getTeamInsights(teamId: string): Promise<Insight[]> {
     JOIN "Match" m ON m.id = mp."matchId"
     WHERE mp."playerId" = ANY(${rosterPlayerIds}::text[])
       AND m."eventStreamSynced" = true
-    GROUP BY mp."matchId", mp."team", m."winningTeam"
+    GROUP BY mp."matchId", m."startTime", mp."team", m."winningTeam"
     HAVING COUNT(DISTINCT mp."playerId") >= 3
     ORDER BY m."startTime" DESC
     LIMIT 30
