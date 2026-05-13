@@ -154,9 +154,7 @@ const sections: SidebarSection[] = [
     id: 'matches',
     label: 'Matches',
     icon: <Film size={17} />,
-    items: [
-      { to: '/matches', label: 'Match List' },
-    ],
+    to: '/matches',
   },
   {
     id: 'analysis',
@@ -166,8 +164,8 @@ const sections: SidebarSection[] = [
     items: [
       { to: '/analysis/teams', label: 'Team Analysis' },
       { to: '/analysis/players', label: 'Player Analysis' },
-      { to: '/analysis/draft', label: 'Draft Analysis' },
       { to: '/analysis/rival', label: 'Rival Scouting' },
+      { to: '/analysis/draft', label: 'Draft Analysis' },
     ],
   },
   {
@@ -176,9 +174,8 @@ const sections: SidebarSection[] = [
     icon: <Wrench size={17} />,
     items: [
       { to: '/tools/review', label: 'Review Queue' },
-      { to: '/tools/goals', label: 'Team Goals' },
-      { to: '/tools/board', label: 'Tactical Board' },
       { to: '/tools/vod', label: 'VOD Index' },
+      { to: '/tools/board', label: 'Tactical Board' },
       { to: '/tools/scrims', label: 'Scrim Planner' },
     ],
   },
@@ -187,10 +184,9 @@ const sections: SidebarSection[] = [
     label: 'Reports',
     icon: <FileText size={17} />,
     items: [
-      { to: '/reports/scrim', label: 'Scrim Reports' },
-      { to: '/reports/weekly', label: 'Weekly Team' },
+      { to: '/reports/scrim', label: 'Scrim Report' },
+      { to: '/reports/weekly', label: 'Weekly Reports' },
       { to: '/reports/players', label: 'Player Development' },
-      { to: '/reports/rival', label: 'Rival Scouting' },
     ],
   },
   {
@@ -198,8 +194,8 @@ const sections: SidebarSection[] = [
     label: 'Team Management',
     icon: <Users size={17} />,
     items: [
+      { to: '/management/staff', label: 'Staff & Invitations' },
       { to: '/management/teams', label: 'Teams & Rosters' },
-      { to: '/management/staff', label: 'Staff' },
       { to: '/management/roles', label: 'Roles & Permissions' },
     ],
   },
@@ -364,7 +360,7 @@ export default function App() {
 
             {/* Team Tools */}
             <Route path="/tools/review" element={<ReviewQueue />} />
-            <Route path="/tools/goals" element={<ReviewQueue />} />
+            <Route path="/tools/goals" element={<Navigate to="/tools/review" replace />} />
             <Route path="/tools/board" element={<ComingSoon section="Tactical Board" description="Free-form tactical planning board over the Predecessor map." issue={53} />} />
             <Route path="/tools/vod" element={<VodIndex />} />
             <Route path="/tools/scrims" element={<ComingSoon section="Scrim Planner" description="Plan scrims with focus areas linked to team goals." issue={64} />} />
@@ -373,7 +369,7 @@ export default function App() {
             <Route path="/reports/scrim" element={<ScrimReport />} />
             <Route path="/reports/weekly" element={<ComingSoon section="Weekly Team Reports" description="Aggregated weekly performance summary for the coaching staff." />} />
             <Route path="/reports/players" element={<ComingSoon section="Player Development Reports" description="Individual player progress reports over time." />} />
-            <Route path="/reports/rival" element={<ComingSoon section="Rival Scouting Reports" description="Full scouting report for opponent teams." />} />
+            <Route path="/reports/rival" element={<Navigate to="/analysis/rival" replace />} />
 
             {/* Team Management */}
             <Route path="/management/teams" element={<ComingSoon section="Teams & Rosters" description="Create and manage teams, rosters and player assignments." issue={72} />} />

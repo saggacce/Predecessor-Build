@@ -63,15 +63,18 @@ function SyncStatusTab() {
 
   async function refresh() {
     try {
-      const [s, logs] = await Promise.all([
-        apiClient.admin.syncStatus(),
-        apiClient.admin.syncLogs(10, 'sync:cron').catch(() => ({ logs: [] })),
-      ]);
+      const s = await apiClient.admin.syncStatus();
       setStatus(s);
-      setSyncHistory(logs.logs);
       if (!s.eventStreamJob.running) setOptimisticRunning(false);
-    } catch { /* silent */ }
-    finally { setLoading(false); }
+      // Load cron history separately — don't block on failure
+      apiClient.admin.syncLogs(10, 'sync:cron')
+        .then((res) => setSyncHistory(res.logs))
+        .catch(() => null);
+    } catch (err) {
+      console.error('sync status failed:', err);
+    } finally {
+      setLoading(false);
+    }
   }
 
   useEffect(() => { void refresh(); }, []);

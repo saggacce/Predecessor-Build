@@ -917,10 +917,11 @@ export const apiClient = {
     updateUser: (id: string, data: { isActive?: boolean; globalRole?: string }) =>
       fetchApi<{ user: unknown }>(`/admin/users/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
     apiStatus: () => fetchApi<unknown>('/admin/api-status'),
-    syncLogs: (limit = 50, entity?: string, status?: string) => {
+    syncLogs: (limit = 50, entity?: string, status?: string, source?: string) => {
       const params = new URLSearchParams({ limit: String(limit) });
       if (entity) params.set('entity', entity);
       if (status) params.set('status', status);
+      if (source) params.set('source', source);
       return fetchApi<{ logs: SyncLog[]; total: number }>(`/admin/sync-logs?${params}`);
     },
   },

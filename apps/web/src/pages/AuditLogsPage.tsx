@@ -32,12 +32,8 @@ export default function AuditLogsPage() {
   useEffect(() => {
     if (!isAdmin) return;
     setLoading(true);
-    apiClient.admin.syncLogs(300, entityFilter || undefined, statusFilter || undefined)
-      .then((res) => {
-        const filtered = sourceFilter ? res.logs.filter((l: SyncLog) => l.source === sourceFilter) : res.logs;
-        setLogs(filtered);
-        setTotal(res.total);
-      })
+    apiClient.admin.syncLogs(300, entityFilter || undefined, statusFilter || undefined, sourceFilter || undefined)
+      .then((res) => { setLogs(res.logs); setTotal(res.total); })
       .catch(() => toast.error('Failed to load audit logs'))
       .finally(() => setLoading(false));
   }, [entityFilter, statusFilter, sourceFilter, isAdmin]);
