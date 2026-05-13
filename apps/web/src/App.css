@@ -50,8 +50,8 @@
   font-weight: 800;
   line-height: 1;
   letter-spacing: -0.01em;
-  /* teal → blue gradient matching the favicon palette */
-  background: linear-gradient(120deg, var(--accent-teal-bright) 0%, var(--accent-blue) 65%, var(--accent-violet) 100%);
+  /* violet → blue gradient for Rift Line brand */
+  background: linear-gradient(120deg, #c4b5fd 0%, var(--accent-violet) 45%, var(--accent-blue) 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
