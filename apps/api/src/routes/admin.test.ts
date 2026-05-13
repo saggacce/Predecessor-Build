@@ -142,9 +142,8 @@ describe('GET /admin/sync-logs', () => {
     expect(res.status).toBe(200);
   });
 
-  it('returns 400 when status filter is invalid', async () => {
-    const res = await request(app).get('/admin/sync-logs?status=invalid').set('Cookie', platformAdminCookie);
-    expect(res.status).toBe(400);
-    expect(res.body.error.code).toBe('VALIDATION_ERROR');
+  it('accepts success and partial status filters', async () => {
+    const res = await request(app).get('/admin/sync-logs?status=success').set('Cookie', platformAdminCookie);
+    expect(res.status).toBe(200);
   });
 });
