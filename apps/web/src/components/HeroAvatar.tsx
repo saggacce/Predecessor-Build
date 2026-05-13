@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import type { HeroMeta } from '../api/client';
+import { normalizeHeroSlug } from '../hooks/useHeroMeta';
 
 const ROLE_ICON_SLUG: Record<string, string> = {
   CARRY: 'carry', SUPPORT: 'support', JUNGLE: 'jungle',
@@ -34,8 +35,10 @@ export function HeroAvatarWithTooltip({ slug, name, imageUrl, meta, size, rounde
   const [tipPos, setTipPos] = useState({ top: 0, left: 0 });
   const containerRef = useRef<HTMLDivElement>(null);
 
-  const localSrc = slug ? `/heroes/${slug}.webp` : null;
-  const src = !imgErr && localSrc ? localSrc : (imageUrl ?? null);
+  // Local asset first (served from /assets/heroes/ via proxy), omeda.city as fallback
+  const normalizedSlug = slug ? normalizeHeroSlug(slug) : null;
+  const localSrc = normalizedSlug ? `/heroes/${normalizedSlug}.webp` : null;
+  const src = !imgErr ? (localSrc ?? meta?.imageUrl ?? imageUrl ?? null) : (meta?.imageUrl ?? imageUrl ?? null);
 
   const displayName = meta?.displayName ?? name ?? slug ?? 'Hero';
   const initials = displayName.split(/[\s_\-&]+/).filter(Boolean).map((p: string) => p[0]).join('').slice(0, 2).toUpperCase();

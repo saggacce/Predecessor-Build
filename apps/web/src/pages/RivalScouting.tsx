@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router';
 import { Shield, TrendingUp, TrendingDown, Minus, AlertTriangle, Target } from 'lucide-react';
 import { toast } from 'sonner';
 import { apiClient, ApiErrorResponse, type TeamProfile, type RivalScoutingReport } from '../api/client';
+import { useHeroMeta, normalizeHeroSlug } from '../hooks/useHeroMeta';
 
 const ROLE_COLORS: Record<string, string> = {
   carry: '#f0b429', jungle: '#7fd66b', midlane: '#a78bfa',
@@ -250,7 +251,7 @@ export default function RivalScouting() {
                       <div style={{ display: 'flex', gap: '0.25rem', justifyContent: 'flex-end' }}>
                         {p.topHeroes.slice(0, 4).map((h) => (
                           <div key={h.heroSlug} title={`${h.heroSlug} · ${h.games}g · ${h.winRate}% WR`} style={{ width: 26, height: 26, borderRadius: 5, overflow: 'hidden', border: '1px solid var(--border-color)', flexShrink: 0 }}>
-                            <img src={`/heroes/${h.heroSlug}.webp`} alt={h.heroSlug} style={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                            <img src={`/heroes/${normalizeHeroSlug(h.heroSlug)}.webp`} alt={h.heroSlug} style={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
                           </div>
                         ))}
                       </div>

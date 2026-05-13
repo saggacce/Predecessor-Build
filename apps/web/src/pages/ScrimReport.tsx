@@ -10,6 +10,7 @@ import {
   type RivalScoutingReport,
   ApiErrorResponse,
 } from '../api/client';
+import { useHeroMeta, normalizeHeroSlug } from '../hooks/useHeroMeta';
 
 const ROLE_ORDER = ['carry', 'jungle', 'midlane', 'offlane', 'support'];
 const ROLE_LABELS: Record<string, string> = {
@@ -250,7 +251,7 @@ export default function ScrimReport() {
                 {banTargets.map((h, i) => (
                   <div key={`${h.playerId}-${h.heroSlug}`} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.5rem 0.75rem', border: `1px solid ${i === 0 ? '#ef4444' : i <= 1 ? '#f97316' : 'var(--border-color)'}`, borderRadius: '8px', background: i === 0 ? 'rgba(239,68,68,0.08)' : 'rgba(255,255,255,0.02)' }}>
                     <div style={{ width: 32, height: 32, borderRadius: 6, overflow: 'hidden', flexShrink: 0 }}>
-                      <img src={`/heroes/${h.heroSlug}.webp`} alt={h.heroSlug} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                      <img src={`/heroes/${normalizeHeroSlug(h.heroSlug)}.webp`} alt={h.heroSlug} style={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
                     </div>
                     <div>
                       <div style={{ fontWeight: 700, fontSize: '0.8rem', textTransform: 'capitalize' }}>{h.heroSlug}</div>
@@ -335,7 +336,7 @@ export default function ScrimReport() {
                         <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
                           {(heroPool.length > 0 ? heroPool.map((h) => ({ slug: h.heroSlug, label: `${h.games}g ${h.winRate}% WR` })) : member.topHeroes.slice(0, 5).map((h) => ({ slug: h.slug, label: `${h.wins}W/${h.losses}L` }))).map((h) => (
                             <div key={h.slug} title={`${h.slug} · ${h.label}`} style={{ width: 28, height: 28, borderRadius: 5, overflow: 'hidden', border: '1px solid var(--border-color)', background: 'var(--bg-card)', flexShrink: 0 }}>
-                              <img src={`/heroes/${h.slug}.webp`} alt={h.slug} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                              <img src={`/heroes/${normalizeHeroSlug(h.slug)}.webp`} alt={h.slug} style={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
                             </div>
                           ))}
                         </div>

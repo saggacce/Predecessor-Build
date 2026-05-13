@@ -341,6 +341,8 @@ function DataControlsTab() {
       fn: async () => { const r = await apiClient.admin.syncIncompleteMatches(); return `${r.synced} matches synced · ${r.errors} errors`; } },
     { key: 'fixids', label: 'Fix HeroKill Player IDs', desc: 'Repair event stream records referencing pred.gg UUIDs instead of internal IDs.',
       fn: async () => { const r = await apiClient.admin.fixHeroKillPlayerIds(); return `Updated ${r.heroKillsUpdated} kills · ${r.objectiveKillsUpdated} objectives · ${r.wardEventsUpdated} wards`; } },
+    { key: 'heroes', label: 'Sync Hero Metadata', desc: 'Fetch all heroes from omeda.city and upsert classes, roles and image URLs into DB.',
+      fn: async () => { const r = await apiClient.admin.syncHeroes(); return `${r.synced} heroes synced · ${r.errors} errors`; } },
   ];
 
   return (

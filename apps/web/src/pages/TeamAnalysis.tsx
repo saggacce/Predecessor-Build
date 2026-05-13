@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type ChangeEvent, type CSSProperties, type
 import { createPortal } from 'react-dom';
 import { Link } from 'react-router';
 import { RankIcon } from '../components/RankIcon';
+import { useHeroMeta, normalizeHeroSlug } from '../hooks/useHeroMeta';
 import {
   Users,
   Shield,
@@ -925,6 +926,7 @@ function DraftBanRates({ ownBans, receivedBans, rankedSampleSize }: {
 function DraftHeroPool({ playerDepth, playerById }: {
   playerDepth: TeamDraftAnalysis['playerDepth']; playerById: Map<string, TeamProfile['roster'][number]>;
 }) {
+  const heroMeta = useHeroMeta();
   if (playerDepth.length === 0) return <DraftEmptyState text="No hero pool data found for this roster." />;
   const sorted = [...playerDepth].sort((a, b) => b.heroCount - a.heroCount);
   return (
@@ -1034,9 +1036,18 @@ function HeroDraftCard({ heroSlug, children }: { heroSlug: string; children: Rea
 }
 
 function HeroIcon({ heroSlug, size }: { heroSlug: string; size: number }) {
+  const heroMeta = useHeroMeta();
+  const [imgErr, setImgErr] = useState(false);
+  const meta = heroMeta.get(heroSlug);
+  const label = meta?.displayName ?? formatHeroName(heroSlug);
+  const localSrc = `/heroes/${normalizeHeroSlug(heroSlug)}.webp`;
+  const src = !imgErr ? localSrc : (meta?.imageUrl ?? null);
   return (
     <div style={{ width: size, height: size, borderRadius: 6, overflow: 'hidden', border: '1px solid var(--border-color)', background: 'var(--bg-dark)', flexShrink: 0 }}>
-      <img src={`/heroes/${heroSlug}.webp`} alt={formatHeroName(heroSlug)} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+      {src
+        ? <img src={src} alt={label} style={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={() => setImgErr(true)} />
+        : <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: Math.max(8, size * 0.28), fontWeight: 700, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>{label.slice(0, 2).toUpperCase()}</div>
+      }
     </div>
   );
 }
@@ -1531,7 +1542,7 @@ function PerformanceTab({ teamId, analysis, loading, onRefresh }: {
                   return (
                   <div key={h.slug} title={`${h.name} · ${h.matches} games · ${h.winRate.toFixed(1)}% WR${isPocketPick ? ' · Pocket pick' : ''}`} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.2rem' }}>
                     <div style={{ width: 32, height: 32, borderRadius: 6, overflow: 'hidden', border: isPocketPick ? '1px solid var(--accent-prime)' : '1px solid var(--border-color)', background: 'var(--bg-dark)', boxShadow: isPocketPick ? '0 0 6px rgba(240,180,41,0.4)' : 'none' }}>
-                      <img src={`/heroes/${h.slug}.webp`} alt={h.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                      <img src={`/heroes/${normalizeHeroSlug(h.slug)}.webp`} alt={h.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
                     </div>
                     <div style={{ fontSize: '0.55rem', fontFamily: 'var(--font-mono)', color: isPocketPick ? 'var(--accent-prime)' : h.winRate >= 55 ? 'var(--accent-win)' : h.winRate < 45 ? 'var(--accent-loss)' : 'var(--text-muted)' }}>
                       {h.winRate.toFixed(0)}%
@@ -1735,7 +1746,7 @@ function ScoutingReport({ playerStats, heroPool }: { playerStats: PlayerAnalysis
               <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
                 {heroes.map((h) => (
                   <div key={h.heroSlug} title={`${h.heroSlug} · ${h.games}g · ${h.winRate}% WR`} style={{ width: 28, height: 28, borderRadius: 5, overflow: 'hidden', border: '1px solid var(--border-color)', background: 'var(--bg-dark)', flexShrink: 0 }}>
-                    <img src={`/heroes/${h.heroSlug}.webp`} alt={h.heroSlug} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    <img src={`/heroes/${normalizeHeroSlug(h.heroSlug)}.webp`} alt={h.heroSlug} style={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
                   </div>
                 ))}
                 {depth <= 2 && (
@@ -1760,7 +1771,7 @@ function ScoutingReport({ playerStats, heroPool }: { playerStats: PlayerAnalysis
               return (
                 <div key={`${h.playerId}-${h.heroSlug}`} style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', padding: '0.35rem 0.6rem', border: `1px solid ${i === 0 ? '#ef4444' : i <= 2 ? '#f97316' : 'var(--border-color)'}`, borderRadius: '6px', background: i === 0 ? 'rgba(239,68,68,0.08)' : 'rgba(255,255,255,0.02)' }}>
                   <div style={{ width: 24, height: 24, borderRadius: 4, overflow: 'hidden', flexShrink: 0 }}>
-                    <img src={`/heroes/${h.heroSlug}.webp`} alt={h.heroSlug} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    <img src={`/heroes/${normalizeHeroSlug(h.heroSlug)}.webp`} alt={h.heroSlug} style={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
                   </div>
                   <div>
                     <div style={{ fontSize: '0.72rem', fontWeight: 700, textTransform: 'capitalize' }}>{h.heroSlug}</div>
