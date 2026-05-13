@@ -40,12 +40,15 @@ const OWN_HEROES: Record<string, string[]> = {
   support: ['feng-mao', 'wraith'], // wraith compartido con jungle
 };
 
-const RIVAL_HEROES: Record<string, string> = {
-  carry:   'gadget',
-  jungle:  'grux',
-  midlane: 'murdock',
-  offlane: 'gideon',
-  support: 'belica',
+// Solapamientos rival intencionados:
+//   'rampage' → jungle alt + offlane alt (overlap)
+//   'gideon'  → midlane alt + offlane main (overlap)
+const RIVAL_HEROES: Record<string, string[]> = {
+  carry:   ['gadget', 'sparrow'],
+  jungle:  ['grux', 'rampage'],   // rampage compartido con offlane
+  midlane: ['murdock', 'gideon'], // gideon compartido con offlane
+  offlane: ['gideon', 'rampage'], // gideon compartido con midlane, rampage con jungle
+  support: ['belica', 'aurora'],
 };
 
 // Héroes de ban — pool más amplio para variedad
@@ -156,7 +159,7 @@ async function seed() {
   // ── Players — héroe fijo por rol ───────────────────────────────────────────
 
   const ownPlayers: { id: string; role: string; heroes: string[] }[] = [];
-  const rivalPlayers: { id: string; role: string; heroSlug: string }[] = [];
+  const rivalPlayers: { id: string; role: string; heroes: string[] }[] = [];
 
   for (const role of ROLES) {
     const ownPlayer = await db.player.upsert({
@@ -173,7 +176,7 @@ async function seed() {
       create: { predggId: `qa-rival-${role}`, predggUuid: `qa-rival-${role}-uuid`, displayName: `${QA_TAG} rival-${role}`, lastSynced: new Date() },
       update: {},
     });
-    rivalPlayers.push({ id: rivalPlayer.id, role, heroSlug: RIVAL_HEROES[role] });
+    rivalPlayers.push({ id: rivalPlayer.id, role, heroes: RIVAL_HEROES[role] });
     const existingRival = await db.teamRoster.findFirst({ where: { teamId: rivalTeam.id, playerId: rivalPlayer.id } });
     if (!existingRival) await db.teamRoster.create({ data: { teamId: rivalTeam.id, playerId: rivalPlayer.id, role } });
   }
@@ -278,7 +281,7 @@ async function seed() {
           playerName: `QA-rival-${p.role}`,
           team: rivalSide,
           role: p.role,
-          heroSlug: p.heroSlug,
+          heroSlug: Math.random() > 0.25 ? p.heroes[0] : p.heroes[1],
           kills,
           deaths,
           assists: rand(1, 14),
@@ -313,8 +316,8 @@ async function seed() {
           gameTime,
           killerTeam,
           killedTeam,
-          killerHeroSlug: killerPlayer.heroSlug,
-          killedHeroSlug: killedPlayer.heroSlug,
+          killerHeroSlug: killerPlayer.heroes[0],
+          killedHeroSlug: killedPlayer.heroes[0],
           killerPlayerId: killerPlayer.id,
           killedPlayerId: killedPlayer.id,
           locationX: rand(-7000, 7000),
