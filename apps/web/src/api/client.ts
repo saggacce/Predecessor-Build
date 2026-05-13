@@ -673,7 +673,8 @@ export interface SessionUser {
   id: string;
   email: string;
   name: string;
-  globalRole: 'PLATFORM_ADMIN' | 'VIEWER' | string;
+  globalRole: 'PLATFORM_ADMIN' | 'PLAYER' | 'VIEWER' | string;
+  linkedPlayerId: string | null;
   memberships: SessionMembership[];
 }
 

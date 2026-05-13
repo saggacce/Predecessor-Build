@@ -188,9 +188,43 @@ const createPlayerGoalSchema = z.object({
   visibility: z.enum(['staff', 'player', 'all']).default('staff'),
 });
 
-reviewRouter.get('/goals/player/:teamId', requireAuth, requireRole(staffRoles), async (req, res, next) => {
+
+/**
+ * GET /review/goals/player/self — own player goals for standalone PLAYER accounts
+ * Auth only — no team role required. Uses user.linkedPlayerId.
+ */
+reviewRouter.get('/goals/player/self', requireAuth, async (req, res, next) => {
   try {
+    const user = req.user;
+    if (!user?.linkedPlayerId) {
+      res.json({ goals: [] });
+      return;
+    }
+    // Find a team that contains this player to query goals (or return all goals for this player)
+    const goals = await db.playerGoal.findMany({
+      where: { playerId: user.linkedPlayerId },
+      orderBy: { createdAt: 'desc' },
+    });
+    res.json({ goals });
+  } catch (err) { next(err); }
+});
+
+reviewRouter.get('/goals/player/:teamId', requireAuth, async (req, res, next) => {
+  try {
+    const user = req.user!;
     const playerId = req.query.playerId ? String(req.query.playerId) : undefined;
+    // Allow: staff roles of the team OR the player viewing their own goals
+    const membership = user.memberships.find((m) => m.teamId === req.params.teamId);
+    const isStaff = user.globalRole === 'PLATFORM_ADMIN' ||
+      (membership && staffRoles.includes(membership.role));
+    const isOwnGoals = playerId && (
+      membership?.playerId === playerId ||
+      user.linkedPlayerId === playerId
+    );
+    if (!isStaff && !isOwnGoals) {
+      res.status(403).json({ error: { message: 'Insufficient permissions', code: 'FORBIDDEN' } });
+      return;
+    }
     const goals = await listPlayerGoals(req.params.teamId, playerId);
     res.json({ goals });
   } catch (err) { next(err); }
