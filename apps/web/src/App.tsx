@@ -405,8 +405,11 @@ function AppContent() {
     return () => document.removeEventListener('mousemove', onMouseMove);
   }, []);
 
+  // While checking auth: render nothing to avoid flash of wrong content
+  if (internalLoading) return null;
+
   // Unauthenticated: show landing/login/register without sidebar
-  if (!internalLoading && !internalAuthenticated) {
+  if (!internalAuthenticated) {
     return (
       <Routes>
         <Route path="/login" element={<Login />} />
