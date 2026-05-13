@@ -689,13 +689,19 @@ export async function syncPlayerByName(
 export async function syncStalePlayers(db: PrismaClient, userToken?: string): Promise<SyncResult & { total: number }> {
   const staleThreshold = new Date(Date.now() - STALE_THRESHOLD_MS);
   const stalePlayers = await db.player.findMany({
-    where: { lastSynced: { lt: staleThreshold }, displayName: { not: 'HIDDEN' } },
+    where: {
+      lastSynced: { lt: staleThreshold },
+      displayName: { not: 'HIDDEN' },
+      isConsole: false,   // console players have no pred.gg account — skip
+    },
     select: { displayName: true },
     orderBy: { lastSynced: 'asc' }, // oldest first
     take: STALE_SYNC_BATCH,
   });
 
-  const total = await db.player.count({ where: { lastSynced: { lt: staleThreshold } } });
+  const total = await db.player.count({
+    where: { lastSynced: { lt: staleThreshold }, displayName: { not: 'HIDDEN' }, isConsole: false },
+  });
   const result: SyncResult & { total: number } = { synced: 0, skipped: 0, errors: 0, total };
 
   // Process in chunks of STALE_CONCURRENCY
