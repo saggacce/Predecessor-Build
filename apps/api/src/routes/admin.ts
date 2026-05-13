@@ -71,7 +71,7 @@ adminRouter.post('/sync-stale', async (req, res, next) => {
 const logsQuerySchema = z.object({
   limit: z.coerce.number().int().positive().max(500).default(50),
   entity: z.string().optional(),
-  status: z.enum(['ok', 'error', 'skipped']).optional(),
+  status: z.string().optional(),
 });
 
 /**
@@ -490,17 +490,36 @@ adminRouter.get('/sync-event-streams/status', async (_req, res) => {
  */
 const logsQuerySchemaFull = logsQuerySchema.extend({ source: z.string().optional() });
 
+// Map source filter to entity patterns for logs that predate the source field
+function sourceToEntityFilter(source: string): object {
+  const map: Record<string, string> = {
+    'cron': 'sync:cron',
+    'user': 'sync:on-demand',
+  };
+  if (map[source]) {
+    return { OR: [{ source }, { entity: map[source] }] };
+  }
+  if (source === 'event-stream') {
+    return { OR: [{ source }, { entity: 'match', operation: 'event-stream' }] };
+  }
+  if (source === 'admin') {
+    return { OR: [{ source }, { entity: { in: ['player', 'match', 'version', 'Invitation'] }, source: null }] };
+  }
+  return { source };
+}
+
 adminRouter.get('/sync-logs', async (req, res, next) => {
   try {
     const { limit, entity, status, source } = logsQuerySchemaFull.parse(req.query);
-    const total = await db.syncLog.count({
-      where: { ...(entity && { entity }), ...(status && { status }), ...(source && { source }) },
-    });
-    const logs = await db.syncLog.findMany({
-      where: { ...(entity && { entity }), ...(status && { status }), ...(source && { source }) },
-      orderBy: { syncedAt: 'desc' },
-      take: limit,
-    });
+    const where = {
+      ...(entity && { entity }),
+      ...(status && { status }),
+      ...(source && sourceToEntityFilter(source)),
+    };
+    const [total, logs] = await Promise.all([
+      db.syncLog.count({ where }),
+      db.syncLog.findMany({ where, orderBy: { syncedAt: 'desc' }, take: limit }),
+    ]);
     res.json({ logs, total });
   } catch (err) {
     next(err);
