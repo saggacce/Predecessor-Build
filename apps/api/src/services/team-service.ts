@@ -587,7 +587,7 @@ export async function getTeamPhaseAnalysis(teamId: string): Promise<TeamPhaseAna
     JOIN "Match" m ON m.id = mp."matchId"
     WHERE mp."playerId" = ANY(${rosterPlayerIds}::text[])
       AND m."eventStreamSynced" = true
-    GROUP BY mp."matchId", m."predggUuid", mp."team", m."winningTeam"
+    GROUP BY mp."matchId", m."predggUuid", m."startTime", mp."team", m."winningTeam"
     HAVING COUNT(DISTINCT mp."playerId") >= 3
     ORDER BY m."startTime" DESC
     LIMIT 50
@@ -740,7 +740,7 @@ export async function getTeamVisionAnalysis(teamId: string): Promise<TeamVisionA
     JOIN "Match" m ON m.id = mp."matchId"
     WHERE mp."playerId" = ANY(${rosterPlayerIds}::text[])
       AND m."eventStreamSynced" = true
-    GROUP BY mp."matchId", mp."team", m."winningTeam"
+    GROUP BY mp."matchId", m."startTime", mp."team", m."winningTeam"
     HAVING COUNT(DISTINCT mp."playerId") >= 3
     ORDER BY m."startTime" DESC
     LIMIT 50
@@ -1012,7 +1012,7 @@ export async function getTeamObjectiveAnalysis(teamId: string): Promise<TeamObje
     JOIN "Match" m ON m.id = mp."matchId"
     WHERE mp."playerId" = ANY(${rosterPlayerIds}::text[])
       AND m."eventStreamSynced" = true
-    GROUP BY mp."matchId", mp."team"
+    GROUP BY mp."matchId", m."startTime", mp."team"
     HAVING COUNT(DISTINCT mp."playerId") >= 3
     ORDER BY m."startTime" DESC
     LIMIT 50
@@ -1166,7 +1166,7 @@ export async function getTeamDraftAnalysis(teamId: string): Promise<TeamDraftAna
     FROM "MatchPlayer" mp
     JOIN "Match" m ON m.id = mp."matchId"
     WHERE mp."playerId" = ANY(${rosterPlayerIds}::text[])
-    GROUP BY mp."matchId", mp."team", m."winningTeam", m."gameMode"
+    GROUP BY mp."matchId", m."startTime", mp."team", m."winningTeam", m."gameMode"
     HAVING COUNT(DISTINCT mp."playerId") >= 3
     ORDER BY m."startTime" DESC
     LIMIT 60
