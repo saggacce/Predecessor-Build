@@ -331,24 +331,24 @@ function Sidebar() {
 
         <div className="sidebar-auth-divider" />
 
-        {loading ? (
-          <div className="session-state muted">
-            <Loader size={14} style={{ animation: 'spin 1s linear infinite' }} />
-            Checking pred.gg...
-          </div>
-        ) : authenticated ? (
-          <button onClick={handlePredggLogout} className="btn-auth btn-auth-logout" type="button">
-            <LogOut size={16} /> Logout pred.gg
-          </button>
-        ) : (
-          <a href={apiClient.auth.loginUrl()} className="btn-auth btn-auth-login">
-            <LogIn size={16} /> Login with pred.gg
-          </a>
+        {/* pred.gg auth — only visible to platform admins (token used for sync) */}
+        {user?.globalRole === 'PLATFORM_ADMIN' && (
+          loading ? (
+            <div className="session-state muted">
+              <Loader size={14} style={{ animation: 'spin 1s linear infinite' }} />
+              Checking pred.gg...
+            </div>
+          ) : authenticated ? (
+            <button onClick={handlePredggLogout} className="btn-auth btn-auth-logout" type="button">
+              <LogOut size={16} /> Logout pred.gg
+            </button>
+          ) : (
+            <a href={apiClient.auth.loginUrl()} className="btn-auth btn-auth-login">
+              <LogIn size={16} /> Login with pred.gg
+            </a>
+          )
         )}
-        {!loading && !authenticated && (
-          <p className="sidebar-note">Login to enable player search and stats</p>
-        )}
-        {!loading && authenticated && (
+        {user?.globalRole === 'PLATFORM_ADMIN' && !loading && authenticated && (
           <p className="sidebar-note connected">pred.gg connected</p>
         )}
       </div>
