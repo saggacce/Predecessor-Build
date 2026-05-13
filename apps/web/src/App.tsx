@@ -363,6 +363,7 @@ export default function App() {
   return (
     <BrowserRouter>
       <AppContent />
+      <Toaster position="bottom-right" theme="dark" richColors closeButton />
     </BrowserRouter>
   );
 }
@@ -443,7 +444,5 @@ function AppContent() {
           </Routes>
         </main>
       </div>
-      <Toaster position="bottom-right" theme="dark" richColors closeButton />
-    </BrowserRouter>
   );
 }
