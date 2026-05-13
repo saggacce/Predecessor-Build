@@ -554,8 +554,8 @@ adminRouter.patch('/users/:id', async (req, res, next) => {
       email: z.string().email().optional(),
       isActive: z.boolean().optional(),
       globalRole: z.enum(['PLATFORM_ADMIN', 'VIEWER']).optional(),
-      tier: z.enum(['FREE', 'PRO', 'TEAM', 'ENTERPRISE']).optional(),
-      tierExpiresAt: z.string().datetime().optional().nullable(),
+      playerTier: z.enum(['FREE', 'PRO', 'PREMIUM']).optional(),
+      playerTierExpiresAt: z.string().datetime().optional().nullable(),
     }).parse(req.body);
 
     const user = await db.user.update({
@@ -565,10 +565,10 @@ adminRouter.patch('/users/:id', async (req, res, next) => {
         ...(body.email && { email: body.email }),
         ...(typeof body.isActive === 'boolean' && { isActive: body.isActive }),
         ...(body.globalRole && { globalRole: body.globalRole }),
-        ...(body.tier && { tier: body.tier }),
-        ...(body.tierExpiresAt !== undefined && { tierExpiresAt: body.tierExpiresAt ? new Date(body.tierExpiresAt) : null }),
+        ...(body.playerTier && { playerTier: body.playerTier }),
+        ...(body.playerTierExpiresAt !== undefined && { playerTierExpiresAt: body.playerTierExpiresAt ? new Date(body.playerTierExpiresAt) : null }),
       },
-      include: { memberships: { include: { team: { select: { id: true, name: true } } } } },
+      include: { memberships: { include: { team: { select: { id: true, name: true, teamTier: true } } } } },
     });
     res.json({ user });
   } catch (err) { next(err); }
@@ -662,5 +662,29 @@ adminRouter.post('/config/:key/reset', requireAuth, requirePlatformAdmin, async 
     const userId = (req as { user?: { id: string } }).user?.id ?? 'unknown';
     const updated = await resetConfigValue(db, req.params.key, userId);
     res.json({ config: updated });
+  } catch (err) { next(err); }
+});
+
+/**
+ * PATCH /admin/teams/:id/tier — update a team's tier (PLATFORM_ADMIN only)
+ */
+adminRouter.patch('/teams/:id/tier', async (req, res, next) => {
+  try {
+    const body = z.object({
+      teamTier: z.enum(['FREE', 'PRO', 'TEAM', 'ENTERPRISE']),
+      teamTierExpiresAt: z.string().datetime().optional().nullable(),
+    }).parse(req.body);
+
+    const team = await db.team.update({
+      where: { id: req.params.id },
+      data: {
+        teamTier: body.teamTier,
+        ...(body.teamTierExpiresAt !== undefined && {
+          teamTierExpiresAt: body.teamTierExpiresAt ? new Date(body.teamTierExpiresAt) : null,
+        }),
+      },
+      select: { id: true, name: true, type: true, teamTier: true, teamTierExpiresAt: true },
+    });
+    res.json({ team });
   } catch (err) { next(err); }
 });

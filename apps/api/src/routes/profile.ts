@@ -3,6 +3,7 @@ import { z } from 'zod';
 import bcrypt from 'bcryptjs';
 import { db } from '../db.js';
 import { requireAuth } from '../middleware/require-auth.js';
+import { getEffectiveAccess, getAccessSummary } from '../services/tier-access.js';
 
 export const profileRouter = Router();
 profileRouter.use(requireAuth);
@@ -11,11 +12,21 @@ const SAFE_USER_SELECT = {
   id: true, email: true, name: true, globalRole: true, isActive: true,
   createdAt: true, lastLoginAt: true,
   avatarUrl: true, bio: true, timezone: true,
-  tier: true, tierExpiresAt: true,
+  playerTier: true, playerTierExpiresAt: true,
   discordId: true, discordUsername: true,
   epicGamesId: true, epicGamesUsername: true,
   steamId: true, steamUsername: true,
-  memberships: { select: { role: true, team: { select: { id: true, name: true, type: true } } } },
+  memberships: {
+    select: {
+      role: true,
+      team: {
+        select: {
+          id: true, name: true, type: true,
+          teamTier: true, teamTierExpiresAt: true,
+        },
+      },
+    },
+  },
 };
 
 // GET /profile — own profile
@@ -114,5 +125,29 @@ profileRouter.delete('/social/:provider', async (req, res, next) => {
 
     await db.user.update({ where: { id: userId }, data: fieldMap[provider] });
     res.json({ ok: true });
+  } catch (err) { next(err); }
+});
+
+// GET /profile/access — effective tier access for the authenticated user
+profileRouter.get('/access', async (req, res, next) => {
+  try {
+    const userId = (req as { user?: { id: string } }).user!.id;
+    const user = await db.user.findUnique({
+      where: { id: userId },
+      select: {
+        playerTier: true, playerTierExpiresAt: true,
+        memberships: {
+          select: {
+            team: {
+              select: { type: true, teamTier: true, teamTierExpiresAt: true },
+            },
+          },
+        },
+      },
+    });
+    if (!user) { res.status(404).json({ error: { message: 'User not found' } }); return; }
+    const access = getEffectiveAccess(user);
+    const features = getAccessSummary(access);
+    res.json({ access, features });
   } catch (err) { next(err); }
 });

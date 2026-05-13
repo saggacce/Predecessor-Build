@@ -10,18 +10,20 @@ interface PlatformUser {
   name: string;
   globalRole: string;
   isActive: boolean;
-  tier: string;
-  tierExpiresAt: string | null;
+  playerTier: string;
+  playerTierExpiresAt: string | null;
   createdAt: string;
   lastLoginAt: string | null;
-  memberships: Array<{ id: string; role: string; team: { id: string; name: string } }>;
+  memberships: Array<{ id: string; role: string; team: { id: string; name: string; type: string; teamTier: string } }>;
 }
 
-const TIER_COLORS: Record<string, string> = {
-  FREE: 'var(--text-muted)',
-  PRO: 'var(--accent-blue)',
-  TEAM: 'var(--accent-teal-bright)',
-  ENTERPRISE: 'var(--accent-prime)',
+const PLAYER_TIER_COLORS: Record<string, string> = {
+  FREE: 'var(--text-muted)', PRO: 'var(--accent-blue)', PREMIUM: 'var(--accent-prime)',
+};
+
+const TEAM_TIER_COLORS: Record<string, string> = {
+  FREE: 'var(--text-muted)', PRO: 'var(--accent-blue)',
+  TEAM: 'var(--accent-teal-bright)', ENTERPRISE: 'var(--accent-prime)',
 };
 
 const ROLE_COLORS: Record<string, string> = {
@@ -74,9 +76,9 @@ export default function UsersPage() {
     setEditName(u.name);
     setEditEmail(u.email);
     setEditRole(u.globalRole);
-    setEditTier(u.tier ?? 'FREE');
+    setEditTier(u.playerTier ?? 'FREE');
     setEditActive(u.isActive);
-    setEditTierExpiry(u.tierExpiresAt ? u.tierExpiresAt.slice(0, 10) : '');
+    setEditTierExpiry(u.playerTierExpiresAt ? u.playerTierExpiresAt.slice(0, 10) : '');
   }
 
   async function saveEdit() {
@@ -87,10 +89,10 @@ export default function UsersPage() {
       if (editName !== editUser.name) payload.name = editName;
       if (editEmail !== editUser.email) payload.email = editEmail;
       if (editRole !== editUser.globalRole) payload.globalRole = editRole;
-      if (editTier !== editUser.tier) payload.tier = editTier;
+      if (editTier !== editUser.playerTier) payload.playerTier = editTier;
       if (editActive !== editUser.isActive) payload.isActive = editActive;
-      if (editTierExpiry !== (editUser.tierExpiresAt?.slice(0, 10) ?? '')) {
-        payload.tierExpiresAt = editTierExpiry ? new Date(editTierExpiry).toISOString() : null;
+      if (editTierExpiry !== (editUser.playerTierExpiresAt?.slice(0, 10) ?? '')) {
+        payload.playerTierExpiresAt = editTierExpiry ? new Date(editTierExpiry).toISOString() : null;
       }
 
       if (Object.keys(payload).length === 0) { setEditUser(null); return; }
@@ -126,7 +128,7 @@ export default function UsersPage() {
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
           {/* Header row */}
           <div className="glass-card" style={{ display: 'grid', gridTemplateColumns: '1fr 100px 90px 150px 100px 80px', gap: '1rem', padding: '0.45rem 1.25rem', fontSize: '0.62rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-            <span>Usuario</span><span>Rol global</span><span>Tier</span><span>Membresías</span><span>Último login</span><span>Acciones</span>
+            <span>Usuario</span><span>Rol global</span><span>Player Tier</span><span>Membresías</span><span>Último login</span><span>Acciones</span>
           </div>
 
           {users.map((u) => (
@@ -144,8 +146,8 @@ export default function UsersPage() {
                 </span>
               </div>
               <div>
-                <span style={{ fontSize: '0.68rem', fontWeight: 700, color: TIER_COLORS[u.tier ?? 'FREE'] ?? 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
-                  <Star size={10} style={{ color: TIER_COLORS[u.tier ?? 'FREE'] }} /> {u.tier ?? 'FREE'}
+                <span style={{ fontSize: '0.68rem', fontWeight: 700, color: TIER_COLORS[u.playerTier ?? 'FREE'] ?? 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                  <Star size={10} style={{ color: TIER_COLORS[u.playerTier ?? 'FREE'] }} /> {u.playerTier ?? 'FREE'}
                 </span>
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
@@ -220,7 +222,7 @@ export default function UsersPage() {
                   <label style={{ fontSize: '0.72rem', color: 'var(--text-muted)', display: 'block', marginBottom: '0.25rem' }}>Tier</label>
                   <select value={editTier} onChange={(e) => setEditTier(e.target.value)}
                     style={{ width: '100%', padding: '0.42rem 0.55rem', background: 'var(--bg-dark)', border: '1px solid var(--border-color)', borderRadius: 6, color: 'var(--text-primary)', fontSize: '0.82rem' }}>
-                    {['FREE', 'PRO', 'TEAM', 'ENTERPRISE'].map((t) => <option key={t} value={t}>{t}</option>)}
+                    {['FREE', 'PRO', 'PREMIUM'].map((t) => <option key={t} value={t}>{t}</option>)}
                   </select>
                 </div>
               </div>

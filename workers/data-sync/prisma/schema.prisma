@@ -61,6 +61,11 @@ model Team {
   notes        String?
   createdAt    DateTime @default(now())
 
+  // Team subscription tier — only meaningful for OWN teams
+  // FREE | PRO | TEAM | ENTERPRISE
+  teamTier         String    @default("FREE")
+  teamTierExpiresAt DateTime?
+
   roster       TeamRoster[]
   memberships  TeamMembership[]
   llmAnalyses  LlmAnalysis[]
@@ -266,10 +271,10 @@ model User {
   bio          String?
   timezone     String?
 
-  // Membership tier — future feature gating
-  // FREE | PRO | TEAM | ENTERPRISE
-  tier         String   @default("FREE")
-  tierExpiresAt DateTime?
+  // Individual player tier — personal features (stats, personal insights, LLM coach)
+  // FREE | PRO | PREMIUM
+  playerTier         String    @default("FREE")
+  playerTierExpiresAt DateTime?
 
   // Social connections — OAuth flows implemented per-provider
   discordId       String? @unique
