@@ -4,6 +4,7 @@ import { Server, Zap, RefreshCw, CheckCircle, XCircle, ArrowRight, Users, Sparkl
 import { toast } from 'sonner';
 import { apiClient, ApiErrorResponse, type TeamProfile, type TeamAnalysis, type PlayerProfile } from '../api/client';
 import { useAuth } from '../hooks/useAuth';
+import { useViewAs } from '../hooks/useViewAs';
 import { LinkPlayerModal } from '../components/LinkPlayerModal';
 import type { VersionRecord } from '@predecessor/data-model';
 
@@ -79,6 +80,7 @@ function TeamFormStrip({ analysis }: { analysis: TeamAnalysis | null }) {
 // ── Main dashboard ────────────────────────────────────────────────────────────
 export default function Dashboard() {
   const { user, internalAuthenticated } = useAuth();
+  const { viewAs } = useViewAs();
   const [healthStatus, setHealthStatus] = useState<'checking' | 'ok' | 'error'>('checking');
   const [latestPatch, setLatestPatch] = useState<VersionRecord | null>(null);
   const [syncState, setSyncState] = useState<SyncState>({ tag: 'idle' });
@@ -90,9 +92,13 @@ export default function Dashboard() {
   const [userCount, setUserCount] = useState<number | null>(null);
 
   // Determine role
-  const isPlatformAdmin = user?.globalRole === 'PLATFORM_ADMIN';
+  // If admin is previewing as a role, use the simulated role
+  const isPlatformAdmin = !viewAs && user?.globalRole === 'PLATFORM_ADMIN';
   const ownMembership = ownTeam ? user?.memberships?.find((m) => m.teamId === ownTeam.id) : null;
-  const teamRole = ownMembership?.role ?? null; // MANAGER | COACH | ANALISTA | JUGADOR
+  const effectiveTeamRole = viewAs && ['MANAGER','COACH','ANALISTA','JUGADOR'].includes(viewAs)
+    ? viewAs as 'MANAGER' | 'COACH' | 'ANALISTA' | 'JUGADOR'
+    : (ownMembership?.role ?? null);
+  const teamRole = effectiveTeamRole;
   const isManager = teamRole === 'MANAGER';
   const isCoach = teamRole === 'COACH';
   const isAnalista = teamRole === 'ANALISTA';
@@ -454,7 +460,7 @@ export default function Dashboard() {
       )}
 
       {/* ── Standalone PLAYER (no team) ──────────────────────────────────── */}
-      {!isPlatformAdmin && !ownTeam && (
+      {!isPlatformAdmin && (!ownTeam || viewAs === 'PLAYER') && (
         <PlayerStandaloneView />
       )}
     </div>

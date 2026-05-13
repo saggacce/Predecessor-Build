@@ -31,6 +31,7 @@ import FeedbackPage from './pages/FeedbackPage';
 import { FeedbackButton } from './components/FeedbackButton';
 import LandingPage from './pages/LandingPage';
 import { useAuth } from './hooks/useAuth';
+import { ViewAsProvider, useViewAs, type ViewAsRole } from './hooks/useViewAs';
 import { apiClient } from './api/client';
 import './App.css';
 
@@ -73,6 +74,11 @@ function WorkspaceHeader() {
       )}
 
       <div className="workspace-meta">
+        {/* View As role selector — admin only */}
+        {isAdmin && (
+          <ViewAsSelector />
+        )}
+
         {/* Patch badge — everyone */}
         {latestPatch && (
           <div className="workspace-chip">
@@ -267,6 +273,7 @@ const sections: SidebarSection[] = [
 
 function Sidebar() {
   const { authenticated, loading, user, internalLoading } = useAuth();
+  const { viewAs } = useViewAs();
   const location = useLocation();
   const [feedbackUnread, setFeedbackUnread] = useState(0);
 
@@ -336,17 +343,19 @@ function Sidebar() {
       <nav className="sidebar-nav">
         {sections
           .filter((section) => {
-            const isPlayer = user?.globalRole === 'PLAYER';
-            const hasTeam = (user?.memberships?.length ?? 0) > 0;
-            const isStandalone = isPlayer || (!hasTeam && user?.globalRole !== 'PLATFORM_ADMIN');
-            if (section.id === 'admin') return user?.globalRole === 'PLATFORM_ADMIN';
+            const effectiveRole = viewAs ?? user?.globalRole;
+            const isPlayer = effectiveRole === 'PLAYER';
+            const hasTeam = viewAs ? ['MANAGER','COACH','ANALISTA','JUGADOR'].includes(viewAs) : (user?.memberships?.length ?? 0) > 0;
+            const isStandalone = isPlayer || (!hasTeam && effectiveRole !== 'PLATFORM_ADMIN');
+            if (section.id === 'admin') return !viewAs && user?.globalRole === 'PLATFORM_ADMIN';
             if (['tools', 'management'].includes(section.id) && isStandalone) return false;
             return true;
           })
           .map((section) => {
-            const isPlayer = user?.globalRole === 'PLAYER';
-            const hasTeam = (user?.memberships?.length ?? 0) > 0;
-            const isStandalone = isPlayer || (!hasTeam && user?.globalRole !== 'PLATFORM_ADMIN');
+            const effectiveRole = viewAs ?? user?.globalRole;
+            const isPlayer = effectiveRole === 'PLAYER';
+            const hasTeam = viewAs ? ['MANAGER','COACH','ANALISTA','JUGADOR'].includes(viewAs) : (user?.memberships?.length ?? 0) > 0;
+            const isStandalone = isPlayer || (!hasTeam && effectiveRole !== 'PLATFORM_ADMIN');
             const filteredSection = isStandalone && section.items ? {
               ...section,
               items: section.id === 'analysis'
@@ -395,13 +404,56 @@ function WeeklyReportsPage() {
   );
 }
 
+
+// ── View As Role selector (admin only) ───────────────────────────────────────
+const VIEW_AS_OPTIONS: Array<{ value: ViewAsRole; label: string; color: string }> = [
+  { value: null,       label: 'Admin (real)',  color: 'var(--accent-teal-bright)' },
+  { value: 'MANAGER',  label: 'Manager',       color: 'var(--accent-blue)' },
+  { value: 'COACH',    label: 'Coach',         color: 'var(--accent-violet)' },
+  { value: 'ANALISTA', label: 'Analista',      color: 'var(--accent-prime)' },
+  { value: 'JUGADOR',  label: 'Jugador',       color: '#7fd66b' },
+  { value: 'PLAYER',   label: 'Player (solo)', color: 'var(--accent-loss)' },
+];
+
+function ViewAsSelector() {
+  const { viewAs, setViewAs } = useViewAs();
+  const current = VIEW_AS_OPTIONS.find(o => o.value === viewAs) ?? VIEW_AS_OPTIONS[0];
+
+  return (
+    <div style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+      <span style={{ fontSize: '0.55rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Vista:</span>
+      <select
+        value={viewAs ?? ''}
+        onChange={(e) => setViewAs((e.target.value || null) as ViewAsRole)}
+        style={{
+          padding: '0.18rem 0.5rem',
+          background: viewAs ? `${current.color}18` : 'transparent',
+          border: `1px solid ${viewAs ? current.color + '55' : 'var(--border-color)'}`,
+          borderRadius: 5,
+          color: current.color,
+          fontSize: '0.68rem',
+          fontWeight: 700,
+          cursor: 'pointer',
+          outline: 'none',
+        }}
+      >
+        {VIEW_AS_OPTIONS.map(o => (
+          <option key={String(o.value)} value={o.value ?? ''}>{o.label}</option>
+        ))}
+      </select>
+    </div>
+  );
+}
+
 // ── App ───────────────────────────────────────────────────────────────────────
 
 export default function App() {
   return (
     <BrowserRouter>
-      <AppContent />
-      <Toaster position="bottom-right" theme="dark" richColors closeButton />
+      <ViewAsProvider>
+        <AppContent />
+          <Toaster position="bottom-right" theme="dark" richColors closeButton />
+      </ViewAsProvider>
     </BrowserRouter>
   );
 }
