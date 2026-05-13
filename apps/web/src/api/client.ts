@@ -142,7 +142,9 @@ export interface HeroMeta {
   displayName: string;
   classes: string[];
   roles: string[];
-  icon: string | null;
+  imageUrl: string | null;
+  abilities?: unknown[];
+  baseStats?: Record<string, number[]>;
 }
 
 export interface MatchPlayerDetail {
@@ -897,6 +899,8 @@ export const apiClient = {
   },
 
   admin: {
+    syncHeroes: () =>
+      fetchApi<{ ok: boolean; synced: number; errors: number }>('/admin/sync-heroes', { method: 'POST' }),
     syncVersions: () =>
       fetchApi<AdminSyncVersionsResult>('/admin/sync-versions', { method: 'POST' }),
     syncStale: () =>

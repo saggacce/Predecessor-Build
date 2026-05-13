@@ -5,6 +5,7 @@
 import { Prisma, PrismaClient } from '@prisma/client';
 import { AppError } from '../middleware/error-handler.js';
 import { logger } from '../logger.js';
+import { syncHeroMeta } from './hero-meta-service.js';
 
 const GQL_URL = process.env.PRED_GG_GQL_URL ?? 'https://pred.gg/gql';
 const API_KEY = process.env.PRED_GG_CLIENT_SECRET;
@@ -757,6 +758,11 @@ export async function syncVersionsFromPredgg(db: PrismaClient): Promise<number> 
   await db.syncLog.create({
     data: { entity: 'version', entityId: 'all', operation: 'upsert', status: 'ok' },
   });
+
+  // When new versions are detected, refresh hero meta (abilities/stats may change per patch)
+  if (upserted > 0) {
+    syncHeroMeta(db).catch((err) => logger.warn({ err }, 'hero-meta: background sync failed'));
+  }
 
   logger.info({ upserted, elapsed: Date.now() - start }, 'versions sync complete');
   return upserted;

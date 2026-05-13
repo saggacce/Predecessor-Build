@@ -34,8 +34,8 @@ export function HeroAvatarWithTooltip({ slug, name, imageUrl, meta, size, rounde
   const [tipPos, setTipPos] = useState({ top: 0, left: 0 });
   const containerRef = useRef<HTMLDivElement>(null);
 
-  const localSrc = slug ? `/heroes/${slug}.webp` : null;
-  const src = !imgErr && localSrc ? localSrc : (imageUrl ?? null);
+  // Prefer omeda.city URL from meta, then pred.gg CDN imageUrl prop as fallback
+  const src = !imgErr ? (meta?.imageUrl ?? imageUrl ?? null) : null;
 
   const displayName = meta?.displayName ?? name ?? slug ?? 'Hero';
   const initials = displayName.split(/[\s_\-&]+/).filter(Boolean).map((p: string) => p[0]).join('').slice(0, 2).toUpperCase();

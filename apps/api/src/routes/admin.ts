@@ -11,6 +11,8 @@ import {
   syncMatchEventStream,
   resyncMatch,
 } from '../services/sync-service.js';
+import { syncHeroMeta } from '../services/hero-meta-service.js';
+import { invalidateHeroMetaCache } from './hero-meta.js';
 import { getValidToken, exchangeToken, COOKIE_REFRESH } from './auth.js';
 import { requireAuth } from '../middleware/require-auth.js';
 import { requirePlatformAdmin } from '../middleware/require-platform-admin.js';
@@ -598,4 +600,18 @@ adminRouter.get('/api-status', async (_req, res, next) => {
       lastSuccessfulSync: lastSuccess,
     });
   } catch (err) { next(err); }
+});
+
+/**
+ * POST /admin/sync-heroes
+ * Fetch all heroes from omeda.city and upsert into HeroMeta table.
+ */
+adminRouter.post('/sync-heroes', requireAuth, requirePlatformAdmin, async (_req, res, next) => {
+  try {
+    const result = await syncHeroMeta(db);
+    invalidateHeroMetaCache();
+    res.json({ ok: true, ...result });
+  } catch (err) {
+    next(err);
+  }
 });
