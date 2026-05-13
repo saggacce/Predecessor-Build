@@ -1381,8 +1381,10 @@ export async function getTeamRivalScouting(teamId: string): Promise<RivalScoutin
   const losses = last10.filter((r) => r === 'L').length;
   const firstHalf = last10.slice(0, 5).filter((r) => r === 'W').length;
   const secondHalf = last10.slice(5).filter((r) => r === 'W').length;
+  // firstHalf = most recent 5 matches, secondHalf = older 5
+  // More wins in recent half → improving; more wins in older half → declining
   const trend: 'improving' | 'declining' | 'stable' =
-    secondHalf > firstHalf + 1 ? 'improving' : firstHalf > secondHalf + 1 ? 'declining' : 'stable';
+    firstHalf > secondHalf + 1 ? 'improving' : secondHalf > firstHalf + 1 ? 'declining' : 'stable';
 
   // Per-player stats
   const playerMPs = await db.matchPlayer.findMany({
@@ -1494,9 +1496,9 @@ export async function getTeamRivalScouting(teamId: string): Promise<RivalScoutin
   const identity: string[] = [];
   if (avgKillDiff10 > 1.5) identity.push('Early Aggressor');
   if (fangPct > 58 || primePct > 58) identity.push('Objective Focused');
-  if (avgWinDur > avgLossDur + 180 && overallWR > 45) identity.push('Scaling');
+  if (avgWinDur > avgLossDur + 180 && overallWR > 45) identity.push('Late Game Scaling');
   if ((throwRate ?? 0) > 30) identity.push('Throw-prone');
-  if (avgKillDiff10 < -1) identity.push('Passive Early');
+  if (avgKillDiff10 < -1) identity.push('Passive Farmer');
   if (identity.length === 0) identity.push('Balanced');
 
   const strongPhase = avgKillDiff10 > 1 ? 'early' : overallWR > 55 && avgWinDur > 1800 ? 'late' : null;

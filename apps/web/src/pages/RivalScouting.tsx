@@ -22,13 +22,15 @@ const OBJ_COLORS: Record<string, string> = {
 };
 const PHASE_COLORS = { early: '#ef4444', mid: '#f0b429', late: '#3b82f6' };
 const IDENTITY_COLORS: Record<string, string> = {
-  'Early Aggressor': '#ef4444',
-  'Objective Focused': '#f0b429',
-  'Vision Heavy': '#38d4c8',
-  'Team Fight Oriented': '#a78bfa',
-  'Late Game Scaling': '#3b82f6',
-  'Comeback Specialist': '#4ade80',
-  'Passive Farmer': '#94a3b8',
+  'Early Aggressor':    '#ef4444',
+  'Objective Focused':  '#f0b429',
+  'Vision Heavy':       '#38d4c8',
+  'Team Fight Oriented':'#a78bfa',
+  'Late Game Scaling':  '#3b82f6',
+  'Comeback Specialist':'#4ade80',
+  'Passive Farmer':     '#94a3b8',
+  'Throw-prone':        '#f97316',
+  'Balanced':           '#64748b',
 };
 
 export default function RivalScouting() {
@@ -262,36 +264,39 @@ export default function RivalScouting() {
             </div>
           )}
 
-          {/* Objective Priority */}
-          {report.objectivePriority.length > 0 && (
-            <div className="glass-card" style={{ padding: '1rem 1.25rem' }}>
-              <div style={{ fontSize: '0.68rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: '1rem' }}>
-                Objective Priority
-              </div>
-              <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
-                {report.objectivePriority.map((o) => {
-                  const color = OBJ_COLORS[o.entityType] ?? '#64748b';
-                  const label = OBJ_LABELS[o.entityType] ?? o.entityType;
-                  const avgMin = o.avgGameTimeSecs ? Math.floor(o.avgGameTimeSecs / 60) : null;
-                  return (
-                    <div key={o.entityType} style={{ flex: '1 1 150px', padding: '0.75rem 1rem', border: `1px solid ${color}33`, borderRadius: '8px', background: `${color}08` }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginBottom: '0.5rem' }}>
-                        <div style={{ width: 7, height: 7, borderRadius: '50%', background: color, flexShrink: 0 }} />
-                        <span style={{ fontSize: '0.72rem', fontWeight: 700, color }}>{label}</span>
-                      </div>
-                      <div style={{ height: 5, borderRadius: 999, background: 'rgba(255,255,255,0.07)', overflow: 'hidden', marginBottom: '0.4rem' }}>
-                        <div style={{ height: '100%', width: `${o.controlPct}%`, background: color, borderRadius: 999 }} />
-                      </div>
-                      <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.72rem', fontWeight: 700, color }}>{o.controlPct}% control</div>
-                      {avgMin !== null && (
-                        <div style={{ fontSize: '0.62rem', color: 'var(--text-muted)', marginTop: '0.2rem' }}>avg at {avgMin}m</div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
+          {/* Objective Priority — always show all 5 objective types */}
+          <div className="glass-card" style={{ padding: '1rem 1.25rem' }}>
+            <div style={{ fontSize: '0.68rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: '1rem' }}>
+              Objective Priority
             </div>
-          )}
+            <div style={{ display: 'flex', gap: '0.65rem', flexWrap: 'wrap' }}>
+              {(['FANGTOOTH', 'PRIMAL_FANGTOOTH', 'ORB_PRIME', 'MINI_PRIME', 'SHAPER'] as const).map((type) => {
+                const found = report.objectivePriority.find((o) => o.entityType === type);
+                const color = OBJ_COLORS[type] ?? '#64748b';
+                const label = OBJ_LABELS[type] ?? type;
+                const ctrl = found?.controlPct ?? 0;
+                const avgMin = found?.avgGameTimeSecs ? Math.floor(found.avgGameTimeSecs / 60) : null;
+                const hasData = !!found;
+                return (
+                  <div key={type} style={{ flex: '1 1 130px', padding: '0.75rem 1rem', border: `1px solid ${hasData ? color + '33' : 'var(--border-color)'}`, borderRadius: '8px', background: hasData ? `${color}08` : 'transparent', opacity: hasData ? 1 : 0.45 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginBottom: '0.5rem' }}>
+                      <div style={{ width: 7, height: 7, borderRadius: '50%', background: color, flexShrink: 0 }} />
+                      <span style={{ fontSize: '0.72rem', fontWeight: 700, color }}>{label}</span>
+                    </div>
+                    <div style={{ height: 5, borderRadius: 999, background: 'rgba(255,255,255,0.07)', overflow: 'hidden', marginBottom: '0.4rem' }}>
+                      <div style={{ height: '100%', width: `${ctrl}%`, background: color, borderRadius: 999 }} />
+                    </div>
+                    <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.72rem', fontWeight: 700, color: hasData ? color : 'var(--text-muted)' }}>
+                      {hasData ? `${ctrl}% control` : 'sin datos'}
+                    </div>
+                    {avgMin !== null && (
+                      <div style={{ fontSize: '0.62rem', color: 'var(--text-muted)', marginTop: '0.2rem' }}>avg at {avgMin}m</div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
 
         </div>
       )}
