@@ -29,6 +29,7 @@ import ApiStatusPage from './pages/ApiStatusPage';
 import ConfigPage from './pages/ConfigPage';
 import FeedbackPage from './pages/FeedbackPage';
 import { FeedbackButton } from './components/FeedbackButton';
+import LandingPage from './pages/LandingPage';
 import { useAuth } from './hooks/useAuth';
 import { apiClient } from './api/client';
 import './App.css';
@@ -361,6 +362,30 @@ function Sidebar() {
 export default function App() {
   return (
     <BrowserRouter>
+      <AppContent />
+    </BrowserRouter>
+  );
+}
+
+function AppContent() {
+  const { internalAuthenticated, internalLoading } = useAuth();
+  const location = useLocation();
+
+  // Show landing page for unauthenticated users (except login/register routes)
+  const publicRoutes = ['/login', '/register', '/unauthorized'];
+  const isPublicRoute = publicRoutes.some((r) => location.pathname.startsWith(r));
+
+  if (!internalLoading && !internalAuthenticated && !isPublicRoute) {
+    return (
+      <Routes>
+        <Route path="*" element={<LandingPage />} />
+        <Route path="/login" element={<Login />} />
+        <Route path="/register/:token" element={<Register />} />
+      </Routes>
+    );
+  }
+
+  return (
       <div className="app-container">
         <Sidebar />
         <FeedbackButton />
