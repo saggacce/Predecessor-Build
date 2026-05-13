@@ -214,7 +214,7 @@ const sections: SidebarSection[] = [
     defaultOpen: true,
     items: [
       { to: '/analysis/teams', label: 'Team Analysis' },
-      { to: '/analysis/players', label: 'Player Analysis' },
+      { to: '/analysis/players', label: 'Player Scouting' },
       { to: '/analysis/rival', label: 'Rival Scouting' },
       { to: '/analysis/draft', label: 'Draft Analysis' },
     ],

@@ -362,3 +362,47 @@ pred.gg API → PrimeSight Backend → Analytics Engine → Notification Service
 - `docs/predgg_api_inventory.md`
 - `docs/primesight_indicators_catalog.csv`
 - `docs/primesight_visual_design_direction.md`
+
+---
+
+## Notas pendientes — Reportes diferenciados por tipo de usuario
+
+### Contexto
+La plataforma tiene dos perfiles de usuario distintos con necesidades de reporte completamente diferentes:
+
+**Equipos** (MANAGER / COACH / ANALISTA / JUGADOR en equipo):
+- Scrim Report: inteligencia pre-partido, ban targets, win conditions
+- Weekly Report: rendimiento del equipo, métricas colectivas
+- Player Development: análisis de mejora individual dentro del contexto del equipo
+
+**Jugadores individuales** (PLAYER sin equipo / `globalRole: 'PLAYER'`):
+- No tienen "coaching staff" ni scrim preparación
+- Necesitan: análisis de rendimiento personal, evolución de métricas, hero pool
+- Weekly summary: KDA, GPM, DPM, win rate, forma reciente de la semana
+- Sin referencias a equipo, objetivos colectivos ni ban targets
+
+### Trabajo pendiente (Reportes B2C)
+
+#### Weekly Performance Summary (PLAYER)
+- Endpoint: `GET /reports/player-weekly/:playerId`
+- Contenido: KDA semanal vs histórico, héroe más jugado, win rate 7d vs 30d,
+  mejora/bajada de métricas clave, partidas jugadas en la semana
+- UI: página separada en `/reports/weekly` con condicional por rol
+- Mostrar: trend up/down por métrica, comparativa con semana anterior
+
+#### Player Development (PLAYER vs JUGADOR en equipo)
+- Para JUGADOR en equipo: lo define el coach, vinculado a Player Goals
+- Para PLAYER individual: autogenerado desde sus propias métricas históricas
+  Sugerencias automáticas de mejora basadas en reglas (slump, hero pool, etc.)
+
+#### Scrim Report para jugadores
+- Un jugador individual no hace scrims contra equipos — esta sección no aplica
+- Considerar ocultarla en el sidebar para PLAYER role (ya se hace para `tools`)
+- O redirigir a Weekly Summary
+
+### Estado actual (Mayo 2026)
+- Mensaje del Scrim Report ya diferenciado: "coaching staff" vs "Aggregated weekly performance summary"
+- Sección Reports visible para PLAYER (Weekly Reports, Player Development) — contenido pendiente
+- El motor de insights ya tiene reglas individuales (slump KDA/GPM/DPM, KP, death share)
+  que son la base para los reportes personales
+
