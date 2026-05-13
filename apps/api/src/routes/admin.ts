@@ -237,15 +237,19 @@ adminRouter.get('/sync-status', async (_req, res, next) => {
       hiddenPlayers,
       totalMatches,
       matchesWithStream,
-      matchesNoPlayers,
+      noPlayersResult,
     ] = await Promise.all([
       db.player.count(),
       db.player.count({ where: { lastSynced: { lt: staleThreshold }, displayName: { not: 'HIDDEN' } } }),
       db.player.count({ where: { displayName: 'HIDDEN' } }),
       db.match.count(),
       db.match.count({ where: { eventStreamSynced: true } }),
-      db.match.count({ where: { matchPlayers: { none: {} } } }),
+      db.$queryRaw<[{ count: bigint }]>`
+        SELECT COUNT(*)::bigint AS count FROM "Match" m
+        WHERE NOT EXISTS (SELECT 1 FROM "MatchPlayer" mp WHERE mp."matchId" = m.id)
+      `,
     ]);
+    const matchesNoPlayers = Number(noPlayersResult[0]?.count ?? 0);
 
     const matchesWithPlayers = totalMatches - matchesNoPlayers;
     const matchesPartial = matchesWithPlayers - matchesWithStream;
