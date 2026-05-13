@@ -19,24 +19,29 @@ const SteamIcon = () => (
   </svg>
 );
 
-// Epic Games shield logo
+// Epic Games — white filled shield with dark EPIC GAMES text (official icon)
 const EpicIcon = () => (
-  <svg width="22" height="26" viewBox="0 0 200 240" fill="#fff">
-    {/* Shield outline */}
-    <path d="M100 0 L190 30 L190 140 Q190 200 100 240 Q10 200 10 140 L10 30 Z" fill="none" stroke="#fff" strokeWidth="12"/>
-    {/* EPIC text */}
-    <text x="100" y="115" textAnchor="middle" fill="#fff" fontSize="62" fontWeight="900" fontFamily="Arial Black, sans-serif" letterSpacing="-2">EPIC</text>
-    {/* GAMES text */}
-    <text x="100" y="158" textAnchor="middle" fill="#fff" fontSize="28" fontWeight="700" fontFamily="Arial, sans-serif" letterSpacing="6">GAMES</text>
-    {/* Bottom arrow */}
-    <path d="M85 185 L100 205 L115 185 Z" fill="#fff"/>
+  <svg width="28" height="30" viewBox="0 0 100 108" xmlns="http://www.w3.org/2000/svg">
+    {/* White filled shield */}
+    <path d="M8 5 H92 Q97 5 97 12 V66 Q97 92 50 106 Q3 92 3 66 V12 Q3 5 8 5 Z" fill="white"/>
+    {/* EPIC — dark text matching background */}
+    <text x="50" y="50" textAnchor="middle" dominantBaseline="middle"
+          fill="#1b2a3b" fontSize="36" fontWeight="900"
+          fontFamily="'Arial Black','Arial Bold',Arial,sans-serif">EPIC</text>
+    {/* GAMES — dark smaller text */}
+    <text x="50" y="71" textAnchor="middle" dominantBaseline="middle"
+          fill="#1b2a3b" fontSize="14" fontWeight="800"
+          fontFamily="Arial,sans-serif" letterSpacing="4">GAMES</text>
+    {/* Chevron arrow */}
+    <path d="M40 84 L50 93 L60 84" fill="none" stroke="#1b2a3b"
+          strokeWidth="5" strokeLinecap="round" strokeLinejoin="round"/>
   </svg>
 );
 
 const PROVIDERS = [
   { id: 'discord', label: 'Discord',    Icon: DiscordIcon, bg: '#5865F2', iconColor: '#fff' },
   { id: 'steam',   label: 'Steam',      Icon: SteamIcon,   bg: '#1b2838', iconColor: '#66c0f4' },
-  { id: 'epic',    label: 'Epic Games', Icon: EpicIcon,    bg: '#0f0f0f', iconColor: '#fff' },
+  { id: 'epic',    label: 'Epic Games', Icon: EpicIcon,    bg: '#1b2a3b', iconColor: '#fff' },
 ] as const;
 
 export default function Login() {
@@ -125,7 +130,7 @@ export default function Login() {
                 <button
                   disabled
                   style={{
-                    width: 52, height: 52,
+                    width: 64, height: 64,
                     borderRadius: 12,
                     border: 'none',
                     background: bg,
