@@ -21,6 +21,7 @@ import Login from './pages/Login';
 import Register from './pages/Register';
 import Unauthorized from './pages/Unauthorized';
 import StaffManagement from './pages/StaffManagement';
+import AdminPanel from './pages/AdminPanel';
 import { useAuth } from './hooks/useAuth';
 import { apiClient } from './api/client';
 import './App.css';
@@ -150,9 +151,7 @@ const sections: SidebarSection[] = [
     id: 'matches',
     label: 'Matches',
     icon: <Film size={17} />,
-    items: [
-      { to: '/matches', label: 'Match List' },
-    ],
+    to: '/matches',
   },
   {
     id: 'analysis',
@@ -162,8 +161,8 @@ const sections: SidebarSection[] = [
     items: [
       { to: '/analysis/teams', label: 'Team Analysis' },
       { to: '/analysis/players', label: 'Player Analysis' },
-      { to: '/analysis/draft', label: 'Draft Analysis' },
       { to: '/analysis/rival', label: 'Rival Scouting' },
+      { to: '/analysis/draft', label: 'Draft Analysis' },
     ],
   },
   {
@@ -172,9 +171,8 @@ const sections: SidebarSection[] = [
     icon: <Wrench size={17} />,
     items: [
       { to: '/tools/review', label: 'Review Queue' },
-      { to: '/tools/goals', label: 'Team Goals' },
-      { to: '/tools/board', label: 'Tactical Board' },
       { to: '/tools/vod', label: 'VOD Index' },
+      { to: '/tools/board', label: 'Tactical Board' },
       { to: '/tools/scrims', label: 'Scrim Planner' },
     ],
   },
@@ -183,10 +181,9 @@ const sections: SidebarSection[] = [
     label: 'Reports',
     icon: <FileText size={17} />,
     items: [
-      { to: '/reports/scrim', label: 'Scrim Reports' },
-      { to: '/reports/weekly', label: 'Weekly Team' },
+      { to: '/reports/scrim', label: 'Scrim Report' },
+      { to: '/reports/weekly', label: 'Weekly Reports' },
       { to: '/reports/players', label: 'Player Development' },
-      { to: '/reports/rival', label: 'Rival Scouting' },
     ],
   },
   {
@@ -194,8 +191,8 @@ const sections: SidebarSection[] = [
     label: 'Team Management',
     icon: <Users size={17} />,
     items: [
+      { to: '/management/staff', label: 'Staff & Invitations' },
       { to: '/management/teams', label: 'Teams & Rosters' },
-      { to: '/management/staff', label: 'Staff' },
       { to: '/management/roles', label: 'Roles & Permissions' },
     ],
   },
@@ -204,10 +201,9 @@ const sections: SidebarSection[] = [
     label: 'Platform Admin',
     icon: <Settings size={17} />,
     items: [
+      { to: '/admin/sync', label: 'Sync & Data' },
       { to: '/admin/users', label: 'Users' },
-      { to: '/admin/data-quality', label: 'Data Quality' },
       { to: '/admin/api-status', label: 'API Status' },
-      { to: '/admin/audit-logs', label: 'Audit Logs' },
     ],
   },
 ];
@@ -360,33 +356,34 @@ export default function App() {
 
             {/* Team Tools */}
             <Route path="/tools/review" element={<ReviewQueue />} />
-            <Route path="/tools/goals" element={<ReviewQueue />} />
             <Route path="/tools/board" element={<ComingSoon section="Tactical Board" description="Free-form tactical planning board over the Predecessor map." issue={53} />} />
             <Route path="/tools/vod" element={<VodIndex />} />
             <Route path="/tools/scrims" element={<ComingSoon section="Scrim Planner" description="Plan scrims with focus areas linked to team goals." issue={64} />} />
 
             {/* Reports */}
             <Route path="/reports/scrim" element={<ScrimReport />} />
-            <Route path="/reports/weekly" element={<ComingSoon section="Weekly Team Reports" description="Aggregated weekly performance summary for the coaching staff." />} />
-            <Route path="/reports/players" element={<ComingSoon section="Player Development Reports" description="Individual player progress reports over time." />} />
-            <Route path="/reports/rival" element={<ComingSoon section="Rival Scouting Reports" description="Full scouting report for opponent teams." />} />
+            <Route path="/reports/weekly" element={<ComingSoon section="Weekly Reports" description="Aggregated weekly performance summary for the coaching staff." />} />
+            <Route path="/reports/players" element={<ComingSoon section="Player Development" description="Individual player progress reports over time." />} />
 
             {/* Team Management */}
-            <Route path="/management/teams" element={<ComingSoon section="Teams & Rosters" description="Create and manage teams, rosters and player assignments." issue={72} />} />
             <Route path="/management/staff" element={<StaffManagement />} />
+            <Route path="/management/teams" element={<ComingSoon section="Teams & Rosters" description="Create and manage teams, rosters and player assignments." issue={72} />} />
             <Route path="/management/roles" element={<ComingSoon section="Roles & Permissions" description="Configure access levels per user and team." issue={76} />} />
 
             {/* Platform Admin */}
+            <Route path="/admin/sync" element={<AdminPanel />} />
             <Route path="/admin/users" element={<ComingSoon section="User Management" description="Platform-wide user administration." issue={78} />} />
-            <Route path="/admin/data-quality" element={<ComingSoon section="Data Quality" description="Monitor sync status, incomplete matches and data freshness." issue={78} />} />
             <Route path="/admin/api-status" element={<ComingSoon section="API Status" description="pred.gg connection health, sync logs and error counts." issue={78} />} />
-            <Route path="/admin/audit-logs" element={<ComingSoon section="Audit Logs" description="History of platform operations and security events." issue={78} />} />
 
-            {/* Backward compatibility redirects */}
+            {/* Redirects — old routes and removed pages */}
             <Route path="/players" element={<Navigate to="/analysis/players" replace />} />
             <Route path="/teams" element={<Navigate to="/analysis/teams" replace />} />
             <Route path="/scrims" element={<Navigate to="/reports/scrim" replace />} />
             <Route path="/review" element={<Navigate to="/tools/review" replace />} />
+            <Route path="/tools/goals" element={<Navigate to="/tools/review" replace />} />
+            <Route path="/reports/rival" element={<Navigate to="/analysis/rival" replace />} />
+            <Route path="/admin/data-quality" element={<Navigate to="/admin/sync" replace />} />
+            <Route path="/admin/audit-logs" element={<Navigate to="/admin/sync" replace />} />
           </Routes>
         </main>
       </div>
