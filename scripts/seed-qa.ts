@@ -138,46 +138,25 @@ async function seed() {
   for (const role of ROLES) {
     const heroSlug = pick(HEROES[role]);
 
-    // OWN player
-    const ownDisplayName = `${QA_TAG} ${role}-${heroSlug}`;
-    let ownPlayer = await db.player.findFirst({ where: { displayName: ownDisplayName } });
-    if (!ownPlayer) {
-      ownPlayer = await db.player.create({
-        data: {
-          predggId: `qa-own-${role}`,
-          predggUuid: `qa-own-${role}-uuid`,
-          displayName: ownDisplayName,
-          lastSynced: new Date(),
-        },
-      });
-    }
+    // OWN player — upsert by stable predggId
+    const ownPlayer = await db.player.upsert({
+      where: { predggId: `qa-own-${role}` },
+      create: { predggId: `qa-own-${role}`, predggUuid: `qa-own-${role}-uuid`, displayName: `${QA_TAG} ${role}-${heroSlug}`, lastSynced: new Date() },
+      update: {},
+    });
     ownPlayers.push({ id: ownPlayer.id, role });
-
-    // Add to own team roster if not already
     const existingOwn = await db.teamRoster.findFirst({ where: { teamId: ownTeam.id, playerId: ownPlayer.id } });
-    if (!existingOwn) {
-      await db.teamRoster.create({ data: { teamId: ownTeam.id, playerId: ownPlayer.id, role } });
-    }
+    if (!existingOwn) await db.teamRoster.create({ data: { teamId: ownTeam.id, playerId: ownPlayer.id, role } });
 
     // RIVAL player
-    const rivalDisplayName = `${QA_TAG} rival-${role}`;
-    let rivalPlayer = await db.player.findFirst({ where: { displayName: rivalDisplayName } });
-    if (!rivalPlayer) {
-      rivalPlayer = await db.player.create({
-        data: {
-          predggId: `qa-rival-${role}`,
-          predggUuid: `qa-rival-${role}-uuid`,
-          displayName: rivalDisplayName,
-          lastSynced: new Date(),
-        },
-      });
-    }
+    const rivalPlayer = await db.player.upsert({
+      where: { predggId: `qa-rival-${role}` },
+      create: { predggId: `qa-rival-${role}`, predggUuid: `qa-rival-${role}-uuid`, displayName: `${QA_TAG} rival-${role}`, lastSynced: new Date() },
+      update: {},
+    });
     rivalPlayers.push({ id: rivalPlayer.id, role });
-
     const existingRival = await db.teamRoster.findFirst({ where: { teamId: rivalTeam.id, playerId: rivalPlayer.id } });
-    if (!existingRival) {
-      await db.teamRoster.create({ data: { teamId: rivalTeam.id, playerId: rivalPlayer.id, role } });
-    }
+    if (!existingRival) await db.teamRoster.create({ data: { teamId: rivalTeam.id, playerId: rivalPlayer.id, role } });
   }
   console.log(`  ✓ 10 jugadores (5 OWN + 5 RIVAL) en roster`);
 
