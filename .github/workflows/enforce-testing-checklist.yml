@@ -1,0 +1,55 @@
+name: Enforce Testing Checklist
+
+on:
+  issues:
+    types: [closed]
+
+jobs:
+  check-all-boxes:
+    name: Verify all checkboxes are checked
+    runs-on: ubuntu-latest
+    # Only for testing issues
+    if: contains(github.event.issue.labels.*.name, 'testing')
+    permissions:
+      issues: write
+    steps:
+      - name: Check all boxes and reopen if incomplete
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const issue = context.payload.issue;
+            const body = issue.body || '';
+
+            // Count total and checked boxes
+            const total = (body.match(/- \[[ x]\]/g) || []).length;
+            const checked = (body.match(/- \[x\]/g) || []).length;
+            const pending = total - checked;
+
+            if (pending > 0) {
+              // Reopen the issue
+              await github.rest.issues.update({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issue.number,
+                state: 'open',
+              });
+
+              // Comment explaining why
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issue.number,
+                body: [
+                  `## ❌ No se puede cerrar — checklist incompleto`,
+                  ``,
+                  `Hay **${pending} de ${total}** items sin marcar.`,
+                  ``,
+                  `Completa todas las pruebas antes de cerrar este issue.`,
+                  `El deploy a producción no debe aprobarse hasta que todo esté validado.`,
+                ].join('\n'),
+              });
+
+              console.log(`Reopened issue #${issue.number} — ${pending}/${total} checks pending`);
+            } else {
+              console.log(`All ${total} checks completed — issue can be closed`);
+            }
