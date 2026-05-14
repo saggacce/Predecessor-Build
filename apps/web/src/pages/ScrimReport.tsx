@@ -294,7 +294,7 @@ export default function ScrimReport() {
                   const color: Record<string, string> = { FANGTOOTH: '#ef4444', PRIMAL_FANGTOOTH: '#b91c1c', ORB_PRIME: '#7c3aed', MINI_PRIME: '#a78bfa', SHAPER: '#c084fc' };
                   const c = color[o.entityType] ?? '#64748b';
                   const l = label[o.entityType] ?? o.entityType;
-                  const hasData = o.controlPct > 0 || (o as { count?: number }).count > 0;
+                  const hasData = o.controlPct > 0 || ((o as { count?: number }).count ?? 0) > 0;
                   return (
                     <div key={o.entityType} style={{ flex: '1 1 120px', padding: '0.75rem', border: `1px solid ${hasData ? c + '33' : 'var(--border-color)'}`, borderRadius: '8px', background: hasData ? `${c}08` : 'transparent', opacity: hasData ? 1 : 0.45 }}>
                       <div style={{ fontSize: '0.72rem', fontWeight: 700, color: hasData ? c : 'var(--text-muted)', marginBottom: '0.35rem' }}>{l}</div>

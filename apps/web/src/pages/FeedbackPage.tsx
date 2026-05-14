@@ -51,7 +51,7 @@ export default function FeedbackPage() {
       if (status !== 'NEW') setExpanded(null);
       toast.success(`Estado actualizado: ${STATUS_CONFIG[status].label}`);
     } catch { toast.error('Error al actualizar'); }
-    finally { setUpdating(false); setReviewNote(''); }
+    finally { setUpdating(null); setReviewNote(''); }
   }
 
   function toggleExpand(id: string) {

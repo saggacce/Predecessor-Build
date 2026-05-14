@@ -125,8 +125,8 @@ export default function MatchList() {
       <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
         {matches.map((m) => (
           <button
-            key={m.id}
-            onClick={() => navigate(`/matches/${m.id}`)}
+            key={m.matchId}
+            onClick={() => navigate(`/matches/${m.matchId}`)}
             style={{ display: 'flex', alignItems: 'center', gap: '1rem', padding: '0.85rem 1.1rem', background: 'var(--bg-card)', border: '1px solid var(--border-color)', borderRadius: 8, cursor: 'pointer', textAlign: 'left', width: '100%', transition: 'border-color 0.15s' }}
             onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--border-strong)'; }}
             onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--border-color)'; }}

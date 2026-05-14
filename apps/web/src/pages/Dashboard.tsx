@@ -52,7 +52,7 @@ function TeamFormStrip({ analysis }: { analysis: TeamAnalysis | null }) {
   const totalMatches = analysis ? analysis.teamWins + analysis.teamLosses : 0;
   const wr = totalMatches > 0 ? Math.round((analysis!.teamWins / totalMatches) * 100) : null;
   const last5 = analysis
-    ? analysis.recentMatches.slice(0, 5).map((m) => m.won)
+    ? analysis.teamMatches.slice(0, 5).map((m) => m.won)
     : [];
   const recentWins = last5.filter(Boolean).length;
   const onFire = last5.length >= 3 && last5.slice(0, 3).every(Boolean);
@@ -392,7 +392,7 @@ export default function Dashboard() {
                 <>
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '1rem' }}>
                     {[
-                      { label: 'KDA', value: playerProfile.generalStats?.kda?.toFixed(2) ?? '—', color: 'var(--accent-teal-bright)' },
+                      { label: 'KDA', value: (playerProfile.generalStats?.kda as number | undefined)?.toFixed(2) ?? '—', color: 'var(--accent-teal-bright)' },
                       { label: 'Partidas', value: playerProfile.recentMatches.length, color: 'var(--text-primary)' },
                       { label: 'Win Rate', value: playerProfile.generalStats?.winRate ? `${Math.round(playerProfile.generalStats.winRate as number)}%` : '—', color: 'var(--accent-prime)' },
                     ].map(({ label, value, color }) => (
