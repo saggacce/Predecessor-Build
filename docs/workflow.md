@@ -1,140 +1,138 @@
-# Workflow de trabajo del proyecto
-
-Este documento define el flujo operativo acordado entre el usuario y Claude
-para trabajar de forma iterativa sobre el repositorio local y GitHub.
+# Workflow de trabajo — RiftLine
 
 ---
 
-## 1. Flujo completo por tarea
+## Estrategia de ramas
 
 ```
-main (GitHub) → branch local → commits → push → PR → review → merge → main
+feature/xxx ──┐
+feature/yyy ──┤──→ develop ──→ (sprint PR) ──→ main ──→ [approval] ──→ riftline.app
+feature/zzz ──┘
 ```
 
-### Paso a paso
+| Rama | Propósito |
+|------|-----------|
+| `main` | Producción. Solo recibe PRs de sprint desde `develop`. Cada merge despliega con aprobación manual. |
+| `develop` | Acumulación de sprint. Aquí van todos los PRs de features/fixes. CI pasa pero NO hay deploy. |
+| `feat/*`, `fix/*`, etc. | Ramas de trabajo. Se abren contra `develop`, no contra `main`. |
 
-1. **Claude parte siempre desde `main` actualizado**
+---
+
+## 1. Flujo por feature (día a día)
+
+```
+develop → feat/mi-feature → commits → PR → CI → merge a develop
+```
+
+1. **Partir siempre de `develop` actualizado**
    ```bash
-   git checkout main
-   git pull origin main
+   git checkout develop && git pull origin develop
+   git checkout -b feat/descripcion-corta
    ```
 
-2. **Claude crea un branch descriptivo para la tarea**
-   ```bash
-   git checkout -b <tipo>/<descripcion-corta>
-   # Ejemplos:
-   # feat/player-profile-endpoint
-   # fix/stat-calculator-level-scaling
-   # docs/update-api-auth-section
-   ```
-
-3. **Claude trabaja localmente** — edita archivos, ejecuta validaciones.
-
-4. **Claude commitea en incrementos atómicos**
+2. **Trabajar, commitear en incrementos atómicos**
    ```bash
    git add <archivos-especificos>
-   git commit -m "tipo: descripción concisa en inglés"
+   git commit -m "feat: descripción en inglés imperativo"
    ```
 
-5. **Claude pushea el branch a GitHub** (autónomo — PAT configurado)
+3. **Push y PR hacia `develop`** (no hacia `main`)
    ```bash
-   git push -u origin <nombre-del-branch>
+   git push -u origin feat/descripcion-corta
+   gh pr create --base develop --title "..." --body "..."
    ```
 
-6. **Claude abre un PR** hacia `main` vía GitHub REST API con `curl` (**`gh` CLI no está instalado**)
+4. **CI pasa → usuario mergea → branch eliminado**
    ```bash
-   TOKEN=$(git credential fill <<< $'protocol=https\nhost=github.com\n' 2>/dev/null | grep '^password=' | cut -d= -f2-)
-   curl -s -X POST \
-     -H "Authorization: token $TOKEN" \
-     -H "Content-Type: application/json" \
-     https://api.github.com/repos/saggacce/Predecessor-Build/pulls \
-     -d '{"title":"...","head":"feat/branch-name","base":"main","body":"..."}'
-   ```
-
-7. **El usuario revisa el PR** en GitHub, aprueba o pide cambios.
-
-8. **Merge y limpieza** — el usuario mergea el PR en GitHub y elimina el branch remoto.
-   ⚠️ **Importante:** mergear en GitHub NO actualiza el WSL automáticamente. Son dos copias separadas.
-   Claude sincroniza y elimina el branch local:
-   ```bash
-   git checkout main
-   git pull origin main   # ← SIEMPRE necesario después de un merge en GitHub
-   git branch -d <nombre-del-branch>
+   git checkout develop && git pull origin develop
+   git branch -d feat/descripcion-corta
    ```
 
 ---
 
-## 2. Convención de nombres de branch
+## 2. Flujo de sprint (deploy a producción)
 
-| Prefijo   | Cuándo usarlo                             | Ejemplo                          |
-|-----------|-------------------------------------------|----------------------------------|
-| `feat/`   | Nueva funcionalidad                       | `feat/player-profile-api`        |
-| `fix/`    | Corrección de bug o error                 | `fix/hero-stat-level-18`         |
-| `docs/`   | Solo cambios en documentación             | `docs/auth-findings-predgg`      |
-| `chore/`  | Configuración, dependencias, limpieza     | `chore/monorepo-tsconfig`        |
-| `refactor/` | Cambios internos sin cambio funcional   | `refactor/domain-engine-types`   |
+Al final de cada sprint, cuando el conjunto de features está probado en `develop`:
 
----
-
-## 3. Convención de commits
-
-Formato: `tipo: descripción en inglés (imperativo, minúsculas)`
-
-| Tipo       | Cuándo usarlo                                  |
-|------------|------------------------------------------------|
-| `feat`     | Nueva funcionalidad                            |
-| `fix`      | Corrección de bug                              |
-| `docs`     | Cambios en documentación                       |
-| `chore`    | Tareas de mantenimiento (configs, deps)        |
-| `refactor` | Refactorización sin cambio de comportamiento   |
-| `test`     | Añadir o corregir tests                        |
-
-Ejemplos válidos:
 ```
-feat: add player profile GraphQL query handler
-fix: correct level-18 stat interpolation in domain engine
-docs: add pred.gg auth test findings to API doc
-chore: sync local repo with main from GitHub
+develop → (sprint PR) → main → CI → [approval manual] → deploy a Hetzner
+```
+
+1. Abrir PR de `develop` → `main` en GitHub
+2. CI corre (typecheck + tests)
+3. GitHub pausa el deploy y notifica al responsable
+4. Responsable revisa, prueba manualmente en local si hace falta
+5. **Aprueba en GitHub** → deploy automático a `https://riftline.app`
+6. Actualizar `develop` con main: `git checkout develop && git pull origin main`
+
+---
+
+## 3. Convención de branches
+
+| Prefijo | Cuándo | Ejemplo |
+|---------|--------|---------|
+| `feat/` | Nueva funcionalidad | `feat/discord-bot-mvp` |
+| `fix/` | Corrección de bug | `fix/cookie-secure-http` |
+| `chore/` | Config, deps, limpieza | `chore/update-node-22` |
+| `refactor/` | Sin cambio funcional | `refactor/sync-service` |
+| `docs/` | Solo documentación | `docs/roadmap-update` |
+
+---
+
+## 4. Convención de commits
+
+`tipo: descripción en inglés (imperativo, minúsculas)`
+
+```
+feat: add weekly player performance report endpoint
+fix: secure cookies only when HTTPS_ENABLED=true
+chore: upgrade tsx to dependencies for production
+refactor: move asset serving from Express to Vite public/
 ```
 
 ---
 
-## 4. Reglas operativas
+## 5. CI/CD
 
-- **Un branch por objetivo.** No mezclar features, fixes y docs en el mismo branch.
-- **`main` es siempre estable.** Claude nunca pushea directo a `main`.
-- **PRs con alcance acotado.** Un PR resuelve una cosa concreta.
-- **Claude sincroniza antes de empezar.** Siempre `git pull origin main` al inicio de cada sesión o tarea.
-- **El usuario decide el merge.** Claude abre el PR pero no lo mergea sin instrucción explícita.
-- **Claude es autosuficiente.** Push y creación de PR son autónomos — no requieren intervención del usuario.
+| Evento | CI | Deploy |
+|--------|----|--------|
+| PR a `develop` | ✅ corre | ❌ no |
+| Merge a `develop` | ✅ corre | ❌ no |
+| PR a `main` | ✅ corre | ❌ no |
+| **Merge a `main`** | ✅ corre | ✅ **con aprobación manual** |
 
-### Git identity (WSL)
+El deploy requiere aprobación en **GitHub → Environments → production** antes de ejecutarse.
+
+---
+
+## 6. Reglas operativas
+
+- **Nunca push directo a `main` ni a `develop`** — siempre por PR.
+- **Features van a `develop`**, no a `main`.
+- **Un branch por objetivo** — no mezclar features y fixes.
+- **Sincronizar antes de empezar**: `git pull origin develop` al inicio de cada tarea.
+- **El usuario decide el merge** — Claude abre el PR pero no lo mergea sin instrucción.
+- **Producción es sagrada** — si hay dudas, merge a `develop` primero y prueba.
+
+---
+
+## 7. Criterio de "Done" por feature
+
+- Criterios funcionales cumplidos
+- Typecheck y tests pasan
+- PR mergeado a `develop` y branch eliminado
+
+## Criterio de "Done" por sprint
+
+- Todas las features del sprint en `develop` y validadas
+- PR de sprint mergeado a `main`
+- Deploy aprobado y verificado en `https://riftline.app`
+- `develop` sincronizado con `main`
+
+---
+
+## 8. Git identity (WSL)
 ```bash
 git config user.name "gabriel"
 git config user.email "gaby0806@gmail.com"
 ```
-
----
-
-## 5. Criterio de "Done" por PR
-
-Una tarea se considera completada cuando:
-
-- Se cumplen los criterios funcionales acordados.
-- La documentación afectada está actualizada.
-- Se han ejecutado validaciones razonables para el tipo de cambio.
-- El PR está mergeado en `main` y el branch eliminado (remoto y local).
-
----
-
-## 6. Documentación de referencia obligatoria
-
-Antes de comenzar cualquier tarea, Claude revisa:
-
-- `docs/planning.md` → tareas activas y subtareas con estado ← **leer primero**
-- `docs/primesight_visual_design_direction.md` → antes de cualquier cambio de UI/UX
-- `docs/primesight_indicators_catalog.csv` → antes de implementar métricas o analytics
-- `docs/project_predecessor.md` → visión de producto, alcance y roadmap
-- `docs/predecessor_api_technical_doc.md` → integración pred.gg API (técnico)
-- `docs/predgg_api_inventory.md` → campos y endpoints disponibles
-- `docs/future_features_roadmap.md` → backlog de capacidades futuras y dependencias
