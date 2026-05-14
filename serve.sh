@@ -317,6 +317,9 @@ case "$CMD" in
     (cd "$STAGING_DIR" && npx prisma generate --schema=workers/data-sync/prisma/schema.prisma 2>&1 | grep -v "^$" | tail -3)
     ok "Prisma client ready"
 
+    # Clear tsx compile cache to ensure latest code is used
+    rm -rf ~/.cache/tsx 2>/dev/null || true
+
     # Load staging env and start API from worktree
     log "Starting Staging API on port $STAGING_API_PORT..."
     mkdir -p "$PIDS_DIR" "$LOGS_DIR"
