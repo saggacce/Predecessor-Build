@@ -146,8 +146,8 @@ export default function UsersPage() {
                 </span>
               </div>
               <div>
-                <span style={{ fontSize: '0.68rem', fontWeight: 700, color: TIER_COLORS[u.playerTier ?? 'FREE'] ?? 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
-                  <Star size={10} style={{ color: TIER_COLORS[u.playerTier ?? 'FREE'] }} /> {u.playerTier ?? 'FREE'}
+                <span style={{ fontSize: '0.68rem', fontWeight: 700, color: PLAYER_TIER_COLORS[u.playerTier ?? 'FREE'] ?? 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                  <Star size={10} style={{ color: PLAYER_TIER_COLORS[u.playerTier ?? 'FREE'] }} /> {u.playerTier ?? 'FREE'}
                 </span>
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>

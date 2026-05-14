@@ -31,14 +31,25 @@ import FeedbackPage from './pages/FeedbackPage';
 import { FeedbackButton } from './components/FeedbackButton';
 import LandingPage from './pages/LandingPage';
 import { useAuth } from './hooks/useAuth';
+import { ViewAsProvider, useViewAs, type ViewAsRole } from './hooks/useViewAs';
 import { apiClient } from './api/client';
 import './App.css';
 
 // ── Workspace header ──────────────────────────────────────────────────────────
 
 function WorkspaceHeader() {
-  const { authenticated, user } = useAuth();
+  const { authenticated, user, refreshInternalSession } = useAuth();
+
+  async function handleInternalLogout() {
+    try {
+      await apiClient.auth.internalLogout();
+      window.location.reload();
+    } catch {
+      toast.error('Logout failed');
+    }
+  }
   const [latestPatch, setLatestPatch] = useState<VersionRecord | null>(null);
+  const isAdmin = user?.globalRole === 'PLATFORM_ADMIN';
 
   useEffect(() => {
     void apiClient.patches.latest()
@@ -46,27 +57,67 @@ function WorkspaceHeader() {
       .catch(() => setLatestPatch(null));
   }, []);
 
+  const initials = user?.name
+    ? user.name.split(/\s+/).map((p) => p[0]).join('').slice(0, 2).toUpperCase()
+    : '?';
+
   return (
     <header className="workspace-header" aria-label="Workspace status">
-      <div>
-        <div className="workspace-title">Predecessor competitive workspace</div>
-        <div className="workspace-subtitle">Competitive Intel · by Synapsight</div>
-      </div>
+      {/* Left — only shown for admins */}
+      {isAdmin ? (
+        <div>
+          <div className="workspace-title">Predecessor competitive workspace</div>
+          <div className="workspace-subtitle">Competitive Intel · by Synapsight</div>
+        </div>
+      ) : (
+        <div />
+      )}
+
       <div className="workspace-meta">
+        {/* View As role selector — admin only */}
+        {isAdmin && (
+          <ViewAsSelector />
+        )}
+
+        {/* Patch badge — everyone */}
         {latestPatch && (
           <div className="workspace-chip">
             <Zap size={13} />
             Patch v{latestPatch.name}
           </div>
         )}
-        <div className={`workspace-chip ${authenticated ? 'connected' : ''}`}>
-          <Radio size={13} />
-          {authenticated ? 'pred.gg connected' : 'pred.gg login required'}
-        </div>
+
+        {/* pred.gg status — admins only */}
+        {isAdmin && (
+          <div className={`workspace-chip ${authenticated ? 'connected' : ''}`}>
+            <Radio size={13} />
+            {authenticated ? 'pred.gg connected' : 'pred.gg disconnected'}
+          </div>
+        )}
+
+        {/* User chip with avatar + logout */}
         {user && (
-          <div className="workspace-chip connected">
-            <KeyRound size={13} />
-            {user.name}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+            <Link to="/profile" style={{ textDecoration: 'none' }}>
+              <div className="workspace-chip connected" style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', padding: '0.2rem 0.55rem 0.2rem 0.2rem' }}>
+                <div style={{ width: 22, height: 22, borderRadius: '50%', overflow: 'hidden', background: 'rgba(167,139,250,0.25)', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  {user.avatarUrl
+                    ? <img src={user.avatarUrl} alt={user.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                    : <span style={{ fontSize: '0.5rem', fontWeight: 700, color: 'var(--accent-violet)', fontFamily: 'var(--font-mono)' }}>{initials}</span>
+                  }
+                </div>
+                {user.name}
+              </div>
+            </Link>
+            <button
+              onClick={handleInternalLogout}
+              title="Cerrar sesión"
+              style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 28, height: 28, borderRadius: 6, border: '1px solid var(--border-color)', background: 'transparent', cursor: 'pointer', color: 'var(--text-muted)', transition: 'color 0.15s, border-color 0.15s' }}
+              onMouseEnter={(e) => { const b = e.currentTarget; b.style.color = 'var(--accent-loss)'; b.style.borderColor = 'rgba(248,113,113,0.4)'; }}
+              onMouseLeave={(e) => { const b = e.currentTarget; b.style.color = 'var(--text-muted)'; b.style.borderColor = 'var(--border-color)'; }}
+            >
+              <LogOut size={13} />
+            </button>
           </div>
         )}
       </div>
@@ -169,7 +220,7 @@ const sections: SidebarSection[] = [
     defaultOpen: true,
     items: [
       { to: '/analysis/teams', label: 'Team Analysis' },
-      { to: '/analysis/players', label: 'Player Analysis' },
+      { to: '/analysis/players', label: 'Player Scouting' },
       { to: '/analysis/rival', label: 'Rival Scouting' },
       { to: '/analysis/draft', label: 'Draft Analysis' },
     ],
@@ -222,6 +273,7 @@ const sections: SidebarSection[] = [
 
 function Sidebar() {
   const { authenticated, loading, user, internalLoading } = useAuth();
+  const { viewAs } = useViewAs();
   const location = useLocation();
   const [feedbackUnread, setFeedbackUnread] = useState(0);
 
@@ -291,17 +343,19 @@ function Sidebar() {
       <nav className="sidebar-nav">
         {sections
           .filter((section) => {
-            const isPlayer = user?.globalRole === 'PLAYER';
-            const hasTeam = (user?.memberships?.length ?? 0) > 0;
-            const isStandalone = isPlayer || (!hasTeam && user?.globalRole !== 'PLATFORM_ADMIN');
-            if (section.id === 'admin') return user?.globalRole === 'PLATFORM_ADMIN';
+            const effectiveRole = viewAs ?? user?.globalRole;
+            const isPlayer = effectiveRole === 'PLAYER';
+            const hasTeam = viewAs ? ['MANAGER','COACH','ANALISTA','JUGADOR'].includes(viewAs) : (user?.memberships?.length ?? 0) > 0;
+            const isStandalone = isPlayer || (!hasTeam && effectiveRole !== 'PLATFORM_ADMIN');
+            if (section.id === 'admin') return !viewAs && user?.globalRole === 'PLATFORM_ADMIN';
             if (['tools', 'management'].includes(section.id) && isStandalone) return false;
             return true;
           })
           .map((section) => {
-            const isPlayer = user?.globalRole === 'PLAYER';
-            const hasTeam = (user?.memberships?.length ?? 0) > 0;
-            const isStandalone = isPlayer || (!hasTeam && user?.globalRole !== 'PLATFORM_ADMIN');
+            const effectiveRole = viewAs ?? user?.globalRole;
+            const isPlayer = effectiveRole === 'PLAYER';
+            const hasTeam = viewAs ? ['MANAGER','COACH','ANALISTA','JUGADOR'].includes(viewAs) : (user?.memberships?.length ?? 0) > 0;
+            const isStandalone = isPlayer || (!hasTeam && effectiveRole !== 'PLATFORM_ADMIN');
             const filteredSection = isStandalone && section.items ? {
               ...section,
               items: section.id === 'analysis'
@@ -322,58 +376,72 @@ function Sidebar() {
           })}
       </nav>
 
-      <div className="sidebar-auth">
-        {internalLoading ? (
-          <div className="session-state muted">
-            <Loader size={14} style={{ animation: 'spin 1s linear infinite' }} />
-            Checking internal session...
-          </div>
-        ) : user ? (
-          <div className="internal-session-card">
-            <Link to="/profile" style={{ textDecoration: 'none', display: 'block' }}>
-              <div className="internal-session-name" style={{ color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                {user.name}
-                <span style={{ fontSize: '0.58rem', color: 'var(--text-muted)', fontWeight: 400 }}>· perfil</span>
-              </div>
-            </Link>
-            <div className="internal-session-email">{user.email}</div>
-            <div className="internal-session-row">
-              <span className="internal-role-badge">{roleLabel}</span>
-              <button onClick={handleInternalLogout} className="btn-auth btn-auth-logout" type="button">
-                <LogOut size={15} /> Logout
-              </button>
-            </div>
-          </div>
-        ) : (
-          <Link to="/login" className="btn-auth btn-auth-login">
-            <KeyRound size={16} /> Internal login
-          </Link>
-        )}
 
-        <div className="sidebar-auth-divider" />
-
-        {/* pred.gg auth — only visible to platform admins (token used for sync) */}
-        {user?.globalRole === 'PLATFORM_ADMIN' && (
-          loading ? (
-            <div className="session-state muted">
-              <Loader size={14} style={{ animation: 'spin 1s linear infinite' }} />
-              Checking pred.gg...
-            </div>
-          ) : authenticated ? (
-            <button onClick={handlePredggLogout} className="btn-auth btn-auth-logout" type="button">
-              <LogOut size={16} /> Logout pred.gg
-            </button>
-          ) : (
-            <a href={apiClient.auth.loginUrl()} className="btn-auth btn-auth-login">
-              <LogIn size={16} /> Login with pred.gg
-            </a>
-          )
-        )}
-        {user?.globalRole === 'PLATFORM_ADMIN' && !loading && authenticated && (
-          <p className="sidebar-note connected">pred.gg connected</p>
-        )}
-      </div>
     </aside>
+  );
+}
+
+// ── Weekly Reports — role-aware ───────────────────────────────────────────────
+function WeeklyReportsPage() {
+  const { user } = useAuth();
+  const hasTeam = (user?.memberships?.length ?? 0) > 0;
+  const isStandalonePlayer = user?.globalRole === 'PLAYER' || (!hasTeam && user?.globalRole !== 'PLATFORM_ADMIN');
+
+  if (isStandalonePlayer) {
+    return (
+      <ComingSoon
+        section="Weekly Reports"
+        description="Aggregated weekly performance summary."
+      />
+    );
+  }
+
+  return (
+    <ComingSoon
+      section="Weekly Team Reports"
+      description="Aggregated weekly performance summary for the coaching staff."
+    />
+  );
+}
+
+
+// ── View As Role selector (admin only) ───────────────────────────────────────
+const VIEW_AS_OPTIONS: Array<{ value: ViewAsRole; label: string; color: string }> = [
+  { value: null,       label: 'Admin (real)',  color: 'var(--accent-teal-bright)' },
+  { value: 'MANAGER',  label: 'Manager',       color: 'var(--accent-blue)' },
+  { value: 'COACH',    label: 'Coach',         color: 'var(--accent-violet)' },
+  { value: 'ANALISTA', label: 'Analista',      color: 'var(--accent-prime)' },
+  { value: 'JUGADOR',  label: 'Jugador',       color: '#7fd66b' },
+  { value: 'PLAYER',   label: 'Player (solo)', color: 'var(--accent-loss)' },
+];
+
+function ViewAsSelector() {
+  const { viewAs, setViewAs } = useViewAs();
+  const current = VIEW_AS_OPTIONS.find(o => o.value === viewAs) ?? VIEW_AS_OPTIONS[0];
+
+  return (
+    <div style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+      <span style={{ fontSize: '0.55rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Vista:</span>
+      <select
+        value={viewAs ?? ''}
+        onChange={(e) => setViewAs((e.target.value || null) as ViewAsRole)}
+        style={{
+          padding: '0.18rem 0.5rem',
+          background: viewAs ? `${current.color}18` : 'transparent',
+          border: `1px solid ${viewAs ? current.color + '55' : 'var(--border-color)'}`,
+          borderRadius: 5,
+          color: current.color,
+          fontSize: '0.68rem',
+          fontWeight: 700,
+          cursor: 'pointer',
+          outline: 'none',
+        }}
+      >
+        {VIEW_AS_OPTIONS.map(o => (
+          <option key={String(o.value)} value={o.value ?? ''}>{o.label}</option>
+        ))}
+      </select>
+    </div>
   );
 }
 
@@ -382,8 +450,10 @@ function Sidebar() {
 export default function App() {
   return (
     <BrowserRouter>
-      <AppContent />
-      <Toaster position="bottom-right" theme="dark" richColors closeButton />
+      <ViewAsProvider>
+        <AppContent />
+          <Toaster position="bottom-right" theme="dark" richColors closeButton />
+      </ViewAsProvider>
     </BrowserRouter>
   );
 }
@@ -405,8 +475,11 @@ function AppContent() {
     return () => document.removeEventListener('mousemove', onMouseMove);
   }, []);
 
+  // While checking auth: render nothing to avoid flash of wrong content
+  if (internalLoading) return null;
+
   // Unauthenticated: show landing/login/register without sidebar
-  if (!internalLoading && !internalAuthenticated) {
+  if (!internalAuthenticated) {
     return (
       <Routes>
         <Route path="/login" element={<Login />} />
@@ -448,7 +521,7 @@ function AppContent() {
 
             {/* Reports */}
             <Route path="/reports/scrim" element={<ScrimReport />} />
-            <Route path="/reports/weekly" element={<ComingSoon section="Weekly Team Reports" description="Aggregated weekly performance summary for the coaching staff." />} />
+            <Route path="/reports/weekly" element={<WeeklyReportsPage />} />
             <Route path="/reports/players" element={<ComingSoon section="Player Development Reports" description="Individual player progress reports over time." />} />
             <Route path="/reports/rival" element={<Navigate to="/analysis/rival" replace />} />
 

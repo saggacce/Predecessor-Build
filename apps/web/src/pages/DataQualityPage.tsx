@@ -177,7 +177,8 @@ function SyncStatusTab() {
           <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.72rem', color: 'var(--text-muted)', marginLeft: 'auto' }}>{matches.total.toLocaleString()} total</span>
         </div>
         <SyncRow label="Complete (players + event stream)" value={matches.complete} total={matches.total} color="var(--accent-win)" />
-        <SyncRow label="Partial (sin event stream)" value={matches.partial} total={matches.total} color="var(--accent-prime)" warning />
+        <SyncRow label="Pending (sin event stream)" value={matches.partial} total={matches.total} color="var(--accent-prime)" warning />
+        <SyncRow label="No disponible en pred.gg" value={(matches as any).failed ?? 0} total={matches.total} color="var(--text-muted)" />
         <SyncRow label="Incomplete (sin players)" value={matches.incomplete} total={matches.total} color="var(--accent-loss)" warning />
         <ProgressBar pct={matchPct} color={matchPct === 100 ? 'var(--accent-win)' : 'var(--accent-violet)'} />
       </div>
@@ -220,7 +221,7 @@ function SyncStatusTab() {
             {jobLoading ? <RefreshCw size={13} style={{ animation: 'spin 0.6s linear infinite' }} /> : isRunning ? <Square size={13} /> : <Play size={13} />}
             {jobLoading ? (isRunning ? 'Deteniendo...' : 'Iniciando...') : isRunning ? 'Detener' : 'Iniciar Event Stream Sync'}
           </button>
-          {!isRunning && matches.partial > 0 && <span style={{ fontSize: '0.72rem', color: 'var(--accent-prime)', alignSelf: 'center' }}>{matches.partial.toLocaleString()} partidas pendientes</span>}
+          {!isRunning && matches.partial > 0 && <span style={{ fontSize: '0.72rem', color: 'var(--accent-prime)', alignSelf: 'center' }}>{matches.partial.toLocaleString()} partidas pendientes{(matches as any).failed > 0 ? ` · ${(matches as any).failed.toLocaleString()} no disponibles en pred.gg` : ''}</span>}
         </div>
       </div>
 
@@ -335,7 +336,12 @@ function DataControlsTab() {
   const controls = [
     { key: 'versions', label: 'Sync Versions', desc: 'Fetch all game versions from pred.gg and upsert into DB.',
       fn: async () => { const r = await apiClient.admin.syncVersions(); return `${r.synced} version${r.synced !== 1 ? 's' : ''} synced in ${(r.elapsed / 1000).toFixed(1)}s`; } },
-    { key: 'stale', label: 'Sync Stale Players', desc: 'Re-sync players whose data is outdated (batch of 20).',
+    { key: 'staleAll', label: 'Sync All Stale Players', desc: 'Re-sincroniza TODOS los jugadores con datos >24h en batches automáticos. Tarda varios minutos.',
+      fn: async () => {
+        const r = await apiClient.admin.syncStaleAll();
+        return `${r.totalSynced.toLocaleString()} jugadores sincronizados · ${r.totalErrors} errores · ${r.batches} batches`;
+      } },
+    { key: 'stale', label: 'Sync Stale Players (1 batch)', desc: 'Re-sync players whose data is outdated (batch of 30).',
       fn: async () => { const r = await apiClient.admin.syncStale(); return `${r.synced} synced · ${r.skipped} skipped · ${r.errors} errors`; } },
     { key: 'incomplete', label: 'Sync Incomplete Matches', desc: 'Fetch full 10-player rosters for matches with missing players.',
       fn: async () => { const r = await apiClient.admin.syncIncompleteMatches(); return `${r.synced} matches synced · ${r.errors} errors`; } },

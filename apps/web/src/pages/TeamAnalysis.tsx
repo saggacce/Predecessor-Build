@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ChangeEvent, type CSSProperties, type ReactNode, type KeyboardEvent, type MouseEvent } from 'react';
+import React, { useEffect, useRef, useState, type ChangeEvent, type CSSProperties, type ReactNode, type KeyboardEvent, type MouseEvent } from 'react';
 import { createPortal } from 'react-dom';
 import { Link } from 'react-router';
 import { RankIcon } from '../components/RankIcon';
@@ -47,6 +47,30 @@ interface TeamFormData {
 }
 
 const emptyForm = (): TeamFormData => ({ name: '', abbreviation: '', logoUrl: '', type: 'RIVAL', region: '', notes: '' });
+
+
+class TeamAnalysisErrorBoundary extends React.Component<
+  { children: React.ReactNode },
+  { error: Error | null }
+> {
+  constructor(props: { children: React.ReactNode }) {
+    super(props);
+    this.state = { error: null };
+  }
+  static getDerivedStateFromError(error: Error) { return { error }; }
+  render() {
+    if (this.state.error) {
+      return (
+        <div className="glass-card" style={{ padding: '1.5rem', borderLeft: '3px solid var(--accent-loss)', margin: '1rem 0' }}>
+          <div style={{ fontWeight: 700, color: 'var(--accent-loss)', marginBottom: '0.5rem' }}>Error en el análisis</div>
+          <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', marginBottom: '1rem' }}>{this.state.error.message}</div>
+          <button className="btn-secondary" style={{ fontSize: '0.8rem' }} onClick={() => this.setState({ error: null })}>Cerrar</button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 export default function TeamAnalysis() {
   const [teams, setTeams] = useState<TeamProfile[]>([]);
@@ -496,12 +520,14 @@ export default function TeamAnalysis() {
 
             {/* Performance Tab */}
             {detailTab === 'performance' && selected && (
+              <TeamAnalysisErrorBoundary>
               <PerformanceTab
                 teamId={selected.id}
                 analysis={analysis}
                 loading={loadingAnalysis}
                 onRefresh={() => void loadAnalysis(selected.id)}
               />
+              </TeamAnalysisErrorBoundary>
             )}
 
             {/* Phase Tab */}
@@ -1693,6 +1719,8 @@ function InsightCard({ insight: ins, last, expanded, onToggle, teamId }: {
 }
 
 function ScoutingReport({ playerStats, heroPool }: { playerStats: PlayerAnalysisStat[]; heroPool: RivalHeroStat[] }) {
+  const config = useConfig();
+  const narrowDepth = config.get('display_hero_pool_narrow_depth') ?? 2;
   // Build hero pool per player
   const poolByPlayer = new Map<string, RivalHeroStat[]>();
   for (const h of heroPool) {

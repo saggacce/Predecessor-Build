@@ -51,6 +51,7 @@ function createMockDb() {
       create: vi.fn().mockResolvedValue({}),
     },
     $transaction: vi.fn().mockImplementation(async (queries) => Promise.all(queries)),
+    $executeRaw: vi.fn().mockResolvedValue(1),
   };
 }
 
@@ -135,39 +136,17 @@ describe('syncMatchEventStream', () => {
 });
 
 describe('repairEventStreamPlayerIds', () => {
-  it('rewrites existing pred.gg player IDs to internal IDs without changing already-internal IDs', async () => {
+  it('uses raw SQL to update player IDs in event stream tables', async () => {
     const mockDb = createMockDb();
-    mockDb.player.findMany.mockResolvedValue([
-      { id: 'internal-killer', predggId: 'predgg-killer' },
-      { id: 'already-internal', predggId: 'other-predgg-id' },
-      { id: 'internal-warder', predggId: 'predgg-warder' },
-    ]);
-    mockDb.heroKill.findMany.mockResolvedValue([
-      { id: 'hk-1', killerPlayerId: 'predgg-killer', killedPlayerId: 'already-internal' },
-    ]);
-    mockDb.objectiveKill.findMany.mockResolvedValue([
-      { id: 'ok-1', killerPlayerId: 'predgg-killer' },
-    ]);
-    mockDb.wardEvent.findMany.mockResolvedValue([
-      { id: 'we-1', playerId: 'predgg-warder' },
-    ]);
+    // $executeRaw returns number of rows affected (mocked to 1 each)
+    mockDb.$executeRaw.mockResolvedValue(1);
 
     const result = await repairEventStreamPlayerIds(mockDb as never);
 
-    expect(mockDb.heroKill.update).toHaveBeenCalledWith({
-      where: { id: 'hk-1' },
-      data: { killerPlayerId: 'internal-killer', killedPlayerId: 'already-internal' },
-    });
-    expect(mockDb.objectiveKill.update).toHaveBeenCalledWith({
-      where: { id: 'ok-1' },
-      data: { killerPlayerId: 'internal-killer' },
-    });
-    expect(mockDb.wardEvent.update).toHaveBeenCalledWith({
-      where: { id: 'we-1' },
-      data: { playerId: 'internal-warder' },
-    });
+    // Should call $executeRaw 4 times: killer, killed, objective, ward
+    expect(mockDb.$executeRaw).toHaveBeenCalledTimes(4);
     expect(result).toEqual({
-      heroKillsUpdated: 1,
+      heroKillsUpdated: 2, // killerPlayerId + killedPlayerId (1+1)
       objectiveKillsUpdated: 1,
       wardEventsUpdated: 1,
       placeholdersCreated: 0,

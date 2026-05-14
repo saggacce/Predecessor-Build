@@ -675,6 +675,7 @@ export interface SessionUser {
   name: string;
   globalRole: 'PLATFORM_ADMIN' | 'PLAYER' | 'VIEWER' | string;
   linkedPlayerId: string | null;
+  avatarUrl?: string | null;
   memberships: SessionMembership[];
 }
 
@@ -866,6 +867,10 @@ export const apiClient = {
       fetchApi<{ user: UserProfile }>('/profile/email', { method: 'PATCH', body: JSON.stringify({ email, currentPassword }) }),
     changePassword: (currentPassword: string, newPassword: string) =>
       fetchApi<{ ok: boolean }>('/profile/password', { method: 'PATCH', body: JSON.stringify({ currentPassword, newPassword }) }),
+    linkPlayer: (playerId: string) =>
+      fetchApi<{ user: UserProfile; player: { id: string; displayName: string; customName: string | null } }>('/profile/link-player', { method: 'POST', body: JSON.stringify({ playerId }) }),
+    unlinkPlayer: () =>
+      fetchApi<{ ok: boolean }>('/profile/link-player', { method: 'DELETE' }),
     disconnectSocial: (provider: 'discord' | 'epic' | 'steam') =>
       fetchApi<{ ok: boolean }>(`/profile/social/${provider}`, { method: 'DELETE' }),
     getAccess: () =>
@@ -995,6 +1000,8 @@ export const apiClient = {
       fetchApi<{ ok: boolean; synced: number; errors: number }>('/admin/sync-heroes', { method: 'POST' }),
     syncVersions: () =>
       fetchApi<AdminSyncVersionsResult>('/admin/sync-versions', { method: 'POST' }),
+    syncStaleAll: () =>
+      fetchApi<{ ok: boolean; totalStale: number; totalSynced: number; totalErrors: number; batches: number }>('/admin/sync-stale-all', { method: 'POST' }),
     syncStale: () =>
       fetchApi<AdminSyncStaleResult>('/admin/sync-stale', { method: 'POST' }),
     syncIncompleteMatches: () =>

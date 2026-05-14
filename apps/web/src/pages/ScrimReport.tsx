@@ -11,6 +11,7 @@ import {
   ApiErrorResponse,
 } from '../api/client';
 import { useHeroMeta, normalizeHeroSlug } from '../hooks/useHeroMeta';
+import { useAuth } from '../hooks/useAuth';
 
 const ROLE_ORDER = ['carry', 'jungle', 'midlane', 'offlane', 'support'];
 const ROLE_LABELS: Record<string, string> = {
@@ -19,6 +20,7 @@ const ROLE_LABELS: Record<string, string> = {
 };
 
 export default function ScrimReport() {
+  const { user } = useAuth();
   const [searchParams] = useSearchParams();
   const [ownTeams, setOwnTeams] = useState<TeamProfile[]>([]);
   const [rivalTeams, setRivalTeams] = useState<TeamProfile[]>([]);
@@ -149,7 +151,12 @@ export default function ScrimReport() {
     <div>
       <header className="header">
         <h1 className="header-title">Scrim Report</h1>
-        <p style={{ color: 'var(--text-secondary)' }}>Pre-match intelligence report for coaching staff.</p>
+        <p style={{ color: 'var(--text-secondary)' }}>
+          {user?.globalRole === 'PLAYER' || (user?.memberships?.length ?? 0) === 0
+            ? 'Aggregated weekly performance summary.'
+            : 'Pre-match intelligence report for coaching staff.'
+          }
+        </p>
       </header>
 
       {/* Form */}

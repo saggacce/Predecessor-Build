@@ -4,6 +4,8 @@ import { Server, Zap, RefreshCw, CheckCircle, XCircle, ArrowRight, Users, Sparkl
 import { toast } from 'sonner';
 import { apiClient, ApiErrorResponse, type TeamProfile, type TeamAnalysis, type PlayerProfile } from '../api/client';
 import { useAuth } from '../hooks/useAuth';
+import { useViewAs } from '../hooks/useViewAs';
+import { LinkPlayerModal } from '../components/LinkPlayerModal';
 import type { VersionRecord } from '@predecessor/data-model';
 
 type SyncState =
@@ -16,11 +18,11 @@ type FocusState = 'idle' | 'streaming' | 'done' | 'error';
 type FeedbackState = 'none' | 'positive' | 'negative';
 
 // ── Shared quick-link card ────────────────────────────────────────────────────
-function QuickLink({ to, icon, label, description, color = 'var(--accent-blue)' }: {
-  to: string; icon: React.ReactNode; label: string; description: string; color?: string;
+function QuickLink({ to, state, icon, label, description, color = 'var(--accent-blue)' }: {
+  to: string; state?: Record<string, unknown>; icon: React.ReactNode; label: string; description: string; color?: string;
 }) {
   return (
-    <Link to={to} style={{ textDecoration: 'none' }}>
+    <Link to={to} state={state} style={{ textDecoration: 'none' }}>
       <div className="glass-card" style={{ display: 'flex', alignItems: 'center', gap: '0.85rem', padding: '0.9rem 1.1rem', cursor: 'pointer', borderLeft: `3px solid ${color}`, transition: 'opacity 0.15s' }}
         onMouseEnter={(e) => { (e.currentTarget as HTMLDivElement).style.opacity = '0.82'; }}
         onMouseLeave={(e) => { (e.currentTarget as HTMLDivElement).style.opacity = '1'; }}>
@@ -78,6 +80,7 @@ function TeamFormStrip({ analysis }: { analysis: TeamAnalysis | null }) {
 // ── Main dashboard ────────────────────────────────────────────────────────────
 export default function Dashboard() {
   const { user, internalAuthenticated } = useAuth();
+  const { viewAs } = useViewAs();
   const [healthStatus, setHealthStatus] = useState<'checking' | 'ok' | 'error'>('checking');
   const [latestPatch, setLatestPatch] = useState<VersionRecord | null>(null);
   const [syncState, setSyncState] = useState<SyncState>({ tag: 'idle' });
@@ -89,9 +92,13 @@ export default function Dashboard() {
   const [userCount, setUserCount] = useState<number | null>(null);
 
   // Determine role
-  const isPlatformAdmin = user?.globalRole === 'PLATFORM_ADMIN';
+  // If admin is previewing as a role, use the simulated role
+  const isPlatformAdmin = !viewAs && user?.globalRole === 'PLATFORM_ADMIN';
   const ownMembership = ownTeam ? user?.memberships?.find((m) => m.teamId === ownTeam.id) : null;
-  const teamRole = ownMembership?.role ?? null; // MANAGER | COACH | ANALISTA | JUGADOR
+  const effectiveTeamRole = viewAs && ['MANAGER','COACH','ANALISTA','JUGADOR'].includes(viewAs)
+    ? viewAs as 'MANAGER' | 'COACH' | 'ANALISTA' | 'JUGADOR'
+    : (ownMembership?.role ?? null);
+  const teamRole = effectiveTeamRole;
   const isManager = teamRole === 'MANAGER';
   const isCoach = teamRole === 'COACH';
   const isAnalista = teamRole === 'ANALISTA';
@@ -100,26 +107,32 @@ export default function Dashboard() {
   useEffect(() => {
     if (!internalAuthenticated) return;
 
-    // Always fetch: own team + health + patch
+    // Fetch health + patch for everyone; team data only if user has team memberships
+    const hasTeamMemberships = (user?.memberships?.length ?? 0) > 0;
     void (async () => {
-      const [teamRes, health, patch] = await Promise.allSettled([
-        apiClient.teams.list('OWN'),
+      const [health, patch] = await Promise.allSettled([
         apiClient.admin.apiStatus(),
-        apiClient.patches.list(),
+        apiClient.patches.latest(),
       ]);
-      if (teamRes.status === 'fulfilled') {
-        const team = teamRes.value.teams?.[0] ?? null;
-        setOwnTeam(team);
-        if (team) {
-          const [analysis] = await Promise.allSettled([apiClient.teams.getAnalysis(team.id)]);
-          if (analysis.status === 'fulfilled') setOwnAnalysis(analysis.value);
-        }
-      }
       if (health.status === 'fulfilled') setHealthStatus('ok');
       else setHealthStatus('error');
       if (patch.status === 'fulfilled') {
-        const versions = (patch.value as { versions?: VersionRecord[] }).versions;
-        if (versions?.length) setLatestPatch(versions[0]);
+        setLatestPatch(patch.value as unknown as VersionRecord);
+      }
+
+      // Only fetch team data for users who actually belong to a team
+      if (hasTeamMemberships) {
+        const [teamRes] = await Promise.allSettled([apiClient.teams.list('OWN')]);
+        if (teamRes.status === 'fulfilled') {
+          // Only use teams the user is actually a member of
+          const userTeamIds = new Set(user?.memberships?.map((m) => m.teamId) ?? []);
+          const team = (teamRes.value.teams ?? []).find((t) => userTeamIds.has(t.id)) ?? null;
+          setOwnTeam(team);
+          if (team) {
+            const [analysis] = await Promise.allSettled([apiClient.teams.getAnalysis(team.id)]);
+            if (analysis.status === 'fulfilled') setOwnAnalysis(analysis.value);
+          }
+        }
       }
     })();
 
@@ -134,13 +147,15 @@ export default function Dashboard() {
   useEffect(() => {
     const pid = ownMembership?.playerId;
     if (!isJugador || !pid) return;
-    apiClient.players.get(pid).then(setPlayerProfile).catch(() => null);
+    apiClient.players.getProfile(pid).then(setPlayerProfile).catch(() => null);
   }, [isJugador, ownMembership?.playerId]);
 
   // Fetch review queue count for MANAGER / COACH
   useEffect(() => {
     if (!isManager && !isCoach) return;
-    apiClient.review.list({ status: 'PENDING' }).then((r) => setReviewCount(r.items?.length ?? 0)).catch(() => null);
+    if (ownTeam) {
+      apiClient.review.list(ownTeam.id, { status: 'PENDING' }).then((r) => setReviewCount(r.items?.length ?? 0)).catch(() => null);
+    }
   }, [isManager, isCoach]);
 
   const isSyncing = syncState.tag === 'running';
@@ -390,7 +405,7 @@ export default function Dashboard() {
                     {playerProfile.heroStats.length > 0 && (
                       <div className="glass-card" style={{ textAlign: 'center', padding: '1rem' }}>
                         <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.9rem', fontWeight: 700, color: 'var(--accent-blue)', textTransform: 'capitalize' }}>
-                          {playerProfile.heroStats[0].heroData?.slug ?? '—'}
+                          {playerProfile.heroStats[0].heroData?.name ?? playerProfile.heroStats[0].heroData?.slug ?? '—'}
                         </div>
                         <div style={{ fontSize: '0.62rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginTop: '0.15rem' }}>Main Hero</div>
                       </div>
@@ -421,10 +436,12 @@ export default function Dashboard() {
               )}
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '0.75rem' }}>
                 {ownMembership?.playerId && (
-                  <QuickLink to={`/analysis/players?id=${ownMembership.playerId}`} icon={<Users size={16} />} label="Mi perfil" description="Historial, héroes y métricas" color="var(--accent-teal-bright)" />
+                  <QuickLink to="/analysis/players" state={{ autoLoadPlayerId: ownMembership.playerId }} icon={<Users size={16} />} label="Mi perfil en el juego" description="Stats, héroes, evolución de forma" color="var(--accent-teal-bright)" />
                 )}
-                <QuickLink to="/tools/review" icon={<Star size={16} />} label="Mis objetivos" description="Goals personales y de equipo" color="var(--accent-prime)" />
-                <QuickLink to="/matches" icon={<BookOpen size={16} />} label="Partidas" description="Últimas partidas del equipo" color="var(--accent-violet)" />
+                <QuickLink to="/tools/review" icon={<Star size={16} />} label="Mis objetivos" description="Player Goals del equipo" color="var(--accent-prime)" />
+                {ownMembership?.playerId && (
+                  <QuickLink to="/analysis/players" state={{ autoLoadPlayerId: ownMembership.playerId }} icon={<BookOpen size={16} />} label="Mis partidas" description="Historial completo de partidas" color="var(--accent-violet)" />
+                )}
               </div>
             </>
           )}
@@ -442,13 +459,9 @@ export default function Dashboard() {
         </>
       )}
 
-      {/* ── No team ─────────────────────────────────────────────────────── */}
-      {!isPlatformAdmin && !ownTeam && (
-        <div className="glass-card" style={{ textAlign: 'center', padding: '2.5rem', color: 'var(--text-muted)' }}>
-          <Users size={32} style={{ margin: '0 auto 0.75rem', opacity: 0.3 }} />
-          <p style={{ fontSize: '0.9rem', marginBottom: '0.5rem' }}>No estás asignado a ningún equipo.</p>
-          <p style={{ fontSize: '0.78rem' }}>Contacta a tu manager o admin para recibir una invitación.</p>
-        </div>
+      {/* ── Standalone PLAYER (no team) ──────────────────────────────────── */}
+      {!isPlatformAdmin && (!ownTeam || viewAs === 'PLAYER') && (
+        <PlayerStandaloneView />
       )}
     </div>
   );
@@ -485,3 +498,127 @@ function PlayerSyncWidget() {
   return null;
 }
 export { PlayerSyncWidget };
+
+// ── Standalone Player view (PLAYER globalRole, no team) ───────────────────────
+function PlayerStandaloneView() {
+  const { user, refreshInternalSession } = useAuth();
+  const linkedId = (user as { linkedPlayerId?: string | null })?.linkedPlayerId;
+
+  // All hooks before any conditional returns
+  const [profile, setProfile] = useState<PlayerProfile | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [showLinkModal, setShowLinkModal] = useState(false);
+  const [linkedIdState, setLinkedIdState] = useState(linkedId);
+
+  // Sync linkedIdState when auth state updates (e.g. after refreshInternalSession)
+  useEffect(() => {
+    if (linkedId && !linkedIdState) {
+      setLinkedIdState(linkedId);
+    }
+  }, [linkedId, linkedIdState]);
+
+  useEffect(() => {
+    if (!linkedId) return;
+    setLoading(true);
+    apiClient.players.getProfile(linkedId)
+      .then(setProfile)
+      .catch(() => null)
+      .finally(() => setLoading(false));
+  }, [linkedId]);
+
+  if (!linkedIdState) {
+    return (
+      <>
+        <div className="glass-card" style={{ textAlign: 'center', padding: '2.5rem' }}>
+          <Users size={36} style={{ margin: '0 auto 0.85rem', opacity: 0.3, color: 'var(--accent-teal-bright)' }} />
+          <p style={{ fontSize: '0.92rem', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '0.4rem' }}>
+            Vincula tu perfil de jugador
+          </p>
+          <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginBottom: '1.25rem', lineHeight: 1.6 }}>
+            Para ver tus estadísticas de Predecessor, busca tu nombre de jugador y vincúlalo a tu cuenta.
+          </p>
+          <button
+            onClick={() => setShowLinkModal(true)}
+            className="btn-primary"
+            style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.88rem', padding: '0.55rem 1.25rem' }}
+          >
+            Buscar mi perfil en Predecessor
+          </button>
+        </div>
+        {showLinkModal && (
+          <LinkPlayerModal
+            onLinked={(pid) => { setLinkedIdState(pid); setShowLinkModal(false); void refreshInternalSession(); }}
+            onClose={() => setShowLinkModal(false)}
+          />
+        )}
+      </>
+    );
+  }
+
+  if (loading) return <div style={{ padding: '2rem', color: 'var(--text-muted)', textAlign: 'center' }}>Cargando tu perfil…</div>;
+
+  if (!profile) return null;
+
+  const wr = profile.generalStats?.winRate ? Math.round(profile.generalStats.winRate as number) : null;
+  const kda = profile.generalStats?.kda ? (profile.generalStats.kda as number).toFixed(2) : null;
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+      {/* Stats */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '1rem' }}>
+        {[
+          { label: 'KDA', value: kda ?? '—', color: 'var(--accent-teal-bright)' },
+          { label: 'Win Rate', value: wr ? `${wr}%` : '—', color: wr && wr >= 50 ? 'var(--accent-win)' : 'var(--accent-loss)' },
+          { label: 'Partidas', value: profile.recentMatches.length, color: 'var(--text-primary)' },
+          ...(profile.heroStats[0] ? [{ label: 'Main Hero', value: profile.heroStats[0].heroData?.name ?? profile.heroStats[0].heroData?.slug ?? '—', color: 'var(--accent-blue)' }] : []),
+        ].map(({ label, value, color }) => (
+          <div key={label} className="glass-card" style={{ textAlign: 'center', padding: '1rem' }}>
+            <div style={{ fontFamily: 'var(--font-mono)', fontSize: label === 'Main Hero' ? '0.85rem' : '1.4rem', fontWeight: 700, color }}>{String(value)}</div>
+            <div style={{ fontSize: '0.62rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginTop: '0.15rem' }}>{label}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Last 5 matches */}
+      {profile.recentMatches.length > 0 && (
+        <div className="glass-card" style={{ padding: '1rem 1.25rem' }}>
+          <div style={{ fontSize: '0.68rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '0.75rem' }}>Últimas partidas</div>
+          <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+            {profile.recentMatches.slice(0, 8).map((m, i) => (
+              <div key={i} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.25rem' }}>
+                <div style={{ width: 36, height: 36, borderRadius: 6, background: m.result === 'win' ? 'rgba(74,222,128,0.12)' : 'rgba(248,113,113,0.12)', border: `1px solid ${m.result === 'win' ? 'var(--accent-win)' : 'var(--accent-loss)'}33`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <span style={{ fontSize: '0.62rem', fontWeight: 700, color: m.result === 'win' ? 'var(--accent-win)' : 'var(--accent-loss)', fontFamily: 'var(--font-mono)' }}>{m.result === 'win' ? 'W' : 'L'}</span>
+                </div>
+                <span style={{ fontSize: '0.5rem', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>{m.kills}/{m.deaths}/{m.assists}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Quick links */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '0.75rem' }}>
+        <Link to="/analysis/players" state={{ autoLoadPlayerId: linkedId }} style={{ textDecoration: 'none' }}>
+          <div className="glass-card landing-feature-card" style={{ display: 'flex', alignItems: 'center', gap: '0.85rem', padding: '0.9rem 1.1rem', cursor: 'pointer', borderLeft: '3px solid var(--accent-teal-bright)' }}>
+            <Users size={18} style={{ color: 'var(--accent-teal-bright)', flexShrink: 0 }} />
+            <div>
+              <div style={{ fontWeight: 700, fontSize: '0.85rem', color: 'var(--text-primary)' }}>Mi perfil completo</div>
+              <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '0.1rem' }}>Stats, héroes, evolución</div>
+            </div>
+            <ArrowRight size={14} style={{ color: 'var(--text-muted)', marginLeft: 'auto', flexShrink: 0 }} />
+          </div>
+        </Link>
+        <Link to="/analysis/players" state={{ autoLoadPlayerId: linkedId }} style={{ textDecoration: 'none' }}>
+          <div className="glass-card landing-feature-card" style={{ display: 'flex', alignItems: 'center', gap: '0.85rem', padding: '0.9rem 1.1rem', cursor: 'pointer', borderLeft: '3px solid var(--accent-violet)' }}>
+            <BookOpen size={18} style={{ color: 'var(--accent-violet)', flexShrink: 0 }} />
+            <div>
+              <div style={{ fontWeight: 700, fontSize: '0.85rem', color: 'var(--text-primary)' }}>Mis partidas</div>
+              <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '0.1rem' }}>Historial completo</div>
+            </div>
+            <ArrowRight size={14} style={{ color: 'var(--text-muted)', marginLeft: 'auto', flexShrink: 0 }} />
+          </div>
+        </Link>
+      </div>
+    </div>
+  );
+}

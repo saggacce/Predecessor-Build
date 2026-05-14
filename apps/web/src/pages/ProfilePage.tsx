@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react';
 import { Camera, Key, Link2, Link2Off, Save, Shield, Star, User } from 'lucide-react';
 import { toast } from 'sonner';
 import { apiClient, type UserProfile } from '../api/client';
+import { useAuth } from '../hooks/useAuth';
+import { LinkPlayerModal } from '../components/LinkPlayerModal';
 
 const PLAYER_TIER_CONFIG = {
   FREE:    { label: 'Free',    color: 'var(--text-muted)',        bg: 'rgba(100,116,139,0.1)' },
@@ -33,6 +35,8 @@ export default function ProfilePage() {
   const [avatarUrl, setAvatarUrl] = useState('');
   const [timezone, setTimezone] = useState('');
   const [savingProfile, setSavingProfile] = useState(false);
+  const { refreshInternalSession } = useAuth();
+  const [showLinkModal, setShowLinkModal] = useState(false);
 
   // Password form
   const [currentPw, setCurrentPw] = useState('');
@@ -68,6 +72,7 @@ export default function ProfilePage() {
         timezone: timezone || null,
       });
       setProfile(user);
+      void refreshInternalSession(); // update name/avatar in header badge
       toast.success('Perfil actualizado');
     } catch { toast.error('Error al guardar'); }
     finally { setSavingProfile(false); }
@@ -258,8 +263,43 @@ export default function ProfilePage() {
         <div className="glass-card" style={{ padding: '1.25rem' }}>
           <h2 style={{ margin: '0 0 0.4rem', fontSize: '0.9rem', fontWeight: 700 }}>Cuentas conectadas</h2>
           <p style={{ fontSize: '0.76rem', color: 'var(--text-muted)', margin: '0 0 1.25rem' }}>
-            Conecta tus cuentas de juego y servicios. Los flujos de autorización OAuth estarán disponibles próximamente.
+            Conecta tus cuentas de juego y servicios.
           </p>
+
+          {/* Predecessor / pred.gg player link */}
+          <div style={{ marginBottom: '1rem', padding: '0.85rem 1rem', border: '1px solid rgba(56,212,200,0.25)', borderRadius: 8, background: 'rgba(56,212,200,0.05)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                <div style={{ width: 32, height: 32, borderRadius: 6, background: 'rgba(56,212,200,0.15)', border: '1px solid rgba(56,212,200,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.9rem' }}>🎮</div>
+                <div>
+                  <div style={{ fontWeight: 700, fontSize: '0.88rem', color: 'var(--text-primary)' }}>Predecessor (pred.gg)</div>
+                  <div style={{ fontSize: '0.72rem', color: profile.linkedPlayerId ? 'var(--accent-win)' : 'var(--text-muted)', marginTop: '0.1rem' }}>
+                    {profile.linkedPlayerId ? 'Perfil vinculado' : 'Sin perfil vinculado'}
+                  </div>
+                </div>
+              </div>
+              {profile.linkedPlayerId ? (
+                <button
+                  onClick={async () => {
+                    try {
+                      await apiClient.profile.unlinkPlayer();
+                      setProfile((p) => p ? { ...p, linkedPlayerId: null } : p);
+                      toast.success('Perfil desvinculado');
+                    } catch { toast.error('Error al desvincular'); }
+                  }}
+                  style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', padding: '0.35rem 0.75rem', border: '1px solid var(--border-color)', borderRadius: 6, background: 'transparent', color: 'var(--accent-loss)', cursor: 'pointer', fontSize: '0.75rem' }}>
+                  Desvincular
+                </button>
+              ) : (
+                <button
+                  onClick={() => setShowLinkModal(true)}
+                  className="btn-primary"
+                  style={{ fontSize: '0.78rem', padding: '0.38rem 0.85rem', whiteSpace: 'nowrap' }}>
+                  Vincular perfil
+                </button>
+              )}
+            </div>
+          </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem' }}>
             {([
               { provider: 'discord' as const, label: 'Discord', color: '#5865F2', id: profile.discordId, username: profile.discordUsername, icon: '🎮' },
