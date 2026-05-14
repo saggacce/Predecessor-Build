@@ -35,7 +35,7 @@ export function HeroAvatarWithTooltip({ slug, name, imageUrl, meta, size, rounde
   const [tipPos, setTipPos] = useState({ top: 0, left: 0 });
   const containerRef = useRef<HTMLDivElement>(null);
 
-  // Local asset first (served from /assets/heroes/ via proxy), omeda.city as fallback
+  // Local asset first (served from apps/web/public/heroes/ by Vite), omeda.city as fallback
   const normalizedSlug = slug ? normalizeHeroSlug(slug) : null;
   const localSrc = normalizedSlug ? `/heroes/${normalizedSlug}.webp` : null;
   const src = !imgErr ? (localSrc ?? meta?.imageUrl ?? imageUrl ?? null) : (meta?.imageUrl ?? imageUrl ?? null);
