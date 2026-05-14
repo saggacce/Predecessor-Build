@@ -3,7 +3,7 @@ name: Sprint Testing Issue
 on:
   pull_request:
     branches: [main]
-    types: [opened, reopened]
+    types: [opened, reopened, synchronize]
 
 jobs:
   create-testing-issue:
@@ -33,6 +33,21 @@ jobs:
         with:
           script: |
             const pr = context.payload.pull_request;
+
+            // Skip if a testing issue already exists for this PR
+            const existing = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              labels: 'testing,sprint',
+              state: 'open',
+            });
+            const alreadyExists = existing.data.some(i =>
+              i.title.includes(`Sprint PR #${pr.number}`)
+            );
+            if (alreadyExists) {
+              console.log('Testing issue already exists for this PR, skipping.');
+              return;
+            }
             const commits = `${{ steps.commits.outputs.list }}`;
 
             const body = [
