@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { getPlayerProfile, comparePlayers, searchPlayers, getPlayerAdvancedMetrics } from '../services/player-service.js';
-import { syncPlayerByName } from '../services/sync-service.js';
+import { syncPlayerByName, syncRecentMatchesForPlayer } from '../services/sync-service.js';
 import { AppError } from '../middleware/error-handler.js';
 import { requireAuth } from '../middleware/require-auth.js';
 import { db } from '../db.js';
@@ -98,6 +98,11 @@ playersRouter.post('/sync', async (req, res, next) => {
         `Player "${name}" not found on pred.gg`,
         'PLAYER_NOT_FOUND_PREDGG',
       );
+    }
+
+    // Also sync recent matches + event stream if we have a token
+    if (userToken && synced.predggId) {
+      syncRecentMatchesForPlayer(db, synced.predggId, userToken, 10).catch(() => null);
     }
 
     res.json({ synced: true, player: synced });
