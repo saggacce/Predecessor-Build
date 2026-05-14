@@ -1,140 +1,128 @@
-# PrimeSight — Competitive Intelligence for Predecessor
+# RiftLine — Competitive Intel for Predecessor
 
-Private web platform for competitive analysis of the MOBA game [Predecessor](https://www.predecessorgame.com/). Built for coaches and analysts to scout rivals, manage rosters, and prepare scrims with real match data.
+Private competitive intelligence platform for the MOBA [Predecessor](https://www.predecessorgame.com/). Built for coaches, analysts, and players to scout rivals, track performance, and prepare with real match data.
 
-## Current state
+---
 
-| Feature | Status |
-|---------|--------|
-| OAuth2 login with pred.gg (PKCE, 30-day sessions) | ✅ Complete |
-| Player search, profile sync, match history | ✅ Complete |
-| Player Scouting UI (10-phase state machine) | ✅ Complete |
-| Dashboard with data sync controls | ✅ Complete |
-| CI/CD (GitHub Actions + branch protection) | ✅ Complete |
-| **Teams management — create, edit, roster CRUD** | ✅ Complete |
-| PrimeSight design system (color, typography, favicon) | ✅ Complete |
-| Competitive docs (indicators catalog, design direction) | ✅ Complete |
-| Team logo upload (URL or file upload, base64) | ✅ Complete |
-| Custom player names (customName, searchable) | ✅ Complete |
-| Console / PC platform badge (isConsole from pred.gg) | ✅ Complete |
-| **Match detail — Scoreboard, KP%, GPM, role column, hero tooltips** | ✅ Complete |
-| Player profile — rank icon (pred.gg style), season badges, region flag | ✅ Complete |
-| Recent Matches table — headers, colored badges, role icons | ✅ Complete |
-| Hero metadata API — class, roles, normalized names | ✅ Complete |
-| Local assets — heroes, items, roles, rank icons | ✅ Complete |
-| Match Statistics tab (data available, storage strategy pending) | 🔜 Next |
-| Event stream sync (heatmaps, Fase 2 metrics) | 🔜 Planned |
-| Match Timeline + Analysis tabs | 🔜 Planned |
-| Pre-scrim report (enriched) | 🔜 Planned |
-| Build / stat calculator | 📋 Phase 2+ |
+## Stack
 
-**93% competitive match data coverage** confirmed against pred.gg GraphQL API, including event stream (heroKills with X/Y/Z coordinates, ward placements, gold timeline, item purchase timestamps).
-
-## Tech stack
-
-| Layer | Technology |
-|-------|-----------|
+| Layer | Tech |
+|-------|------|
 | Frontend | React 19 + TypeScript + Vite |
-| Backend | Node.js + Express + TypeScript |
-| Domain engine | `packages/domain-engine` (pure TS) |
-| Auth | OAuth2 PKCE + HTTP-only cookie sessions (30-day refresh) |
+| Backend | Express + Node.js + TypeScript |
 | Database | PostgreSQL + Prisma ORM |
-| Tests | Vitest + Supertest (43 tests) |
-| Monorepo | npm workspaces |
-| Data source | pred.gg GraphQL API |
-| Logging | Pino (JSON structured, credential redaction) |
+| Auth | Internal (bcrypt + JWT + HTTP-only cookies) + OAuth2 PKCE (pred.gg) |
+| Logging | Pino (structured JSON) |
+| Tests | Vitest + Supertest (106 tests) |
+| CI/CD | GitHub Actions + branch protection on main |
+| Hosting | Railway.app (single service: API + frontend static build) |
 
-## Quick start
+---
 
+## Features
+
+### Analysis
+- **Player Scouting** — profile, hero pool, WR trends, form strip, CS/wards/multi-kills, advanced metrics (Gold/Damage/Kill Share, Efficiency Gap, Death Rates)
+- **Team Analysis** — roster, performance by patch/side, Phase/Vision/Objective/Draft Analysis, Rival Scouting with threat score
+- **Match Detail** — Scoreboard, Statistics (16 extended fields), Timeline (swim lanes + minimap), Analysis (Objective Control, Gold Diff, Heatmap)
+- **Analyst Rules Engine** — 9 deterministic rules: critical deaths pre-objective, vision gaps, throw patterns, player slump, draft dependency, positive reinforcement
+
+### Team Tools
+- **Review Queue** — 8 states, 8 cause tags, inline edit, priority filters
+- **Team & Player Goals** — KPI strips, progress tracking
+- **Battle Plan** (Scrim Report) — VS view, win conditions, ban targets, Full Screen mode for projection
+- **VOD & Replay Index** — external video links with timestamps and filters
+
+### Platform
+- **RBAC** — roles: `PLATFORM_ADMIN`, `MANAGER`, `COACH`, `ANALISTA`, `JUGADOR`, `PLAYER`
+- **View As Role** — admins preview UI as any role (sessionStorage, no DB change)
+- **Player self-linking** — players link their pred.gg profile from the Dashboard
+- **Platform Admin panel** — Staff management, Data Controls, Audit Logs
+- **Data retention** — configurable rolling window (default 3 months), monthly auto-cleanup cron
+- **Landing page** — hero showcase with Predecessor characters
+- **Login fullscreen** — internal email/password; social logins (coming soon)
+
+---
+
+## Local setup
+
+### Prerequisites
+- Node.js 20.12+
+- PostgreSQL 15+
+- npm 10+
+
+### Install
 ```bash
-# 1. Install dependencies
+git clone https://github.com/saggacce/Predecessor-Build
+cd Predecessor-Build
 npm install
-
-# 2. Copy env template and fill in credentials
-cp .env.example .env
-# Edit .env: PRED_GG_CLIENT_ID, PRED_GG_CLIENT_SECRET, DATABASE_URL, SESSION_SECRET
-
-# 3. Start PostgreSQL and apply schema
-sudo service postgresql start
-npm run db:migrate --workspace=@predecessor/data-sync
-
-# 4. Start both services (hot reload)
-./serve.sh start
-
-# 5. Open the app and log in with pred.gg
-open http://localhost:5173
 ```
+
+### Configure
+```bash
+cp .env.example .env
+# Fill in DATABASE_URL and PRED_GG_* credentials
+```
+
+### Database
+```bash
+cd workers/data-sync
+npx prisma db push                          # create tables
+cd ../..
+npx tsx scripts/seed-config.ts             # seed platform config
+```
+
+### Run (development)
+```bash
+./serve.sh start            # API on :3001, frontend on :5173
+./serve.sh logs             # tail both logs
+./serve.sh stop
+```
+
+### Tests
+```bash
+npm test                    # 106 tests across API routes + domain engine
+npm run typecheck           # TypeScript strict check
+```
+
+---
 
 ## Project structure
 
 ```
 apps/
-  api/          → Express backend (auth, players, teams, reports, admin, patches)
-  web/          → React frontend (Dashboard, PlayerScouting, TeamAnalysis, ScrimReport)
-assets/
-  heroes/       → 129 hero portraits and promo images (.webp)
-  items/        → 321 item icons (.webp)
-  icons/roles/  → Role icons: carry, jungle, midlane, offlane, support (.png)
-  maps/         → map.png (3-lane), brawl_map.png (Arena)
+  api/          Express API + sync service
+  web/          React frontend (Vite)
 packages/
-  data-model/   → Shared TypeScript DTOs
-  domain-engine → Stat calculation engine (Phase 2)
+  data-model/   Shared TypeScript types (DTOs)
+  domain-engine/ Pure TS business logic (no I/O)
 workers/
-  data-sync/    → pred.gg data ingestion (players, matches, versions, Prisma schema)
+  data-sync/    Prisma schema + CLI sync worker
 scripts/
-  explore_predgg_api.py           → OAuth2 diagnostic tool
-  explore_predgg_authenticated.py → Regenerate predgg_api_inventory.md
-docs/
-  planning.md                          → Active tasks ← read first
-  primesight_visual_design_direction.md → Full design system and UX spec
-  primesight_indicators_catalog.csv    → 102 competitive metrics with implementation phases
-  project_predecessor.md               → Product specification
-  predecessor_api_technical_doc.md     → pred.gg API integration reference
-  predgg_api_inventory.md              → Full GraphQL field inventory (authenticated)
-  future_features_roadmap.md           → Feature backlog P0–P3
-  workflow.md                          → Git and PR workflow
-  data_quality_policy.md               → Data freshness and sync strategy
-  portal-moba-analytics.html           → MOBA analytics market research (reference)
+  seed-config.ts  Platform config seed
+  seed-qa.ts      QA test data (dev only — run with --clean to remove)
+docs/           Technical and product documentation
+assets/         Static assets (heroes, items, icons, ranks, maps)
 ```
 
-## Data source
+---
 
-- **pred.gg GraphQL** (`https://pred.gg/gql`) — players, matches, teams, patches, assets
-- OAuth2 PKCE required for player search and event stream data
-- Heroes, items, versions, ratings are public (no auth)
-- See [docs/predgg_api_inventory.md](docs/predgg_api_inventory.md) for full coverage details
+## Key docs
 
-## pred.gg event stream (confirmed available)
+| Doc | Purpose |
+|-----|---------|
+| `docs/planning.md` | Active tasks and project state |
+| `docs/future_features_roadmap.md` | Prioritized feature backlog |
+| `docs/react_crash_patterns.md` | React crash diagnosis and prevention |
+| `docs/primesight_visual_design_direction.md` | UI design system reference |
+| `docs/primesight_indicators_catalog.csv` | Full metrics catalog |
+| `docs/predgg_api_inventory.md` | pred.gg GraphQL field reference |
+| `docs/workflow.md` | Git workflow and conventions |
 
-| Data | Fields |
-|------|--------|
-| `heroKills` | gameTime, location {x,y,z}, killer/killed player+hero+team |
-| `objectiveKills` | gameTime, killedEntityType (FANGTOOTH, ORB_PRIME…), killerTeam |
-| `structureDestructions` | gameTime, structureEntityType, destructionTeam, location |
-| `wardPlacements/Destructions` | gameTime, type (STEALTH/ORACLE/SENTRY/…), location |
-| `goldEarnedAtInterval` | Cumulative gold per minute (array, 1 value/min per player) |
-| `transactions` | gameTime, transactionType (BUY/SELL/UNDO…), itemData |
-| `heroBans` | hero + team — **RANKED only, no pick order** |
+---
 
-All event data requires a valid pred.gg Bearer token.
+## Data retention
 
-## Service management
+Event stream data (kills, wards, transactions) is retained for **3 months** by default. A cron job runs on the 1st of each month at 03:00 AM. Configurable via `DATA_RETENTION_MONTHS` env var. Manual trigger: `POST /admin/cleanup-old-data`.
 
-```bash
-./serve.sh start              # dev mode (tsx watch + vite, hot reload)
-./serve.sh start --prod       # production build then serve
-./serve.sh stop
-./serve.sh restart [--dev|--prod]
-./serve.sh status
-./serve.sh logs [api|web]
-```
-
-## Delivery roadmap
-
-| Phase | Deliverable | State |
-|-------|-------------|-------|
-| 1 | Data ingestion + normalized schema + player scouting | ✅ Complete |
-| 2 | Teams management + PrimeSight design system | ✅ Complete |
-| 3 | Event stream sync + heatmaps + Fase 2 metrics | 🔜 In progress |
-| 4 | Draft analysis + comfort scores + ban vulnerability | 📋 Planned |
-| 5 | Build/stat calculator (level/items/skills) | 📋 Planned |
+Planned next step: TimescaleDB migration for 5-10x compression of event data.

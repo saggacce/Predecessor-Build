@@ -62,14 +62,6 @@ if (process.env.NODE_ENV === 'production') {
 
 app.use('/hero-meta', heroMetaRouter);
 
-// Serve local hero/item/role assets — avoids dependency on pred.gg CDN
-const assetsRoot = join(fileURLToPath(import.meta.url), '../../../../assets');
-app.use('/heroes', express.static(join(assetsRoot, 'heroes')));
-app.use('/items', express.static(join(assetsRoot, 'items')));
-app.use('/icons', express.static(join(assetsRoot, 'icons')));
-app.use('/ranks', express.static(join(assetsRoot, 'ranks')));
-app.use('/maps', express.static(join(assetsRoot, 'maps')));
-
 app.get('/health', (_req, res) => {
   res.json({ status: 'ok', timestamp: new Date() });
 });
