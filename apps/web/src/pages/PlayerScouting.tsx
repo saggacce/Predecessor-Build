@@ -78,7 +78,7 @@ class ProfileErrorBoundary extends React.Component<
 }
 
 export default function PlayerScouting() {
-  const { authenticated } = useAuth();
+  const { authenticated, internalAuthenticated } = useAuth();
   const location = useLocation();
   const [query, setQuery] = useState('');
   const [phase, setPhase] = useState<Phase>({ tag: 'idle' });
@@ -254,7 +254,7 @@ export default function PlayerScouting() {
               <PlayerProfilePanel
                 profile={profilePhase.profile}
                 onClose={() => setProfilePhase({ tag: 'idle' })}
-                onRefresh={authenticated ? () => void handleRefreshProfile(profilePhase.profile.displayName, profilePhase.profile.id) : undefined}
+                onRefresh={internalAuthenticated ? () => void handleRefreshProfile(profilePhase.profile.displayName, profilePhase.profile.id) : undefined}
               />
             </ProfileErrorBoundary>
           )}

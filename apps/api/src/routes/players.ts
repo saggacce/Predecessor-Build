@@ -5,7 +5,7 @@ import { syncPlayerByName } from '../services/sync-service.js';
 import { AppError } from '../middleware/error-handler.js';
 import { requireAuth } from '../middleware/require-auth.js';
 import { db } from '../db.js';
-import { getValidToken } from './auth.js';
+import { getValidToken, exchangeToken } from './auth.js';
 
 export const playersRouter = Router();
 
@@ -79,7 +79,17 @@ playersRouter.post('/sync', async (req, res, next) => {
       name: z.string().min(1).max(100).trim(),
     }).parse(req.body);
 
-    const userToken = await getValidToken(req, res);
+    // Try user OAuth token first, fall back to stored platform credentials
+    let userToken = await getValidToken(req, res);
+    if (!userToken) {
+      try {
+        const cred = await db.platformCredential.findUnique({ where: { key: 'predgg_refresh_token' } });
+        if (cred) {
+          const result = await exchangeToken({ grant_type: 'refresh_token', refresh_token: cred.value });
+          if (result.ok && result.data.access_token) userToken = result.data.access_token;
+        }
+      } catch { /* no stored token, continue without */ }
+    }
     const synced = await syncPlayerByName(db, name, userToken);
 
     if (!synced) {
