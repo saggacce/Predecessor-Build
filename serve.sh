@@ -279,8 +279,10 @@ case "$CMD" in
       exit 1
     fi
 
+    STAGING_DIR="/tmp/riftline-staging"
+
     echo ""
-    echo -e "${BOLD}RiftLine — Staging${NC} ${CYAN}(production-like, nginx :$STAGING_NGINX_PORT → API :$STAGING_API_PORT)${NC}"
+    echo -e "${BOLD}RiftLine — Staging${NC} ${CYAN}(develop branch → nginx :$STAGING_NGINX_PORT → API :$STAGING_API_PORT)${NC}"
     echo "──────────────────────────────────────────────────────────"
 
     # Stop previous staging if running
@@ -288,25 +290,41 @@ case "$CMD" in
       stop_service "Staging API" "$STAGING_API_PID"
     fi
 
-    # Build frontend for staging
+    # Sync develop branch via git worktree (doesn't touch your working branch)
+    log "Syncing develop branch from GitHub..."
+    git -C "$ROOT" fetch origin develop --quiet
+    if [[ -d "$STAGING_DIR" ]]; then
+      git -C "$STAGING_DIR" reset --hard origin/develop --quiet
+    else
+      git -C "$ROOT" worktree add "$STAGING_DIR" origin/develop --quiet 2>/dev/null \
+        || git -C "$ROOT" worktree add "$STAGING_DIR" develop --quiet
+    fi
+    ok "develop branch ready at $STAGING_DIR"
+
+    # Install deps in worktree
+    log "Installing dependencies..."
+    (cd "$STAGING_DIR" && npm install --prefer-offline --silent)
+    ok "Dependencies installed"
+
+    # Build frontend
     log "Building frontend (production build)..."
-    (cd "$ROOT/apps/web" && NODE_ENV=production npm run build >> "$LOGS_DIR/staging-build.log" 2>&1) \
+    (cd "$STAGING_DIR/apps/web" && npm run build >> "$LOGS_DIR/staging-build.log" 2>&1) \
       || { fail "Frontend build failed — check logs/staging-build.log"; exit 1; }
     ok "Frontend built"
 
     # Generate Prisma client
     log "Generating Prisma client..."
-    (cd "$ROOT" && npx prisma generate --schema=workers/data-sync/prisma/schema.prisma >> "$LOGS_DIR/staging-build.log" 2>&1)
+    (cd "$STAGING_DIR" && npx prisma generate --schema=workers/data-sync/prisma/schema.prisma 2>&1 | grep -v "^$" | tail -3)
     ok "Prisma client ready"
 
-    # Load staging env and start API
+    # Load staging env and start API from worktree
     log "Starting Staging API on port $STAGING_API_PORT..."
     mkdir -p "$PIDS_DIR" "$LOGS_DIR"
     set -a
     source "$ROOT/.env.staging"
     set +a
 
-    "$ROOT/node_modules/.bin/tsx" "$ROOT/apps/api/src/index.ts" \
+    "$STAGING_DIR/node_modules/.bin/tsx" "$STAGING_DIR/apps/api/src/index.ts" \
       >> "$STAGING_LOG" 2>&1 &
     staging_pid=$!
     echo "$staging_pid" > "$STAGING_API_PID"
@@ -328,20 +346,26 @@ case "$CMD" in
       warn "nginx may not be running — try: sudo nginx"
     fi
 
+    # Show which commit is deployed
+    STAGING_COMMIT=$(git -C "$STAGING_DIR" log --oneline -1 2>/dev/null || echo "unknown")
     echo ""
     echo -e "${GREEN}✓ Staging ready${NC} — ${BOLD}http://localhost:$STAGING_NGINX_PORT${NC}"
-    echo -e "${CYAN}Logs:${NC}  tail -f logs/staging.log"
-    echo -e "${CYAN}Stop:${NC}  ./serve.sh staging-stop"
+    echo -e "${CYAN}Branch:${NC} develop @ $STAGING_COMMIT"
+    echo -e "${CYAN}Logs:${NC}   tail -f logs/staging.log"
+    echo -e "${CYAN}Stop:${NC}   ./serve.sh staging-stop"
     echo ""
     ;;
 
   staging-stop)
+    STAGING_DIR="/tmp/riftline-staging"
     echo ""
     echo -e "${BOLD}RiftLine — Stopping Staging${NC}"
     echo "──────────────────────────────────────────"
     stop_service "Staging API" "$STAGING_API_PID"
     sudo nginx -s stop 2>/dev/null || true
     ok "nginx stopped"
+    # Remove worktree
+    git -C "$ROOT" worktree remove "$STAGING_DIR" --force 2>/dev/null && ok "Worktree removed" || true
     echo ""
     ;;
 
