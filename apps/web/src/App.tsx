@@ -87,12 +87,17 @@ function WorkspaceHeader() {
           </div>
         )}
 
-        {/* pred.gg status — admins only */}
+        {/* pred.gg status — admins only, click to connect via OAuth */}
         {isAdmin && (
-          <div className={`workspace-chip ${authenticated ? 'connected' : ''}`}>
+          <a
+            href="/api/auth/predgg"
+            className={`workspace-chip ${authenticated ? 'connected' : ''}`}
+            style={{ textDecoration: 'none', cursor: 'pointer' }}
+            title={authenticated ? 'pred.gg conectado — click para reconectar' : 'Click para conectar con pred.gg'}
+          >
             <Radio size={13} />
             {authenticated ? 'pred.gg connected' : 'pred.gg disconnected'}
-          </div>
+          </a>
         )}
 
         {/* User chip with avatar + logout */}
