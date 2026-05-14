@@ -65,18 +65,6 @@ if (process.env.NODE_ENV === 'production') {
   });
 }
 
-// Production: serve Vite-built frontend BEFORE API routes so browser navigation
-// to SPA paths (/profile, /matches, etc.) serves index.html, not the API handler.
-if (process.env.NODE_ENV === 'production') {
-  const distPath = join(dirname(fileURLToPath(import.meta.url)), '../../web/dist');
-  app.use(express.static(distPath));
-  app.get('*', (req, res, next) => {
-    // Only intercept browser navigation (text/html) — let API calls pass through
-    if (req.accepts('html')) return res.sendFile(join(distPath, 'index.html'));
-    next();
-  });
-}
-
 app.use('/hero-meta', heroMetaRouter);
 
 app.get('/health', (_req, res) => {
@@ -101,6 +89,15 @@ app.use('/profile', profileRouter);
 app.use('/feedback', feedbackRouter);
 
 app.use(errorHandler);
+
+// Production: serve Vite-built frontend.
+// Placed AFTER all API routes — Express falls through to here only for paths
+// that don't match any API route (frontend SPA routes like /matches, /profile).
+if (process.env.NODE_ENV === 'production') {
+  const distPath = join(dirname(fileURLToPath(import.meta.url)), '../../web/dist');
+  app.use(express.static(distPath));
+  app.get('*', (_req, res) => res.sendFile(join(distPath, 'index.html')));
+}
 
 // Monthly data retention cleanup — runs on the 1st of every month at 03:00 AM
 if (process.env.NODE_ENV !== 'test') {

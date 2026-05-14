@@ -175,7 +175,9 @@ describe('POST /internal-auth/login', () => {
 
   it('sets secure cookies in production', async () => {
     const previousNodeEnv = process.env.NODE_ENV;
+    const previousHttpsEnabled = process.env.HTTPS_ENABLED;
     process.env.NODE_ENV = 'production';
+    process.env.HTTPS_ENABLED = 'true';
     const passwordHash = await bcrypt.hash('correct-password', 12);
     mockDb.user.findUnique.mockResolvedValue(userRecord({ passwordHash }));
 
@@ -189,6 +191,7 @@ describe('POST /internal-auth/login', () => {
       expect(cookies.find((cookie) => cookie.startsWith('ps_refresh='))).toContain('Secure');
     } finally {
       process.env.NODE_ENV = previousNodeEnv;
+      process.env.HTTPS_ENABLED = previousHttpsEnabled;
     }
   });
 });
