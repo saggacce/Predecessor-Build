@@ -1498,7 +1498,8 @@ export async function cleanupOldData(db: PrismaClient): Promise<CleanupResult> {
 
   logger.info({ cutoff, retentionMonths: DATA_RETENTION_MONTHS }, 'starting data retention cleanup');
 
-  // 1. Event stream — delete by old match IDs
+  // 1. Event stream — drop_chunks for hypertables (milliseconds vs minutes)
+  // HeroBan is not a hypertable so still uses DELETE via Match IDs
   const oldMatchIds = await db.match.findMany({
     where: { startTime: { lt: cutoff } },
     select: { id: true },
@@ -1506,16 +1507,18 @@ export async function cleanupOldData(db: PrismaClient): Promise<CleanupResult> {
   const ids = oldMatchIds.map((m) => m.id);
 
   let deletedEventStreamRows = 0;
+  await Promise.all([
+    db.$executeRaw`SELECT drop_chunks('"HeroKill"', ${cutoff}::timestamptz)`,
+    db.$executeRaw`SELECT drop_chunks('"ObjectiveKill"', ${cutoff}::timestamptz)`,
+    db.$executeRaw`SELECT drop_chunks('"WardEvent"', ${cutoff}::timestamptz)`,
+    db.$executeRaw`SELECT drop_chunks('"Transaction"', ${cutoff}::timestamptz)`,
+    db.$executeRaw`SELECT drop_chunks('"StructureDestruction"', ${cutoff}::timestamptz)`,
+  ]);
+  deletedEventStreamRows = -1; // drop_chunks doesn't return row count
+
+  // HeroBan is not a hypertable — delete normally
   if (ids.length > 0) {
-    const [hb, hk, ok, we, sd, tx] = await Promise.all([
-      db.heroBan.deleteMany({ where: { matchId: { in: ids } } }),
-      db.heroKill.deleteMany({ where: { matchId: { in: ids } } }),
-      db.objectiveKill.deleteMany({ where: { matchId: { in: ids } } }),
-      db.wardEvent.deleteMany({ where: { matchId: { in: ids } } }),
-      db.structureDestruction.deleteMany({ where: { matchId: { in: ids } } }),
-      db.transaction.deleteMany({ where: { matchId: { in: ids } } }),
-    ]);
-    deletedEventStreamRows = hb.count + hk.count + ok.count + we.count + sd.count + tx.count;
+    await db.heroBan.deleteMany({ where: { matchId: { in: ids } } });
   }
 
   // 2. MatchPlayer + Match

@@ -8,165 +8,146 @@ datasource db {
 }
 
 model Version {
-  id          String   @id @default(cuid())
-  predggId    String   @unique
+  id          String           @id @default(cuid())
+  predggId    String           @unique
   name        String
   releaseDate DateTime
   patchType   String
   syncedAt    DateTime
-
-  matches   Match[]
-  snapshots PlayerSnapshot[]
+  matches     Match[]
+  snapshots   PlayerSnapshot[]
 }
 
 model Player {
-  id             String   @id @default(cuid())
-  predggId       String   @unique
-  predggUuid     String   @unique
+  id             String           @id @default(cuid())
+  predggId       String           @unique
+  predggUuid     String           @unique
   displayName    String
-  isPrivate      Boolean  @default(false)
-  isConsole      Boolean  @default(false)
+  isPrivate      Boolean          @default(false)
   inferredRegion String?
-  firstSeen      DateTime @default(now())
+  firstSeen      DateTime         @default(now())
   lastSynced     DateTime
-
-  customName    String?
-
-  snapshots     PlayerSnapshot[]
-  matchPlayers  MatchPlayer[]
-  rosterEntries TeamRoster[]
-  userAccount   User?          // reverse of User.linkedPlayerId
+  customName     String?
+  isConsole      Boolean          @default(false)
+  matchPlayers   MatchPlayer[]
+  snapshots      PlayerSnapshot[]
+  rosterEntries  TeamRoster[]
+  userAccount    User?
 }
 
 model PlayerSnapshot {
   id           String   @id @default(cuid())
   playerId     String
-  player       Player   @relation(fields: [playerId], references: [id])
   versionId    String?
-  version      Version? @relation(fields: [versionId], references: [id])
   syncedAt     DateTime
   generalStats Json
   heroStats    Json
   roleStats    Json
   rankLabel    String?
   ratingPoints Int?
+  player       Player   @relation(fields: [playerId], references: [id])
+  version      Version? @relation(fields: [versionId], references: [id])
 }
 
 model Team {
-  id           String   @id @default(cuid())
-  name         String
-  abbreviation String?
-  logoUrl      String?
-  type         TeamType
-  region       String?
-  notes        String?
-  createdAt    DateTime @default(now())
-
-  // Team subscription tier — only meaningful for OWN teams
-  // FREE | PRO | TEAM | ENTERPRISE
-  teamTier         String    @default("FREE")
+  id                String           @id @default(cuid())
+  name              String
+  abbreviation      String?
+  type              TeamType
+  region            String?
+  notes             String?
+  createdAt         DateTime         @default(now())
+  logoUrl           String?
+  teamTier          String           @default("FREE")
   teamTierExpiresAt DateTime?
-
-  roster       TeamRoster[]
-  memberships  TeamMembership[]
-  llmAnalyses  LlmAnalysis[]
-}
-
-enum TeamType {
-  OWN
-  RIVAL
+  llmAnalyses       LlmAnalysis[]
+  memberships       TeamMembership[]
+  roster            TeamRoster[]
 }
 
 model TeamRoster {
   id         String    @id @default(cuid())
   teamId     String
-  team       Team      @relation(fields: [teamId], references: [id])
   playerId   String
-  player     Player    @relation(fields: [playerId], references: [id])
   role       String?
   activeFrom DateTime  @default(now())
   activeTo   DateTime?
+  player     Player    @relation(fields: [playerId], references: [id])
+  team       Team      @relation(fields: [teamId], references: [id])
 }
 
 model Match {
-  id          String   @id @default(cuid())
-  predggUuid  String   @unique
-  startTime   DateTime
-  duration    Int
-  gameMode    String
-  region      String?
-  winningTeam String?
-  versionId   String?
-  version     Version? @relation(fields: [versionId], references: [id])
+  id                    String                 @id @default(cuid())
+  predggUuid            String                 @unique
+  startTime             DateTime
+  duration              Int
+  gameMode              String
+  region                String?
+  winningTeam           String?
+  versionId             String?
   syncedAt              DateTime
-  rosterSynced          Boolean  @default(false)
-  eventStreamSynced     Boolean  @default(false)
-  eventStreamFailed     Boolean  @default(false)
-
-  matchPlayers        MatchPlayer[]
-  heroKills           HeroKill[]
-  objectiveKills      ObjectiveKill[]
+  eventStreamFailed     Boolean                @default(false)
+  eventStreamSynced     Boolean                @default(false)
+  rosterSynced          Boolean                @default(false)
+  heroBans              HeroBan[]
+  heroKills             HeroKill[]
+  version               Version?               @relation(fields: [versionId], references: [id])
+  matchPlayers          MatchPlayer[]
+  objectiveKills        ObjectiveKill[]
   structureDestructions StructureDestruction[]
-  wardEvents          WardEvent[]
-  transactions        Transaction[]
-  heroBans            HeroBan[]
+  transactions          Transaction[]
+  wardEvents            WardEvent[]
 }
 
 model MatchPlayer {
-  id              String  @id @default(cuid())
-  matchId         String
-  match           Match   @relation(fields: [matchId], references: [id])
-  playerId        String?
-  player          Player? @relation(fields: [playerId], references: [id])
-  predggPlayerUuid String?
-  playerName      String
-  team           String
-  role           String?
-  heroSlug       String
-  kills          Int
-  deaths         Int
-  assists        Int
-  heroDamage     Int?
-  totalDamage    Int?
-  gold           Int?
-  wardsPlaced    Int?
-  wardsDestroyed Int?
-  level          Int?
-  inventoryItems Json
-  perkSlug       String?
-  abilityOrder   Json?
-
-  // Gold timeline (event stream — Bearer required)
+  id                           String  @id @default(cuid())
+  matchId                      String
+  playerId                     String?
+  playerName                   String
+  team                         String
+  role                         String?
+  heroSlug                     String
+  kills                        Int
+  deaths                       Int
+  assists                      Int
+  heroDamage                   Int?
+  totalDamage                  Int?
+  gold                         Int?
+  wardsPlaced                  Int?
+  inventoryItems               Json
+  perkSlug                     String?
+  abilityOrder                 Json?
+  predggPlayerUuid             String?
+  level                        Int?
+  wardsDestroyed               Int?
   goldEarnedAtInterval         Json?
-
-  // Extended stats (populated on resync via match detail query)
-  physicalDamageDealtToHeroes  Int?
-  magicalDamageDealtToHeroes   Int?
-  trueDamageDealtToHeroes      Int?
-  heroDamageTaken              Int?
-  totalDamageTaken             Int?
-  totalHealingDone             Int?
-  totalDamageDealtToStructures Int?
-  totalDamageDealtToObjectives Int?
-  largestCriticalStrike        Int?
-  laneMinionsKilled            Int?
   goldSpent                    Int?
+  heroDamageTaken              Int?
+  laneMinionsKilled            Int?
+  largestCriticalStrike        Int?
   largestKillingSpree          Int?
+  magicalDamageDealt           Int?
+  magicalDamageDealtToHeroes   Int?
   multiKill                    Int?
   physicalDamageDealt          Int?
-  magicalDamageDealt           Int?
+  physicalDamageDealtToHeroes  Int?
+  totalDamageDealtToObjectives Int?
+  totalDamageDealtToStructures Int?
+  totalDamageTaken             Int?
+  totalHealingDone             Int?
   trueDamageDealt              Int?
+  trueDamageDealtToHeroes      Int?
+  match                        Match   @relation(fields: [matchId], references: [id])
+  player                       Player? @relation(fields: [playerId], references: [id])
 
   @@unique([matchId, playerId])
 }
 
-// ── Event stream models ───────────────────────────────────────────────────────
-
 model HeroKill {
-  id             String  @id @default(cuid())
+  id             String   @id @default(cuid())
   matchId        String
-  match          Match   @relation(fields: [matchId], references: [id])
   gameTime       Int
+  syncedAt       DateTime @default(now())
   locationX      Float?
   locationY      Float?
   locationZ      Float?
@@ -176,38 +157,41 @@ model HeroKill {
   killedHeroSlug String?
   killerPlayerId String?
   killedPlayerId String?
+  match          Match    @relation(fields: [matchId], references: [id])
 }
 
 model ObjectiveKill {
-  id           String  @id @default(cuid())
-  matchId      String
-  match        Match   @relation(fields: [matchId], references: [id])
-  gameTime     Int
-  entityType   String
-  killerTeam   String?
+  id             String   @id @default(cuid())
+  matchId        String
+  gameTime       Int
+  syncedAt       DateTime @default(now())
+  entityType     String
+  killerTeam     String?
   killerPlayerId String?
-  locationX    Float?
-  locationY    Float?
-  locationZ    Float?
+  locationX      Float?
+  locationY      Float?
+  locationZ      Float?
+  match          Match    @relation(fields: [matchId], references: [id])
 }
 
 model StructureDestruction {
-  id              String  @id @default(cuid())
+  id              String   @id @default(cuid())
   matchId         String
-  match           Match   @relation(fields: [matchId], references: [id])
   gameTime        Int
+  syncedAt        DateTime @default(now())
   structureType   String
   destructionTeam String?
   locationX       Float?
   locationY       Float?
   locationZ       Float?
+  match           Match    @relation(fields: [matchId], references: [id])
 }
 
 model WardEvent {
-  id        String  @id @default(cuid())
+  id        String   @id @default(cuid())
   matchId   String
-  match     Match   @relation(fields: [matchId], references: [id])
   gameTime  Int
+  syncedAt  DateTime @default(now())
   eventType String
   wardType  String
   locationX Float?
@@ -215,34 +199,36 @@ model WardEvent {
   locationZ Float?
   playerId  String?
   team      String?
+  match     Match    @relation(fields: [matchId], references: [id])
 }
 
 model Transaction {
-  id              String  @id @default(cuid())
+  id              String   @id @default(cuid())
   matchId         String
-  match           Match   @relation(fields: [matchId], references: [id])
   gameTime        Int
+  syncedAt        DateTime @default(now())
   transactionType String
   itemName        String?
   playerId        String?
   team            String?
+  match           Match    @relation(fields: [matchId], references: [id])
 }
 
 model HeroBan {
   id       String @id @default(cuid())
   matchId  String
-  match    Match  @relation(fields: [matchId], references: [id])
   heroSlug String
   team     String
+  match    Match  @relation(fields: [matchId], references: [id])
 }
 
 model MapZone {
-  id              String  @id @default(cuid())
-  key             String  @unique  // e.g. "FANGTOOTH_PIT"
-  name            String
-  polygon         Json    // Array of [x, y] pairs in game coordinates
-  zoneType        String  // "objective" | "lane" | "jungle" | "river"
-  relatedObjective String? // "FANGTOOTH" | "ORB_PRIME" | etc.
+  id               String  @id @default(cuid())
+  key              String  @unique
+  name             String
+  polygon          Json
+  zoneType         String
+  relatedObjective String?
 }
 
 model SyncLog {
@@ -253,54 +239,44 @@ model SyncLog {
   status    String
   syncedAt  DateTime @default(now())
   error     String?
-  source    String?  // 'event-stream' | 'cron' | 'user' | 'admin'
-  userName  String?  // display name when triggered by a user
+  source    String?
+  userName  String?
 }
 
 model User {
-  id           String   @id @default(cuid())
-  email        String   @unique
-  name         String
-  passwordHash String
-  globalRole   String   @default("VIEWER") // PLATFORM_ADMIN | VIEWER
-  isActive     Boolean  @default(true)
-  createdAt    DateTime @default(now())
-  lastLoginAt  DateTime?
-
-  // Profile
-  avatarUrl    String?
-  bio          String?
-  timezone     String?
-
-  // Linked Player record (for standalone PLAYER accounts not in a team)
-  linkedPlayerId String? @unique
-  linkedPlayer   Player? @relation(fields: [linkedPlayerId], references: [id])
-
-  // Individual player tier — personal features (stats, personal insights, LLM coach)
-  // FREE | PRO | PREMIUM
-  playerTier         String    @default("FREE")
+  id                  String           @id @default(cuid())
+  email               String           @unique
+  name                String
+  passwordHash        String
+  globalRole          String           @default("VIEWER")
+  isActive            Boolean          @default(true)
+  createdAt           DateTime         @default(now())
+  lastLoginAt         DateTime?
+  avatarUrl           String?
+  bio                 String?
+  timezone            String?
+  linkedPlayerId      String?          @unique
+  playerTier          String           @default("FREE")
   playerTierExpiresAt DateTime?
-
-  // Social connections — OAuth flows implemented per-provider
-  discordId       String? @unique
-  discordUsername String?
-  epicGamesId     String? @unique
-  epicGamesUsername String?
-  steamId         String? @unique
-  steamUsername   String?
-
-  memberships     TeamMembership[]
-  sentInvitations Invitation[] @relation("InvitedBy")
+  discordId           String?          @unique
+  discordUsername     String?
+  epicGamesId         String?          @unique
+  epicGamesUsername   String?
+  steamId             String?          @unique
+  steamUsername       String?
+  sentInvitations     Invitation[]     @relation("InvitedBy")
+  memberships         TeamMembership[]
+  linkedPlayer        Player?          @relation(fields: [linkedPlayerId], references: [id])
 }
 
 model TeamMembership {
   id       String  @id @default(cuid())
   userId   String
-  user     User    @relation(fields: [userId], references: [id])
   teamId   String
+  role     String
+  playerId String?
   team     Team    @relation(fields: [teamId], references: [id])
-  role     String  // MANAGER | COACH | ANALISTA | JUGADOR
-  playerId String? // FK a Player si role = JUGADOR
+  user     User    @relation(fields: [userId], references: [id])
 
   @@unique([userId, teamId])
 }
@@ -310,35 +286,32 @@ model Invitation {
   token       String    @unique @default(cuid())
   email       String
   teamId      String
-  role        String    // MANAGER | COACH | ANALISTA | JUGADOR
-  playerId    String?   // optional — links to Player for JUGADOR role
+  role        String
+  playerId    String?
   invitedById String
-  invitedBy   User      @relation("InvitedBy", fields: [invitedById], references: [id])
   expiresAt   DateTime
   usedAt      DateTime?
   createdAt   DateTime  @default(now())
+  invitedBy   User      @relation("InvitedBy", fields: [invitedById], references: [id])
 }
-
-// ── Review Queue ──────────────────────────────────────────────────────────────
 
 model ReviewItem {
   id           String   @id @default(cuid())
   teamId       String
   matchId      String?
   playerId     String?
-  insightId    String?  // rule id that generated this item
-  gameTime     Int?     // seconds into the match
-  eventType    String   // category: macro|vision|draft|performance|economy
-  priority     String   @default("high") // critical|high|medium|low
-  reason       String   // brief description of the issue
+  insightId    String?
+  gameTime     Int?
+  eventType    String
+  priority     String   @default("high")
+  reason       String
   status       String   @default("PENDING")
-  // PENDING|IN_REVIEW|REVIEWED|FALSE_POSITIVE|TEAM_ISSUE|PLAYER_ISSUE|DRAFT_ISSUE|ADDED_TO_TRAINING
-  tag          String?  // bad_objective_setup|facecheck|bad_reset|late_rotation|bad_engage|ignored_call|bad_secure|poor_conversion
+  tag          String?
   coachComment String?
-  assignedTo   String?  // player name or role label
-  actionItem   String?  // concrete training action
+  assignedTo   String?
+  actionItem   String?
   vodUrl       String?
-  vodTimestamp Int?     // seconds into the video
+  vodTimestamp Int?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 }
@@ -348,13 +321,13 @@ model TeamGoal {
   teamId        String
   title         String
   description   String?
-  metricId      String?  // indicator ID e.g. "TEAM-012"
+  metricId      String?
   baselineValue Float?
   targetValue   Float?
   currentValue  Float?
-  timeframe     String?  // e.g. "next 5 scrims"
-  priority      String   @default("medium") // high|medium|low
-  status        String   @default("ACTIVE") // DRAFT|ACTIVE|ACHIEVED|FAILED|PAUSED|ARCHIVED
+  timeframe     String?
+  priority      String   @default("medium")
+  status        String   @default("ACTIVE")
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 }
@@ -370,7 +343,7 @@ model PlayerGoal {
   targetValue   Float?
   currentValue  Float?
   coachNote     String?
-  visibility    String   @default("staff") // staff|player|all
+  visibility    String   @default("staff")
   status        String   @default("ACTIVE")
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
@@ -387,39 +360,38 @@ model LlmAnalysis {
   feedback     String?
   correction   String?
   createdAt    DateTime @default(now())
-
-  team Team @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  team         Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
 }
 
 model PlatformCredential {
-  key       String   @id  // e.g. "predgg_refresh_token"
+  key       String   @id
   value     String
   updatedAt DateTime @updatedAt
 }
 
 model PlatformConfig {
-  key         String   @id
-  value       Float
+  key          String   @id
+  value        Float
   defaultValue Float
-  minValue    Float?
-  maxValue    Float?
-  label       String
-  description String
-  group       String   // 'analyst' | 'display'
-  unit        String?  // 's', 'gold', '%', 'partidas', 'wards/min'
-  updatedAt   DateTime @updatedAt
-  updatedBy   String?
+  minValue     Float?
+  maxValue     Float?
+  label        String
+  description  String
+  group        String
+  unit         String?
+  updatedAt    DateTime @updatedAt
+  updatedBy    String?
 }
 
 model HeroMeta {
   id          String   @id @default(cuid())
-  slug        String   @unique  // pred.gg slug (canonical)
+  slug        String   @unique
   displayName String
-  classes     Json     // string[] — omeda.city classes (Mage, Fighter, Tank, …)
-  roles       Json     // string[] — omeda.city roles (Carry, Jungle, …)
-  imageUrl    String?  // full URL: https://omeda.city/assets/…
-  abilities   Json?    // omeda.city abilities array
-  baseStats   Json?    // omeda.city base_stats
+  classes     Json
+  roles       Json
+  imageUrl    String?
+  abilities   Json?
+  baseStats   Json?
   syncedAt    DateTime @default(now())
   updatedAt   DateTime @updatedAt
 }
@@ -442,16 +414,21 @@ model VodLink {
 }
 
 model FeedbackReport {
-  id          String   @id @default(cuid())
-  type        String   // 'bug' | 'suggestion' | 'improvement'
-  section     String   // app section where the issue occurred
-  description String
-  screenshotBase64 String? // optional, base64 encoded image (max 2MB)
-  status      String   @default("NEW") // 'NEW' | 'REVIEWED' | 'DISMISSED'
-  userId      String?  // nullable — not all users have internal accounts
-  userName    String?  // display name at time of submission
-  userEmail   String?
-  createdAt   DateTime @default(now())
-  reviewedAt  DateTime?
-  reviewNote  String?  // optional admin note on resolution
+  id               String    @id @default(cuid())
+  type             String
+  section          String
+  description      String
+  screenshotBase64 String?
+  status           String    @default("NEW")
+  userId           String?
+  userName         String?
+  userEmail        String?
+  createdAt        DateTime  @default(now())
+  reviewedAt       DateTime?
+  reviewNote       String?
+}
+
+enum TeamType {
+  OWN
+  RIVAL
 }
