@@ -1,4 +1,4 @@
-# Reglas de Insights Automáticos — PrimeSight
+# Reglas de Insights Automáticos — RiftLine
 
 **Versión:** Mayo 2026  
 **Módulo:** Analyst (Team Analysis → Performance)  

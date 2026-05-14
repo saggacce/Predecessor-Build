@@ -10,6 +10,13 @@ import { syncHeroMeta } from './hero-meta-service.js';
 const GQL_URL = process.env.PRED_GG_GQL_URL ?? 'https://pred.gg/gql';
 const API_KEY = process.env.PRED_GG_CLIENT_SECRET;
 const STALE_THRESHOLD_MS = 24 * 60 * 60 * 1000; // 24 hours
+const DATA_RETENTION_MONTHS = parseInt(process.env.DATA_RETENTION_MONTHS ?? '3', 10);
+
+function getRetentionCutoff(): Date {
+  const cutoff = new Date();
+  cutoff.setMonth(cutoff.getMonth() - DATA_RETENTION_MONTHS);
+  return cutoff;
+}
 const STALE_SYNC_BATCH   = 30;   // max players per "Sync Players" click
 const STALE_CONCURRENCY  = 5;    // concurrent pred.gg calls within the batch
 
@@ -1366,7 +1373,10 @@ export async function syncRecentMatchesForPlayer(
 
   if (!detail) return { newMatches: 0, newMatchUuids: [] };
 
-  const matches = (detail.matchesPaginated?.results ?? []).slice(0, matchLimit);
+  const cutoff = getRetentionCutoff();
+  const matches = (detail.matchesPaginated?.results ?? [])
+    .filter((m) => m.match?.startTime && new Date(m.match.startTime) >= cutoff)
+    .slice(0, matchLimit);
   if (matches.length === 0) return { newMatches: 0, newMatchUuids: [] };
 
   // Find which of these matches are new (not in DB yet)
@@ -1465,6 +1475,96 @@ export async function repairEventStreamPlayerIds(db: PrismaClient): Promise<Even
   });
 
   return { heroKillsUpdated, objectiveKillsUpdated, wardEventsUpdated, placeholdersCreated: 0 };
+}
+
+// ── Data retention cleanup ────────────────────────────────────────────────────
+
+export interface CleanupResult {
+  deletedMatches: number;
+  deletedPlayers: number;
+  deletedEventStreamRows: number;
+  cutoffDate: Date;
+  elapsedMs: number;
+}
+
+/**
+ * Deletes all data older than DATA_RETENTION_MONTHS months.
+ * Preserves players in team rosters and linked to user accounts.
+ * Run monthly to keep the database within the configured retention window.
+ */
+export async function cleanupOldData(db: PrismaClient): Promise<CleanupResult> {
+  const start = Date.now();
+  const cutoff = getRetentionCutoff();
+
+  logger.info({ cutoff, retentionMonths: DATA_RETENTION_MONTHS }, 'starting data retention cleanup');
+
+  // 1. Event stream — delete by old match IDs
+  const oldMatchIds = await db.match.findMany({
+    where: { startTime: { lt: cutoff } },
+    select: { id: true },
+  });
+  const ids = oldMatchIds.map((m) => m.id);
+
+  let deletedEventStreamRows = 0;
+  if (ids.length > 0) {
+    const [hb, hk, ok, we, sd, tx] = await Promise.all([
+      db.heroBan.deleteMany({ where: { matchId: { in: ids } } }),
+      db.heroKill.deleteMany({ where: { matchId: { in: ids } } }),
+      db.objectiveKill.deleteMany({ where: { matchId: { in: ids } } }),
+      db.wardEvent.deleteMany({ where: { matchId: { in: ids } } }),
+      db.structureDestruction.deleteMany({ where: { matchId: { in: ids } } }),
+      db.transaction.deleteMany({ where: { matchId: { in: ids } } }),
+    ]);
+    deletedEventStreamRows = hb.count + hk.count + ok.count + we.count + sd.count + tx.count;
+  }
+
+  // 2. MatchPlayer + Match
+  const mpResult = ids.length > 0
+    ? await db.matchPlayer.deleteMany({ where: { matchId: { in: ids } } })
+    : { count: 0 };
+  const matchResult = await db.match.deleteMany({ where: { startTime: { lt: cutoff } } });
+
+  // 3. Inactive players (no match since cutoff, not in teams, not linked to users)
+  const inactivePlayers = await db.$queryRaw<Array<{ id: string }>>`
+    SELECT p.id FROM "Player" p
+    WHERE NOT EXISTS (
+      SELECT 1 FROM "MatchPlayer" mp JOIN "Match" m ON m.id = mp."matchId"
+      WHERE mp."playerId" = p.id AND m."startTime" >= ${cutoff}
+    )
+    AND NOT EXISTS (SELECT 1 FROM "TeamRoster" tr WHERE tr."playerId" = p.id)
+    AND NOT EXISTS (SELECT 1 FROM "User" u WHERE u."linkedPlayerId" = p.id)
+  `;
+  const inactiveIds = inactivePlayers.map((p) => p.id);
+  if (inactiveIds.length > 0) {
+    await db.playerGoal.deleteMany({ where: { playerId: { in: inactiveIds } } });
+    await db.playerSnapshot.deleteMany({ where: { playerId: { in: inactiveIds } } });
+    await db.player.deleteMany({ where: { id: { in: inactiveIds } } });
+  }
+
+  // 4. SyncLog older than 30 days (keep recent for debugging)
+  const syncLogCutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+  await db.syncLog.deleteMany({ where: { createdAt: { lt: syncLogCutoff } } });
+
+  const result: CleanupResult = {
+    deletedMatches: matchResult.count,
+    deletedPlayers: inactiveIds.length,
+    deletedEventStreamRows,
+    cutoffDate: cutoff,
+    elapsedMs: Date.now() - start,
+  };
+
+  logger.info(result, 'data retention cleanup complete');
+  await db.syncLog.create({
+    data: {
+      entity: 'system',
+      entityId: 'cleanup',
+      operation: 'cleanup-old-data',
+      status: 'ok',
+      error: JSON.stringify({ deleted: result }),
+    },
+  });
+
+  return result;
 }
 
 

@@ -154,6 +154,8 @@ export async function syncMatch(db: PrismaClient, uuid: string): Promise<string 
   return match.id;
 }
 
+const DATA_RETENTION_MONTHS = parseInt(process.env.DATA_RETENTION_MONTHS ?? '3', 10);
+
 export async function syncPlayerMatches(
   db: PrismaClient,
   predggPlayerId: string,
@@ -165,10 +167,19 @@ export async function syncPlayerMatches(
 
   if (!data.player) return 0;
 
+  const cutoff = new Date();
+  cutoff.setMonth(cutoff.getMonth() - DATA_RETENTION_MONTHS);
+
   let synced = 0;
   for (const node of data.player.matchesPaginated.nodes) {
     try {
-      await syncMatch(db, node.uuid);
+      const matchId = await syncMatch(db, node.uuid);
+      if (matchId === null) continue;
+
+      // Matches come ordered by recency — once we hit one older than the cutoff, stop.
+      const match = await db.match.findUnique({ where: { id: matchId }, select: { startTime: true } });
+      if (match && match.startTime < cutoff) break;
+
       synced++;
     } catch (err) {
       await db.syncLog.create({
