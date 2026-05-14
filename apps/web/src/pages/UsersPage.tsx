@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Edit2, Shield, CheckCircle, XCircle, UserPlus, X, Save, Star } from 'lucide-react';
+import { Edit2, Shield, CheckCircle, XCircle, UserPlus, X, Save, Star, KeyRound } from 'lucide-react';
 import { toast } from 'sonner';
 import { apiClient, ApiErrorResponse } from '../api/client';
 import { useAuth } from '../hooks/useAuth';
@@ -45,6 +45,9 @@ export default function UsersPage() {
   const [editActive, setEditActive] = useState(true);
   const [editTierExpiry, setEditTierExpiry] = useState('');
   const [saving, setSaving] = useState(false);
+  const [resetPasswordUser, setResetPasswordUser] = useState<PlatformUser | null>(null);
+  const [newPassword, setNewPassword] = useState('');
+  const [resetting, setResetting] = useState(false);
 
   const isAdmin = !internalLoading && !!me && me.globalRole === 'PLATFORM_ADMIN';
 
@@ -169,6 +172,14 @@ export default function UsersPage() {
                   <Edit2 size={13} style={{ color: 'var(--accent-blue)' }} />
                 </button>
                 <button
+                  onClick={() => { setResetPasswordUser(u); setNewPassword(''); }}
+                  disabled={u.id === me.id}
+                  className="btn-secondary"
+                  style={{ padding: '0.35rem', opacity: u.id === me.id ? 0.3 : 1 }}
+                  title="Resetear contraseña">
+                  <KeyRound size={13} style={{ color: 'var(--accent-prime)' }} />
+                </button>
+                <button
                   onClick={async () => {
                     try {
                       await (apiClient as any).admin.updateUser(u.id, { isActive: !u.isActive });
@@ -246,6 +257,54 @@ export default function UsersPage() {
                   <Save size={13} /> {saving ? 'Guardando…' : 'Guardar'}
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Reset password modal */}
+      {resetPasswordUser && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem' }}>
+          <div className="glass-card" style={{ width: '100%', maxWidth: 400, padding: '1.5rem' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '0.5rem' }}>
+              <KeyRound size={16} style={{ color: 'var(--accent-prime)' }} />
+              <h3 style={{ margin: 0, fontSize: '0.95rem', fontWeight: 800 }}>Resetear contraseña</h3>
+            </div>
+            <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginBottom: '1.25rem' }}>
+              Establece una nueva contraseña para <strong style={{ color: 'var(--text-primary)' }}>{resetPasswordUser.name || resetPasswordUser.email}</strong>. Compártela con el usuario de forma segura.
+            </p>
+            <div style={{ marginBottom: '1rem' }}>
+              <label style={{ display: 'block', fontSize: '0.7rem', color: 'var(--text-muted)', fontWeight: 700, marginBottom: '0.3rem', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Nueva contraseña</label>
+              <input
+                className="input"
+                type="password"
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                placeholder="Mínimo 8 caracteres"
+                style={{ width: '100%' }}
+                autoFocus
+              />
+            </div>
+            <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
+              <button onClick={() => setResetPasswordUser(null)} className="btn-secondary" style={{ fontSize: '0.82rem' }}>Cancelar</button>
+              <button
+                disabled={newPassword.length < 8 || resetting}
+                className="btn-primary"
+                style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.82rem' }}
+                onClick={async () => {
+                  setResetting(true);
+                  try {
+                    await (apiClient as any).admin.resetPassword(resetPasswordUser.id, newPassword);
+                    toast.success('Contraseña restablecida');
+                    setResetPasswordUser(null);
+                    setNewPassword('');
+                  } catch (err) {
+                    toast.error(err instanceof ApiErrorResponse ? err.error.message : 'Error al resetear');
+                  } finally { setResetting(false); }
+                }}
+              >
+                <KeyRound size={13} /> {resetting ? 'Guardando…' : 'Restablecer'}
+              </button>
             </div>
           </div>
         </div>
