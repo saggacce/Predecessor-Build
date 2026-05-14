@@ -315,7 +315,7 @@ iconography:
     - ChevronDown / ChevronRight (accordion)
 
 css-framework: none
-  # PrimeSight uses plain CSS custom properties. No CSS utility framework.
+  # RiftLine uses plain CSS custom properties. No CSS utility framework.
   # Tailwind is NOT used and should NOT be added. Reasons:
   # - Existing token system (index.css + App.css) is the source of truth
   # - Glassmorphism patterns don't map cleanly to utility classes
@@ -594,7 +594,7 @@ responsive:
     auth-buttons: "icon only"
 ---
 
-# PrimeSight
+# RiftLine
 
 PrimeSight is a private competitive intelligence platform for professional and semi-professional Predecessor (MOBA) teams. It is used by coaches, analysts, managers and players to analyze match data, review objective patterns, prepare Battle Plans, and track training goals.
 

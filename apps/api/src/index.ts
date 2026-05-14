@@ -32,8 +32,10 @@ import { syncRouter } from './routes/sync.js';
 import { profileRouter } from './routes/profile.js';
 import { feedbackRouter } from './routes/feedback.js';
 import { errorHandler } from './middleware/error-handler.js';
-import { disconnectDb } from './db.js';
+import { db, disconnectDb } from './db.js';
 import { logger } from './logger.js';
+import cron from 'node-cron';
+import { cleanupOldData } from './services/sync-service.js';
 
 const app = express();
 const PORT = parseInt(process.env.PORT ?? '3001', 10);
@@ -49,15 +51,16 @@ app.use(pinoHttp({
   autoLogging: { ignore: (req) => req.url === '/health' },
 }));
 
-app.use('/hero-meta', heroMetaRouter);
+// Production: strip /api prefix added by frontend (mirrors Vite dev proxy)
+if (process.env.NODE_ENV === 'production') {
+  app.use((req, _res, next) => {
+    if (req.url.startsWith('/api/')) req.url = req.url.slice(4);
+    else if (req.url === '/api') req.url = '/';
+    next();
+  });
+}
 
-// Serve local hero/item/role assets — avoids dependency on pred.gg CDN
-const assetsRoot = join(fileURLToPath(import.meta.url), '../../../../assets');
-app.use('/heroes', express.static(join(assetsRoot, 'heroes')));
-app.use('/items', express.static(join(assetsRoot, 'items')));
-app.use('/icons', express.static(join(assetsRoot, 'icons')));
-app.use('/ranks', express.static(join(assetsRoot, 'ranks')));
-app.use('/maps', express.static(join(assetsRoot, 'maps')));
+app.use('/hero-meta', heroMetaRouter);
 
 app.get('/health', (_req, res) => {
   res.json({ status: 'ok', timestamp: new Date() });
@@ -81,6 +84,26 @@ app.use('/profile', profileRouter);
 app.use('/feedback', feedbackRouter);
 
 app.use(errorHandler);
+
+// Production: serve Vite-built frontend (single-service deployment on Railway)
+if (process.env.NODE_ENV === 'production') {
+  const distPath = join(dirname(fileURLToPath(import.meta.url)), '../../web/dist');
+  app.use(express.static(distPath));
+  app.get('*', (_req, res) => res.sendFile(join(distPath, 'index.html')));
+}
+
+// Monthly data retention cleanup — runs on the 1st of every month at 03:00 AM
+if (process.env.NODE_ENV !== 'test') {
+  cron.schedule('0 3 1 * *', async () => {
+    logger.info('cron: starting monthly data retention cleanup');
+    try {
+      const result = await cleanupOldData(db);
+      logger.info(result, 'cron: monthly cleanup complete');
+    } catch (err) {
+      logger.error({ err }, 'cron: monthly cleanup failed');
+    }
+  });
+}
 
 let server: ReturnType<typeof app.listen> | undefined;
 if (process.env.NODE_ENV !== 'test') {

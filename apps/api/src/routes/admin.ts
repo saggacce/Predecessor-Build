@@ -10,6 +10,7 @@ import {
   syncRecentMatchesForPlayer,
   syncMatchEventStream,
   resyncMatch,
+  cleanupOldData,
 } from '../services/sync-service.js';
 import { syncHeroMeta } from '../services/hero-meta-service.js';
 import { invalidateHeroMetaCache } from './hero-meta.js';
@@ -734,5 +735,17 @@ adminRouter.patch('/teams/:id/tier', async (req, res, next) => {
       select: { id: true, name: true, type: true, teamTier: true, teamTierExpiresAt: true },
     });
     res.json({ team });
+  } catch (err) { next(err); }
+});
+
+/**
+ * POST /admin/cleanup-old-data
+ * Deletes data older than DATA_RETENTION_MONTHS (default 3).
+ * Also triggered automatically by the monthly cron.
+ */
+adminRouter.post('/cleanup-old-data', async (_req, res, next) => {
+  try {
+    const result = await cleanupOldData(db);
+    res.json({ ok: true, result });
   } catch (err) { next(err); }
 });

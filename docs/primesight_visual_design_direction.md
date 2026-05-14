@@ -1,4 +1,4 @@
-# PrimeSight Visual Design Direction
+# RiftLine Visual Design Direction
 
 Fuente principal: `docs/portal-moba-analytics.html`
 
