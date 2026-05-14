@@ -21,6 +21,25 @@ import { requirePlatformAdmin } from '../middleware/require-platform-admin.js';
 
 export const adminRouter = Router();
 
+/**
+ * Returns a valid pred.gg Bearer token — user OAuth session first,
+ * then falls back to stored platform refresh token.
+ */
+async function getTokenForSync(req: Request, res: Response): Promise<string | null> {
+  const userToken = await getValidToken(req, res);
+  if (userToken) return userToken;
+
+  try {
+    const cred = await db.platformCredential.findUnique({ where: { key: 'predgg_refresh_token' } });
+    if (!cred) return null;
+    const result = await exchangeToken({ grant_type: 'refresh_token', refresh_token: cred.value });
+    if (!result.ok || !result.data.access_token) return null;
+    return result.data.access_token;
+  } catch {
+    return null;
+  }
+}
+
 function requireAdminKey(req: Request, res: Response, next: NextFunction) {
   const key = process.env.ADMIN_API_KEY;
   if (!key) return next();
@@ -58,7 +77,7 @@ adminRouter.post('/sync-versions', async (_req, res, next) => {
 adminRouter.post('/sync-stale', async (req, res, next) => {
   try {
     const start = Date.now();
-    const userToken = await getValidToken(req, res);
+    const userToken = await getTokenForSync(req, res);
     if (!userToken) {
       logger.warn('sync-stale called without user token — player queries will fail (login required)');
     }
@@ -85,7 +104,7 @@ const logsQuerySchema = z.object({
  */
 adminRouter.post('/sync-stale-all', requireAuth, requirePlatformAdmin, async (req, res, next) => {
   try {
-    const userToken = await getValidToken(req, res);
+    const userToken = await getTokenForSync(req, res);
     if (!userToken) {
       res.status(400).json({ error: { message: 'pred.gg session required', code: 'NO_TOKEN' } });
       return;
@@ -496,7 +515,7 @@ adminRouter.post('/sync-event-streams/start', async (req, res, next) => {
       res.json({ ok: true, message: 'Already running', job: eventStreamJob });
       return;
     }
-    const userToken = await getValidToken(req, res);
+    const userToken = await getTokenForSync(req, res);
     if (!userToken) {
       res.status(400).json({ error: { message: 'pred.gg session required — log in via pred.gg first', code: 'PREDGG_AUTH_REQUIRED' } });
       return;
