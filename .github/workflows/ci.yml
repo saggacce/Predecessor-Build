@@ -1,10 +1,10 @@
-name: CI
+name: CI / CD
 
 on:
   pull_request:
-    branches: [main]
+    branches: [main, develop]
   push:
-    branches: [main]
+    branches: [main, develop]
 
 jobs:
   ci:
@@ -31,7 +31,11 @@ jobs:
     name: Deploy to production
     runs-on: ubuntu-latest
     needs: ci
+    # Only deploy when a sprint PR is merged into main
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    environment:
+      name: production
+      url: https://riftline.app
     steps:
       - name: Deploy via SSH
         uses: appleboy/ssh-action@v1.0.3
@@ -59,4 +63,4 @@ jobs:
             echo "→ Restarting API..."
             pm2 restart riftline-api --update-env
 
-            echo "✓ Deploy complete"
+            echo "✓ Deploy complete — https://riftline.app"
