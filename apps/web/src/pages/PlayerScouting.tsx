@@ -839,15 +839,7 @@ function PlayerGoalsSection({ playerId, playerName }: { playerId: string; player
   const canManageGoals = authUser?.globalRole === 'PLATFORM_ADMIN' ||
     (authUser?.memberships?.length ?? 0) > 0;
 
-  // Don't render for users without team access
-  if (!loading && !canManageGoals) {
-    return (
-      <div style={{ padding: '0.75rem 1rem', background: 'var(--bg-dark)', borderRadius: 7, border: '1px solid var(--border-color)', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-        Los objetivos de jugador son visibles para el staff del equipo.
-      </div>
-    );
-  }
-
+  // useEffects must come BEFORE any conditional return (Rules of Hooks)
   React.useEffect(() => {
     if (!canManageGoals) { setLoading(false); return; }
     setLoading(true);
@@ -870,6 +862,15 @@ function PlayerGoalsSection({ playerId, playerName }: { playerId: string; player
       .catch(() => toast.error('Failed to load player goals.'))
       .finally(() => setLoading(false));
   }, [playerId, selectedTeamId]);
+
+  // Guard: no team access — render after all hooks
+  if (!loading && !canManageGoals) {
+    return (
+      <div style={{ padding: '0.75rem 1rem', background: 'var(--bg-dark)', borderRadius: 7, border: '1px solid var(--border-color)', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+        Los objetivos de jugador son visibles para el staff del equipo.
+      </div>
+    );
+  }
 
   function resetCreateForm() {
     setTitle('');
