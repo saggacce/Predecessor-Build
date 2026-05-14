@@ -140,7 +140,29 @@ export async function getPlayerProfile(playerId: string): Promise<PlayerProfile>
           ratingPoints: latestSnapshot.ratingPoints,
         }
       : null,
-    generalStats: isRecord(latestSnapshot?.generalStats) ? latestSnapshot.generalStats : {},
+    generalStats: (() => {
+      // Use snapshot generalStats if it has numeric match data
+      const sg = isRecord(latestSnapshot?.generalStats) ? latestSnapshot.generalStats : {};
+      if (typeof (sg as Record<string, unknown>).matches === 'number') return sg;
+
+      // Fallback: calculate from MatchPlayer records already loaded
+      if (player.matchPlayers.length === 0) return sg;
+      const mps = player.matchPlayers;
+      const wins = mps.filter(mp => mp.match.winningTeam !== null && mp.team === mp.match.winningTeam).length;
+      const totalKills = mps.reduce((s, mp) => s + mp.kills, 0);
+      const totalDeaths = mps.reduce((s, mp) => s + mp.deaths, 0);
+      const totalAssists = mps.reduce((s, mp) => s + mp.assists, 0);
+      const totalDmg = mps.reduce((s, mp) => s + (mp.heroDamage ?? 0), 0);
+      return {
+        ...sg,
+        matches: mps.length,
+        wins,
+        losses: mps.length - wins,
+        winRate: mps.length > 0 ? Math.round((wins / mps.length) * 1000) / 10 : 0,
+        kda: totalDeaths > 0 ? Math.round(((totalKills + totalAssists) / totalDeaths) * 100) / 100 : totalKills + totalAssists,
+        heroDamage: totalDmg,
+      };
+    })(),
     heroStats: Array.isArray(latestSnapshot?.heroStats) ? latestSnapshot.heroStats : [],
     roleStats: Array.isArray(latestSnapshot?.roleStats) ? latestSnapshot.roleStats : [],
     recentMatches,
