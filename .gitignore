@@ -67,3 +67,4 @@ logs/
 # API sample fixtures (large JSON files, regenerate from live API)
 omeda-samples/
 scripts/api-samples/
+.env.staging

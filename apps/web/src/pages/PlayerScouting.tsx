@@ -78,7 +78,7 @@ class ProfileErrorBoundary extends React.Component<
 }
 
 export default function PlayerScouting() {
-  const { authenticated } = useAuth();
+  const { authenticated, internalAuthenticated } = useAuth();
   const location = useLocation();
   const [query, setQuery] = useState('');
   const [phase, setPhase] = useState<Phase>({ tag: 'idle' });
@@ -153,6 +153,14 @@ export default function PlayerScouting() {
     try {
       const profile = await apiClient.players.getProfile(playerId);
       setProfilePhase({ tag: 'loaded', profile });
+
+      // Auto-sync if generalStats is missing (no snapshot yet).
+      // Don't gate on internalAuthenticated — auth state may not be ready yet
+      // when this runs. The sync endpoint handles auth internally.
+      const hasStats = typeof (profile.generalStats as Record<string, unknown>)?.matches === 'number';
+      if (!hasStats) {
+        void handleRefreshProfile(profile.displayName, profile.id);
+      }
     } catch (err) {
       const msg = err instanceof ApiErrorResponse ? err.error.message : 'Could not load player profile.';
       setProfilePhase({ tag: 'error', message: msg });
@@ -254,7 +262,7 @@ export default function PlayerScouting() {
               <PlayerProfilePanel
                 profile={profilePhase.profile}
                 onClose={() => setProfilePhase({ tag: 'idle' })}
-                onRefresh={authenticated ? () => void handleRefreshProfile(profilePhase.profile.displayName, profilePhase.profile.id) : undefined}
+                onRefresh={internalAuthenticated ? () => void handleRefreshProfile(profilePhase.profile.displayName, profilePhase.profile.id) : undefined}
               />
             </ProfileErrorBoundary>
           )}

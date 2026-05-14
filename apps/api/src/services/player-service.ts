@@ -94,6 +94,27 @@ export async function getPlayerProfile(playerId: string): Promise<PlayerProfile>
   const latestSnapshot = player.snapshots[0] ?? null;
   const heroMeta = buildHeroMetaMap(latestSnapshot?.heroStats);
 
+  // Build generalStats: prefer snapshot, fall back to MatchPlayer records
+  const snapshotStats = isRecord(latestSnapshot?.generalStats) ? latestSnapshot!.generalStats : {};
+  let computedGeneralStats: Record<string, unknown> = snapshotStats;
+  if (typeof (snapshotStats as Record<string, unknown>).matches !== 'number' && player.matchPlayers.length > 0) {
+    const mps = player.matchPlayers;
+    const wins = mps.filter((mp) => mp.match.winningTeam !== null && mp.team === mp.match.winningTeam).length;
+    const totalKills = mps.reduce((s, mp) => s + mp.kills, 0);
+    const totalDeaths = mps.reduce((s, mp) => s + mp.deaths, 0);
+    const totalAssists = mps.reduce((s, mp) => s + mp.assists, 0);
+    const totalDmg = mps.reduce((s, mp) => s + (mp.heroDamage ?? 0), 0);
+    computedGeneralStats = {
+      ...snapshotStats,
+      matches: mps.length,
+      wins,
+      losses: mps.length - wins,
+      winRate: mps.length > 0 ? Math.round((wins / mps.length) * 1000) / 10 : 0,
+      kda: totalDeaths > 0 ? Math.round(((totalKills + totalAssists) / totalDeaths) * 100) / 100 : totalKills + totalAssists,
+      heroDamage: totalDmg,
+    };
+  }
+
   const recentMatches = player.matchPlayers.map((mp) => {
     const isWin = mp.match.winningTeam !== null && mp.team === mp.match.winningTeam;
     const isLoss = mp.match.winningTeam !== null && mp.team !== mp.match.winningTeam;
@@ -140,7 +161,7 @@ export async function getPlayerProfile(playerId: string): Promise<PlayerProfile>
           ratingPoints: latestSnapshot.ratingPoints,
         }
       : null,
-    generalStats: isRecord(latestSnapshot?.generalStats) ? latestSnapshot.generalStats : {},
+    generalStats: computedGeneralStats,
     heroStats: Array.isArray(latestSnapshot?.heroStats) ? latestSnapshot.heroStats : [],
     roleStats: Array.isArray(latestSnapshot?.roleStats) ? latestSnapshot.roleStats : [],
     recentMatches,

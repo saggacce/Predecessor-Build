@@ -1020,6 +1020,8 @@ export const apiClient = {
     users: () => fetchApi<{ users: unknown[] }>('/admin/users'),
     updateUser: (id: string, data: { isActive?: boolean; globalRole?: string; name?: string; email?: string; playerTier?: string; playerTierExpiresAt?: string | null }) =>
       fetchApi<{ user: unknown }>(`/admin/users/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+    resetPassword: (id: string, newPassword: string) =>
+      fetchApi<{ ok: boolean }>(`/admin/users/${id}/reset-password`, { method: 'POST', body: JSON.stringify({ newPassword }) }),
     updateTeamTier: (teamId: string, teamTier: string, teamTierExpiresAt?: string | null) =>
       fetchApi<{ team: unknown }>(`/admin/teams/${teamId}/tier`, { method: 'PATCH', body: JSON.stringify({ teamTier, teamTierExpiresAt }) }),
     apiStatus: () => fetchApi<unknown>('/admin/api-status'),

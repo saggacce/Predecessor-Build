@@ -1,4 +1,5 @@
 import { Router, Request, Response, NextFunction } from 'express';
+import bcrypt from 'bcryptjs';
 import { z } from 'zod';
 import { db } from '../db.js';
 import { logger } from '../logger.js';
@@ -754,6 +755,27 @@ adminRouter.patch('/teams/:id/tier', async (req, res, next) => {
       select: { id: true, name: true, type: true, teamTier: true, teamTierExpiresAt: true },
     });
     res.json({ team });
+  } catch (err) { next(err); }
+});
+
+/**
+ * POST /admin/users/:id/reset-password
+ * Admin sets a new password for any user.
+ */
+adminRouter.post('/users/:id/reset-password', async (req, res, next) => {
+  try {
+    const { newPassword } = z.object({
+      newPassword: z.string().min(8, 'Minimum 8 characters'),
+    }).parse(req.body);
+
+    const hash = await bcrypt.hash(newPassword, 12);
+    await db.user.update({
+      where: { id: req.params.id },
+      data: { passwordHash: hash },
+    });
+
+    logger.info({ targetUserId: req.params.id }, 'admin: password reset');
+    res.json({ ok: true });
   } catch (err) { next(err); }
 });
 
