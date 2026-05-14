@@ -1719,6 +1719,8 @@ function InsightCard({ insight: ins, last, expanded, onToggle, teamId }: {
 }
 
 function ScoutingReport({ playerStats, heroPool }: { playerStats: PlayerAnalysisStat[]; heroPool: RivalHeroStat[] }) {
+  const config = useConfig();
+  const narrowDepth = config.get('display_hero_pool_narrow_depth') ?? 2;
   // Build hero pool per player
   const poolByPlayer = new Map<string, RivalHeroStat[]>();
   for (const h of heroPool) {
