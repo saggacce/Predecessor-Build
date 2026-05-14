@@ -49,6 +49,15 @@ app.use(pinoHttp({
   autoLogging: { ignore: (req) => req.url === '/health' },
 }));
 
+// Production: strip /api prefix added by frontend (mirrors Vite dev proxy)
+if (process.env.NODE_ENV === 'production') {
+  app.use((req, _res, next) => {
+    if (req.url.startsWith('/api/')) req.url = req.url.slice(4);
+    else if (req.url === '/api') req.url = '/';
+    next();
+  });
+}
+
 app.use('/hero-meta', heroMetaRouter);
 
 // Serve local hero/item/role assets — avoids dependency on pred.gg CDN
@@ -81,6 +90,13 @@ app.use('/profile', profileRouter);
 app.use('/feedback', feedbackRouter);
 
 app.use(errorHandler);
+
+// Production: serve Vite-built frontend (single-service deployment on Railway)
+if (process.env.NODE_ENV === 'production') {
+  const distPath = join(dirname(fileURLToPath(import.meta.url)), '../../web/dist');
+  app.use(express.static(distPath));
+  app.get('*', (_req, res) => res.sendFile(join(distPath, 'index.html')));
+}
 
 let server: ReturnType<typeof app.listen> | undefined;
 if (process.env.NODE_ENV !== 'test') {

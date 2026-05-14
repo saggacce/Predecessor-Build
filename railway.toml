@@ -1,0 +1,10 @@
+[build]
+builder = "nixpacks"
+buildCommand = "npm install && npx prisma generate --schema=workers/data-sync/prisma/schema.prisma && (cd apps/web && npm run build)"
+
+[deploy]
+startCommand = "node_modules/.bin/tsx apps/api/src/index.ts"
+healthcheckPath = "/health"
+healthcheckTimeout = 30
+restartPolicyType = "on_failure"
+restartPolicyMaxRetries = 3
