@@ -327,14 +327,16 @@ adminRouter.get('/sync-status', async (_req, res, next) => {
     const [
       totalPlayers,
       stalePlayers,
-      hiddenPlayers,
+      unsyncablePlayers,
       totalMatches,
       matchesWithStream,
       noPlayersResult,
     ] = await Promise.all([
       db.player.count(),
-      db.player.count({ where: { lastSynced: { lt: staleThreshold }, displayName: { not: 'HIDDEN' } } }),
-      db.player.count({ where: { displayName: 'HIDDEN' } }),
+      // Stale = needs re-sync AND is syncable (not HIDDEN, not console)
+      db.player.count({ where: { lastSynced: { lt: staleThreshold }, displayName: { not: 'HIDDEN' }, isConsole: false } }),
+      // Unsyncable = HIDDEN display name OR console player (pred.gg has no data)
+      db.player.count({ where: { OR: [{ displayName: 'HIDDEN' }, { isConsole: true }] } }),
       db.match.count(),
       db.match.count({ where: { eventStreamSynced: true } }),
       db.$queryRaw<[{ count: bigint }]>`
@@ -351,9 +353,9 @@ adminRouter.get('/sync-status', async (_req, res, next) => {
     res.json({
       players: {
         total: totalPlayers,
-        synced: totalPlayers - stalePlayers - hiddenPlayers,
+        synced: totalPlayers - stalePlayers - unsyncablePlayers,
         stale: stalePlayers,
-        hidden: hiddenPlayers,
+        unsyncable: unsyncablePlayers,
       },
       matches: {
         total: totalMatches,
@@ -776,6 +778,49 @@ adminRouter.post('/users/:id/reset-password', async (req, res, next) => {
 
     logger.info({ targetUserId: req.params.id }, 'admin: password reset');
     res.json({ ok: true });
+  } catch (err) { next(err); }
+});
+
+/**
+ * POST /admin/verify-nonsyncable
+ * Tests a sample of unsyncable players (HIDDEN/console) against pred.gg.
+ * Players that now have data are updated to isConsole=false and marked for re-sync.
+ */
+adminRouter.post('/verify-nonsyncable', async (req, res, next) => {
+  try {
+    const { limit = 50 } = z.object({ limit: z.number().int().min(1).max(200).default(50) })
+      .parse(req.body ?? {});
+
+    const userToken = await getTokenForSync(req, res);
+    if (!userToken) {
+      res.status(400).json({ error: { message: 'pred.gg session required', code: 'NO_TOKEN' } });
+      return;
+    }
+
+    const unsyncable = await db.player.findMany({
+      where: { OR: [{ displayName: 'HIDDEN' }, { isConsole: true }] },
+      select: { id: true, predggId: true, displayName: true },
+      take: limit,
+      orderBy: { lastSynced: 'asc' },
+    });
+
+    let recovered = 0;
+    let checked = 0;
+
+    for (const player of unsyncable) {
+      try {
+        const synced = await syncPlayerByName(db, player.predggId, userToken);
+        if (synced && synced.displayName !== 'HIDDEN') {
+          recovered++;
+        }
+        checked++;
+      } catch {
+        checked++;
+      }
+    }
+
+    logger.info({ checked, recovered }, 'verify-nonsyncable complete');
+    res.json({ ok: true, checked, recovered, total: unsyncable.length });
   } catch (err) { next(err); }
 });
 
