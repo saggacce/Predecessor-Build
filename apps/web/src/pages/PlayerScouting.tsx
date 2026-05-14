@@ -46,6 +46,39 @@ type ProfilePhase =
   | { tag: 'loaded'; profile: PlayerProfile }
   | { tag: 'error'; message: string };
 
+
+import React from 'react';
+
+class ProfileErrorBoundary extends React.Component<
+  { children: React.ReactNode; onReset: () => void },
+  { error: Error | null }
+> {
+  constructor(props: { children: React.ReactNode; onReset: () => void }) {
+    super(props);
+    this.state = { error: null };
+  }
+  static getDerivedStateFromError(error: Error) {
+    return { error };
+  }
+  render() {
+    if (this.state.error) {
+      return (
+        <div className="glass-card" style={{ padding: '1.5rem', borderLeft: '3px solid var(--accent-loss)' }}>
+          <div style={{ fontWeight: 700, color: 'var(--accent-loss)', marginBottom: '0.5rem' }}>Error al cargar el perfil</div>
+          <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', marginBottom: '1rem' }}>
+            {this.state.error.message}
+          </div>
+          <button className="btn-secondary" style={{ fontSize: '0.8rem' }}
+            onClick={() => { this.setState({ error: null }); this.props.onReset(); }}>
+            Cerrar
+          </button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 export default function PlayerScouting() {
   const { authenticated } = useAuth();
   const location = useLocation();
@@ -219,11 +252,13 @@ export default function PlayerScouting() {
             />
           )}
           {profilePhase.tag === 'loaded' && (
-            <PlayerProfilePanel
-              profile={profilePhase.profile}
-              onClose={() => setProfilePhase({ tag: 'idle' })}
-              onRefresh={authenticated ? () => void handleRefreshProfile(profilePhase.profile.displayName, profilePhase.profile.id) : undefined}
-            />
+            <ProfileErrorBoundary onReset={() => setProfilePhase({ tag: 'idle' })}>
+              <PlayerProfilePanel
+                profile={profilePhase.profile}
+                onClose={() => setProfilePhase({ tag: 'idle' })}
+                onRefresh={authenticated ? () => void handleRefreshProfile(profilePhase.profile.displayName, profilePhase.profile.id) : undefined}
+              />
+            </ProfileErrorBoundary>
           )}
         </div>
       )}
