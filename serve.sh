@@ -202,8 +202,13 @@ CMD="${1:-help}"
 ARG="${2:---dev}"
 MODE="${ARG#--}"   # strip leading "--"  →  dev | prod
 
+STAGING_API_PID="$PIDS_DIR/staging-api.pid"
+STAGING_API_PORT=3002
+STAGING_NGINX_PORT=8080
+STAGING_LOG="$LOGS_DIR/staging.log"
+
 # Load .env for all commands that interact with services
-if [[ -f "$ROOT/.env" && "$CMD" != "help" ]]; then
+if [[ -f "$ROOT/.env" && "$CMD" != "help" && "$CMD" != "staging" ]]; then
   set -a
   # shellcheck disable=SC1090
   source "$ROOT/.env"
@@ -268,27 +273,112 @@ case "$CMD" in
     esac
     ;;
 
+  staging)
+    if [[ ! -f "$ROOT/.env.staging" ]]; then
+      fail ".env.staging not found — copy .env.example to .env.staging and configure it"
+      exit 1
+    fi
+
+    echo ""
+    echo -e "${BOLD}RiftLine — Staging${NC} ${CYAN}(production-like, nginx :$STAGING_NGINX_PORT → API :$STAGING_API_PORT)${NC}"
+    echo "──────────────────────────────────────────────────────────"
+
+    # Stop previous staging if running
+    if is_running "$STAGING_API_PID"; then
+      stop_service "Staging API" "$STAGING_API_PID"
+    fi
+
+    # Build frontend for staging
+    log "Building frontend (production build)..."
+    (cd "$ROOT/apps/web" && NODE_ENV=production npm run build >> "$LOGS_DIR/staging-build.log" 2>&1) \
+      || { fail "Frontend build failed — check logs/staging-build.log"; exit 1; }
+    ok "Frontend built"
+
+    # Generate Prisma client
+    log "Generating Prisma client..."
+    (cd "$ROOT" && npx prisma generate --schema=workers/data-sync/prisma/schema.prisma >> "$LOGS_DIR/staging-build.log" 2>&1)
+    ok "Prisma client ready"
+
+    # Load staging env and start API
+    log "Starting Staging API on port $STAGING_API_PORT..."
+    mkdir -p "$PIDS_DIR" "$LOGS_DIR"
+    set -a
+    source "$ROOT/.env.staging"
+    set +a
+
+    "$ROOT/node_modules/.bin/tsx" "$ROOT/apps/api/src/index.ts" \
+      >> "$STAGING_LOG" 2>&1 &
+    staging_pid=$!
+    echo "$staging_pid" > "$STAGING_API_PID"
+
+    if wait_for_port "$STAGING_API_PORT"; then
+      ok "Staging API running on port $STAGING_API_PORT (PID $staging_pid)"
+    else
+      fail "Staging API did not start — check logs/staging.log"
+      exit 1
+    fi
+
+    # Start nginx
+    log "Starting nginx..."
+    sudo nginx -t > /dev/null 2>&1 && sudo nginx 2>/dev/null || sudo nginx -s reload 2>/dev/null || true
+
+    if wait_for_port "$STAGING_NGINX_PORT"; then
+      ok "nginx proxying http://localhost:$STAGING_NGINX_PORT → :$STAGING_API_PORT"
+    else
+      warn "nginx may not be running — try: sudo nginx"
+    fi
+
+    echo ""
+    echo -e "${GREEN}✓ Staging ready${NC} — ${BOLD}http://localhost:$STAGING_NGINX_PORT${NC}"
+    echo -e "${CYAN}Logs:${NC}  tail -f logs/staging.log"
+    echo -e "${CYAN}Stop:${NC}  ./serve.sh staging-stop"
+    echo ""
+    ;;
+
+  staging-stop)
+    echo ""
+    echo -e "${BOLD}RiftLine — Stopping Staging${NC}"
+    echo "──────────────────────────────────────────"
+    stop_service "Staging API" "$STAGING_API_PID"
+    sudo nginx -s stop 2>/dev/null || true
+    ok "nginx stopped"
+    echo ""
+    ;;
+
+  staging-status)
+    echo ""
+    echo -e "${BOLD}RiftLine — Staging Status${NC}"
+    echo "──────────────────────────────────────────"
+    status_service "Staging API" "$STAGING_API_PID" "$STAGING_API_PORT"
+    if curl -s "http://localhost:$STAGING_NGINX_PORT/health" | grep -q "ok" 2>/dev/null; then
+      echo -e "  ${GREEN}●${NC} ${BOLD}nginx${NC}  running  port $STAGING_NGINX_PORT"
+    else
+      echo -e "  ${RED}○${NC} ${BOLD}nginx${NC}  stopped"
+    fi
+    echo ""
+    ;;
+
   help|*)
     echo ""
     echo -e "${BOLD}Usage:${NC} ./serve.sh <command> [--dev|--prod]"
     echo ""
-    echo -e "${BOLD}Commands:${NC}"
+    echo -e "${BOLD}Development commands:${NC}"
     echo "  start   [--dev|--prod]   Start API and Frontend (default: --dev)"
-    echo "  stop                     Stop all services"
+    echo "  stop                     Stop all dev services"
     echo "  restart [--dev|--prod]   Stop and start again"
     echo "  status                   Show PID and port for each service"
     echo "  logs    [api|web|build]  Tail log files (default: both)"
     echo ""
-    echo -e "${BOLD}Modes:${NC}"
-    echo "  --dev    Dev servers (API requires restart; frontend uses Vite)"
-    echo "  --prod   Build frontend, then run production servers"
+    echo -e "${BOLD}Staging commands (production-like, nginx + built static):${NC}"
+    echo "  staging                  Build frontend + start nginx :8080 → API :3002"
+    echo "  staging-stop             Stop staging services"
+    echo "  staging-status           Show staging status"
     echo ""
-    echo -e "${BOLD}Prerequisites:${NC}"
-    echo "  1. Copy .env.example → .env and fill in DATABASE_URL + PRED_GG_* vars"
-    echo "  2. npm install"
-    echo "  3. Start PostgreSQL and run: npm run db:migrate --workspace=@predecessor/data-sync"
+    echo -e "${BOLD}Environments:${NC}"
+    echo "  .env          → development (Vite HMR, port 5173)"
+    echo "  .env.staging  → staging (nginx :8080, NODE_ENV=production)"
     echo ""
-    echo -e "${BOLD}Logs:${NC} logs/api.log  logs/web.log  logs/build.log"
+    echo -e "${BOLD}Logs:${NC} logs/api.log  logs/web.log  logs/staging.log  logs/staging-build.log"
     echo ""
     ;;
 esac
