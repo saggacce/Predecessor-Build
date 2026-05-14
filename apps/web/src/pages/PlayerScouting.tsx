@@ -153,6 +153,12 @@ export default function PlayerScouting() {
     try {
       const profile = await apiClient.players.getProfile(playerId);
       setProfilePhase({ tag: 'loaded', profile });
+
+      // Auto-sync if generalStats is missing (no snapshot yet)
+      const hasStats = Object.keys(profile.generalStats ?? {}).length > 0;
+      if (!hasStats && internalAuthenticated) {
+        void handleRefreshProfile(profile.displayName, profile.id);
+      }
     } catch (err) {
       const msg = err instanceof ApiErrorResponse ? err.error.message : 'Could not load player profile.';
       setProfilePhase({ tag: 'error', message: msg });
