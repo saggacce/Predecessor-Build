@@ -335,8 +335,8 @@ adminRouter.get('/sync-status', async (_req, res, next) => {
       db.player.count(),
       // Stale = needs re-sync AND is syncable (not HIDDEN, not console)
       db.player.count({ where: { lastSynced: { lt: staleThreshold }, displayName: { not: 'HIDDEN' }, isConsole: false } }),
-      // Unsyncable = HIDDEN display name OR console player (pred.gg has no data)
-      db.player.count({ where: { OR: [{ displayName: 'HIDDEN' }, { isConsole: true }] } }),
+      // Unsyncable = HIDDEN or console AND stale (can't be re-synced, dragging the counter)
+      db.player.count({ where: { lastSynced: { lt: staleThreshold }, OR: [{ displayName: 'HIDDEN' }, { isConsole: true }] } }),
       db.match.count(),
       db.match.count({ where: { eventStreamSynced: true } }),
       db.$queryRaw<[{ count: bigint }]>`
@@ -355,7 +355,7 @@ adminRouter.get('/sync-status', async (_req, res, next) => {
         total: totalPlayers,
         synced: totalPlayers - stalePlayers - unsyncablePlayers,
         stale: stalePlayers,
-        unsyncable: unsyncablePlayers,
+        unsyncable: unsyncablePlayers, // stale HIDDEN/console — can't be re-synced
       },
       matches: {
         total: totalMatches,
