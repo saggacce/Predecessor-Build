@@ -186,6 +186,7 @@ export interface UserProfile {
   timezone: string | null;
   playerTier: PlayerTier;
   playerTierExpiresAt: string | null;
+  linkedPlayerId: string | null;
   discordId: string | null;
   discordUsername: string | null;
   epicGamesId: string | null;

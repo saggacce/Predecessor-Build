@@ -1229,6 +1229,9 @@ function PerformanceTab({ teamId, analysis, loading, onRefresh }: {
   const [insights, setInsights] = useState<Insight[] | null>(null);
   const [loadingInsights, setLoadingInsights] = useState(false);
   const [expandedEvidence, setExpandedEvidence] = useState<Set<string>>(new Set());
+  const _config = useConfig();
+  const pocketPickWr = _config.get('display_pocket_pick_wr') ?? 65;
+  const pocketPickMaxGames = _config.get('display_pocket_pick_max_games') ?? 10;
 
   useEffect(() => {
     setLoadingInsights(true);
