@@ -1,0 +1,82 @@
+name: Sprint Testing Issue
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, reopened]
+
+jobs:
+  create-testing-issue:
+    name: Create testing issue
+    runs-on: ubuntu-latest
+    # Only for PRs from develop (sprint PRs)
+    if: github.head_ref == 'develop'
+    permissions:
+      issues: write
+      pull-requests: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Get commit list
+        id: commits
+        run: |
+          COMMITS=$(git log origin/main..origin/develop --oneline --no-merges | head -30 | sed 's/^/- /')
+          echo "list<<EOF" >> $GITHUB_OUTPUT
+          echo "$COMMITS" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Create testing issue
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const pr = context.payload.pull_request;
+            const commits = `${{ steps.commits.outputs.list }}`;
+
+            const body = [
+              `## 🧪 Testing requerido antes del deploy`,
+              ``,
+              `Sprint PR: #${pr.number} — ${pr.title}`,
+              ``,
+              `### Cambios incluidos en este sprint`,
+              commits || '_No se encontraron commits_',
+              ``,
+              `### Checklist de testing`,
+              `- [ ] Login y logout funcionan correctamente`,
+              `- [ ] Player Scouting — búsqueda y perfil de jugador`,
+              `- [ ] Team Analysis — tabs principales (Performance, Phase, Vision, Objective, Draft)`,
+              `- [ ] Scrim Report / Battle Plan`,
+              `- [ ] Review Queue y objetivos`,
+              `- [ ] Platform Admin — Data Controls, Staff`,
+              `- [ ] Funcionalidades nuevas de este sprint verificadas`,
+              `- [ ] No hay regresiones visibles en navegación y carga`,
+              ``,
+              `### Instrucciones`,
+              `1. Prueba todo lo anterior en \`https://riftline.app\` (pre-merge) o en local`,
+              `2. Marca cada checkbox conforme lo valides`,
+              `3. **Cierra este issue** cuando todo esté OK`,
+              `4. Ve a GitHub → Actions → aprueba el deploy en Environment \`production\``,
+              ``,
+              `> ⚠️ No aprobar el deploy sin haber cerrado este issue primero.`,
+            ].join('\n');
+
+            const issue = await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `🧪 Testing requerido — Sprint PR #${pr.number}`,
+              body,
+              labels: ['testing', 'sprint'],
+            });
+
+            // Comment on the PR linking to the issue
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: pr.number,
+              body: `## 🧪 Testing requerido\n\nSe ha creado el issue de testing: **#${issue.data.number}**\n\nCompleta el checklist y cierra el issue antes de aprobar el deploy en producción.\n\n→ ${issue.data.html_url}`,
+            });
+
+            core.summary.addRaw(`Testing issue created: ${issue.data.html_url}`);
+            await core.summary.write();
