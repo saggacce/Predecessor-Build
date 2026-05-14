@@ -154,9 +154,11 @@ export default function PlayerScouting() {
       const profile = await apiClient.players.getProfile(playerId);
       setProfilePhase({ tag: 'loaded', profile });
 
-      // Auto-sync if generalStats is missing (no snapshot yet)
-      const hasStats = Object.keys(profile.generalStats ?? {}).length > 0;
-      if (!hasStats && internalAuthenticated) {
+      // Auto-sync if generalStats is missing (no snapshot yet).
+      // Don't gate on internalAuthenticated — auth state may not be ready yet
+      // when this runs. The sync endpoint handles auth internally.
+      const hasStats = typeof (profile.generalStats as Record<string, unknown>)?.matches === 'number';
+      if (!hasStats) {
         void handleRefreshProfile(profile.displayName, profile.id);
       }
     } catch (err) {
