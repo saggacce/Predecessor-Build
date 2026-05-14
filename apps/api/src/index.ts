@@ -90,7 +90,9 @@ app.use('/feedback', feedbackRouter);
 
 app.use(errorHandler);
 
-// Production: serve Vite-built frontend (single-service deployment on Railway)
+// Production: serve Vite-built frontend.
+// Placed AFTER all API routes — Express falls through to here only for paths
+// that don't match any API route (frontend SPA routes like /matches, /profile).
 if (process.env.NODE_ENV === 'production') {
   const distPath = join(dirname(fileURLToPath(import.meta.url)), '../../web/dist');
   app.use(express.static(distPath));

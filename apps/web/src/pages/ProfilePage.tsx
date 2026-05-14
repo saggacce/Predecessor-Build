@@ -417,6 +417,18 @@ export default function ProfilePage() {
           </div>
         </div>
       )}
+
+      {showLinkModal && (
+        <LinkPlayerModal
+          onLinked={async (playerId, displayName) => {
+            setProfile((p) => p ? { ...p, linkedPlayerId: playerId } : p);
+            setShowLinkModal(false);
+            await refreshInternalSession();
+            toast.success(`Perfil vinculado: ${displayName}`);
+          }}
+          onClose={() => setShowLinkModal(false)}
+        />
+      )}
     </div>
   );
 }

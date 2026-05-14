@@ -86,10 +86,11 @@ async function signSession(user: UserWithMemberships): Promise<string> {
 
 async function setSessionCookie(res: Response, user: UserWithMemberships): Promise<void> {
   const token = await signSession(user);
+  const secureCookies = process.env.HTTPS_ENABLED === 'true';
   res.cookie(SESSION_COOKIE, token, {
     httpOnly: true,
     sameSite: 'lax',
-    secure: process.env.NODE_ENV === 'production',
+    secure: secureCookies,
     maxAge: SESSION_MAX_AGE_MS,
   });
 
@@ -101,7 +102,7 @@ async function setSessionCookie(res: Response, user: UserWithMemberships): Promi
   res.cookie(REFRESH_COOKIE, refreshToken, {
     httpOnly: true,
     sameSite: 'lax',
-    secure: process.env.NODE_ENV === 'production',
+    secure: secureCookies,
     maxAge: REFRESH_MAX_AGE_MS,
     path: '/internal-auth/refresh',
   });
