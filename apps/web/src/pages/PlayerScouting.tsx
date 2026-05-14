@@ -47,8 +47,6 @@ type ProfilePhase =
   | { tag: 'error'; message: string };
 
 
-import React from 'react';
-
 class ProfileErrorBoundary extends React.Component<
   { children: React.ReactNode; onReset: () => void },
   { error: Error | null }
