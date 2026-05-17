@@ -116,6 +116,7 @@ model MatchPlayer {
   wardsPlaced                  Int?
   inventoryItems               Json
   perkSlug                     String?
+  perks                        Json?
   abilityOrder                 Json?
   predggPlayerUuid             String?
   level                        Int?

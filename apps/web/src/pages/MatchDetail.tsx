@@ -315,6 +315,7 @@ function ScoreboardTab({ match, duskWon, dawnWon, isAram, heroMeta, editingPlaye
               <HeaderTooltip label="Gold total" tip="Oro total acumulado al final de la partida" style={{ flex: '0 0 76px', display: 'flex', justifyContent: 'center' }} />
               {!isAram && <span className="hide-mobile" style={{ flex: '0 0 80px', display: 'flex', justifyContent: 'center' }}><HeaderTooltip label="Wards" tip="Guardianes colocados / destruidos durante la partida" /></span>}
               <span className="hide-mobile" style={{ flex: '0 0 196px', display: 'flex', justifyContent: 'center' }}><HeaderTooltip label="Items" tip="Inventario final del jugador" /></span>
+              <span className="hide-mobile" style={{ flex: '0 0 160px', display: 'flex', justifyContent: 'center' }}><HeaderTooltip label="Augments" tip="Mejoras pre-partida seleccionadas por el jugador" /></span>
             </div>
 
             {/* Player rows */}
@@ -506,6 +507,28 @@ function PlayerRow({ player, isAram, teamColor, maxDamage, teamKills, matchDurat
         {player.inventoryItems.filter((s) => s && s.length > 0).slice(0, 6).map((slug, i) => (
           <ItemIcon key={i} slug={slug} />
         ))}
+      </div>
+
+      {/* Augments */}
+      <div className="hide-mobile" style={{ flex: '0 0 160px', display: 'flex', flexDirection: 'column', gap: '3px', justifyContent: 'center', padding: '0 4px' }}>
+        {player.perks && player.perks.length > 0 ? player.perks.map((perk) => (
+          <div key={perk.id} title={perk.displayName} style={{
+            fontSize: '0.6rem',
+            fontFamily: 'var(--font-mono)',
+            padding: '1px 5px',
+            borderRadius: '3px',
+            whiteSpace: 'nowrap',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            background: perk.slot === 'HERO_SPECIFIC_1' ? 'rgba(167,139,250,0.15)' : 'rgba(255,255,255,0.05)',
+            color: perk.slot === 'HERO_SPECIFIC_1' ? 'var(--accent-violet)' : 'var(--text-muted)',
+            border: perk.slot === 'HERO_SPECIFIC_1' ? '1px solid rgba(167,139,250,0.3)' : '1px solid rgba(255,255,255,0.06)',
+          }}>
+            {perk.displayName}
+          </div>
+        )) : (
+          <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)', opacity: 0.4 }}>—</span>
+        )}
       </div>
     </div>
   );
