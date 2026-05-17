@@ -26,8 +26,11 @@ export default function MatchDetail() {
       try {
         const data = await apiClient.matches.getDetail(id);
         setMatch(data);
-        // Auto-sync when event stream is missing — also resolves player names via Bearer
-        if (!data.eventStreamSynced) {
+        // Auto-sync when roster/perks/event stream data is incomplete
+        const allPlayers = [...data.dusk, ...data.dawn];
+        const missingRoster = !data.rosterSynced || allPlayers.length < 10;
+        const missingPerks = allPlayers.length > 0 && allPlayers.every((p) => p.perks === null);
+        if (missingRoster || missingPerks || !data.eventStreamSynced) {
           setSyncing(true);
           try {
             const updated = await apiClient.matches.syncPlayers(id);
