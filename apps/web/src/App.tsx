@@ -28,7 +28,9 @@ import ProfilePage from './pages/ProfilePage';
 import ApiStatusPage from './pages/ApiStatusPage';
 import ConfigPage from './pages/ConfigPage';
 import FeedbackPage from './pages/FeedbackPage';
+import PermissionsPage from './pages/PermissionsPage';
 import { FeedbackButton } from './components/FeedbackButton';
+import { PermissionsProvider } from './contexts/PermissionsContext';
 import LandingPage from './pages/LandingPage';
 import { useAuth } from './hooks/useAuth';
 import { ViewAsProvider, useViewAs, type ViewAsRole } from './hooks/useViewAs';
@@ -455,10 +457,12 @@ function ViewAsSelector() {
 export default function App() {
   return (
     <BrowserRouter>
-      <ViewAsProvider>
-        <AppContent />
+      <PermissionsProvider>
+        <ViewAsProvider>
+          <AppContent />
           <Toaster position="bottom-right" theme="dark" richColors closeButton />
-      </ViewAsProvider>
+        </ViewAsProvider>
+      </PermissionsProvider>
     </BrowserRouter>
   );
 }
@@ -543,6 +547,7 @@ function AppContent() {
             <Route path="/admin/api-status" element={<ApiStatusPage />} />
             <Route path="/admin/audit-logs" element={<AuditLogsPage />} />
             <Route path="/admin/feedback" element={<FeedbackPage />} />
+            <Route path="/management/roles" element={<PermissionsPage />} />
 
             {/* Backward compatibility redirects */}
             <Route path="/players" element={<Navigate to="/analysis/players" replace />} />
