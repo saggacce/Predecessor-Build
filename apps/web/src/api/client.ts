@@ -232,6 +232,7 @@ export interface MatchPlayerDetail {
   level: number | null;
   inventoryItems: string[];
   perkSlug: string | null;
+  perks: Array<{ id: string; name: string; displayName: string; slot: string | null }> | null;
   rankLabel: string | null;
   ratingPoints: number | null;
   physicalDamageDealtToHeroes: number | null;

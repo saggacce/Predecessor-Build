@@ -797,6 +797,7 @@ const MATCH_DETAIL_QUERY = `
         physicalDamageDealt magicalDamageDealt trueDamageDealt
         hero { slug }
         inventoryItemData { name }
+        perks { id name data { displayName slot } }
         player { id name isNameConsole }
       }
     }
@@ -843,6 +844,7 @@ interface PredggMatchDetail {
     trueDamageDealt: number | null;
     hero: { slug: string } | null;
     inventoryItemData: Array<{ name: string } | null>;
+    perks: Array<{ id: string; name: string; data: { displayName: string; slot: string } | null }> | null;
     player: { id: string; name: string | null; isNameConsole: boolean } | null;
   }>;
 }
@@ -948,6 +950,12 @@ export async function resyncMatch(
         trueDamageDealt: mp.trueDamageDealt ?? null,
         inventoryItems: (mp.inventoryItemData ?? []).filter(Boolean).map((i) => i!.name.toLowerCase()),
         perkSlug: null,
+        perks: (mp.perks ?? []).map((p) => ({
+          id: p.id,
+          name: p.name,
+          displayName: p.data?.displayName ?? p.name,
+          slot: p.data?.slot ?? null,
+        })),
         abilityOrder: [],
       },
     });
