@@ -7,57 +7,103 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// GAME DATA — synced from pred.gg via GraphQL (sync-service.ts)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Game patch / version fetched from pred.gg.
+/// Used to tag matches and player snapshots to a specific patch for
+/// patch-aware analytics (winrates, stats per patch).
 model Version {
+  /// Internal cuid — used in joins
   id          String           @id @default(cuid())
+  /// pred.gg version ID (numeric string)
   predggId    String           @unique
+  /// Human-readable patch name shown in UI, e.g. "0.19.2"
   name        String
   releaseDate DateTime
+  /// "MAJOR" | "MINOR" | "HOTFIX" — from pred.gg
   patchType   String
   syncedAt    DateTime
   matches     Match[]
   snapshots   PlayerSnapshot[]
 }
 
+/// A Predecessor player known to the system.
+/// Players are discovered when their matches are synced. Not all players
+/// have pred.gg accounts — console players appear with displayName but
+/// no linked account (~60% of players).
 model Player {
+  /// Internal cuid — used in all internal joins
   id             String           @id @default(cuid())
+  /// pred.gg player ID (UUID format) — used for API lookups
   predggId       String           @unique
+  /// pred.gg UUID — same value as predggId in practice; kept for legacy reasons
   predggUuid     String           @unique
+  /// Display name from pred.gg. Console players show a generated "user-XXXXXXXX" name.
   displayName    String
+  /// Whether the player set their profile to private on pred.gg
   isPrivate      Boolean          @default(false)
+  /// Region inferred from match location data (not provided by pred.gg directly)
   inferredRegion String?
   firstSeen      DateTime         @default(now())
+  /// Last time this player's data was synced from pred.gg
   lastSynced     DateTime
+  /// Optional override name set by staff in RiftLine (takes priority over displayName in UI)
   customName     String?
+  /// True for players who play on console. Console players cannot be synced
+  /// via the pred.gg player endpoint — their matches appear with isNameConsole=true.
   isConsole      Boolean          @default(false)
   matchPlayers   MatchPlayer[]
   snapshots      PlayerSnapshot[]
   rosterEntries  TeamRoster[]
+  /// RiftLine user account linked to this player (one-to-one, optional)
   userAccount    User?
 }
 
+/// Point-in-time snapshot of a player's aggregate stats fetched from pred.gg.
+/// Multiple snapshots per player are possible (one per sync). The most recent
+/// snapshot is used for display. Snapshots are tagged to a Version when possible.
 model PlayerSnapshot {
   id           String   @id @default(cuid())
   playerId     String
+  /// Patch this snapshot was taken on (null if version could not be resolved)
   versionId    String?
   syncedAt     DateTime
+  /// Aggregate lifetime stats: matches, wins, KDA, gold, damage, etc.
+  /// Shape: { matches, wins, kills, deaths, assists, heroDamage, gold, ... }
   generalStats Json
+  /// Per-hero breakdown: [{ heroData: { slug, name }, matches, wins, kills, ... }]
   heroStats    Json
+  /// Per-role breakdown: [{ role, matches, wins, kills, ... }]
   roleStats    Json
+  /// Latest rank label from pred.gg (e.g. "Diamond III")
   rankLabel    String?
+  /// Numeric rating points corresponding to rankLabel
   ratingPoints Int?
   player       Player   @relation(fields: [playerId], references: [id])
   version      Version? @relation(fields: [versionId], references: [id])
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// TEAM MANAGEMENT — created and managed within RiftLine
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// A team tracked in RiftLine. Can be OWN (your team) or RIVAL.
+/// Teams are the primary organizational unit — matches, analysis and
+/// goals are scoped to a team.
 model Team {
-  id                String           @id @default(cuid())
-  name              String
-  abbreviation      String?
-  type              TeamType
-  region            String?
-  notes             String?
-  createdAt         DateTime         @default(now())
-  logoUrl           String?
+  id           String    @id @default(cuid())
+  name         String
+  abbreviation String?
+  /// OWN = team belonging to the org; RIVAL = opponent being scouted
+  type         TeamType
+  region       String?
+  /// Internal notes visible only to staff
+  notes        String?
+  createdAt    DateTime  @default(now())
+  logoUrl      String?
+  /// Subscription tier: "FREE" | "PRO" | "TEAM" | "ENTERPRISE"
   teamTier          String           @default("FREE")
   teamTierExpiresAt DateTime?
   llmAnalyses       LlmAnalysis[]
@@ -65,29 +111,50 @@ model Team {
   roster            TeamRoster[]
 }
 
+/// Links a Player to a Team for a specific time period.
+/// activeTo = null means the player is currently active on the roster.
+/// Historical entries (activeTo set) are kept for match attribution.
 model TeamRoster {
   id         String    @id @default(cuid())
   teamId     String
   playerId   String
+  /// In-game role: "CARRY" | "JUNGLE" | "MIDLANE" | "OFFLANE" | "SUPPORT"
   role       String?
   activeFrom DateTime  @default(now())
+  /// null = currently active; set when the player leaves the roster
   activeTo   DateTime?
   player     Player    @relation(fields: [playerId], references: [id])
   team       Team      @relation(fields: [teamId], references: [id])
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// MATCH DATA — synced from pred.gg
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// A single Predecessor match. Synced from pred.gg in two phases:
+/// 1. Basic roster sync (rosterSynced=true): 10 MatchPlayers with stats
+/// 2. Event stream sync (eventStreamSynced=true): HeroKills, ObjectiveKills,
+///    StructureDestructions, WardEvents, Transactions (requires Bearer token)
 model Match {
+  /// Internal cuid
   id                    String                 @id @default(cuid())
+  /// pred.gg match UUID — used for all pred.gg API calls
   predggUuid            String                 @unique
   startTime             DateTime
+  /// Match duration in seconds
   duration              Int
+  /// "RANKED" | "ARAM" | "BRAWL" | "STANDARD"
   gameMode              String
   region                String?
+  /// "DUSK" | "DAWN" | null (null = match in progress or unknown)
   winningTeam           String?
   versionId             String?
   syncedAt              DateTime
+  /// True if the event stream sync attempt failed (prevents retry loops)
   eventStreamFailed     Boolean                @default(false)
+  /// True when HeroKills, ObjectiveKills, etc. have been fetched
   eventStreamSynced     Boolean                @default(false)
+  /// True when all 10 MatchPlayers have been fetched and stored
   rosterSynced          Boolean                @default(false)
   heroBans              HeroBan[]
   heroKills             HeroKill[]
@@ -99,12 +166,26 @@ model Match {
   wardEvents            WardEvent[]
 }
 
+/// Per-player stats for a single match. One row per player per match (max 10).
+/// playerId is nullable because not all players have pred.gg accounts;
+/// anonymous players still get a MatchPlayer row with stats.
+///
+/// NOTE: inventoryItems are stored as lowercase slugs (e.g. "taintedblade")
+/// matching the filename convention in apps/web/public/items/.
+///
+/// NOTE: perks stores the 3 pre-game augments the player selected:
+/// [{ id, name, displayName, slot }] where slot is
+/// "HERO_SPECIFIC_1" | "COMMON_1" | "COMMON_2"
 model MatchPlayer {
   id                           String  @id @default(cuid())
   matchId                      String
+  /// null when the player has no pred.gg account (console players)
   playerId                     String?
+  /// Name as it appears in pred.gg. "HIDDEN" for private/unlinked accounts.
   playerName                   String
+  /// "DUSK" | "DAWN"
   team                         String
+  /// "CARRY" | "JUNGLE" | "MIDLANE" | "OFFLANE" | "SUPPORT" | null
   role                         String?
   heroSlug                     String
   kills                        Int
@@ -114,21 +195,30 @@ model MatchPlayer {
   totalDamage                  Int?
   gold                         Int?
   wardsPlaced                  Int?
+  /// Array of item slugs in lowercase, e.g. ["taintedblade", "stormbreaker"]
   inventoryItems               Json
+  /// Legacy field — always null. Kept to avoid migration on hypertable-adjacent tables.
   perkSlug                     String?
+  /// Pre-game augments: [{ id, name, displayName, slot }]. null = synced before augments feature.
   perks                        Json?
+  /// Sequence of ability upgrades per level: [1,3,1,2,...]. Rarely populated.
   abilityOrder                 Json?
+  /// pred.gg player UUID — same as Player.predggId when playerId is set
   predggPlayerUuid             String?
   level                        Int?
   wardsDestroyed               Int?
+  /// Cumulative gold earned per minute as an array, e.g. [500, 1200, 2100, ...]
+  /// Requires Bearer token to sync. null = event stream not yet synced.
   goldEarnedAtInterval         Json?
   goldSpent                    Int?
   heroDamageTaken              Int?
+  /// CS — lane minions killed (does not include jungle camps)
   laneMinionsKilled            Int?
   largestCriticalStrike        Int?
   largestKillingSpree          Int?
   magicalDamageDealt           Int?
   magicalDamageDealtToHeroes   Int?
+  /// Highest multi-kill achieved (2=double, 3=triple, etc.)
   multiKill                    Int?
   physicalDamageDealt          Int?
   physicalDamageDealtToHeroes  Int?
@@ -141,33 +231,54 @@ model MatchPlayer {
   match                        Match   @relation(fields: [matchId], references: [id])
   player                       Player? @relation(fields: [playerId], references: [id])
 
+  /// A player can only appear once per match
   @@unique([matchId, playerId])
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// EVENT STREAM — granular in-match events (requires Bearer token)
+// HeroKill, ObjectiveKill, StructureDestruction, WardEvent, Transaction
+// are stored in TimescaleDB hypertables for time-series queries.
+// ⚠ ALTER TABLE on these models requires special handling — see workflow.md.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// A hero kill event during a match.
+/// killerPlayerId / killedPlayerId reference Player.id (internal cuid),
+/// resolved by repair-herokill-player-ids admin endpoint.
 model HeroKill {
   id             String   @id @default(cuid())
   matchId        String
+  /// Seconds from match start
   gameTime       Int
   syncedAt       DateTime @default(now())
+  /// Game-world coordinates. Use MAP_BOUNDS calibration to convert to minimap pixels.
   locationX      Float?
   locationY      Float?
   locationZ      Float?
+  /// "DUSK" | "DAWN"
   killerTeam     String?
   killedTeam     String?
   killerHeroSlug String?
   killedHeroSlug String?
+  /// Internal Player.id (not predggId). May be null if player has no account.
   killerPlayerId String?
   killedPlayerId String?
   match          Match    @relation(fields: [matchId], references: [id])
 }
 
+/// An objective secured during a match (Fangtooth, Prime, Shaper, buffs, etc.)
+/// entityType values: FANGTOOTH, PRIMAL_FANGTOOTH, ORB_PRIME, MINI_PRIME,
+/// SHAPER, RED_BUFF, BLUE_BUFF, CYAN_BUFF, GOLD_BUFF, RIVER, SEEDLING
+/// NOTE: Genesis Core was renamed to SHAPER in the DB — use SHAPER in queries.
 model ObjectiveKill {
   id             String   @id @default(cuid())
   matchId        String
   gameTime       Int
   syncedAt       DateTime @default(now())
+  /// See entityType values in the comment above
   entityType     String
   killerTeam     String?
+  /// Internal Player.id of the player who landed the killing blow
   killerPlayerId String?
   locationX      Float?
   locationY      Float?
@@ -175,12 +286,16 @@ model ObjectiveKill {
   match          Match    @relation(fields: [matchId], references: [id])
 }
 
+/// A structure destroyed during a match.
+/// structureType: "OUTER_TOWER" | "INNER_TOWER" | "INHIBITOR" | "CORE"
+/// destructionTeam is the team that destroyed it (not the team that owned it).
 model StructureDestruction {
   id              String   @id @default(cuid())
   matchId         String
   gameTime        Int
   syncedAt        DateTime @default(now())
   structureType   String
+  /// Team that destroyed the structure: "DUSK" | "DAWN"
   destructionTeam String?
   locationX       Float?
   locationY       Float?
@@ -188,6 +303,9 @@ model StructureDestruction {
   match           Match    @relation(fields: [matchId], references: [id])
 }
 
+/// A ward placed or destroyed during a match.
+/// eventType: "PLACEMENT" | "DESTRUCTION"
+/// wardType: "STEALTH" | "ORACLE" | "SENTRY" | "SONAR_DRONE" | "SOLSTONE_DRONE"
 model WardEvent {
   id        String   @id @default(cuid())
   matchId   String
@@ -198,57 +316,105 @@ model WardEvent {
   locationX Float?
   locationY Float?
   locationZ Float?
+  /// Internal Player.id — who placed or destroyed the ward
   playerId  String?
   team      String?
   match     Match    @relation(fields: [matchId], references: [id])
 }
 
+/// An item transaction (buy/sell/undo) during a match.
+/// transactionType: "BUY" | "SELL" | "UNDO_BUY" | "UNDO_SELL" | "AUTO_BUY"
+/// itemName is PascalCase from pred.gg (e.g. "TaintedBlade"). Convert to
+/// lowercase for asset lookups: /items/taintedblade.webp
 model Transaction {
   id              String   @id @default(cuid())
   matchId         String
   gameTime        Int
   syncedAt        DateTime @default(now())
   transactionType String
+  /// PascalCase item name from pred.gg — convert to lowercase for asset slugs
   itemName        String?
   playerId        String?
   team            String?
   match           Match    @relation(fields: [matchId], references: [id])
 }
 
+/// A hero ban during the draft phase. Only populated for RANKED matches.
+/// pred.gg does not provide pick/ban order — only the final list of bans.
 model HeroBan {
   id       String @id @default(cuid())
   matchId  String
   heroSlug String
+  /// Team that executed the ban: "DUSK" | "DAWN"
   team     String
   match    Match  @relation(fields: [matchId], references: [id])
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// MAP & ANALYTICS
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// A calibrated zone on the Predecessor map used for spatial event analysis.
+/// Polygons are defined in game-world coordinates (same as HeroKill/Ward locations).
+/// Seeded via POST /admin/map-zones/seed. Used by the heatmap and objective analysis.
+/// See MAP_BOUNDS in skill pred-devint for the coordinate-to-pixel conversion.
 model MapZone {
   id               String  @id @default(cuid())
+  /// Unique identifier used in code (e.g. "fangtooth", "prime", "river_north")
   key              String  @unique
   name             String
+  /// Array of {x, y} points defining the zone boundary in game coordinates
   polygon          Json
+  /// "objective" | "lane" | "jungle" | "base"
   zoneType         String
+  /// Links zone to an objective entity type (e.g. "FANGTOOTH")
   relatedObjective String?
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// OPERATIONS & AUDIT
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Audit log for all sync and admin operations.
+/// Written by sync-service and admin routes. Used by the Audit Logs page.
+/// source values: "sync", "admin", "cron", "user"
+/// status values: "ok" | "error" | "partial" | "skipped" | "success"
 model SyncLog {
   id        String   @id @default(cuid())
+  /// Entity type being operated on (e.g. "player", "match", "version")
   entity    String
+  /// ID of the specific entity (e.g. player predggId, "all" for bulk ops)
   entityId  String
+  /// Operation name (e.g. "upsert", "sync-stale", "event-stream")
   operation String
+  /// "ok" | "error" | "partial" | "skipped" | "success"
   status    String
   syncedAt  DateTime @default(now())
   error     String?
+  /// "sync" | "admin" | "cron" | "user"
   source    String?
   userName  String?
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// AUTH & USERS — RiftLine's own auth system (bcrypt + JWT)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// A RiftLine platform user. Auth is internal (bcrypt + JWT), separate from
+/// pred.gg OAuth. Users can optionally link their pred.gg player profile via
+/// linkedPlayerId to enable personal match feeds and player goals.
+///
+/// globalRole controls platform-wide access:
+/// - "SUPER_ADMIN": full access, cannot be modified by anyone
+/// - "PLATFORM_ADMIN": can configure platform settings, permissions and users
+/// - "VIEWER": default role; access controlled by team membership role
 model User {
   id                  String           @id @default(cuid())
   email               String           @unique
   name                String
+  /// bcrypt hash (cost factor 12)
   passwordHash        String
+  /// "SUPER_ADMIN" | "PLATFORM_ADMIN" | "VIEWER"
   globalRole          String           @default("VIEWER")
   isActive            Boolean          @default(true)
   createdAt           DateTime         @default(now())
@@ -256,9 +422,13 @@ model User {
   avatarUrl           String?
   bio                 String?
   timezone            String?
+  /// Links to a Player record — enables personal match feed and player goals.
+  /// Set via profile page or automatically during pred.gg OAuth login.
   linkedPlayerId      String?          @unique
+  /// "FREE" | "PRO" | "PREMIUM"
   playerTier          String           @default("FREE")
   playerTierExpiresAt DateTime?
+  /// Social / OAuth provider links (for display only; not used for auth)
   discordId           String?          @unique
   discordUsername     String?
   epicGamesId         String?          @unique
@@ -270,11 +440,17 @@ model User {
   linkedPlayer        Player?          @relation(fields: [linkedPlayerId], references: [id])
 }
 
+/// Maps a User to a Team with a specific role.
+/// A user can only have one role per team (enforced by @@unique).
+/// Team roles control what the user can do within that team's context.
+/// role values: "MANAGER" | "COACH" | "ANALISTA" | "JUGADOR"
 model TeamMembership {
   id       String  @id @default(cuid())
   userId   String
   teamId   String
+  /// "MANAGER" | "COACH" | "ANALISTA" | "JUGADOR"
   role     String
+  /// Set when role = "JUGADOR" — links the membership to a specific Player record
   playerId String?
   team     Team    @relation(fields: [teamId], references: [id])
   user     User    @relation(fields: [userId], references: [id])
@@ -282,50 +458,83 @@ model TeamMembership {
   @@unique([userId, teamId])
 }
 
+/// A pending invitation to join a team. Sent via email as a signup link.
+/// Token is included in the invite URL and consumed on registration.
+/// Invitations expire after 7 days (set at creation time in expiresAt).
 model Invitation {
   id          String    @id @default(cuid())
+  /// URL-safe token included in the invite link (e.g. /register/:token)
   token       String    @unique @default(cuid())
+  /// Email address of the recipient
   email       String
   teamId      String
+  /// Role the invitee will receive on the team
   role        String
+  /// For JUGADOR invitations — pre-links the new user to a Player record
   playerId    String?
   invitedById String
+  /// Token becomes invalid after this timestamp
   expiresAt   DateTime
+  /// Set when the invitation is accepted; null = not yet used
   usedAt      DateTime?
   createdAt   DateTime  @default(now())
   invitedBy   User      @relation("InvitedBy", fields: [invitedById], references: [id])
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// COACHING TOOLS
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// A coaching review item flagged for analysis. Can be generated automatically
+/// by the analyst engine (insightId set) or created manually by staff.
+/// Lifecycle: PENDING → IN_REVIEW → REVIEWED | FALSE_POSITIVE | DEFERRED | ARCHIVED
 model ReviewItem {
   id           String   @id @default(cuid())
   teamId       String
+  /// Optional link to the match where the event occurred
   matchId      String?
+  /// Optional link to the player involved
   playerId     String?
+  /// ID of the analyst insight that generated this item (if auto-created)
   insightId    String?
+  /// In-match timestamp in seconds (used to jump to the event in video review)
   gameTime     Int?
+  /// Event category (e.g. "objective_death", "vision_gap", "throw_pattern")
   eventType    String
+  /// "critical" | "high" | "medium" | "low"
   priority     String   @default("high")
+  /// Human-readable description of why this was flagged
   reason       String
+  /// "PENDING" | "IN_REVIEW" | "REVIEWED" | "FALSE_POSITIVE" | "DEFERRED" | "ARCHIVED"
   status       String   @default("PENDING")
+  /// Coach-assigned cause tag (e.g. "bad_setup", "facecheck", "bad_reset")
   tag          String?
   coachComment String?
+  /// User ID of the staff member assigned to review this item
   assignedTo   String?
   actionItem   String?
+  /// Optional VOD link for direct video reference
   vodUrl       String?
+  /// Timestamp in the VOD (seconds) where the event occurs
   vodTimestamp Int?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 }
 
+/// A measurable goal set for an entire team over a defined timeframe.
+/// Tracks baseline, target and current values for a specific metric.
+/// status: "DRAFT" | "ACTIVE" | "ACHIEVED" | "FAILED" | "PAUSED" | "ARCHIVED"
 model TeamGoal {
   id            String   @id @default(cuid())
   teamId        String
   title         String
   description   String?
+  /// Identifier of the metric being tracked (maps to indicators catalog)
   metricId      String?
   baselineValue Float?
   targetValue   Float?
   currentValue  Float?
+  /// e.g. "2w" | "1m" | "season"
   timeframe     String?
   priority      String   @default("medium")
   status        String   @default("ACTIVE")
@@ -333,9 +542,13 @@ model TeamGoal {
   updatedAt     DateTime @updatedAt
 }
 
+/// A measurable goal set for an individual player, scoped to a team context.
+/// visibility controls who can see the goal:
+/// "staff" = coaches/managers only | "team" = all team members | "player" = player + staff
 model PlayerGoal {
   id            String   @id @default(cuid())
   playerId      String
+  /// Team context the goal belongs to
   teamId        String
   title         String
   description   String?
@@ -343,69 +556,134 @@ model PlayerGoal {
   baselineValue Float?
   targetValue   Float?
   currentValue  Float?
+  /// Coach's private note about this goal (not visible to the player)
   coachNote     String?
+  /// "staff" | "team" | "player"
   visibility    String   @default("staff")
   status        String   @default("ACTIVE")
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// AI & LLM
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Stores the result of an LLM analysis run for a team.
+/// Used to display AI insights on the Dashboard ("Focus of the Day").
+/// feedback / correction fields enable coach oversight and future fine-tuning.
 model LlmAnalysis {
   id           String   @id @default(cuid())
   teamId       String
+  /// Claude model used (e.g. "claude-sonnet-4-6")
   model        String
+  /// Raw JSON of analyst insights passed as context to the LLM
   insightsJson Json
+  /// The LLM's generated text output shown to users
   outputText   String
   promptTokens Int?
   outputTokens Int?
+  /// Coach feedback on the output: "positive" | "negative"
   feedback     String?
+  /// Optional correction text provided by coach when feedback is negative
   correction   String?
   createdAt    DateTime @default(now())
   team         Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// PLATFORM CONFIGURATION
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Stores sensitive credentials used by the platform for background operations.
+/// Currently used to store the pred.gg refresh token for the background sync cron.
+/// key: "predgg_refresh_token" — the platform's own OAuth refresh token.
 model PlatformCredential {
+  /// Credential identifier (e.g. "predgg_refresh_token")
   key       String   @id
   value     String
   updatedAt DateTime @updatedAt
 }
 
+/// Configurable numeric thresholds used by the analyst engine.
+/// Each row is a single named parameter (e.g. "vision.minWardsPerMin").
+/// Values can be adjusted by PLATFORM_ADMIN via the Config page.
+/// Seeded with defaults on first deploy.
 model PlatformConfig {
+  /// Dot-notation key identifying the config parameter
   key          String   @id
   value        Float
   defaultValue Float
   minValue     Float?
   maxValue     Float?
+  /// Human-readable label shown in the Config UI
   label        String
   description  String
+  /// Grouping for UI display (e.g. "Vision", "Objectives", "Performance")
   group        String
+  /// Display unit (e.g. "wards/min", "seconds", "%")
   unit         String?
   updatedAt    DateTime @updatedAt
   updatedBy    String?
 }
 
+/// Stores the platform-wide role permission matrix as a single JSON row.
+/// Always has exactly one row with id="global". SUPER_ADMIN is never stored
+/// here — it is hardcoded to full access in the permissions service.
+/// Shape: { PLATFORM_ADMIN: { "teams.own.view": true, ... }, MANAGER: {...}, ... }
+/// See permissions-service.ts for the full PermissionKey union type.
+model PermissionsConfig {
+  id          String   @id @default("global")
+  /// JSON object mapping ConfigurableRole → Record<PermissionKey, boolean>
+  permissions Json
+  updatedAt   DateTime @updatedAt
+  /// userId of the last PLATFORM_ADMIN who modified the permissions
+  updatedBy   String?
+}
+
+/// Hero metadata fetched from omeda.city. Used for hero names, images,
+/// classes, roles, abilities and base stats throughout the UI.
+/// Synced via POST /admin/sync-heroes. Images are stored as omeda.city URLs
+/// but the app prefers local assets in apps/web/public/heroes/.
 model HeroMeta {
   id          String   @id @default(cuid())
+  /// Lowercase hero slug matching the public asset filename (e.g. "grux", "adele")
   slug        String   @unique
   displayName String
+  /// Array of class strings, e.g. ["Fighter", "Tank"]
   classes     Json
+  /// Array of role strings, e.g. ["Offlane", "Jungle"]
   roles       Json
+  /// omeda.city image URL (fallback only — prefer /heroes/{slug}.webp local asset)
   imageUrl    String?
+  /// Array of ability objects (Passive, LMB, RMB, Q, E, R)
   abilities   Json?
+  /// Base stat arrays per level (18 values each): health, armor, attack, etc.
   baseStats   Json?
   syncedAt    DateTime @default(now())
   updatedAt   DateTime @updatedAt
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// MEDIA & FEEDBACK
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// A VOD (video) link associated with a match, player or team.
+/// Used by coaches to reference specific game footage during review sessions.
+/// visibility: "staff" | "team" | "player"
 model VodLink {
   id                  String   @id @default(cuid())
+  /// Optional match reference for jump-to-timestamp functionality
   matchId             String?
   playerId            String?
   teamId              String
+  /// "full_match" | "player_pov" | "clip" | "coach_review" | "scrim_recording"
   type                String
   url                 String
+  /// In-game timestamp range (seconds) for the relevant event
   gameTimeStart       Int?
   gameTimeEnd         Int?
+  /// Video platform timestamp range (seconds) for the clip
   videoTimestampStart Int?
   videoTimestampEnd   Int?
   tags                String[] @default([])
@@ -414,22 +692,38 @@ model VodLink {
   createdAt           DateTime @default(now())
 }
 
+/// User-submitted feedback report (bug, suggestion or improvement).
+/// Collected via the in-app FeedbackButton component.
+/// Reviewed by PLATFORM_ADMIN in the Feedback admin page.
+/// screenshotBase64 is a base64-encoded PNG captured at submission time.
 model FeedbackReport {
   id               String    @id @default(cuid())
+  /// "bug" | "suggestion" | "improvement"
   type             String
+  /// Page/section where the feedback was submitted (e.g. "TeamAnalysis")
   section          String
   description      String
+  /// Optional base64 PNG screenshot captured at submission time
   screenshotBase64 String?
+  /// "NEW" | "REVIEWED" | "DISMISSED"
   status           String    @default("NEW")
   userId           String?
   userName         String?
   userEmail        String?
   createdAt        DateTime  @default(now())
   reviewedAt       DateTime?
+  /// Admin note added during review
   reviewNote       String?
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// ENUMS
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Whether a team is the org's own team or a rival being scouted
 enum TeamType {
+  /// The organization's own competitive team
   OWN
+  /// An opponent team being tracked for scouting purposes
   RIVAL
 }

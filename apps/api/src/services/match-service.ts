@@ -1,18 +1,41 @@
+/**
+ * @fileoverview Match service — reads match detail and event stream data from the DB.
+ *
+ * Two main responsibilities:
+ * 1. `getMatchDetail` — assembles the full match scoreboard (both teams, per-player stats,
+ *    rank labels, hero metadata) from MatchPlayer + PlayerSnapshot records.
+ * 2. `getMatchEvents` — returns the raw event stream (kills, objectives, wards, transactions)
+ *    used by the Timeline and Analysis tabs. Requires eventStreamSynced=true on the Match.
+ *
+ * Data flow: pred.gg → sync-service → DB → match-service → matches route → frontend
+ */
+
 import { db } from '../db.js';
 import { AppError } from '../middleware/error-handler.js';
 
+// ── Event stream shapes ───────────────────────────────────────────────────────
+// These interfaces map directly from DB rows to the API response.
+// gameTime is always in seconds from match start.
+
+/** A hero kill event. killerPlayerId / killedPlayerId are internal Player.id values. */
 export interface MatchEventKill {
   gameTime: number;
+  /** "DUSK" | "DAWN" | null */
   killerTeam: string | null;
   killedTeam: string | null;
   killerHeroSlug: string | null;
   killedHeroSlug: string | null;
+  /** Internal Player.id — may be null for players with no pred.gg account */
   killerPlayerId: string | null;
   killedPlayerId: string | null;
+  locationX: number | null;
+  locationY: number | null;
 }
 
+/** An objective secured (Fangtooth, Prime, Shaper, buffs, etc.) */
 export interface MatchEventObjective {
   gameTime: number;
+  /** Entity type — see ObjectiveKill model in schema.prisma for valid values */
   entityType: string;
   killerTeam: string | null;
   killerPlayerId: string | null;
@@ -20,27 +43,41 @@ export interface MatchEventObjective {
   locationY: number | null;
 }
 
+/** A structure destroyed (tower, inhibitor, or core) */
 export interface MatchEventStructure {
   gameTime: number;
+  /** "OUTER_TOWER" | "INNER_TOWER" | "INHIBITOR" | "CORE" */
   structureType: string;
+  /** Team that destroyed it — not the team that owned it */
   destructionTeam: string | null;
+  locationX: number | null;
+  locationY: number | null;
 }
 
+/** A ward placement or destruction event */
 export interface MatchEventWard {
   gameTime: number;
+  /** "PLACEMENT" | "DESTRUCTION" */
   eventType: string;
+  /** "STEALTH" | "ORACLE" | "SENTRY" | "SONAR_DRONE" | "SOLSTONE_DRONE" */
   wardType: string;
   team: string | null;
+  locationX: number | null;
+  locationY: number | null;
 }
 
+/** An item transaction. Only BUY and SELL are included (UNDO_BUY/SELL filtered out). */
 export interface MatchEventTransaction {
   gameTime: number;
+  /** "BUY" | "SELL" */
   transactionType: string;
+  /** PascalCase item name from pred.gg — convert to lowercase for asset slugs */
   itemName: string | null;
   team: string | null;
   playerId: string | null;
 }
 
+/** Complete event stream for a match, used by Timeline and Analysis tabs. */
 export interface MatchEvents {
   heroKills: MatchEventKill[];
   objectiveKills: MatchEventObjective[];
@@ -49,6 +86,13 @@ export interface MatchEvents {
   transactions: MatchEventTransaction[];
 }
 
+/**
+ * Fetches all event stream data for a match from the DB.
+ * Events are sorted chronologically (gameTime asc).
+ * Only BUY/SELL transactions are returned — UNDO_* entries are excluded.
+ *
+ * @throws {AppError} 404 if the match does not exist
+ */
 export async function getMatchEvents(matchId: string): Promise<MatchEvents> {
   const match = await db.match.findUnique({ where: { id: matchId }, select: { id: true, eventStreamSynced: true } });
   if (!match) throw new AppError(404, `Match not found: ${matchId}`, 'MATCH_NOT_FOUND');
@@ -109,16 +153,31 @@ export async function getMatchEvents(matchId: string): Promise<MatchEvents> {
   };
 }
 
+// ── Match detail shapes ───────────────────────────────────────────────────────
+
+/**
+ * Per-player data for the match scoreboard.
+ * Combines MatchPlayer stats, Player profile (customName, isConsole, rank),
+ * and hero metadata resolved from the latest PlayerSnapshot.
+ */
 export interface MatchPlayerDetail {
+  /** Internal MatchPlayer.id */
   id: string;
+  /** Internal Player.id — null if player has no pred.gg account */
   playerId: string | null;
+  /** pred.gg player UUID — used to link back to pred.gg profiles */
   predggPlayerUuid: string | null;
+  /** Resolved display name. Falls back to "user-XXXXXXXX" for HIDDEN players. */
   playerName: string;
+  /** Staff-set override name — takes priority over playerName in the UI */
   customName: string | null;
+  /** "DUSK" | "DAWN" */
   team: string;
   role: string | null;
   heroSlug: string;
+  /** Hero display name resolved from PlayerSnapshot.heroStats */
   heroName: string | null;
+  /** Always "/heroes/{heroSlug}.webp" — served from public assets */
   heroImageUrl: string | null;
   isConsole: boolean;
   kills: number;
@@ -129,10 +188,15 @@ export interface MatchPlayerDetail {
   gold: number | null;
   wardsPlaced: number | null;
   wardsDestroyed: number | null;
+  /** Final level at end of match */
   level: number | null;
+  /** Lowercase item slugs matching /items/*.webp filenames */
   inventoryItems: string[];
+  /** @deprecated Always null — use perks instead */
   perkSlug: string | null;
+  /** Pre-game augments: [{id, name, displayName, slot}]. null = not yet synced. */
   perks: Array<{ id: string; name: string; displayName: string; slot: string | null }> | null;
+  /** From the most recent PlayerSnapshot — e.g. "Diamond III" */
   rankLabel: string | null;
   ratingPoints: number | null;
   physicalDamageDealtToHeroes: number | null;
@@ -144,6 +208,7 @@ export interface MatchPlayerDetail {
   totalDamageDealtToStructures: number | null;
   totalDamageDealtToObjectives: number | null;
   largestCriticalStrike: number | null;
+  /** CS — lane minions only, excludes jungle camps */
   laneMinionsKilled: number | null;
   goldSpent: number | null;
   largestKillingSpree: number | null;
@@ -151,17 +216,26 @@ export interface MatchPlayerDetail {
   physicalDamageDealt: number | null;
   magicalDamageDealt: number | null;
   trueDamageDealt: number | null;
+  /** Cumulative gold per minute array — requires event stream sync */
   goldEarnedAtInterval: number[] | null;
 }
 
+/**
+ * Full match detail returned by GET /matches/:id.
+ * Players are split into dusk/dawn teams, ordered by kills desc.
+ */
 export interface MatchDetail {
   id: string;
   predggUuid: string;
   startTime: Date;
+  /** Duration in seconds */
   duration: number;
+  /** "RANKED" | "ARAM" | "BRAWL" | "STANDARD" */
   gameMode: string;
   region: string | null;
+  /** "DUSK" | "DAWN" | null */
   winningTeam: string | null;
+  /** Patch name string e.g. "0.19.2", null if version not resolved */
   version: string | null;
   rosterSynced: boolean;
   eventStreamSynced: boolean;
@@ -169,6 +243,10 @@ export interface MatchDetail {
   dawn: MatchPlayerDetail[];
 }
 
+/**
+ * Builds a slug→{name, imageUrl} lookup from a PlayerSnapshot.heroStats JSON blob.
+ * Used to resolve hero names and images without a separate DB query.
+ */
 function buildHeroMeta(heroStats: unknown): Map<string, { name: string; imageUrl: string | null }> {
   const map = new Map<string, { name: string; imageUrl: string | null }>();
   if (!Array.isArray(heroStats)) return map;
@@ -185,6 +263,15 @@ function buildHeroMeta(heroStats: unknown): Map<string, { name: string; imageUrl
   return map;
 }
 
+/**
+ * Fetches a complete match detail from the DB, including all 10 players,
+ * their stats, rank labels (from latest snapshot), and hero metadata.
+ *
+ * Hero metadata is resolved from the PlayerSnapshot.heroStats of players in this match
+ * — no separate HeroMeta lookup needed for basic name/image resolution.
+ *
+ * @throws {AppError} 404 if the match does not exist
+ */
 export async function getMatchDetail(matchId: string): Promise<MatchDetail> {
   const match = await db.match.findUnique({
     where: { id: matchId },
@@ -194,10 +281,12 @@ export async function getMatchDetail(matchId: string): Promise<MatchDetail> {
         include: {
           player: {
             include: {
+              // Only the most recent snapshot — used for rank label and hero meta
               snapshots: { orderBy: { syncedAt: 'desc' }, take: 1 },
             },
           },
         },
+        // DUSK first, then sorted by kills descending within each team
         orderBy: [{ team: 'asc' }, { kills: 'desc' }],
       },
     },
@@ -205,7 +294,7 @@ export async function getMatchDetail(matchId: string): Promise<MatchDetail> {
 
   if (!match) throw new AppError(404, `Match not found: ${matchId}`, 'MATCH_NOT_FOUND');
 
-  // Build hero meta from all player snapshots in this match
+  // Aggregate hero meta from all snapshots present in this match
   const heroMeta = new Map<string, { name: string; imageUrl: string | null }>();
   for (const mp of match.matchPlayers) {
     const snap = mp.player?.snapshots[0];
@@ -215,13 +304,18 @@ export async function getMatchDetail(matchId: string): Promise<MatchDetail> {
     }
   }
 
+  /**
+   * Resolves the display name for a player.
+   * "HIDDEN" players (no pred.gg account or private profile) are displayed
+   * as "user-XXXXXXXX" derived from their UUID — matching pred.gg's own convention.
+   */
   function resolvePlayerName(playerName: string, predggPlayerUuid: string | null): string {
     if (playerName !== 'HIDDEN') return playerName;
-    // Construct user-XXXX format from UUID (same as pred.gg website)
     if (predggPlayerUuid) return `user-${predggPlayerUuid.replace(/-/g, '').slice(0, 8)}`;
     return 'HIDDEN';
   }
 
+  /** Maps a DB MatchPlayer row to the MatchPlayerDetail API shape. */
   function toDetail(mp: (typeof match.matchPlayers)[number]): MatchPlayerDetail {
     const snap = mp.player?.snapshots[0] ?? null;
     const hero = heroMeta.get(mp.heroSlug);
