@@ -727,3 +727,10 @@ enum TeamType {
   /// An opponent team being tracked for scouting purposes
   RIVAL
 }
+
+model PermissionsConfig {
+  id          String   @id @default("global")
+  permissions Json
+  updatedAt   DateTime @updatedAt
+  updatedBy   String?
+}
