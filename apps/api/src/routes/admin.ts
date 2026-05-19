@@ -16,6 +16,7 @@ import {
 import { syncHeroMeta } from '../services/hero-meta-service.js';
 import { invalidateHeroMetaCache } from './hero-meta.js';
 import { getAllConfig, updateConfigValue, resetConfigValue } from '../services/config-service.js';
+import { getPermissions, savePermissions, DEFAULT_PERMISSIONS, CONFIGURABLE_ROLES } from '../services/permissions-service.js';
 import { getValidToken, exchangeToken, COOKIE_REFRESH } from './auth.js';
 import { requireAuth } from '../middleware/require-auth.js';
 import { requirePlatformAdmin } from '../middleware/require-platform-admin.js';
@@ -833,5 +834,45 @@ adminRouter.post('/cleanup-old-data', async (_req, res, next) => {
   try {
     const result = await cleanupOldData(db);
     res.json({ ok: true, result });
+  } catch (err) { next(err); }
+});
+
+/**
+ * GET /admin/permissions
+ * Returns platform-wide role permissions config.
+ */
+adminRouter.get('/permissions', requireAuth, async (_req, res, next) => {
+  try {
+    const permissions = await getPermissions(db);
+    res.json({ permissions, roles: CONFIGURABLE_ROLES, defaults: DEFAULT_PERMISSIONS });
+  } catch (err) { next(err); }
+});
+
+/**
+ * PUT /admin/permissions
+ * Updates platform-wide role permissions. SUPER_ADMIN role is always excluded.
+ */
+adminRouter.put('/permissions', requireAuth, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { permissions } = req.body as { permissions: Record<string, Record<string, boolean>> };
+    if (!permissions || typeof permissions !== 'object') {
+      res.status(400).json({ error: 'Invalid permissions payload' });
+      return;
+    }
+    const userId = (req as any).user?.userId ?? 'unknown';
+    await savePermissions(db, permissions as any, userId);
+    res.json({ ok: true });
+  } catch (err) { next(err); }
+});
+
+/**
+ * POST /admin/permissions/reset
+ * Resets permissions to defaults.
+ */
+adminRouter.post('/permissions/reset', requireAuth, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const userId = (req as any).user?.userId ?? 'unknown';
+    await savePermissions(db, DEFAULT_PERMISSIONS, userId);
+    res.json({ ok: true, permissions: DEFAULT_PERMISSIONS });
   } catch (err) { next(err); }
 });

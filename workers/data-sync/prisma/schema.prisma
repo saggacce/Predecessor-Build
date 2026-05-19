@@ -433,3 +433,10 @@ enum TeamType {
   OWN
   RIVAL
 }
+
+model PermissionsConfig {
+  id          String   @id @default("global")
+  permissions Json
+  updatedAt   DateTime @updatedAt
+  updatedBy   String?
+}
