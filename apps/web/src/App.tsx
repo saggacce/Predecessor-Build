@@ -260,7 +260,6 @@ const sections: SidebarSection[] = [
     items: [
       { to: '/management/staff', label: 'Staff & Invitations' },
       { to: '/management/teams', label: 'Teams & Rosters' },
-      { to: '/management/roles', label: 'Roles & Permissions' },
     ],
   },
   {
@@ -270,6 +269,7 @@ const sections: SidebarSection[] = [
     items: [
       { to: '/admin/users', label: 'Users' },
       { to: '/admin/data-quality', label: 'Data Quality' },
+      { to: '/management/roles', label: 'Roles & Permissions' },
       { to: '/admin/api-status', label: 'API Status' },
       { to: '/admin/audit-logs', label: 'Audit Logs' },
       { to: '/admin/config', label: 'Configuración' },
