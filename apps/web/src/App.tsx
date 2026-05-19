@@ -28,7 +28,9 @@ import ProfilePage from './pages/ProfilePage';
 import ApiStatusPage from './pages/ApiStatusPage';
 import ConfigPage from './pages/ConfigPage';
 import FeedbackPage from './pages/FeedbackPage';
+import PermissionsPage from './pages/PermissionsPage';
 import { FeedbackButton } from './components/FeedbackButton';
+import { PermissionsProvider } from './contexts/PermissionsContext';
 import LandingPage from './pages/LandingPage';
 import { useAuth } from './hooks/useAuth';
 import { ViewAsProvider, useViewAs, type ViewAsRole } from './hooks/useViewAs';
@@ -381,6 +383,14 @@ function Sidebar() {
           })}
       </nav>
 
+      <div style={{ padding: '0.75rem 1rem', borderTop: '1px solid var(--border-color)', marginTop: 'auto' }}>
+        <p style={{ fontSize: '0.6rem', color: 'var(--text-muted)', lineHeight: 1.5, margin: 0 }}>
+          Match &amp; player data:{' '}
+          <a href="https://pred.gg" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--text-muted)', textDecoration: 'underline' }}>pred.gg</a>
+          {' '}·{' '}
+          <a href="https://omeda.city" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--text-muted)', textDecoration: 'underline' }}>omeda.city</a>
+        </p>
+      </div>
 
     </aside>
   );
@@ -455,10 +465,12 @@ function ViewAsSelector() {
 export default function App() {
   return (
     <BrowserRouter>
-      <ViewAsProvider>
-        <AppContent />
+      <PermissionsProvider>
+        <ViewAsProvider>
+          <AppContent />
           <Toaster position="bottom-right" theme="dark" richColors closeButton />
-      </ViewAsProvider>
+        </ViewAsProvider>
+      </PermissionsProvider>
     </BrowserRouter>
   );
 }
@@ -533,7 +545,7 @@ function AppContent() {
             {/* Team Management */}
             <Route path="/management/teams" element={<ComingSoon section="Teams & Rosters" description="Create and manage teams, rosters and player assignments." issue={72} />} />
             <Route path="/management/staff" element={<StaffManagement />} />
-            <Route path="/management/roles" element={<ComingSoon section="Roles & Permissions" description="Configure access levels per user and team." issue={76} />} />
+            <Route path="/management/roles" element={<ComingSoon section="Roles & Permissions" description="Manage roles and permissions for team members." />} />
 
             {/* Platform Admin */}
             <Route path="/admin/users" element={<UsersPage />} />
@@ -543,6 +555,7 @@ function AppContent() {
             <Route path="/admin/api-status" element={<ApiStatusPage />} />
             <Route path="/admin/audit-logs" element={<AuditLogsPage />} />
             <Route path="/admin/feedback" element={<FeedbackPage />} />
+            <Route path="/management/roles" element={<PermissionsPage />} />
 
             {/* Backward compatibility redirects */}
             <Route path="/players" element={<Navigate to="/analysis/players" replace />} />

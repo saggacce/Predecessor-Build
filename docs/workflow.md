@@ -105,6 +105,43 @@ El deploy requiere aprobación en **GitHub → Environments → production** ant
 
 ---
 
+## 6. Migraciones de BD en producción (Hetzner)
+
+El proyecto usa `prisma db push` en desarrollo, pero las tablas de TimescaleDB (hypertables con chunks comprimidos) bloquean alteraciones automáticas. Toda migración de esquema sigue este protocolo:
+
+### En desarrollo (local)
+```bash
+# Añadir campos nuevos directamente con SQL
+psql "postgresql://predecessor:predecessor@localhost:5432/predecessor_build" \
+  -c 'ALTER TABLE "ModelName" ADD COLUMN IF NOT EXISTS "campo" tipo;'
+
+# Regenerar cliente Prisma
+npx prisma generate --schema workers/data-sync/prisma/schema.prisma
+```
+
+### En producción (Hetzner) — antes del deploy
+Cada PR que añade campos al schema debe incluir en el body el SQL de migración exacto. Antes de que el nuevo código arranque en producción, ejecutar contra la BD de Hetzner:
+
+```bash
+# Conectar a Hetzner (SSH + psql o acceso directo según configuración)
+psql "$DATABASE_URL_PRODUCTION" -c 'ALTER TABLE "ModelName" ADD COLUMN IF NOT EXISTS "campo" tipo;'
+```
+
+**Orden obligatorio:**
+1. Merge del sprint PR a `main`
+2. **Ejecutar el ALTER TABLE en Hetzner** antes de aprobar el deploy
+3. Aprobar el deploy en GitHub → Environments → production
+4. Verificar en `https://riftline.app`
+
+> Si el servicio arranca antes de añadir la columna, el servidor fallará al acceder al campo nuevo.
+
+### Columnas pendientes de aplicar en Hetzner
+| PR | Tabla | SQL |
+|----|-------|-----|
+| #182 | `MatchPlayer` | `ALTER TABLE "MatchPlayer" ADD COLUMN IF NOT EXISTS "perks" jsonb;` |
+
+---
+
 ## 6. Reglas operativas
 
 - **Nunca push directo a `main` ni a `develop`** — siempre por PR.

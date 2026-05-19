@@ -1,5 +1,27 @@
 import type { VersionRecord } from '@predecessor/data-model';
 
+export type ConfigurableRole = 'PLATFORM_ADMIN' | 'MANAGER' | 'COACH' | 'ANALISTA' | 'JUGADOR';
+export type PermissionKey =
+  | 'teams.own.view' | 'teams.own.create' | 'teams.own.edit' | 'teams.own.delete'
+  | 'teams.own.addPlayer' | 'teams.own.removePlayer' | 'teams.own.editPlayerName' | 'teams.own.syncMatches'
+  | 'teams.rival.view' | 'teams.rival.create' | 'teams.rival.edit' | 'teams.rival.delete'
+  | 'teams.rival.addPlayer' | 'teams.rival.removePlayer' | 'teams.rival.syncMatches'
+  | 'teamAnalysis.view' | 'teamAnalysis.performance' | 'teamAnalysis.draft'
+  | 'teamAnalysis.vision' | 'teamAnalysis.analyst'
+  | 'playerScouting.view' | 'playerScouting.syncPlayer' | 'playerScouting.editPlayerName'
+  | 'playerGoals.view' | 'playerGoals.create' | 'playerGoals.edit' | 'playerGoals.delete'
+  | 'matchDetail.view' | 'matchDetail.syncMatch' | 'matchDetail.editPlayerName'
+  | 'matchDetail.scoreboard' | 'matchDetail.statistics' | 'matchDetail.timeline' | 'matchDetail.analysis'
+  | 'scrimReport.view' | 'scrimReport.export'
+  | 'reviewQueue.view' | 'reviewQueue.createItem' | 'reviewQueue.editItem' | 'reviewQueue.deleteItem'
+  | 'teamGoals.view' | 'teamGoals.create' | 'teamGoals.edit' | 'teamGoals.delete'
+  | 'vodIndex.view' | 'vodIndex.create' | 'vodIndex.edit' | 'vodIndex.delete'
+  | 'invitations.view' | 'invitations.create' | 'invitations.revoke'
+  | 'platformAdmin.view' | 'platformAdmin.dataControls' | 'platformAdmin.staff'
+  | 'platformAdmin.auditLogs' | 'platformAdmin.feedback' | 'platformAdmin.permissions';
+export type RolePermissions = Record<PermissionKey, boolean>;
+export type PlatformPermissions = Record<ConfigurableRole, RolePermissions>;
+
 export const API_BASE = '/api';
 // Direct API URL — bypasses Vite proxy for OAuth redirects (proxy intercepts 302s internally)
 export const API_DIRECT = import.meta.env.VITE_API_URL ?? 'http://localhost:3001';
@@ -232,6 +254,7 @@ export interface MatchPlayerDetail {
   level: number | null;
   inventoryItems: string[];
   perkSlug: string | null;
+  perks: Array<{ id: string; name: string; displayName: string; slot: string | null }> | null;
   rankLabel: string | null;
   ratingPoints: number | null;
   physicalDamageDealtToHeroes: number | null;
@@ -1022,6 +1045,8 @@ export const apiClient = {
       fetchApi<{ user: unknown }>(`/admin/users/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
     resetPassword: (id: string, newPassword: string) =>
       fetchApi<{ ok: boolean }>(`/admin/users/${id}/reset-password`, { method: 'POST', body: JSON.stringify({ newPassword }) }),
+    verifyNonsyncable: (limit = 50) =>
+      fetchApi<{ ok: boolean; checked: number; recovered: number }>('/admin/verify-nonsyncable', { method: 'POST', body: JSON.stringify({ limit }) }),
     updateTeamTier: (teamId: string, teamTier: string, teamTierExpiresAt?: string | null) =>
       fetchApi<{ team: unknown }>(`/admin/teams/${teamId}/tier`, { method: 'PATCH', body: JSON.stringify({ teamTier, teamTierExpiresAt }) }),
     apiStatus: () => fetchApi<unknown>('/admin/api-status'),
@@ -1037,6 +1062,12 @@ export const apiClient = {
       if (source) params.set('source', source);
       return fetchApi<{ logs: SyncLog[]; total: number }>(`/admin/sync-logs?${params}`);
     },
+    getPermissions: () =>
+      fetchApi<{ permissions: PlatformPermissions; roles: string[]; defaults: PlatformPermissions }>('/admin/permissions'),
+    savePermissions: (permissions: PlatformPermissions) =>
+      fetchApi<{ ok: boolean }>('/admin/permissions', { method: 'PUT', body: JSON.stringify({ permissions }) }),
+    resetPermissions: () =>
+      fetchApi<{ ok: boolean; permissions: PlatformPermissions }>('/admin/permissions/reset', { method: 'POST' }),
   },
 
   sync: {

@@ -142,7 +142,9 @@ function SyncStatusTab() {
 
   const { players, matches, eventStreamJob: job, cronJob } = status;
   const isRunning = job.running || optimisticRunning;
-  const playerPct = players.total > 0 ? Math.round(((players.total - players.stale - players.hidden) / players.total) * 100) : 0;
+  const unsyncable = (players as any).unsyncable ?? (players as any).hidden ?? 0;
+  const syncablePlayers = players.total - unsyncable;
+  const playerPct = syncablePlayers > 0 ? Math.round(((syncablePlayers - players.stale) / syncablePlayers) * 100) : 0;
   const matchPct = matches.total > 0 ? Math.round((matches.complete / matches.total) * 100) : 0;
   const jobPct = job.total > 0 ? Math.round((job.synced / job.total) * 100) : 0;
   let ratePerMin: number | null = null;
@@ -165,7 +167,7 @@ function SyncStatusTab() {
         </div>
         <SyncRow label="Fully synced" value={players.synced} total={players.total} color="var(--accent-win)" />
         <SyncRow label="Needs re-sync (>24h)" value={players.stale} total={players.total} color="var(--accent-prime)" warning />
-        <SyncRow label="Private / hidden" value={players.hidden} total={players.total} color="var(--text-muted)" />
+        <SyncRow label="No sincronizable (HIDDEN / consola)" value={unsyncable} total={players.total} color="var(--text-muted)" />
         <ProgressBar pct={playerPct} color={playerPct === 100 ? 'var(--accent-win)' : 'var(--accent-blue)'} />
       </div>
 
@@ -349,6 +351,11 @@ function DataControlsTab() {
       fn: async () => { const r = await apiClient.admin.fixHeroKillPlayerIds(); return `Updated ${r.heroKillsUpdated} kills · ${r.objectiveKillsUpdated} objectives · ${r.wardEventsUpdated} wards`; } },
     { key: 'heroes', label: 'Sync Hero Metadata', desc: 'Fetch all heroes from omeda.city and upsert classes, roles and image URLs into DB.',
       fn: async () => { const r = await apiClient.admin.syncHeroes(); return `${r.synced} heroes synced · ${r.errors} errors`; } },
+    { key: 'verifyNonsyncable', label: 'Verificar no sincronizables', desc: 'Prueba una muestra de jugadores HIDDEN/consola contra pred.gg. Los recuperados se mueven a sincronizables.',
+      fn: async () => {
+        const r = await (apiClient as any).admin.verifyNonsyncable();
+        return `${r.checked} verificados · ${r.recovered} recuperados`;
+      } },
   ];
 
   return (

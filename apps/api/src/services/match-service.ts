@@ -132,6 +132,7 @@ export interface MatchPlayerDetail {
   level: number | null;
   inventoryItems: string[];
   perkSlug: string | null;
+  perks: Array<{ id: string; name: string; displayName: string; slot: string | null }> | null;
   rankLabel: string | null;
   ratingPoints: number | null;
   physicalDamageDealtToHeroes: number | null;
@@ -247,6 +248,7 @@ export async function getMatchDetail(matchId: string): Promise<MatchDetail> {
       level: mp.level,
       inventoryItems: Array.isArray(mp.inventoryItems) ? (mp.inventoryItems as string[]) : [],
       perkSlug: mp.perkSlug,
+      perks: Array.isArray(mp.perks) ? (mp.perks as Array<{ id: string; name: string; displayName: string; slot: string | null }>) : null,
       rankLabel: snap?.rankLabel ?? null,
       ratingPoints: snap?.ratingPoints ?? null,
       physicalDamageDealtToHeroes: mp.physicalDamageDealtToHeroes,

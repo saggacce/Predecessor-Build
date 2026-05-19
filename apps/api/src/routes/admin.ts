@@ -16,6 +16,7 @@ import {
 import { syncHeroMeta } from '../services/hero-meta-service.js';
 import { invalidateHeroMetaCache } from './hero-meta.js';
 import { getAllConfig, updateConfigValue, resetConfigValue } from '../services/config-service.js';
+import { getPermissions, savePermissions, DEFAULT_PERMISSIONS, CONFIGURABLE_ROLES } from '../services/permissions-service.js';
 import { getValidToken, exchangeToken, COOKIE_REFRESH } from './auth.js';
 import { requireAuth } from '../middleware/require-auth.js';
 import { requirePlatformAdmin } from '../middleware/require-platform-admin.js';
@@ -327,14 +328,16 @@ adminRouter.get('/sync-status', async (_req, res, next) => {
     const [
       totalPlayers,
       stalePlayers,
-      hiddenPlayers,
+      unsyncablePlayers,
       totalMatches,
       matchesWithStream,
       noPlayersResult,
     ] = await Promise.all([
       db.player.count(),
-      db.player.count({ where: { lastSynced: { lt: staleThreshold }, displayName: { not: 'HIDDEN' } } }),
-      db.player.count({ where: { displayName: 'HIDDEN' } }),
+      // Stale = needs re-sync AND is syncable (not HIDDEN, not console)
+      db.player.count({ where: { lastSynced: { lt: staleThreshold }, displayName: { not: 'HIDDEN' }, isConsole: false } }),
+      // Unsyncable = ALL HIDDEN or console players — no pred.gg profile regardless of lastSynced
+      db.player.count({ where: { OR: [{ displayName: 'HIDDEN' }, { isConsole: true }] } }),
       db.match.count(),
       db.match.count({ where: { eventStreamSynced: true } }),
       db.$queryRaw<[{ count: bigint }]>`
@@ -351,9 +354,9 @@ adminRouter.get('/sync-status', async (_req, res, next) => {
     res.json({
       players: {
         total: totalPlayers,
-        synced: totalPlayers - stalePlayers - hiddenPlayers,
+        synced: totalPlayers - stalePlayers - unsyncablePlayers,
         stale: stalePlayers,
-        hidden: hiddenPlayers,
+        unsyncable: unsyncablePlayers, // stale HIDDEN/console — can't be re-synced
       },
       matches: {
         total: totalMatches,
@@ -780,6 +783,49 @@ adminRouter.post('/users/:id/reset-password', async (req, res, next) => {
 });
 
 /**
+ * POST /admin/verify-nonsyncable
+ * Tests a sample of unsyncable players (HIDDEN/console) against pred.gg.
+ * Players that now have data are updated to isConsole=false and marked for re-sync.
+ */
+adminRouter.post('/verify-nonsyncable', async (req, res, next) => {
+  try {
+    const { limit = 50 } = z.object({ limit: z.number().int().min(1).max(200).default(50) })
+      .parse(req.body ?? {});
+
+    const userToken = await getTokenForSync(req, res);
+    if (!userToken) {
+      res.status(400).json({ error: { message: 'pred.gg session required', code: 'NO_TOKEN' } });
+      return;
+    }
+
+    const unsyncable = await db.player.findMany({
+      where: { OR: [{ displayName: 'HIDDEN' }, { isConsole: true }] },
+      select: { id: true, predggId: true, displayName: true },
+      take: limit,
+      orderBy: { lastSynced: 'asc' },
+    });
+
+    let recovered = 0;
+    let checked = 0;
+
+    for (const player of unsyncable) {
+      try {
+        const synced = await syncPlayerByName(db, player.predggId, userToken);
+        if (synced && synced.displayName !== 'HIDDEN') {
+          recovered++;
+        }
+        checked++;
+      } catch {
+        checked++;
+      }
+    }
+
+    logger.info({ checked, recovered }, 'verify-nonsyncable complete');
+    res.json({ ok: true, checked, recovered, total: unsyncable.length });
+  } catch (err) { next(err); }
+});
+
+/**
  * POST /admin/cleanup-old-data
  * Deletes data older than DATA_RETENTION_MONTHS (default 3).
  * Also triggered automatically by the monthly cron.
@@ -788,5 +834,45 @@ adminRouter.post('/cleanup-old-data', async (_req, res, next) => {
   try {
     const result = await cleanupOldData(db);
     res.json({ ok: true, result });
+  } catch (err) { next(err); }
+});
+
+/**
+ * GET /admin/permissions
+ * Returns platform-wide role permissions config.
+ */
+adminRouter.get('/permissions', requireAuth, async (_req, res, next) => {
+  try {
+    const permissions = await getPermissions(db);
+    res.json({ permissions, roles: CONFIGURABLE_ROLES, defaults: DEFAULT_PERMISSIONS });
+  } catch (err) { next(err); }
+});
+
+/**
+ * PUT /admin/permissions
+ * Updates platform-wide role permissions. SUPER_ADMIN role is always excluded.
+ */
+adminRouter.put('/permissions', requireAuth, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { permissions } = req.body as { permissions: Record<string, Record<string, boolean>> };
+    if (!permissions || typeof permissions !== 'object') {
+      res.status(400).json({ error: 'Invalid permissions payload' });
+      return;
+    }
+    const userId = (req as any).user?.userId ?? 'unknown';
+    await savePermissions(db, permissions as any, userId);
+    res.json({ ok: true });
+  } catch (err) { next(err); }
+});
+
+/**
+ * POST /admin/permissions/reset
+ * Resets permissions to defaults.
+ */
+adminRouter.post('/permissions/reset', requireAuth, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const userId = (req as any).user?.userId ?? 'unknown';
+    await savePermissions(db, DEFAULT_PERMISSIONS, userId);
+    res.json({ ok: true, permissions: DEFAULT_PERMISSIONS });
   } catch (err) { next(err); }
 });
