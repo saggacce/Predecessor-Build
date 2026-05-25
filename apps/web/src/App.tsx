@@ -57,6 +57,12 @@ function WorkspaceHeader() {
     void apiClient.patches.latest()
       .then(setLatestPatch)
       .catch(() => setLatestPatch(null));
+
+    const onVersionsSync = () => {
+      void apiClient.patches.latest().then(setLatestPatch).catch(() => null);
+    };
+    window.addEventListener('versions-synced', onVersionsSync);
+    return () => window.removeEventListener('versions-synced', onVersionsSync);
   }, []);
 
   const initials = user?.name

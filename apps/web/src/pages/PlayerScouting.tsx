@@ -629,36 +629,15 @@ function PlayerProfilePanel({
         </div>
       </div>
 
-      <div style={{ padding: '1.5rem' }}>
-        <section style={{ marginBottom: '1.5rem' }}>
-          <SectionTitle icon={<Activity size={18} />} title="Advanced Metrics" />
-          <AdvancedMetricsSection metrics={advancedMetrics} loading={advancedLoading} />
-        </section>
+      <div style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+        <ScoutingFormStrip matches={profile.recentMatches} />
 
-        <section style={{ marginBottom: '1.5rem' }}>
-          <SectionTitle icon={<Target size={18} />} title="Player Goals" />
-          <PlayerGoalsSection playerId={profile.id} playerName={profile.customName ?? profile.displayName} />
-        </section>
-
-        <section style={{ marginBottom: '1.5rem' }}>
-          <SectionTitle icon={<Swords size={18} />} title="Comfort Heroes" />
+        <section>
+          <SectionTitle icon={<Swords size={18} />} title="Hero Pool" />
           {profile.heroStats.length > 0 ? (
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '0.75rem' }}>
               {profile.heroStats.slice(0, 6).map((hero, index) => (
                 <HeroStatCard key={`${hero.heroData.slug}-${index}`} hero={hero} />
-              ))}
-            </div>
-          ) : (
-            <EmptyStatsText />
-          )}
-        </section>
-
-        <section style={{ marginBottom: '1.5rem' }}>
-          <SectionTitle icon={<Shield size={18} />} title="Role Performance" />
-          {profile.roleStats.length > 0 ? (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '0.75rem' }}>
-              {profile.roleStats.map((role) => (
-                <RoleStatCard key={role.role} role={role} />
               ))}
             </div>
           ) : (
@@ -673,12 +652,8 @@ function PlayerProfilePanel({
         )}
 
         <section>
-          <MatchesSection
-            matches={profile.recentMatches}
-            heroBySlug={heroBySlug}
-            fromPlayerId={profile.id}
-            fromPlayerName={profile.customName ?? profile.displayName}
-          />
+          <SectionTitle icon={<Activity size={18} />} title="Advanced Metrics" />
+          <AdvancedMetricsSection metrics={advancedMetrics} loading={advancedLoading} />
         </section>
       </div>
     </div>
@@ -1379,6 +1354,63 @@ const GAME_MODE_LABELS: Record<string, string> = {
   ARENA: 'Arena', DAYBREAK: 'Daybreak', RUSH: 'Rush',
   TEAM_VS_AI: 'vs AI', LEGACY: 'Legacy', NONE: 'Unknown',
 };
+
+// ── Scouting form strip — top of profile, immediate signal ───────────────────
+function ScoutingFormStrip({ matches }: { matches: RecentMatch[] }) {
+  const recent = matches.slice(0, 10);
+  if (recent.length === 0) return null;
+
+  const wins = recent.filter((m) => m.result === 'win').length;
+  const losses = recent.filter((m) => m.result === 'loss').length;
+  const wr10 = recent.length > 0 ? Math.round((wins / recent.length) * 100) : null;
+
+  let streak = 0;
+  const streakType = recent[0]?.result;
+  for (const m of recent) {
+    if (m.result === streakType && m.result !== 'unknown') streak++;
+    else break;
+  }
+
+  const uniqueHeroes = new Set(recent.map((m) => m.heroSlug)).size;
+  const isNarrowPool = uniqueHeroes <= 2 && recent.length >= 5;
+
+  return (
+    <div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '0.65rem', flexWrap: 'wrap' }}>
+        <span style={{ fontSize: '0.68rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Forma reciente</span>
+        {wr10 !== null && (
+          <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.8rem', fontWeight: 700, color: wr10 >= 55 ? 'var(--accent-win)' : wr10 < 45 ? 'var(--accent-loss)' : 'var(--text-primary)' }}>
+            {wins}W {losses}L · {wr10}%
+          </span>
+        )}
+        {streak >= 3 && (
+          <span style={{ fontSize: '0.65rem', fontWeight: 700, padding: '2px 7px', borderRadius: 3, background: streakType === 'win' ? 'rgba(74,222,128,0.12)' : 'rgba(248,113,113,0.12)', color: streakType === 'win' ? 'var(--accent-win)' : 'var(--accent-loss)', border: `1px solid ${streakType === 'win' ? 'rgba(74,222,128,0.3)' : 'rgba(248,113,113,0.3)'}`, fontFamily: 'var(--font-mono)' }}>
+            {streak}{streakType === 'win' ? 'W' : 'L'} streak
+          </span>
+        )}
+        {isNarrowPool && (
+          <span style={{ fontSize: '0.65rem', fontWeight: 700, padding: '2px 7px', borderRadius: 3, background: 'rgba(251,191,36,0.1)', color: 'var(--accent-prime)', border: '1px solid rgba(251,191,36,0.3)' }}>
+            Pool estrecho
+          </span>
+        )}
+      </div>
+      <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
+        {recent.map((m, i) => {
+          const isWin = m.result === 'win';
+          const isLoss = m.result === 'loss';
+          return (
+            <div key={i} title={`${m.heroName ?? m.heroSlug} · ${isWin ? 'W' : isLoss ? 'L' : '?'} · ${m.kills}/${m.deaths}/${m.assists}`} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '3px' }}>
+              <div style={{ width: 32, height: 32, borderRadius: 6, overflow: 'hidden', border: `2px solid ${isWin ? 'var(--accent-win)' : isLoss ? 'var(--accent-loss)' : 'var(--border-color)'}`, background: 'var(--bg-dark)' }}>
+                <img src={`/heroes/${normalizeHeroSlug(m.heroSlug)}.webp`} alt={m.heroSlug} style={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+              </div>
+              <div style={{ width: 7, height: 7, borderRadius: '50%', background: isWin ? 'var(--accent-win)' : isLoss ? 'var(--accent-loss)' : 'var(--border-color)' }} />
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
 
 function gameModeLabel(mode: string): string {
   return GAME_MODE_LABELS[mode] ?? mode;

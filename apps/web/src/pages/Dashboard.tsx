@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router';
 import { Server, Zap, RefreshCw, CheckCircle, XCircle, ArrowRight, Users, Sparkles, ThumbsUp, ThumbsDown, Send, Download, Target, BookOpen, Shield, Star, TrendingUp, BarChart2, MessageSquare } from 'lucide-react';
 import { toast } from 'sonner';
-import { apiClient, ApiErrorResponse, type TeamProfile, type TeamAnalysis, type PlayerProfile } from '../api/client';
+import { apiClient, ApiErrorResponse, type TeamProfile, type TeamAnalysis, type PlayerProfile, type Insight, type HeroStat } from '../api/client';
 import { useAuth } from '../hooks/useAuth';
 import { useViewAs } from '../hooks/useViewAs';
 import { LinkPlayerModal } from '../components/LinkPlayerModal';
@@ -90,6 +90,7 @@ export default function Dashboard() {
   const [reviewCount, setReviewCount] = useState<number | null>(null);
   const [feedbackCount, setFeedbackCount] = useState<number | null>(null);
   const [userCount, setUserCount] = useState<number | null>(null);
+  const [coachInsights, setCoachInsights] = useState<Insight[]>([]);
 
   // Determine role
   // If admin is previewing as a role, use the simulated role
@@ -158,6 +159,14 @@ export default function Dashboard() {
     }
   }, [isManager, isCoach]);
 
+  // Fetch critical/high insights for COACH
+  useEffect(() => {
+    if (!isCoach || !ownTeam) return;
+    apiClient.analyst.insights(ownTeam.id)
+      .then((r) => setCoachInsights(r.insights.filter((i) => i.severity === 'critical' || i.severity === 'high')))
+      .catch(() => null);
+  }, [isCoach, ownTeam?.id]);
+
   const isSyncing = syncState.tag === 'running';
   const statusColor = healthStatus === 'ok' ? 'var(--accent-win)' : healthStatus === 'error' ? 'var(--accent-loss)' : 'var(--accent-violet)';
 
@@ -166,6 +175,9 @@ export default function Dashboard() {
     try {
       const res = await apiClient.admin.syncVersions();
       setSyncState({ tag: 'done', op: 'versions', result: `${res.synced} version${res.synced !== 1 ? 's' : ''} synced` });
+      const patch = await apiClient.patches.latest();
+      setLatestPatch(patch as unknown as VersionRecord);
+      window.dispatchEvent(new CustomEvent('versions-synced'));
     } catch (err) {
       setSyncState({ tag: 'failed', op: 'versions', message: err instanceof ApiErrorResponse ? err.error.message : 'Sync failed' });
     }
@@ -204,9 +216,13 @@ export default function Dashboard() {
           {teamRole && <span style={{ fontSize: '0.7rem', fontWeight: 500, color: 'var(--text-muted)', marginLeft: '0.5rem' }}>· {teamRole}</span>}
           {isPlatformAdmin && <span style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--accent-teal-bright)', marginLeft: '0.5rem' }}>· PLATFORM ADMIN</span>}
         </h1>
-        <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', marginTop: '0.25rem' }}>
+        <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', marginTop: '0.25rem', display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
           {ownTeam ? ownTeam.name : 'Sin equipo asignado'}
-          {latestPatch && <span style={{ color: 'var(--text-muted)', marginLeft: '0.75rem', fontFamily: 'var(--font-mono)', fontSize: '0.75rem' }}>v{latestPatch.name}</span>}
+          {latestPatch && (
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem', background: 'rgba(107,170,248,0.12)', border: '1px solid rgba(107,170,248,0.25)', borderRadius: 4, padding: '1px 7px', fontFamily: 'var(--font-mono)', fontSize: '0.7rem', fontWeight: 700, color: 'var(--accent-blue)' }}>
+              Patch {latestPatch.name}
+            </span>
+          )}
         </p>
       </header>
 
@@ -306,13 +322,14 @@ export default function Dashboard() {
           {/* ── MANAGER view ── */}
           {isManager && (
             <>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '1rem' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '1rem' }}>
                 <div className="glass-card" style={{ textAlign: 'center', padding: '1rem' }}>
                   <div style={{ fontFamily: 'var(--font-mono)', fontSize: '1.5rem', fontWeight: 700, color: ownAnalysis ? (ownAnalysis.teamWins / (ownAnalysis.teamWins + ownAnalysis.teamLosses) >= 0.5 ? 'var(--accent-win)' : 'var(--accent-loss)') : 'var(--text-muted)' }}>
                     {ownAnalysis ? `${Math.round((ownAnalysis.teamWins / (ownAnalysis.teamWins + ownAnalysis.teamLosses || 1)) * 100)}%` : '—'}
                   </div>
                   <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Win Rate</div>
                 </div>
+                {ownAnalysis && <SideWRChips matches={ownAnalysis.teamMatches} />}
                 {reviewCount !== null && (
                   <Link to="/tools/review" style={{ textDecoration: 'none' }}>
                     <div className="glass-card" style={{ textAlign: 'center', padding: '1rem', cursor: 'pointer' }}>
@@ -340,7 +357,14 @@ export default function Dashboard() {
           {/* ── COACH view ── */}
           {isCoach && (
             <>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '1rem' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '1rem' }}>
+                <div className="glass-card" style={{ textAlign: 'center', padding: '1rem' }}>
+                  <div style={{ fontFamily: 'var(--font-mono)', fontSize: '1.5rem', fontWeight: 700, color: ownAnalysis ? (ownAnalysis.teamWins / (ownAnalysis.teamWins + ownAnalysis.teamLosses || 1) >= 0.5 ? 'var(--accent-win)' : 'var(--accent-loss)') : 'var(--text-muted)' }}>
+                    {ownAnalysis ? `${Math.round((ownAnalysis.teamWins / (ownAnalysis.teamWins + ownAnalysis.teamLosses || 1)) * 100)}%` : '—'}
+                  </div>
+                  <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Win Rate</div>
+                </div>
+                {ownAnalysis && <SideWRChips matches={ownAnalysis.teamMatches} />}
                 {reviewCount !== null && (
                   <Link to="/tools/review" style={{ textDecoration: 'none' }}>
                     <div className="glass-card" style={{ textAlign: 'center', padding: '1rem', cursor: 'pointer', borderLeft: `3px solid ${reviewCount > 0 ? 'var(--accent-prime)' : 'var(--border-color)'}` }}>
@@ -349,13 +373,22 @@ export default function Dashboard() {
                     </div>
                   </Link>
                 )}
-                <div className="glass-card" style={{ textAlign: 'center', padding: '1rem' }}>
-                  <div style={{ fontFamily: 'var(--font-mono)', fontSize: '1.5rem', fontWeight: 700, color: ownAnalysis ? (ownAnalysis.teamWins / (ownAnalysis.teamWins + ownAnalysis.teamLosses || 1) >= 0.5 ? 'var(--accent-win)' : 'var(--accent-loss)') : 'var(--text-muted)' }}>
-                    {ownAnalysis ? `${Math.round((ownAnalysis.teamWins / (ownAnalysis.teamWins + ownAnalysis.teamLosses || 1)) * 100)}%` : '—'}
-                  </div>
-                  <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Win Rate equipo</div>
-                </div>
               </div>
+              {coachInsights.length > 0 && (
+                <div className="glass-card" style={{ padding: '0.9rem 1.1rem' }}>
+                  <div style={{ fontSize: '0.68rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '0.6rem' }}>Alertas del equipo</div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.45rem' }}>
+                    {coachInsights.slice(0, 3).map((ins) => (
+                      <div key={ins.id} style={{ display: 'flex', alignItems: 'flex-start', gap: '0.5rem' }}>
+                        <span style={{ flexShrink: 0, fontWeight: 800, fontSize: '0.65rem', padding: '2px 6px', borderRadius: 3, background: ins.severity === 'critical' ? 'rgba(248,113,113,0.15)' : 'rgba(251,191,36,0.12)', color: ins.severity === 'critical' ? 'var(--accent-loss)' : 'var(--accent-prime)', textTransform: 'uppercase', letterSpacing: '0.04em', marginTop: '1px' }}>
+                          {ins.severity}
+                        </span>
+                        <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', lineHeight: 1.4 }}>{ins.title}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '0.75rem' }}>
                 <QuickLink to="/tools/review" icon={<BookOpen size={16} />} label="Review Queue" description={reviewCount ? `${reviewCount} items pendientes` : 'Gestión de revisiones'} color="var(--accent-prime)" />
                 <QuickLink to={`/analysis/teams?team=${ownTeam.id}&tab=draft`} icon={<BarChart2 size={16} />} label="Team Analysis" description="Análisis de rendimiento y draft" color="var(--accent-teal-bright)" />
@@ -390,27 +423,7 @@ export default function Dashboard() {
             <>
               {playerProfile ? (
                 <>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '1rem' }}>
-                    {[
-                      { label: 'KDA', value: (playerProfile.generalStats?.kda as number | undefined)?.toFixed(2) ?? '—', color: 'var(--accent-teal-bright)' },
-                      { label: 'Partidas', value: playerProfile.recentMatches.length, color: 'var(--text-primary)' },
-                      { label: 'Win Rate', value: playerProfile.generalStats?.winRate ? `${Math.round(playerProfile.generalStats.winRate as number)}%` : '—', color: 'var(--accent-prime)' },
-                    ].map(({ label, value, color }) => (
-                      <div key={label} className="glass-card" style={{ textAlign: 'center', padding: '1rem' }}>
-                        <div style={{ fontFamily: 'var(--font-mono)', fontSize: '1.4rem', fontWeight: 700, color }}>{String(value)}</div>
-                        <div style={{ fontSize: '0.62rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginTop: '0.15rem' }}>{label}</div>
-                      </div>
-                    ))}
-                    {/* Top hero */}
-                    {playerProfile.heroStats.length > 0 && (
-                      <div className="glass-card" style={{ textAlign: 'center', padding: '1rem' }}>
-                        <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.9rem', fontWeight: 700, color: 'var(--accent-blue)', textTransform: 'capitalize' }}>
-                          {playerProfile.heroStats[0].heroData?.name ?? playerProfile.heroStats[0].heroData?.slug ?? '—'}
-                        </div>
-                        <div style={{ fontSize: '0.62rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginTop: '0.15rem' }}>Main Hero</div>
-                      </div>
-                    )}
-                  </div>
+                  <PlayerStatSummary profile={playerProfile} />
 
                   {/* Recent matches strip */}
                   <div className="glass-card" style={{ padding: '1rem 1.25rem' }}>
@@ -428,6 +441,8 @@ export default function Dashboard() {
                       ))}
                     </div>
                   </div>
+
+                  <PlayerHeroPool heroStats={playerProfile.heroStats} />
                 </>
               ) : (
                 <div className="glass-card" style={{ padding: '1.25rem', color: 'var(--text-muted)', fontSize: '0.85rem' }}>
@@ -463,6 +478,93 @@ export default function Dashboard() {
       {!isPlatformAdmin && (!ownTeam || viewAs === 'PLAYER') && (
         <PlayerStandaloneView />
       )}
+    </div>
+  );
+}
+
+// ── Side WR chips (DUSK / DAWN) ──────────────────────────────────────────────
+function SideWRChips({ matches }: { matches: { teamSide: string; won: boolean | null }[] }) {
+  const dusk = matches.filter((m) => m.teamSide === 'DUSK');
+  const dawn = matches.filter((m) => m.teamSide === 'DAWN');
+  const duskWR = dusk.length > 0 ? Math.round((dusk.filter((m) => m.won).length / dusk.length) * 100) : null;
+  const dawnWR = dawn.length > 0 ? Math.round((dawn.filter((m) => m.won).length / dawn.length) * 100) : null;
+  if (duskWR === null && dawnWR === null) return null;
+  return (
+    <div className="glass-card" style={{ padding: '1rem', display: 'flex', flexDirection: 'column', gap: '0.35rem', justifyContent: 'center' }}>
+      {duskWR !== null && (
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.5rem' }}>
+          <span style={{ fontSize: '0.65rem', fontWeight: 700, color: 'var(--accent-teal-bright)', fontFamily: 'var(--font-mono)' }}>DUSK</span>
+          <span style={{ fontFamily: 'var(--font-mono)', fontSize: '1rem', fontWeight: 700, color: duskWR >= 50 ? 'var(--accent-win)' : 'var(--accent-loss)' }}>{duskWR}%</span>
+        </div>
+      )}
+      {dawnWR !== null && (
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.5rem' }}>
+          <span style={{ fontSize: '0.65rem', fontWeight: 700, color: '#f87171', fontFamily: 'var(--font-mono)' }}>DAWN</span>
+          <span style={{ fontFamily: 'var(--font-mono)', fontSize: '1rem', fontWeight: 700, color: dawnWR >= 50 ? 'var(--accent-win)' : 'var(--accent-loss)' }}>{dawnWR}%</span>
+        </div>
+      )}
+      <div style={{ fontSize: '0.58rem', color: 'var(--text-muted)', marginTop: '0.1rem' }}>WR por bando</div>
+    </div>
+  );
+}
+
+// ── Player stat summary (JUGADOR dashboard) ──────────────────────────────────
+function PlayerStatSummary({ profile }: { profile: PlayerProfile }) {
+  const matches = profile.recentMatches.filter((m) => m.duration > 0);
+  const avg = (vals: number[]) => vals.length > 0 ? vals.reduce((s, v) => s + v, 0) / vals.length : null;
+
+  const csPerMin = avg(matches.filter((m) => m.laneMinionsKilled != null).map((m) => (m.laneMinionsKilled!) / (m.duration / 60)));
+  const gpm = avg(matches.filter((m) => m.gold != null).map((m) => (m.gold!) / (m.duration / 60)));
+  const dpm = avg(matches.filter((m) => m.heroDamage != null).map((m) => (m.heroDamage!) / (m.duration / 60)));
+
+  const wr = profile.generalStats?.winRate as number | undefined;
+  const kda = profile.generalStats?.kda as number | undefined;
+
+  const chips = [
+    { label: 'Win Rate', value: wr != null ? `${Math.round(wr)}%` : '—', color: wr != null && wr >= 50 ? 'var(--accent-win)' : wr != null ? 'var(--accent-loss)' : 'var(--text-muted)' },
+    { label: 'KDA', value: kda != null ? kda.toFixed(2) : '—', color: 'var(--accent-teal-bright)' },
+    { label: 'CS/min', value: csPerMin != null ? csPerMin.toFixed(1) : '—', color: 'var(--text-primary)' },
+    { label: 'GPM', value: gpm != null ? Math.round(gpm).toString() : '—', color: 'var(--text-primary)' },
+    { label: 'DPM', value: dpm != null ? Math.round(dpm).toString() : '—', color: 'var(--accent-blue)' },
+  ];
+
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: '0.75rem' }}>
+      {chips.map(({ label, value, color }) => (
+        <div key={label} className="glass-card" style={{ textAlign: 'center', padding: '0.9rem 0.75rem' }}>
+          <div style={{ fontFamily: 'var(--font-mono)', fontSize: '1.3rem', fontWeight: 700, color }}>{value}</div>
+          <div style={{ fontSize: '0.6rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginTop: '0.15rem' }}>{label}</div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ── Player hero pool top 3 (JUGADOR dashboard) ────────────────────────────────
+function PlayerHeroPool({ heroStats }: { heroStats: HeroStat[] }) {
+  const top3 = [...heroStats]
+    .filter((h) => (h.matches ?? h.wins + h.losses) >= 3)
+    .sort((a, b) => (b.matches ?? b.wins + b.losses) - (a.matches ?? a.wins + a.losses))
+    .slice(0, 3);
+  if (top3.length === 0) return null;
+  return (
+    <div className="glass-card" style={{ padding: '1rem 1.25rem' }}>
+      <div style={{ fontSize: '0.68rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '0.75rem' }}>Mi hero pool</div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+        {top3.map((h) => {
+          const games = h.matches ?? h.wins + h.losses;
+          const wr = h.winRate ?? (games > 0 ? Math.round((h.wins / games) * 100) : null);
+          return (
+            <div key={h.heroData.slug} style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+              <span style={{ fontWeight: 700, fontSize: '0.82rem', color: 'var(--text-primary)', minWidth: 90, textTransform: 'capitalize' }}>{h.heroData.name ?? h.heroData.slug}</span>
+              <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.78rem', color: 'var(--text-muted)' }}>{games}g</span>
+              {wr != null && (
+                <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.82rem', fontWeight: 700, color: wr >= 55 ? 'var(--accent-win)' : wr < 45 ? 'var(--accent-loss)' : 'var(--text-primary)', marginLeft: 'auto' }}>{wr}%</span>
+              )}
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }

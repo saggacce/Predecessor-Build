@@ -798,7 +798,7 @@ export async function syncVersionsFromPredgg(db: PrismaClient): Promise<number> 
   for (const v of data.versions) {
     await db.version.upsert({
       where: { predggId: v.id },
-      update: { name: v.name || 'Unknown', patchType: v.patchType || 'UNKNOWN', syncedAt: now },
+      update: { name: v.name || 'Unknown', patchType: v.patchType || 'UNKNOWN', releaseDate: new Date(v.releaseDate), syncedAt: now },
       create: {
         predggId: v.id,
         name: v.name || 'Unknown',
