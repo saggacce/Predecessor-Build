@@ -108,8 +108,13 @@ export default function Dashboard() {
   useEffect(() => {
     if (!internalAuthenticated) return;
 
-    // Fetch health + patch for everyone; team data only if user has team memberships
     const hasTeamMemberships = (user?.memberships?.length ?? 0) > 0;
+    const isPreviewingTeamRole = !!viewAs && ['MANAGER', 'COACH', 'ANALISTA', 'JUGADOR'].includes(viewAs);
+
+    // Reset team state on role change so stale data doesn't flash
+    setOwnTeam(null);
+    setOwnAnalysis(null);
+
     void (async () => {
       const [health, patch] = await Promise.allSettled([
         apiClient.admin.apiStatus(),
@@ -121,13 +126,23 @@ export default function Dashboard() {
         setLatestPatch(patch.value as unknown as VersionRecord);
       }
 
-      // Only fetch team data for users who actually belong to a team
       if (hasTeamMemberships) {
+        // Normal user with team memberships
         const [teamRes] = await Promise.allSettled([apiClient.teams.list('OWN')]);
         if (teamRes.status === 'fulfilled') {
-          // Only use teams the user is actually a member of
           const userTeamIds = new Set(user?.memberships?.map((m) => m.teamId) ?? []);
           const team = (teamRes.value.teams ?? []).find((t) => userTeamIds.has(t.id)) ?? null;
+          setOwnTeam(team);
+          if (team) {
+            const [analysis] = await Promise.allSettled([apiClient.teams.getAnalysis(team.id)]);
+            if (analysis.status === 'fulfilled') setOwnAnalysis(analysis.value);
+          }
+        }
+      } else if (isPreviewingTeamRole) {
+        // Platform Admin previewing a team role — load first available OWN team
+        const [teamRes] = await Promise.allSettled([apiClient.teams.list('OWN')]);
+        if (teamRes.status === 'fulfilled') {
+          const team = teamRes.value.teams?.[0] ?? null;
           setOwnTeam(team);
           if (team) {
             const [analysis] = await Promise.allSettled([apiClient.teams.getAnalysis(team.id)]);
@@ -138,11 +153,11 @@ export default function Dashboard() {
     })();
 
     // Role-specific fetches
-    if (isPlatformAdmin) {
+    if (!viewAs && user?.globalRole === 'PLATFORM_ADMIN') {
       void apiClient.feedback.unreadCount().then(({ count }) => setFeedbackCount(count)).catch(() => null);
       void (apiClient as any).admin.users().then((r: { users: unknown[] }) => setUserCount(r.users.length)).catch(() => null);
     }
-  }, [internalAuthenticated, user?.globalRole]);
+  }, [internalAuthenticated, user?.globalRole, viewAs]);
 
   // Fetch player profile for JUGADOR role
   useEffect(() => {
@@ -157,7 +172,7 @@ export default function Dashboard() {
     if (ownTeam) {
       apiClient.review.list(ownTeam.id, { status: 'PENDING' }).then((r) => setReviewCount(r.items?.length ?? 0)).catch(() => null);
     }
-  }, [isManager, isCoach]);
+  }, [isManager, isCoach, ownTeam?.id]);
 
   // Fetch critical/high insights for COACH
   useEffect(() => {
