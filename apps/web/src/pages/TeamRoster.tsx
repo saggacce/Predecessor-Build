@@ -13,6 +13,17 @@ const ROLE_COLOR: Record<string, string> = {
   CARRY: 'var(--accent-loss)', JUNGLE: 'var(--accent-win)', MIDLANE: 'var(--accent-blue)',
   OFFLANE: 'var(--accent-prime)', SUPPORT: 'var(--accent-teal-bright)',
 };
+const ROLE_ICON: Record<string, string> = {
+  CARRY: '/icons/roles/carry.png', JUNGLE: '/icons/roles/jungle.png',
+  MIDLANE: '/icons/roles/midlane.png', OFFLANE: '/icons/roles/offlane.png',
+  SUPPORT: '/icons/roles/support.png',
+};
+
+function RoleIcon({ role, size = 16 }: { role: string; size?: number }) {
+  const src = ROLE_ICON[role.toUpperCase()];
+  if (!src) return null;
+  return <img src={src} alt={role} width={size} height={size} style={{ objectFit: 'contain', flexShrink: 0 }} />;
+}
 
 // pending swap state: which player is being moved and in which direction
 type PendingSwap = { rosterId: string; direction: 'bench' | 'activate' };
@@ -364,11 +375,14 @@ function SwapBar({ label, options, selectedId, required, onSelect, onConfirm, on
       >
         {!required && <option value="">— Ninguno —</option>}
         {required && <option value="">Seleccionar…</option>}
-        {options.map((m) => (
-          <option key={m.rosterId} value={m.rosterId}>
-            {m.customName ?? m.displayName}{m.role ? ` · ${ROLE_LABEL[m.role.toUpperCase()] ?? m.role}` : ''}
-          </option>
-        ))}
+        {options.map((m) => {
+          const r = m.role?.toUpperCase() ?? '';
+          return (
+            <option key={m.rosterId} value={m.rosterId}>
+              {m.customName ?? m.displayName}{r ? ` · ${ROLE_LABEL[r] ?? m.role}` : ''}
+            </option>
+          );
+        })}
       </select>
       <button
         className="btn-primary"
@@ -414,23 +428,31 @@ function PlayerRow({
       background: isPending ? 'rgba(107,170,248,0.05)' : 'transparent',
       transition: 'opacity 0.15s, background 0.15s',
     }}>
-      {/* Role selector */}
+      {/* Role — icon + selector or badge */}
       {canEdit ? (
-        <select
-          value={member.role ?? ''}
-          disabled={isDisabled}
-          onChange={(e) => onChangeRole((e.target.value as TeamRole) || null)}
-          style={{ fontSize: '0.65rem', fontWeight: 800, padding: '2px 6px', borderRadius: 4, border: `1px solid ${ROLE_COLOR[role] ?? 'var(--border-color)'}44`, background: 'transparent', color: ROLE_COLOR[role] ?? 'var(--text-muted)', fontFamily: 'var(--font-mono)', cursor: 'pointer', minWidth: 70 }}
-        >
-          <option value="">Sin rol</option>
-          {(['CARRY', 'JUNGLE', 'MIDLANE', 'OFFLANE', 'SUPPORT']).map((r) => (
-            <option key={r} value={r.toLowerCase()}>{ROLE_LABEL[r]}</option>
-          ))}
-        </select>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', minWidth: 90 }}>
+          {role && <RoleIcon role={role} size={15} />}
+          <select
+            value={member.role ?? ''}
+            disabled={isDisabled}
+            onChange={(e) => onChangeRole((e.target.value as TeamRole) || null)}
+            style={{ fontSize: '0.65rem', fontWeight: 800, padding: '2px 4px', borderRadius: 4, border: `1px solid ${ROLE_COLOR[role] ?? 'var(--border-color)'}44`, background: 'transparent', color: ROLE_COLOR[role] ?? 'var(--text-muted)', fontFamily: 'var(--font-mono)', cursor: 'pointer', maxWidth: 72 }}
+          >
+            <option value="">Sin rol</option>
+            {(['CARRY', 'JUNGLE', 'MIDLANE', 'OFFLANE', 'SUPPORT']).map((r) => (
+              <option key={r} value={r.toLowerCase()}>{ROLE_LABEL[r]}</option>
+            ))}
+          </select>
+        </div>
       ) : (
         role
-          ? <span style={{ fontSize: '0.65rem', fontWeight: 800, padding: '2px 8px', borderRadius: 4, border: `1px solid ${ROLE_COLOR[role]}44`, color: ROLE_COLOR[role], fontFamily: 'var(--font-mono)', minWidth: 70, textAlign: 'center' }}>{ROLE_LABEL[role]}</span>
-          : <span style={{ minWidth: 70 }} />
+          ? (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', minWidth: 90 }}>
+              <RoleIcon role={role} size={15} />
+              <span style={{ fontSize: '0.65rem', fontWeight: 800, color: ROLE_COLOR[role], fontFamily: 'var(--font-mono)' }}>{ROLE_LABEL[role]}</span>
+            </div>
+          )
+          : <span style={{ minWidth: 90 }} />
       )}
 
       {/* Name */}
