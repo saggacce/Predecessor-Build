@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { RefreshCw, CheckCircle, XCircle, AlertTriangle, Activity, Play, Square, Clock, Database, Shield } from 'lucide-react';
 import { toast } from 'sonner';
 import { ApiErrorResponse, apiClient, type SyncLog, type SyncStatus, type CronJob } from '../api/client';
@@ -7,10 +8,11 @@ import { useAuth } from '../hooks/useAuth';
 type DQTab = 'sync' | 'controls';
 
 export default function DataQualityPage() {
+  const { t } = useTranslation();
   const { user, internalLoading } = useAuth();
   const [tab, setTab] = useState<DQTab>('sync');
 
-  if (internalLoading) return <div style={{ padding: '2rem', color: 'var(--text-muted)' }}>Checking session...</div>;
+  if (internalLoading) return <div style={{ padding: '2rem', color: 'var(--text-muted)' }}>{t('common.loading')}</div>;
 
   if (!user || user.globalRole !== 'PLATFORM_ADMIN') {
     return (
@@ -18,7 +20,7 @@ export default function DataQualityPage() {
         <div className="glass-card" style={{ display: 'grid', gap: '1rem' }}>
           <Shield size={34} style={{ color: 'var(--accent-loss)' }} />
           <h1 className="header-title">Data Quality</h1>
-          <p style={{ color: 'var(--text-muted)', fontSize: '0.88rem' }}>Requiere cuenta Platform Admin.</p>
+          <p style={{ color: 'var(--text-muted)', fontSize: '0.88rem' }}>{t('dataQuality.requiresAdmin')}</p>
           <a className="btn-primary" href="/login" style={{ width: 'fit-content' }}>Login</a>
         </div>
       </div>
@@ -30,7 +32,7 @@ export default function DataQualityPage() {
       <header className="header">
         <h1 className="header-title">Data Quality</h1>
         <p style={{ color: 'var(--text-muted)', fontSize: '0.86rem', marginTop: '0.35rem' }}>
-          Estado de sincronización de jugadores, partidas y controles manuales.
+          {t('dataQuality.description')}
         </p>
       </header>
 
@@ -54,6 +56,7 @@ export default function DataQualityPage() {
 // ── Sync Status Tab ───────────────────────────────────────────────────────────
 
 function SyncStatusTab() {
+  const { t } = useTranslation();
   const [status, setStatus] = useState<SyncStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [jobLoading, setJobLoading] = useState(false);
@@ -94,10 +97,10 @@ function SyncStatusTab() {
       if (isRunning) {
         await apiClient.admin.stopEventStreamSync();
         setOptimisticRunning(false);
-        toast.success('Sync detenido');
+        toast.success(t('dataQuality.syncStopped'));
       } else {
         const res = await apiClient.admin.startEventStreamSync();
-        if (res.ok) toast.success('Sync iniciado en background');
+        if (res.ok) toast.success(t('dataQuality.syncStarted'));
         else { setOptimisticRunning(false); toast.error(res.message); }
       }
       await refresh();
@@ -105,7 +108,7 @@ function SyncStatusTab() {
       setOptimisticRunning(false);
       const msg = err instanceof ApiErrorResponse ? err.error.message : 'Error';
       toast.error(msg.includes('pred.gg') || msg.includes('PREDGG')
-        ? 'Necesitas estar logueado en pred.gg'
+        ? t('dataQuality.predggLoginRequired')
         : msg);
     } finally { setJobLoading(false); }
   }
@@ -114,8 +117,8 @@ function SyncStatusTab() {
     if (!status) return;
     setCronLoading(true);
     try {
-      if (status.cronJob.enabled) { await apiClient.admin.stopCron(); toast.success('Cron desactivado'); }
-      else { await apiClient.admin.startCron(); toast.success('Cron activado — cada 2h'); }
+      if (status.cronJob.enabled) { await apiClient.admin.stopCron(); toast.success(t('dataQuality.cronDeactivated')); }
+      else { await apiClient.admin.startCron(); toast.success(t('dataQuality.cronActivated')); }
       await refresh();
     } catch (err) {
       toast.error(err instanceof ApiErrorResponse ? err.error.message : 'Error');
@@ -126,7 +129,7 @@ function SyncStatusTab() {
     setCronLoading(true);
     try {
       await apiClient.admin.runCronNow();
-      toast.success('Sync manual lanzado');
+      toast.success(t('dataQuality.manualSyncLaunched'));
       setTimeout(() => void refresh(), 3000);
     } catch (err) {
       toast.error(err instanceof ApiErrorResponse ? err.error.message : 'Error');
@@ -138,7 +141,7 @@ function SyncStatusTab() {
       {[1, 2, 3].map((i) => <div key={i} className="glass-card" style={{ height: 110, background: 'rgba(255,255,255,0.02)' }} />)}
     </div>
   );
-  if (!status) return <div style={{ padding: '1.5rem', color: 'var(--accent-loss)' }}>Error al cargar</div>;
+  if (!status) return <div style={{ padding: '1.5rem', color: 'var(--accent-loss)' }}>{t('dataQuality.loadError')}</div>;
 
   const { players, matches, eventStreamJob: job, cronJob } = status;
   const isRunning = job.running || optimisticRunning;
@@ -163,11 +166,11 @@ function SyncStatusTab() {
         <div style={{ padding: '0.75rem 1.25rem', borderBottom: '1px solid var(--border-color)', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
           <Activity size={15} style={{ color: 'var(--accent-blue)' }} />
           <span style={{ fontWeight: 700, fontSize: '0.9rem' }}>Players</span>
-          <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.72rem', color: 'var(--text-muted)', marginLeft: 'auto' }}>{players.total.toLocaleString()} total</span>
+          <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.72rem', color: 'var(--text-muted)', marginLeft: 'auto' }}>{players.total.toLocaleString(undefined)} total</span>
         </div>
         <SyncRow label="Fully synced" value={players.synced} total={players.total} color="var(--accent-win)" />
         <SyncRow label="Needs re-sync (>24h)" value={players.stale} total={players.total} color="var(--accent-prime)" warning />
-        <SyncRow label="No sincronizable (HIDDEN / consola)" value={unsyncable} total={players.total} color="var(--text-muted)" />
+        <SyncRow label={t('dataQuality.notSyncable')} value={unsyncable} total={players.total} color="var(--text-muted)" />
         <ProgressBar pct={playerPct} color={playerPct === 100 ? 'var(--accent-win)' : 'var(--accent-blue)'} />
       </div>
 
@@ -176,12 +179,12 @@ function SyncStatusTab() {
         <div style={{ padding: '0.75rem 1.25rem', borderBottom: '1px solid var(--border-color)', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
           <Activity size={15} style={{ color: 'var(--accent-violet)' }} />
           <span style={{ fontWeight: 700, fontSize: '0.9rem' }}>Matches</span>
-          <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.72rem', color: 'var(--text-muted)', marginLeft: 'auto' }}>{matches.total.toLocaleString()} total</span>
+          <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.72rem', color: 'var(--text-muted)', marginLeft: 'auto' }}>{matches.total.toLocaleString(undefined)} total</span>
         </div>
         <SyncRow label="Complete (players + event stream)" value={matches.complete} total={matches.total} color="var(--accent-win)" />
-        <SyncRow label="Pending (sin event stream)" value={matches.partial} total={matches.total} color="var(--accent-prime)" warning />
-        <SyncRow label="No disponible en pred.gg" value={(matches as any).failed ?? 0} total={matches.total} color="var(--text-muted)" />
-        <SyncRow label="Incomplete (sin players)" value={matches.incomplete} total={matches.total} color="var(--accent-loss)" warning />
+        <SyncRow label={t('dataQuality.pendingSinEventStream')} value={matches.partial} total={matches.total} color="var(--accent-prime)" warning />
+        <SyncRow label={t('dataQuality.notAvailablePredgg')} value={(matches as any).failed ?? 0} total={matches.total} color="var(--text-muted)" />
+        <SyncRow label={t('dataQuality.incompleteSinPlayers')} value={matches.incomplete} total={matches.total} color="var(--accent-loss)" warning />
         <ProgressBar pct={matchPct} color={matchPct === 100 ? 'var(--accent-win)' : 'var(--accent-violet)'} />
       </div>
 
@@ -190,40 +193,45 @@ function SyncStatusTab() {
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1rem' }}>
           <RefreshCw size={16} style={{ color: isRunning ? 'var(--accent-blue)' : job.tokenError ? 'var(--accent-loss)' : 'var(--text-muted)', animation: isRunning ? 'spin 1s linear infinite' : 'none', flexShrink: 0 }} />
           <span style={{ fontWeight: 700, fontSize: '0.9rem' }}>Event Stream Background Sync</span>
-          {isRunning && <span style={{ fontSize: '0.65rem', fontWeight: 700, color: 'var(--accent-blue)', background: 'rgba(91,156,246,0.15)', border: '1px solid rgba(91,156,246,0.4)', borderRadius: 999, padding: '0.15rem 0.55rem' }}>EN CURSO</span>}
-          {job.tokenError && !isRunning && <span style={{ fontSize: '0.65rem', fontWeight: 700, color: 'var(--accent-loss)', background: 'rgba(248,113,113,0.1)', border: '1px solid rgba(248,113,113,0.3)', borderRadius: 999, padding: '0.15rem 0.55rem' }}>TOKEN EXPIRADO</span>}
+          {isRunning && <span style={{ fontSize: '0.65rem', fontWeight: 700, color: 'var(--accent-blue)', background: 'rgba(91,156,246,0.15)', border: '1px solid rgba(91,156,246,0.4)', borderRadius: 999, padding: '0.15rem 0.55rem' }}>{t('dataQuality.inProgress')}</span>}
+          {job.tokenError && !isRunning && <span style={{ fontSize: '0.65rem', fontWeight: 700, color: 'var(--accent-loss)', background: 'rgba(248,113,113,0.1)', border: '1px solid rgba(248,113,113,0.3)', borderRadius: 999, padding: '0.15rem 0.55rem' }}>{t('dataQuality.tokenExpired')}</span>}
           {isRunning && <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)', marginLeft: 'auto', fontFamily: 'var(--font-mono)' }}>↻ 2s</span>}
         </div>
         {job.tokenError && !isRunning && (
           <div style={{ marginBottom: '1rem', padding: '0.75rem 1rem', background: 'rgba(248,113,113,0.06)', border: '1px solid rgba(248,113,113,0.2)', borderRadius: 8, fontSize: '0.82rem', color: 'var(--accent-loss)', lineHeight: 1.6 }}>
-            Sesión de pred.gg expirada. {job.synced > 0 && `${job.synced} partidas sincronizadas antes. `}Asegúrate de estar logueado y reinicia.
+            {t('dataQuality.tokenExpiredMsg', { synced: job.synced > 0 ? t('dataQuality.tokenExpiredSynced', { count: job.synced }) : '' })}
           </div>
         )}
         {isRunning && job.total > 0 && (
           <div style={{ marginBottom: '1.25rem', padding: '1rem', background: 'rgba(91,156,246,0.06)', border: '1px solid rgba(91,156,246,0.15)', borderRadius: 8 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
-              <span style={{ fontFamily: 'var(--font-mono)', fontSize: '1rem', fontWeight: 700 }}>{job.synced.toLocaleString()} <span style={{ fontSize: '0.72rem', fontWeight: 400, color: 'var(--text-muted)' }}>/ {job.total.toLocaleString()}</span></span>
+              <span style={{ fontFamily: 'var(--font-mono)', fontSize: '1rem', fontWeight: 700 }}>{job.synced.toLocaleString(undefined)} <span style={{ fontSize: '0.72rem', fontWeight: 400, color: 'var(--text-muted)' }}>/ {job.total.toLocaleString(undefined)}</span></span>
               <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 700, color: 'var(--accent-blue)' }}>{jobPct}%</span>
             </div>
             <div style={{ height: 8, borderRadius: 999, background: 'rgba(255,255,255,0.07)', overflow: 'hidden', marginBottom: '0.5rem' }}>
               <div style={{ height: '100%', width: `${jobPct}%`, background: 'linear-gradient(90deg, var(--accent-blue), #7eb8fb)', borderRadius: 999 }} />
             </div>
             <div style={{ display: 'flex', gap: '1rem', fontSize: '0.7rem', fontFamily: 'var(--font-mono)', flexWrap: 'wrap' }}>
-              <span style={{ color: 'var(--accent-win)' }}>{job.synced.toLocaleString()} OK</span>
-              <span style={{ color: 'var(--accent-loss)' }}>{job.errors} errores</span>
+              <span style={{ color: 'var(--accent-win)' }}>{job.synced.toLocaleString(undefined)} OK</span>
+              <span style={{ color: 'var(--accent-loss)' }}>{job.errors} {t('dataQuality.errors_label')}</span>
               <span style={{ color: 'var(--accent-prime)' }}>{job.skipped} omitidos</span>
               {ratePerMin !== null && <span style={{ color: 'var(--text-muted)' }}>{ratePerMin} p/min</span>}
               {etaMin !== null && <span style={{ color: 'var(--text-muted)' }}>~{etaMin < 60 ? `${etaMin}min` : `${Math.round(etaMin / 60)}h`} restantes</span>}
             </div>
           </div>
         )}
-        {!isRunning && <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginBottom: '1rem', lineHeight: 1.6 }}>Sincroniza kills, objetivos, wards y gold diff de todas las partidas pendientes. Requiere sesión de pred.gg.</p>}
+        {!isRunning && <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginBottom: '1rem', lineHeight: 1.6 }}>{t('dataQuality.syncDesc')}</p>}
         <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
           <button onClick={() => void handleStartStop()} disabled={jobLoading} className={isRunning ? 'btn-secondary' : 'btn-primary'} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
             {jobLoading ? <RefreshCw size={13} style={{ animation: 'spin 0.6s linear infinite' }} /> : isRunning ? <Square size={13} /> : <Play size={13} />}
-            {jobLoading ? (isRunning ? 'Deteniendo...' : 'Iniciando...') : isRunning ? 'Detener' : 'Iniciar Event Stream Sync'}
+            {jobLoading ? (isRunning ? t('dataQuality.stopping') : t('dataQuality.starting')) : isRunning ? t('dataQuality.stop') : t('dataQuality.startSync')}
           </button>
-          {!isRunning && matches.partial > 0 && <span style={{ fontSize: '0.72rem', color: 'var(--accent-prime)', alignSelf: 'center' }}>{matches.partial.toLocaleString()} partidas pendientes{(matches as any).failed > 0 ? ` · ${(matches as any).failed.toLocaleString()} no disponibles en pred.gg` : ''}</span>}
+          {!isRunning && matches.partial > 0 && (
+            <span style={{ fontSize: '0.72rem', color: 'var(--accent-prime)', alignSelf: 'center' }}>
+              {t('dataQuality.pendingMatches', { count: matches.partial.toLocaleString(undefined) })}
+              {(matches as any).failed > 0 ? ` · ${t('dataQuality.failedMatches', { count: (matches as any).failed.toLocaleString(undefined) })}` : ''}
+            </span>
+          )}
         </div>
       </div>
 
@@ -241,7 +249,7 @@ function SyncRow({ label, value, total, color, warning }: { label: string; value
         {warning && value > 0 ? <AlertTriangle size={12} style={{ color, flexShrink: 0 }} /> : <CheckCircle size={12} style={{ color, flexShrink: 0 }} />}
         {label}
       </div>
-      <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.82rem', fontWeight: 700, color, textAlign: 'right' }}>{value.toLocaleString()}</span>
+      <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.82rem', fontWeight: 700, color, textAlign: 'right' }}>{value.toLocaleString(undefined)}</span>
       <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.68rem', color: 'var(--text-muted)', textAlign: 'right' }}>{pct}%</span>
     </div>
   );
@@ -259,24 +267,25 @@ function ProgressBar({ pct, color }: { pct: number; color: string }) {
 }
 
 function CronStatusCard({ cronJob, loading, onToggle, onRunNow, history }: { cronJob: CronJob; loading: boolean; onToggle: () => void; onRunNow: () => void; history: SyncLog[] }) {
+  const { t } = useTranslation();
   const lastResult = cronJob.lastRunResult;
   return (
     <div className="glass-card" style={{ borderLeft: cronJob.enabled ? '3px solid var(--accent-teal-bright)' : undefined }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1rem' }}>
         <Clock size={16} style={{ color: cronJob.enabled ? 'var(--accent-teal-bright)' : 'var(--text-muted)', flexShrink: 0 }} />
-        <span style={{ fontWeight: 700, fontSize: '0.9rem' }}>Auto-Sync Global (cron cada 2h)</span>
-        {cronJob.enabled && <span style={{ fontSize: '0.65rem', fontWeight: 700, color: 'var(--accent-teal-bright)', background: 'rgba(56,212,200,0.12)', border: '1px solid rgba(56,212,200,0.35)', borderRadius: 999, padding: '0.15rem 0.55rem' }}>ACTIVO</span>}
+        <span style={{ fontWeight: 700, fontSize: '0.9rem' }}>{t('dataQuality.cronTitle')}</span>
+        {cronJob.enabled && <span style={{ fontSize: '0.65rem', fontWeight: 700, color: 'var(--accent-teal-bright)', background: 'rgba(56,212,200,0.12)', border: '1px solid rgba(56,212,200,0.35)', borderRadius: 999, padding: '0.15rem 0.55rem' }}>{t('dataQuality.cronActive')}</span>}
         {cronJob.running && <RefreshCw size={12} style={{ color: 'var(--accent-teal-bright)', animation: 'spin 1s linear infinite' }} />}
       </div>
       <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginBottom: '1rem', lineHeight: 1.6 }}>
-        Fetchea partidas nuevas de todos los jugadores cada 2h e incluye el event stream. Se guarda al iniciar el Event Stream Sync.
+        {t('dataQuality.cronDesc')}
       </p>
       {lastResult && (
         <div style={{ display: 'flex', gap: '1.5rem', fontSize: '0.72rem', fontFamily: 'var(--font-mono)', marginBottom: '1rem', padding: '0.65rem 1rem', background: 'rgba(255,255,255,0.03)', borderRadius: 8, flexWrap: 'wrap' }}>
-          <span><span style={{ color: 'var(--accent-win)', fontWeight: 700 }}>{lastResult.newMatches}</span> <span style={{ color: 'var(--text-muted)' }}>nuevas</span></span>
+          <span><span style={{ color: 'var(--accent-win)', fontWeight: 700 }}>{lastResult.newMatches}</span> <span style={{ color: 'var(--text-muted)' }}>{t('dataQuality.newMatches')}</span></span>
           {lastResult.eventStreamSynced > 0 && <span><span style={{ color: 'var(--accent-blue)', fontWeight: 700 }}>{lastResult.eventStreamSynced}</span> <span style={{ color: 'var(--text-muted)' }}>event stream</span></span>}
-          <span><span style={{ color: 'var(--text-primary)', fontWeight: 700 }}>{lastResult.players}</span> <span style={{ color: 'var(--text-muted)' }}>jugadores</span></span>
-          {lastResult.errors > 0 && <span><span style={{ color: 'var(--accent-loss)', fontWeight: 700 }}>{lastResult.errors}</span> <span style={{ color: 'var(--text-muted)' }}>errores</span></span>}
+          <span><span style={{ color: 'var(--text-primary)', fontWeight: 700 }}>{lastResult.players}</span> <span style={{ color: 'var(--text-muted)' }}>{t('dataQuality.players_label')}</span></span>
+          {lastResult.errors > 0 && <span><span style={{ color: 'var(--accent-loss)', fontWeight: 700 }}>{lastResult.errors}</span> <span style={{ color: 'var(--text-muted)' }}>{t('dataQuality.errors_label')}</span></span>}
           {cronJob.lastRunAt && <span style={{ color: 'var(--text-muted)' }}>última: {new Date(cronJob.lastRunAt).toLocaleTimeString()}</span>}
           {cronJob.nextRunAt && cronJob.enabled && <span style={{ color: 'var(--text-muted)' }}>próxima: {new Date(cronJob.nextRunAt).toLocaleTimeString()}</span>}
         </div>
@@ -284,16 +293,16 @@ function CronStatusCard({ cronJob, loading, onToggle, onRunNow, history }: { cro
       <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', marginBottom: history.length > 0 ? '1.25rem' : undefined }}>
         <button onClick={onToggle} disabled={loading} className={cronJob.enabled ? 'btn-secondary' : 'btn-primary'} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
           {loading ? <RefreshCw size={13} style={{ animation: 'spin 0.6s linear infinite' }} /> : cronJob.enabled ? <Square size={13} /> : <Play size={13} />}
-          {cronJob.enabled ? 'Desactivar' : 'Activar cron (cada 2h)'}
+          {cronJob.enabled ? t('dataQuality.cronDisable') : t('dataQuality.cronEnable')}
         </button>
         <button onClick={onRunNow} disabled={loading || cronJob.running} className="btn-secondary" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
           <RefreshCw size={13} style={{ animation: cronJob.running ? 'spin 1s linear infinite' : 'none' }} />
-          Ejecutar ahora
+          {t('dataQuality.runNow')}
         </button>
       </div>
       {history.length > 0 && (
         <div>
-          <div style={{ fontSize: '0.68rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '0.5rem' }}>Historial reciente</div>
+          <div style={{ fontSize: '0.68rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '0.5rem' }}>{t('dataQuality.recentHistory')}</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
             {history.map((log) => (
               <div key={log.id} style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', fontSize: '0.75rem', padding: '0.35rem 0.7rem', background: 'rgba(255,255,255,0.025)', borderRadius: 6 }}>
@@ -301,10 +310,10 @@ function CronStatusCard({ cronJob, loading, onToggle, onRunNow, history }: { cro
                   : log.status === 'partial' ? <AlertTriangle size={12} style={{ color: 'var(--accent-prime)', flexShrink: 0 }} />
                   : <XCircle size={12} style={{ color: 'var(--accent-loss)', flexShrink: 0 }} />}
                 <span style={{ color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', fontSize: '0.68rem', flexShrink: 0 }}>
-                  {new Date(log.syncedAt).toLocaleString('es-ES', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                  {new Date(log.syncedAt).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
                 </span>
                 <span style={{ color: log.status === 'ok' ? 'var(--text-secondary)' : log.status === 'partial' ? 'var(--accent-prime)' : 'var(--accent-loss)', flex: 1 }}>
-                  {log.status === 'ok' ? 'Completado sin errores' : log.error ?? log.status}
+                  {log.status === 'ok' ? t('dataQuality.completedOk') : log.error ?? log.status}
                 </span>
               </div>
             ))}
@@ -320,6 +329,7 @@ function CronStatusCard({ cronJob, loading, onToggle, onRunNow, history }: { cro
 type OpState = 'idle' | 'running' | 'done' | 'error';
 
 function DataControlsTab() {
+  const { t } = useTranslation();
   const [ops, setOps] = useState<Record<string, { state: OpState; result?: string }>>({});
 
   async function runOp(key: string, fn: () => Promise<string>) {
@@ -338,10 +348,10 @@ function DataControlsTab() {
   const controls = [
     { key: 'versions', label: 'Sync Versions', desc: 'Fetch all game versions from pred.gg and upsert into DB.',
       fn: async () => { const r = await apiClient.admin.syncVersions(); return `${r.synced} version${r.synced !== 1 ? 's' : ''} synced in ${(r.elapsed / 1000).toFixed(1)}s`; } },
-    { key: 'staleAll', label: 'Sync All Stale Players', desc: 'Re-sincroniza TODOS los jugadores con datos >24h en batches automáticos. Tarda varios minutos.',
+    { key: 'staleAll', label: 'Sync All Stale Players', desc: t('dataQuality.staleAllDesc'),
       fn: async () => {
         const r = await apiClient.admin.syncStaleAll();
-        return `${r.totalSynced.toLocaleString()} jugadores sincronizados · ${r.totalErrors} errores · ${r.batches} batches`;
+        return `${r.totalSynced.toLocaleString(undefined)} jugadores sincronizados · ${r.totalErrors} errores · ${r.batches} batches`;
       } },
     { key: 'stale', label: 'Sync Stale Players (1 batch)', desc: 'Re-sync players whose data is outdated (batch of 30).',
       fn: async () => { const r = await apiClient.admin.syncStale(); return `${r.synced} synced · ${r.skipped} skipped · ${r.errors} errors`; } },
@@ -351,7 +361,7 @@ function DataControlsTab() {
       fn: async () => { const r = await apiClient.admin.fixHeroKillPlayerIds(); return `Updated ${r.heroKillsUpdated} kills · ${r.objectiveKillsUpdated} objectives · ${r.wardEventsUpdated} wards`; } },
     { key: 'heroes', label: 'Sync Hero Metadata', desc: 'Fetch all heroes from omeda.city and upsert classes, roles and image URLs into DB.',
       fn: async () => { const r = await apiClient.admin.syncHeroes(); return `${r.synced} heroes synced · ${r.errors} errors`; } },
-    { key: 'verifyNonsyncable', label: 'Verificar no sincronizables', desc: 'Prueba una muestra de jugadores HIDDEN/consola contra pred.gg. Los recuperados se mueven a sincronizables.',
+    { key: 'verifyNonsyncable', label: t('dataQuality.verifyNonsyncable'), desc: t('dataQuality.verifyNonsyncableDesc'),
       fn: async () => {
         const r = await (apiClient as any).admin.verifyNonsyncable();
         return `${r.checked} verificados · ${r.recovered} recuperados`;
