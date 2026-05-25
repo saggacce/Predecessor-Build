@@ -84,11 +84,7 @@ export default function TeamRoster() {
     const movingMember = profile.roster.find((m) => m.rosterId === pendingSwap.rosterId);
     if (!movingMember) return;
 
-    // When benching: swapTargetId is required
-    if (pendingSwap.direction === 'bench' && !swapTargetId) {
-      toast.error('Selecciona el suplente que sube al equipo.');
-      return;
-    }
+    // Both directions are optional — swapTargetId empty means solo move
 
     setSwapping(true);
     try {
@@ -106,9 +102,10 @@ export default function TeamRoster() {
         const swapName = swapMember ? (swapMember.customName ?? swapMember.displayName) : '';
         toast.success(`${movingName} ↔ ${swapName}`);
       } else {
-        // Activate without replacing anyone
+        // Move without swapping anyone
         await apiClient.teams.updateRoster(teamId, pendingSwap.rosterId, movingMember.role as TeamRole | null, newStatus);
-        toast.success(`${movingMember.customName ?? movingMember.displayName} → Titular`);
+        const label = newStatus === 'STARTER' ? 'Titular' : 'Suplente';
+        toast.success(`${movingMember.customName ?? movingMember.displayName} → ${label}`);
       }
 
       setPendingSwap(null);
@@ -240,10 +237,10 @@ export default function TeamRoster() {
             {/* Swap bar for benching a starter */}
             {pendingSwap?.direction === 'bench' && starters.some((m) => m.rosterId === pendingSwap.rosterId) && (
               <SwapBar
-                label="¿Quién sube al equipo?"
+                label="¿Quién sube al equipo? (opcional)"
                 options={bench}
                 selectedId={swapTargetId}
-                required
+                required={false}
                 onSelect={setSwapTargetId}
                 onConfirm={() => void confirmSwap()}
                 onCancel={cancelSwap}

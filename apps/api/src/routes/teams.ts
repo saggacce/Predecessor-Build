@@ -53,14 +53,18 @@ const updateTeamSchema = z.object({
 
 const rosterStatusValues = ['STARTER', 'BENCH'] as const;
 
+const roleField = z.string().nullable().optional()
+  .transform((v) => (v ? v.toLowerCase() as 'carry' | 'jungle' | 'midlane' | 'offlane' | 'support' : null))
+  .pipe(z.enum(['carry', 'jungle', 'midlane', 'offlane', 'support']).nullable().optional());
+
 const addRosterSchema = z.object({
   playerId: z.string().min(1),
-  role: z.enum(['carry', 'jungle', 'midlane', 'offlane', 'support']).optional(),
+  role: roleField,
   rosterStatus: z.enum(rosterStatusValues).optional(),
 });
 
 const updateRosterSchema = z.object({
-  role: z.enum(['carry', 'jungle', 'midlane', 'offlane', 'support']).nullable(),
+  role: roleField,
   rosterStatus: z.enum(rosterStatusValues).optional(),
 });
 
