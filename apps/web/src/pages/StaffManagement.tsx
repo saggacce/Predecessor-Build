@@ -1,115 +1,10 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
-import { Copy, Plus, Shield, Trash2, UserPlus, Users, ArrowUpDown } from 'lucide-react';
+import { Copy, Plus, Shield, Trash2, UserPlus } from 'lucide-react';
 import { toast } from 'sonner';
-import { ApiErrorResponse, apiClient, type Invitation, type TeamProfile, type RosterMember } from '../api/client';
+import { ApiErrorResponse, apiClient, type Invitation, type TeamProfile } from '../api/client';
 import { useAuth } from '../hooks/useAuth';
 
 const ROLES = ['MANAGER', 'COACH', 'ANALISTA', 'JUGADOR'] as const;
-
-const ROLE_LABEL: Record<string, string> = {
-  CARRY: 'Carry', JUNGLE: 'Jungle', MIDLANE: 'Mid', OFFLANE: 'Offlane', SUPPORT: 'Support',
-};
-
-const ROLE_COLOR: Record<string, string> = {
-  CARRY: 'var(--accent-loss)', JUNGLE: 'var(--accent-win)', MIDLANE: 'var(--accent-blue)',
-  OFFLANE: 'var(--accent-prime)', SUPPORT: 'var(--accent-teal-bright)',
-};
-
-// ── Roster Panel ──────────────────────────────────────────────────────────────
-
-function RosterPanel({ team, onRosterChange }: { team: TeamProfile; onRosterChange: (updated: TeamProfile) => void }) {
-  const [toggling, setToggling] = useState<string | null>(null);
-
-  const starters = team.roster.filter((m) => m.rosterStatus === 'STARTER');
-  const bench = team.roster.filter((m) => m.rosterStatus === 'BENCH');
-
-  async function toggleStatus(member: RosterMember) {
-    const next = member.rosterStatus === 'STARTER' ? 'BENCH' : 'STARTER';
-    setToggling(member.rosterId);
-    try {
-      await apiClient.teams.updateRoster(team.id, member.rosterId, member.role as any, next);
-      const updated = await apiClient.teams.getProfile(team.id);
-      onRosterChange(updated);
-      toast.success(`${member.customName ?? member.displayName} → ${next === 'STARTER' ? 'Titular' : 'Suplente'}`);
-    } catch {
-      toast.error('Error al cambiar estado del jugador');
-    } finally {
-      setToggling(null);
-    }
-  }
-
-  function PlayerRow({ member }: { member: RosterMember }) {
-    const role = member.role?.toUpperCase() ?? '';
-    const isBench = member.rosterStatus === 'BENCH';
-    const isLoading = toggling === member.rosterId;
-    return (
-      <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.65rem 1.1rem', borderBottom: '1px solid var(--border-color)' }}>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
-            <span style={{ fontWeight: 700, fontSize: '0.88rem', color: isBench ? 'var(--text-muted)' : 'var(--text-primary)' }}>
-              {member.customName ?? member.displayName}
-            </span>
-            {role && (
-              <span style={{ fontSize: '0.62rem', fontWeight: 800, color: ROLE_COLOR[role] ?? 'var(--text-muted)', border: `1px solid ${ROLE_COLOR[role] ?? 'var(--border-color)'}44`, borderRadius: 4, padding: '1px 6px', fontFamily: 'var(--font-mono)' }}>
-                {ROLE_LABEL[role] ?? role}
-              </span>
-            )}
-            {member.rating?.rankLabel && (
-              <span style={{ fontSize: '0.62rem', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>{member.rating.rankLabel}</span>
-            )}
-          </div>
-        </div>
-        <button
-          className="btn-secondary"
-          disabled={isLoading}
-          onClick={() => void toggleStatus(member)}
-          style={{ fontSize: '0.7rem', padding: '0.3rem 0.75rem', display: 'flex', alignItems: 'center', gap: '0.3rem', color: isBench ? 'var(--accent-teal-bright)' : 'var(--accent-prime)', opacity: isLoading ? 0.5 : 1 }}
-        >
-          <ArrowUpDown size={11} />
-          {isBench ? 'Activar' : 'Bench'}
-        </button>
-      </div>
-    );
-  }
-
-  return (
-    <section className="glass-card" style={{ padding: 0, overflow: 'hidden', gridColumn: '1 / -1' }}>
-      <div style={{ padding: '1rem 1.1rem', borderBottom: '1px solid var(--border-color)', display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
-        <Users size={16} style={{ color: 'var(--accent-blue)' }} />
-        <h2 style={{ fontSize: '1rem', fontWeight: 800 }}>Roster — {team.name}</h2>
-        <span style={{ marginLeft: 'auto', fontSize: '0.72rem', color: 'var(--text-muted)' }}>
-          {starters.length} titular{starters.length !== 1 ? 'es' : ''} · {bench.length} suplente{bench.length !== 1 ? 's' : ''}
-        </span>
-      </div>
-
-      {/* Titulares */}
-      {starters.length > 0 && (
-        <div>
-          <div style={{ padding: '0.45rem 1.1rem', fontSize: '0.62rem', fontWeight: 800, color: 'var(--accent-teal-bright)', textTransform: 'uppercase', letterSpacing: '0.08em', background: 'rgba(77,192,181,0.05)', borderBottom: '1px solid var(--border-color)' }}>
-            Titulares
-          </div>
-          {starters.map((m) => <PlayerRow key={m.rosterId} member={m} />)}
-        </div>
-      )}
-
-      {/* Suplentes */}
-      {bench.length > 0 && (
-        <div>
-          <div style={{ padding: '0.45rem 1.1rem', fontSize: '0.62rem', fontWeight: 800, color: 'var(--accent-prime)', textTransform: 'uppercase', letterSpacing: '0.08em', background: 'rgba(251,191,36,0.05)', borderBottom: '1px solid var(--border-color)' }}>
-            Suplentes
-          </div>
-          {bench.map((m) => <PlayerRow key={m.rosterId} member={m} />)}
-        </div>
-      )}
-
-      {team.roster.length === 0 && (
-        <div style={{ padding: '1.5rem 1.1rem', color: 'var(--text-muted)', fontSize: '0.86rem' }}>
-          No hay jugadores en el roster.
-        </div>
-      )}
-    </section>
-  );
-}
 
 function invitationUrl(token: string) {
   return `${window.location.origin}/register/${token}`;
@@ -155,7 +50,7 @@ export default function StaffManagement() {
 function StaffTab({ user, isPlatformAdmin }: { user: NonNullable<ReturnType<typeof useAuth>['user']>; isPlatformAdmin: boolean }) {
   const [teams, setTeams] = useState<TeamProfile[]>([]);
   const [teamId, setTeamId] = useState('');
-  const [teamProfile, setTeamProfile] = useState<TeamProfile | null>(null);
+
   const [invitations, setInvitations] = useState<Invitation[]>([]);
   const [email, setEmail] = useState('');
   const [role, setRole] = useState<(typeof ROLES)[number]>('COACH');
@@ -183,8 +78,6 @@ function StaffTab({ user, isPlatformAdmin }: { user: NonNullable<ReturnType<type
       .catch((err) => { if (!(err instanceof ApiErrorResponse && err.status === 403)) toast.error('Failed to load invitations.'); setInvitations([]); })
       .finally(() => setLoading(false));
     // Load full profile to get properly shaped roster (rosterId, rosterStatus, etc.)
-    setTeamProfile(null);
-    apiClient.teams.getProfile(teamId).then(setTeamProfile).catch(() => null);
   }, [teamId]);
 
   useEffect(() => {
@@ -298,9 +191,6 @@ function StaffTab({ user, isPlatformAdmin }: { user: NonNullable<ReturnType<type
         )}
       </section>
 
-      {teamProfile && (
-        <RosterPanel team={teamProfile} onRosterChange={setTeamProfile} />
-      )}
     </div>
   );
 }

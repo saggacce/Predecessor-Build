@@ -21,6 +21,7 @@ import Login from './pages/Login';
 import Register from './pages/Register';
 import Unauthorized from './pages/Unauthorized';
 import StaffManagement from './pages/StaffManagement';
+import TeamRoster from './pages/TeamRoster';
 import DataQualityPage from './pages/DataQualityPage';
 import AuditLogsPage from './pages/AuditLogsPage';
 import UsersPage from './pages/UsersPage';
@@ -221,6 +222,15 @@ const sections: SidebarSection[] = [
     to: '/',
   },
   {
+    id: 'management',
+    label: 'Team Management',
+    icon: <Users size={17} />,
+    items: [
+      { to: '/management/teams', label: 'Teams & Roster' },
+      { to: '/management/staff', label: 'Staff & Invitations' },
+    ],
+  },
+  {
     id: 'matches',
     label: 'Matches',
     icon: <Film size={17} />,
@@ -257,15 +267,6 @@ const sections: SidebarSection[] = [
       { to: '/reports/scrim', label: 'Scrim Report' },
       { to: '/reports/weekly', label: 'Weekly Reports' },
       { to: '/reports/players', label: 'Player Development' },
-    ],
-  },
-  {
-    id: 'management',
-    label: 'Team Management',
-    icon: <Users size={17} />,
-    items: [
-      { to: '/management/staff', label: 'Staff & Invitations' },
-      { to: '/management/teams', label: 'Teams & Rosters' },
     ],
   },
   {
@@ -549,7 +550,7 @@ function AppContent() {
             <Route path="/reports/rival" element={<Navigate to="/analysis/rival" replace />} />
 
             {/* Team Management */}
-            <Route path="/management/teams" element={<ComingSoon section="Teams & Rosters" description="Create and manage teams, rosters and player assignments." issue={72} />} />
+            <Route path="/management/teams" element={<TeamRoster />} />
             <Route path="/management/staff" element={<StaffManagement />} />
 
             {/* Platform Admin */}
