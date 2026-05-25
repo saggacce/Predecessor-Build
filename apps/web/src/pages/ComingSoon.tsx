@@ -1,4 +1,5 @@
 import { Construction } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 
 interface ComingSoonProps {
   section: string;
@@ -7,6 +8,7 @@ interface ComingSoonProps {
 }
 
 export default function ComingSoon({ section, description, issue }: ComingSoonProps) {
+  const { t } = useTranslation();
   return (
     <div style={{ padding: '2rem', maxWidth: '480px' }}>
       <div className="glass-card" style={{ padding: '2rem', textAlign: 'center' }}>
@@ -15,7 +17,7 @@ export default function ComingSoon({ section, description, issue }: ComingSoonPr
           {section}
         </h2>
         <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem', lineHeight: 1.6 }}>
-          {description ?? 'This section is under development and will be available in a future update.'}
+          {description ?? t('comingSoon.description')}
         </p>
         {issue && (
           <a

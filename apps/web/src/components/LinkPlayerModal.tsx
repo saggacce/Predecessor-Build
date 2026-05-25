@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Search, Link2, X, CheckCircle, User } from 'lucide-react';
 import { toast } from 'sonner';
+import { useTranslation } from 'react-i18next';
 import { apiClient, type PlayerSearchResult } from '../api/client';
 
 interface Props {
@@ -9,6 +10,7 @@ interface Props {
 }
 
 export function LinkPlayerModal({ onLinked, onClose }: Props) {
+  const { t } = useTranslation();
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<PlayerSearchResult[]>([]);
   const [searching, setSearching] = useState(false);
@@ -16,13 +18,13 @@ export function LinkPlayerModal({ onLinked, onClose }: Props) {
   const [searched, setSearched] = useState(false);
 
   async function handleSearch() {
-    if (query.trim().length < 2) { toast.error('Escribe al menos 2 caracteres'); return; }
+    if (query.trim().length < 2) { toast.error(t('linkPlayerModal.searchPlaceholder')); return; }
     setSearching(true);
     setSearched(true);
     try {
       const { results: r } = await apiClient.players.search(query.trim());
       setResults(r);
-    } catch { toast.error('Error buscando jugadores'); }
+    } catch { toast.error(t('common.error')); }
     finally { setSearching(false); }
   }
 
@@ -30,10 +32,10 @@ export function LinkPlayerModal({ onLinked, onClose }: Props) {
     setLinking(player.id);
     try {
       await apiClient.profile.linkPlayer(player.id);
-      toast.success(`Perfil vinculado: ${player.customName ?? player.displayName}`);
+      toast.success(t('linkPlayerModal.confirmButton'));
       onLinked(player.id, player.customName ?? player.displayName);
     } catch (err: unknown) {
-      const msg = (err as { error?: { message?: string } })?.error?.message ?? 'Error al vincular';
+      const msg = (err as { error?: { message?: string } })?.error?.message ?? t('common.error');
       toast.error(msg);
     } finally {
       setLinking(null);
@@ -52,10 +54,10 @@ export function LinkPlayerModal({ onLinked, onClose }: Props) {
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '0.4rem' }}>
           <Link2 size={18} style={{ color: 'var(--accent-teal-bright)' }} />
-          <h2 style={{ fontSize: '1rem', fontWeight: 800, color: 'var(--text-primary)', margin: 0 }}>Vincular perfil de jugador</h2>
+          <h2 style={{ fontSize: '1rem', fontWeight: 800, color: 'var(--text-primary)', margin: 0 }}>{t('linkPlayerModal.title')}</h2>
         </div>
         <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', margin: '0 0 1.25rem' }}>
-          Busca tu nombre de jugador en Predecessor para vincular tu cuenta y ver tus estadísticas.
+          {t('linkPlayerModal.description')}
         </p>
 
         {/* Search */}
@@ -64,7 +66,7 @@ export function LinkPlayerModal({ onLinked, onClose }: Props) {
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter') void handleSearch(); }}
-            placeholder="Tu nombre en el juego…"
+            placeholder={t('linkPlayerModal.searchPlaceholder')}
             style={{ flex: 1, padding: '0.5rem 0.75rem', background: 'var(--bg-dark)', border: '1px solid var(--border-color)', borderRadius: 7, color: 'var(--text-primary)', fontSize: '0.88rem' }}
             autoFocus
           />
@@ -75,7 +77,7 @@ export function LinkPlayerModal({ onLinked, onClose }: Props) {
             style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', padding: '0.5rem 0.9rem', fontSize: '0.82rem', whiteSpace: 'nowrap' }}
           >
             <Search size={14} />
-            {searching ? 'Buscando…' : 'Buscar'}
+            {searching ? t('linkPlayerModal.searching') : t('linkPlayerModal.searchButton')}
           </button>
         </div>
 
@@ -84,8 +86,8 @@ export function LinkPlayerModal({ onLinked, onClose }: Props) {
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', maxHeight: 280, overflowY: 'auto' }}>
             {results.length === 0 && !searching && (
               <div style={{ textAlign: 'center', padding: '1.5rem', color: 'var(--text-muted)', fontSize: '0.85rem' }}>
-                No se encontraron jugadores con ese nombre.<br />
-                <span style={{ fontSize: '0.75rem' }}>Prueba con otro nombre o comprueba la ortografía.</span>
+                {t('linkPlayerModal.noResults')}<br />
+                <span style={{ fontSize: '0.75rem' }}>{t('linkPlayerModal.helpText')}</span>
               </div>
             )}
             {results.map((player) => (
@@ -110,7 +112,7 @@ export function LinkPlayerModal({ onLinked, onClose }: Props) {
                 >
                   {linking === player.id
                     ? <><span style={{ width: 10, height: 10, border: '2px solid var(--accent-teal-bright)', borderTopColor: 'transparent', borderRadius: '50%', display: 'inline-block', animation: 'spin 0.6s linear infinite' }} /></>
-                    : <><CheckCircle size={13} /> Soy yo</>
+                    : <><CheckCircle size={13} /> {t('linkPlayerModal.confirmButton')}</>
                   }
                 </button>
               </div>
@@ -119,8 +121,7 @@ export function LinkPlayerModal({ onLinked, onClose }: Props) {
         )}
 
         <p style={{ fontSize: '0.68rem', color: 'var(--text-muted)', marginTop: '1rem', lineHeight: 1.5 }}>
-          ¿No encuentras tu perfil? Puede que aún no esté en nuestra base de datos.
-          Contacta al administrador para sincronizarlo desde pred.gg.
+          {t('linkPlayerModal.helpText')}
         </p>
       </div>
     </div>

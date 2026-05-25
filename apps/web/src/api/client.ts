@@ -703,6 +703,7 @@ export interface SessionUser {
   globalRole: 'PLATFORM_ADMIN' | 'PLAYER' | 'VIEWER' | string;
   linkedPlayerId: string | null;
   avatarUrl?: string | null;
+  language?: string;
   memberships: SessionMembership[];
 }
 
@@ -888,7 +889,7 @@ export const apiClient = {
 
   profile: {
     get: () => fetchApi<{ user: UserProfile }>('/profile'),
-    update: (data: { name?: string; bio?: string | null; avatarUrl?: string | null; timezone?: string | null }) =>
+    update: (data: { name?: string; bio?: string | null; avatarUrl?: string | null; timezone?: string | null; language?: string }) =>
       fetchApi<{ user: UserProfile }>('/profile', { method: 'PATCH', body: JSON.stringify(data) }),
     changeEmail: (email: string, currentPassword: string) =>
       fetchApi<{ user: UserProfile }>('/profile/email', { method: 'PATCH', body: JSON.stringify({ email, currentPassword }) }),

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router';
 import { Server, Zap, RefreshCw, CheckCircle, XCircle, ArrowRight, Users, Sparkles, ThumbsUp, ThumbsDown, Send, Download, Target, BookOpen, Shield, Star, TrendingUp, BarChart2, MessageSquare } from 'lucide-react';
 import { toast } from 'sonner';
+import { useTranslation } from 'react-i18next';
 import { apiClient, ApiErrorResponse, type TeamProfile, type TeamAnalysis, type PlayerProfile, type Insight, type HeroStat } from '../api/client';
 import { useAuth } from '../hooks/useAuth';
 import { useViewAs } from '../hooks/useViewAs';
@@ -49,6 +50,7 @@ function StatChip({ label, value, color = 'var(--text-primary)' }: { label: stri
 
 // ── Team form strip ───────────────────────────────────────────────────────────
 function TeamFormStrip({ analysis }: { analysis: TeamAnalysis | null }) {
+  const { t } = useTranslation();
   const totalMatches = analysis ? analysis.teamWins + analysis.teamLosses : 0;
   const wr = totalMatches > 0 ? Math.round((analysis!.teamWins / totalMatches) * 100) : null;
   const last5 = analysis
@@ -60,25 +62,26 @@ function TeamFormStrip({ analysis }: { analysis: TeamAnalysis | null }) {
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
       {wr !== null && (
-        <StatChip label="Win Rate" value={`${wr}%`} color={wr >= 55 ? 'var(--accent-win)' : wr < 45 ? 'var(--accent-loss)' : 'var(--accent-prime)'} />
+        <StatChip label={t('dashboard.winRate')} value={`${wr}%`} color={wr >= 55 ? 'var(--accent-win)' : wr < 45 ? 'var(--accent-loss)' : 'var(--accent-prime)'} />
       )}
-      {totalMatches > 0 && <StatChip label="Partidas" value={totalMatches} />}
+      {totalMatches > 0 && <StatChip label={t('dashboard.matches')} value={totalMatches} />}
       <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
         {last5.map((w, i) => (
           <div key={i} style={{ width: 20, height: 20, borderRadius: 4, background: w ? 'var(--accent-win)' : 'var(--accent-loss)', opacity: 0.85, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             <span style={{ fontSize: '0.52rem', fontWeight: 800, color: '#000' }}>{w ? 'W' : 'L'}</span>
           </div>
         ))}
-        {last5.length === 0 && <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Sin partidas recientes</span>}
+        {last5.length === 0 && <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{t('dashboard.noRecentGames')}</span>}
       </div>
-      {onFire && <span style={{ fontSize: '0.7rem', color: 'var(--accent-prime)', fontWeight: 700 }}>🔥 On fire</span>}
-      {last5.length >= 3 && !onFire && recentWins === 0 && <span style={{ fontSize: '0.7rem', color: 'var(--accent-loss)' }}>📉 Racha negativa</span>}
+      {onFire && <span style={{ fontSize: '0.7rem', color: 'var(--accent-prime)', fontWeight: 700 }}>{t('dashboard.onFire')}</span>}
+      {last5.length >= 3 && !onFire && recentWins === 0 && <span style={{ fontSize: '0.7rem', color: 'var(--accent-loss)' }}>{t('dashboard.negativeStreak')}</span>}
     </div>
   );
 }
 
 // ── Main dashboard ────────────────────────────────────────────────────────────
 export default function Dashboard() {
+  const { t } = useTranslation();
   const { user, internalAuthenticated } = useAuth();
   const { viewAs } = useViewAs();
   const [healthStatus, setHealthStatus] = useState<'checking' | 'ok' | 'error'>('checking');
@@ -212,12 +215,12 @@ export default function Dashboard() {
     return (
       <div>
         <header className="header">
-          <h1 className="header-title">Dashboard</h1>
+          <h1 className="header-title">{t('dashboard.title')}</h1>
         </header>
         <div className="glass-card" style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-muted)' }}>
           <Shield size={36} style={{ margin: '0 auto 1rem', opacity: 0.4 }} />
-          <p>Inicia sesión para acceder al dashboard.</p>
-          <Link to="/login" className="btn-primary" style={{ display: 'inline-block', marginTop: '1rem' }}>Iniciar sesión</Link>
+          <p>{t('dashboard.noTeamDesc')}</p>
+          <Link to="/login" className="btn-primary" style={{ display: 'inline-block', marginTop: '1rem' }}>{t('common.login')}</Link>
         </div>
       </div>
     );
@@ -232,7 +235,7 @@ export default function Dashboard() {
           {isPlatformAdmin && <span style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--accent-teal-bright)', marginLeft: '0.5rem' }}>· PLATFORM ADMIN</span>}
         </h1>
         <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', marginTop: '0.25rem', display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
-          {ownTeam ? ownTeam.name : 'Sin equipo asignado'}
+          {ownTeam ? ownTeam.name : t('dashboard.noTeam')}
           {latestPatch && (
             <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem', background: 'rgba(107,170,248,0.12)', border: '1px solid rgba(107,170,248,0.25)', borderRadius: 4, padding: '1px 7px', fontFamily: 'var(--font-mono)', fontSize: '0.7rem', fontWeight: 700, color: 'var(--accent-blue)' }}>
               Patch {latestPatch.name}
@@ -251,7 +254,7 @@ export default function Dashboard() {
                 style={{ width: 10, height: 10, borderRadius: '50%', background: statusColor, flexShrink: 0, ['--pulse-color' as string]: 'var(--accent-win)' }} />
               <div>
                 <div style={{ fontWeight: 700, fontSize: '0.9rem', color: healthStatus === 'ok' ? 'var(--text-primary)' : statusColor }}>
-                  {healthStatus === 'ok' ? 'API Online' : healthStatus === 'error' ? 'API Error' : 'Comprobando…'}
+                  {healthStatus === 'ok' ? t('apiStatus.connected') : healthStatus === 'error' ? t('apiStatus.disconnected') : t('dashboard.checkingSession')}
                 </div>
                 <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>pred.gg pipeline</div>
               </div>
@@ -265,7 +268,7 @@ export default function Dashboard() {
                   <div style={{ fontFamily: 'var(--font-mono)', fontSize: '1.3rem', fontWeight: 700, color: feedbackCount ? 'var(--accent-loss)' : 'var(--text-muted)' }}>
                     {feedbackCount ?? '—'}
                   </div>
-                  <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>Feedbacks nuevos</div>
+                  <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>{t('dashboard.recentMatches')}</div>
                 </div>
               </div>
             </Link>
@@ -275,7 +278,7 @@ export default function Dashboard() {
               <Users size={20} style={{ color: 'var(--accent-blue)', flexShrink: 0 }} />
               <div>
                 <div style={{ fontFamily: 'var(--font-mono)', fontSize: '1.3rem', fontWeight: 700, color: 'var(--text-primary)' }}>{userCount ?? '—'}</div>
-                <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>Usuarios registrados</div>
+                <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>{t('users.title')}</div>
               </div>
             </div>
 
@@ -284,7 +287,7 @@ export default function Dashboard() {
               <Zap size={20} style={{ color: 'var(--accent-violet)', flexShrink: 0 }} />
               <div>
                 <div style={{ fontFamily: 'var(--font-mono)', fontSize: '1.3rem', fontWeight: 700, color: 'var(--text-primary)' }}>{latestPatch ? `v${latestPatch.name}` : '—'}</div>
-                <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>Parche activo</div>
+                <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>{t('dataQuality.syncStatus')}</div>
               </div>
             </div>
           </div>
@@ -312,10 +315,10 @@ export default function Dashboard() {
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '0.75rem' }}>
-            <QuickLink to="/admin/feedback" icon={<MessageSquare size={16} />} label="Feedback" description="Ver reportes de usuarios" color="var(--accent-loss)" />
-            <QuickLink to="/admin/users" icon={<Users size={16} />} label="Usuarios" description="Gestionar cuentas y roles" color="var(--accent-blue)" />
-            <QuickLink to="/admin/data-quality" icon={<Server size={16} />} label="Data Quality" description="Sync y estado del sistema" color="var(--accent-teal-bright)" />
-            <QuickLink to="/admin/config" icon={<Zap size={16} />} label="Configuración" description="Umbrales y reglas de display" color="var(--accent-violet)" />
+            <QuickLink to="/admin/feedback" icon={<MessageSquare size={16} />} label={t('nav.feedback')} description={t('dashboard.reviewMatchesDesc')} color="var(--accent-loss)" />
+            <QuickLink to="/admin/users" icon={<Users size={16} />} label={t('nav.users')} description={t('users.description')} color="var(--accent-blue)" />
+            <QuickLink to="/admin/data-quality" icon={<Server size={16} />} label={t('nav.dataQuality')} description={t('dataQuality.syncStatus')} color="var(--accent-teal-bright)" />
+            <QuickLink to="/admin/config" icon={<Zap size={16} />} label={t('nav.config')} description={t('config.thresholds')} color="var(--accent-violet)" />
           </div>
         </>
       )}
@@ -328,7 +331,7 @@ export default function Dashboard() {
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.85rem' }}>
               <TrendingUp size={14} style={{ color: 'var(--accent-teal-bright)' }} />
               <span style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-                {ownTeam.name} — Forma reciente
+                {ownTeam.name} — {t('dashboard.teamForm')}
               </span>
             </div>
             <TeamFormStrip analysis={ownAnalysis} />
@@ -342,14 +345,14 @@ export default function Dashboard() {
                   <div style={{ fontFamily: 'var(--font-mono)', fontSize: '1.5rem', fontWeight: 700, color: ownAnalysis ? (ownAnalysis.teamWins / (ownAnalysis.teamWins + ownAnalysis.teamLosses) >= 0.5 ? 'var(--accent-win)' : 'var(--accent-loss)') : 'var(--text-muted)' }}>
                     {ownAnalysis ? `${Math.round((ownAnalysis.teamWins / (ownAnalysis.teamWins + ownAnalysis.teamLosses || 1)) * 100)}%` : '—'}
                   </div>
-                  <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Win Rate</div>
+                  <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>{t('dashboard.winRate')}</div>
                 </div>
                 {ownAnalysis && <SideWRChips matches={ownAnalysis.teamMatches} />}
                 {reviewCount !== null && (
                   <Link to="/tools/review" style={{ textDecoration: 'none' }}>
                     <div className="glass-card" style={{ textAlign: 'center', padding: '1rem', cursor: 'pointer' }}>
                       <div style={{ fontFamily: 'var(--font-mono)', fontSize: '1.5rem', fontWeight: 700, color: reviewCount > 0 ? 'var(--accent-prime)' : 'var(--text-muted)' }}>{reviewCount}</div>
-                      <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Revisiones pendientes</div>
+                      <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>{t('reviewQueue.pendingReview')}</div>
                     </div>
                   </Link>
                 )}
@@ -357,14 +360,14 @@ export default function Dashboard() {
                   <div style={{ fontFamily: 'var(--font-mono)', fontSize: '1.5rem', fontWeight: 700, color: 'var(--text-primary)' }}>
                     {ownAnalysis ? ownAnalysis.teamWins + ownAnalysis.teamLosses : '—'}
                   </div>
-                  <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Partidas jugadas</div>
+                  <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>{t('dashboard.matches')}</div>
                 </div>
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '0.75rem' }}>
-                <QuickLink to={`/analysis/teams?team=${ownTeam.id}`} icon={<BarChart2 size={16} />} label="Team Analysis" description="Rendimiento, visión y objetivos" color="var(--accent-teal-bright)" />
-                <QuickLink to="/reports/scrim" icon={<Target size={16} />} label="Scrim Report" description="Inteligencia pre-partido" color="var(--accent-loss)" />
-                <QuickLink to="/tools/review" icon={<BookOpen size={16} />} label="Review Queue" description="Revisión de partidas pendientes" color="var(--accent-prime)" />
-                <QuickLink to="/management/staff" icon={<Users size={16} />} label="Staff" description="Gestión de equipo e invitaciones" color="var(--accent-blue)" />
+                <QuickLink to={`/analysis/teams?team=${ownTeam.id}`} icon={<BarChart2 size={16} />} label={t('teamAnalysis.title')} description={t('dashboard.teamAnalysisDesc')} color="var(--accent-teal-bright)" />
+                <QuickLink to="/reports/scrim" icon={<Target size={16} />} label={t('scrimReport.title')} description={t('dashboard.rivalScoutingDesc')} color="var(--accent-loss)" />
+                <QuickLink to="/tools/review" icon={<BookOpen size={16} />} label={t('reviewQueue.title')} description={t('dashboard.reviewMatchesDesc')} color="var(--accent-prime)" />
+                <QuickLink to="/management/staff" icon={<Users size={16} />} label={t('nav.staffInvitations')} description={t('staffManagement.description')} color="var(--accent-blue)" />
               </div>
             </>
           )}
@@ -377,21 +380,21 @@ export default function Dashboard() {
                   <div style={{ fontFamily: 'var(--font-mono)', fontSize: '1.5rem', fontWeight: 700, color: ownAnalysis ? (ownAnalysis.teamWins / (ownAnalysis.teamWins + ownAnalysis.teamLosses || 1) >= 0.5 ? 'var(--accent-win)' : 'var(--accent-loss)') : 'var(--text-muted)' }}>
                     {ownAnalysis ? `${Math.round((ownAnalysis.teamWins / (ownAnalysis.teamWins + ownAnalysis.teamLosses || 1)) * 100)}%` : '—'}
                   </div>
-                  <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Win Rate</div>
+                  <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>{t('dashboard.winRate')}</div>
                 </div>
                 {ownAnalysis && <SideWRChips matches={ownAnalysis.teamMatches} />}
                 {reviewCount !== null && (
                   <Link to="/tools/review" style={{ textDecoration: 'none' }}>
                     <div className="glass-card" style={{ textAlign: 'center', padding: '1rem', cursor: 'pointer', borderLeft: `3px solid ${reviewCount > 0 ? 'var(--accent-prime)' : 'var(--border-color)'}` }}>
                       <div style={{ fontFamily: 'var(--font-mono)', fontSize: '1.5rem', fontWeight: 700, color: reviewCount > 0 ? 'var(--accent-prime)' : 'var(--text-muted)' }}>{reviewCount}</div>
-                      <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Revisiones pendientes</div>
+                      <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>{t('reviewQueue.pendingReview')}</div>
                     </div>
                   </Link>
                 )}
               </div>
               {coachInsights.length > 0 && (
                 <div className="glass-card" style={{ padding: '0.9rem 1.1rem' }}>
-                  <div style={{ fontSize: '0.68rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '0.6rem' }}>Alertas del equipo</div>
+                  <div style={{ fontSize: '0.68rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '0.6rem' }}>{t('dashboard.teamForm')}</div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '0.45rem' }}>
                     {coachInsights.slice(0, 3).map((ins) => (
                       <div key={ins.id} style={{ display: 'flex', alignItems: 'flex-start', gap: '0.5rem' }}>
@@ -405,10 +408,10 @@ export default function Dashboard() {
                 </div>
               )}
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '0.75rem' }}>
-                <QuickLink to="/tools/review" icon={<BookOpen size={16} />} label="Review Queue" description={reviewCount ? `${reviewCount} items pendientes` : 'Gestión de revisiones'} color="var(--accent-prime)" />
-                <QuickLink to={`/analysis/teams?team=${ownTeam.id}&tab=draft`} icon={<BarChart2 size={16} />} label="Team Analysis" description="Análisis de rendimiento y draft" color="var(--accent-teal-bright)" />
-                <QuickLink to="/reports/scrim" icon={<Target size={16} />} label="Scrim Report" description="Preparación pre-partido" color="var(--accent-loss)" />
-                <QuickLink to="/analysis/players" icon={<Users size={16} />} label="Player Scouting" description="Análisis individual de jugadores" color="var(--accent-blue)" />
+                <QuickLink to="/tools/review" icon={<BookOpen size={16} />} label={t('reviewQueue.title')} description={reviewCount ? `${reviewCount} ${t('reviewQueue.pendingReview')}` : t('dashboard.reviewMatchesDesc')} color="var(--accent-prime)" />
+                <QuickLink to={`/analysis/teams?team=${ownTeam.id}&tab=draft`} icon={<BarChart2 size={16} />} label={t('teamAnalysis.title')} description={t('dashboard.teamAnalysisDesc')} color="var(--accent-teal-bright)" />
+                <QuickLink to="/reports/scrim" icon={<Target size={16} />} label={t('scrimReport.title')} description={t('dashboard.rivalScoutingDesc')} color="var(--accent-loss)" />
+                <QuickLink to="/analysis/players" icon={<Users size={16} />} label={t('playerScouting.title')} description={t('dashboard.scoutPlayerDesc')} color="var(--accent-blue)" />
               </div>
             </>
           )}
@@ -417,17 +420,17 @@ export default function Dashboard() {
           {isAnalista && (
             <>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '0.75rem' }}>
-                <QuickLink to={`/analysis/teams?team=${ownTeam.id}`} icon={<BarChart2 size={16} />} label="Team Analysis" description="Phase, visión, objetivos, draft" color="var(--accent-teal-bright)" />
-                <QuickLink to="/analysis/rival" icon={<Shield size={16} />} label="Rival Scouting" description="Identidad y amenazas del rival" color="var(--accent-loss)" />
-                <QuickLink to="/reports/scrim" icon={<Target size={16} />} label="Scrim Report" description="Inteligencia competitiva" color="var(--accent-prime)" />
-                <QuickLink to="/analysis/players" icon={<Users size={16} />} label="Player Scouting" description="Perfil individual de jugadores" color="var(--accent-blue)" />
-                <QuickLink to="/matches" icon={<BookOpen size={16} />} label="Matches" description="Historial de partidas" color="var(--accent-violet)" />
+                <QuickLink to={`/analysis/teams?team=${ownTeam.id}`} icon={<BarChart2 size={16} />} label={t('teamAnalysis.title')} description={t('dashboard.teamAnalysisDesc')} color="var(--accent-teal-bright)" />
+                <QuickLink to="/analysis/rival" icon={<Shield size={16} />} label={t('rivalScouting.title')} description={t('dashboard.rivalScoutingDesc')} color="var(--accent-loss)" />
+                <QuickLink to="/reports/scrim" icon={<Target size={16} />} label={t('scrimReport.title')} description={t('dashboard.rivalScoutingDesc')} color="var(--accent-prime)" />
+                <QuickLink to="/analysis/players" icon={<Users size={16} />} label={t('playerScouting.title')} description={t('dashboard.scoutPlayerDesc')} color="var(--accent-blue)" />
+                <QuickLink to="/matches" icon={<BookOpen size={16} />} label={t('nav.matches')} description={t('dashboard.recentMatches')} color="var(--accent-violet)" />
               </div>
               {/* Data status */}
               <div className="glass-card" style={{ padding: '0.9rem 1.1rem', display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
                 <Server size={14} style={{ color: healthStatus === 'ok' ? 'var(--accent-win)' : 'var(--text-muted)', flexShrink: 0 }} />
                 <span style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>
-                  {healthStatus === 'ok' ? 'API pred.gg activa' : 'API no disponible'}{latestPatch ? ` · Parche v${latestPatch.name}` : ''}
+                  {healthStatus === 'ok' ? t('apiStatus.connected') : t('apiStatus.disconnected')}{latestPatch ? ` · ${t('common.patch', { name: latestPatch.name })}` : ''}
                 </span>
               </div>
             </>
@@ -442,7 +445,7 @@ export default function Dashboard() {
 
                   {/* Recent matches strip */}
                   <div className="glass-card" style={{ padding: '1rem 1.25rem' }}>
-                    <div style={{ fontSize: '0.68rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '0.75rem' }}>Últimas 5 partidas</div>
+                    <div style={{ fontSize: '0.68rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '0.75rem' }}>{t('dashboard.recentMatches')}</div>
                     <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
                       {playerProfile.recentMatches.slice(0, 5).map((m, i) => (
                         <div key={i} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.25rem' }}>
@@ -461,16 +464,16 @@ export default function Dashboard() {
                 </>
               ) : (
                 <div className="glass-card" style={{ padding: '1.25rem', color: 'var(--text-muted)', fontSize: '0.85rem' }}>
-                  No hay datos de jugador vinculados a tu cuenta. Contacta al manager del equipo.
+                  {t('dashboard.noTeamDesc')}
                 </div>
               )}
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '0.75rem' }}>
                 {ownMembership?.playerId && (
-                  <QuickLink to="/analysis/players" state={{ autoLoadPlayerId: ownMembership.playerId }} icon={<Users size={16} />} label="Mi perfil en el juego" description="Stats, héroes, evolución de forma" color="var(--accent-teal-bright)" />
+                  <QuickLink to="/analysis/players" state={{ autoLoadPlayerId: ownMembership.playerId }} icon={<Users size={16} />} label={t('playerScouting.title')} description={t('dashboard.scoutPlayerDesc')} color="var(--accent-teal-bright)" />
                 )}
-                <QuickLink to="/tools/review" icon={<Star size={16} />} label="Mis objetivos" description="Player Goals del equipo" color="var(--accent-prime)" />
+                <QuickLink to="/tools/review" icon={<Star size={16} />} label={t('reviewQueue.title')} description={t('dashboard.reviewMatchesDesc')} color="var(--accent-prime)" />
                 {ownMembership?.playerId && (
-                  <QuickLink to="/analysis/players" state={{ autoLoadPlayerId: ownMembership.playerId }} icon={<BookOpen size={16} />} label="Mis partidas" description="Historial completo de partidas" color="var(--accent-violet)" />
+                  <QuickLink to="/analysis/players" state={{ autoLoadPlayerId: ownMembership.playerId }} icon={<BookOpen size={16} />} label={t('nav.matches')} description={t('dashboard.recentMatches')} color="var(--accent-violet)" />
                 )}
               </div>
             </>
@@ -479,8 +482,8 @@ export default function Dashboard() {
           {/* ── VIEWER / no team role ── */}
           {!isManager && !isCoach && !isAnalista && !isJugador && (
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '0.75rem' }}>
-              <QuickLink to={`/analysis/teams?team=${ownTeam.id}`} icon={<BarChart2 size={16} />} label="Team Analysis" description="Rendimiento del equipo" color="var(--accent-teal-bright)" />
-              <QuickLink to="/analysis/players" icon={<Users size={16} />} label="Player Scouting" description="Análisis de jugadores" color="var(--accent-blue)" />
+              <QuickLink to={`/analysis/teams?team=${ownTeam.id}`} icon={<BarChart2 size={16} />} label={t('teamAnalysis.title')} description={t('dashboard.teamAnalysisDesc')} color="var(--accent-teal-bright)" />
+              <QuickLink to="/analysis/players" icon={<Users size={16} />} label={t('playerScouting.title')} description={t('dashboard.scoutPlayerDesc')} color="var(--accent-blue)" />
             </div>
           )}
 
@@ -499,6 +502,7 @@ export default function Dashboard() {
 
 // ── Side WR chips (DUSK / DAWN) ──────────────────────────────────────────────
 function SideWRChips({ matches }: { matches: { teamSide: string; won: boolean | null }[] }) {
+  const { t } = useTranslation();
   const dusk = matches.filter((m) => m.teamSide === 'DUSK');
   const dawn = matches.filter((m) => m.teamSide === 'DAWN');
   const duskWR = dusk.length > 0 ? Math.round((dusk.filter((m) => m.won).length / dusk.length) * 100) : null;
@@ -518,13 +522,14 @@ function SideWRChips({ matches }: { matches: { teamSide: string; won: boolean | 
           <span style={{ fontFamily: 'var(--font-mono)', fontSize: '1rem', fontWeight: 700, color: dawnWR >= 50 ? 'var(--accent-win)' : 'var(--accent-loss)' }}>{dawnWR}%</span>
         </div>
       )}
-      <div style={{ fontSize: '0.58rem', color: 'var(--text-muted)', marginTop: '0.1rem' }}>WR por bando</div>
+      <div style={{ fontSize: '0.58rem', color: 'var(--text-muted)', marginTop: '0.1rem' }}>{t('dashboard.winRate')}</div>
     </div>
   );
 }
 
 // ── Player stat summary (JUGADOR dashboard) ──────────────────────────────────
 function PlayerStatSummary({ profile }: { profile: PlayerProfile }) {
+  const { t } = useTranslation();
   const matches = profile.recentMatches.filter((m) => m.duration > 0);
   const avg = (vals: number[]) => vals.length > 0 ? vals.reduce((s, v) => s + v, 0) / vals.length : null;
 
@@ -536,9 +541,9 @@ function PlayerStatSummary({ profile }: { profile: PlayerProfile }) {
   const kda = profile.generalStats?.kda as number | undefined;
 
   const chips = [
-    { label: 'Win Rate', value: wr != null ? `${Math.round(wr)}%` : '—', color: wr != null && wr >= 50 ? 'var(--accent-win)' : wr != null ? 'var(--accent-loss)' : 'var(--text-muted)' },
-    { label: 'KDA', value: kda != null ? kda.toFixed(2) : '—', color: 'var(--accent-teal-bright)' },
-    { label: 'CS/min', value: csPerMin != null ? csPerMin.toFixed(1) : '—', color: 'var(--text-primary)' },
+    { label: t('dashboard.winRate'), value: wr != null ? `${Math.round(wr)}%` : '—', color: wr != null && wr >= 50 ? 'var(--accent-win)' : wr != null ? 'var(--accent-loss)' : 'var(--text-muted)' },
+    { label: t('playerScouting.kda'), value: kda != null ? kda.toFixed(2) : '—', color: 'var(--accent-teal-bright)' },
+    { label: t('playerScouting.cs'), value: csPerMin != null ? csPerMin.toFixed(1) : '—', color: 'var(--text-primary)' },
     { label: 'GPM', value: gpm != null ? Math.round(gpm).toString() : '—', color: 'var(--text-primary)' },
     { label: 'DPM', value: dpm != null ? Math.round(dpm).toString() : '—', color: 'var(--accent-blue)' },
   ];
@@ -557,6 +562,7 @@ function PlayerStatSummary({ profile }: { profile: PlayerProfile }) {
 
 // ── Player hero pool top 3 (JUGADOR dashboard) ────────────────────────────────
 function PlayerHeroPool({ heroStats }: { heroStats: HeroStat[] }) {
+  const { t } = useTranslation();
   const top3 = [...heroStats]
     .filter((h) => (h.matches ?? h.wins + h.losses) >= 3)
     .sort((a, b) => (b.matches ?? b.wins + b.losses) - (a.matches ?? a.wins + a.losses))
@@ -564,7 +570,7 @@ function PlayerHeroPool({ heroStats }: { heroStats: HeroStat[] }) {
   if (top3.length === 0) return null;
   return (
     <div className="glass-card" style={{ padding: '1rem 1.25rem' }}>
-      <div style={{ fontSize: '0.68rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '0.75rem' }}>Mi hero pool</div>
+      <div style={{ fontSize: '0.68rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '0.75rem' }}>{t('playerScouting.heroPool')}</div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
         {top3.map((h) => {
           const games = h.matches ?? h.wins + h.losses;
@@ -586,6 +592,7 @@ function PlayerHeroPool({ heroStats }: { heroStats: HeroStat[] }) {
 
 // ── Focus of the Day (stub — Próximamente) ────────────────────────────────────
 function FocusOfTheDay({ teamId: _teamId }: { teamId: string }) {
+  const { t } = useTranslation();
   const { internalAuthenticated } = useAuth();
   if (!internalAuthenticated) return null;
 
@@ -594,17 +601,17 @@ function FocusOfTheDay({ teamId: _teamId }: { teamId: string }) {
       <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
         <Sparkles size={15} style={{ color: 'var(--accent-violet)', flexShrink: 0 }} />
         <span style={{ fontWeight: 700, fontSize: '0.88rem', color: 'var(--text-primary)' }}>Focus of the Day</span>
-        <div style={{ marginLeft: 'auto', position: 'relative' }} title="Esta funcionalidad estará disponible próximamente">
+        <div style={{ marginLeft: 'auto', position: 'relative' }} title={t('comingSoon.description')}>
           <button disabled className="btn-secondary" style={{ fontSize: '0.72rem', padding: '0.25rem 0.65rem', opacity: 0.45, cursor: 'not-allowed' }}>
-            Analizar
+            {t('dashboard.syncMatches')}
           </button>
           <span style={{ position: 'absolute', bottom: 'calc(100% + 6px)', right: 0, whiteSpace: 'nowrap', fontSize: '0.62rem', fontWeight: 600, color: 'var(--accent-prime)', background: 'var(--bg-card)', border: '1px solid var(--border-color)', borderRadius: 4, padding: '2px 6px', pointerEvents: 'none' }}>
-            Próximamente
+            {t('comingSoon.title')}
           </span>
         </div>
       </div>
       <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', margin: '0.5rem 0 0' }}>
-        Análisis prescriptivo generado por IA a partir de los indicadores del equipo.
+        {t('comingSoon.description')}
       </p>
     </div>
   );
@@ -618,6 +625,7 @@ export { PlayerSyncWidget };
 
 // ── Standalone Player view (PLAYER globalRole, no team) ───────────────────────
 function PlayerStandaloneView() {
+  const { t } = useTranslation();
   const { user, refreshInternalSession } = useAuth();
   const linkedId = (user as { linkedPlayerId?: string | null })?.linkedPlayerId;
 
@@ -649,17 +657,17 @@ function PlayerStandaloneView() {
         <div className="glass-card" style={{ textAlign: 'center', padding: '2.5rem' }}>
           <Users size={36} style={{ margin: '0 auto 0.85rem', opacity: 0.3, color: 'var(--accent-teal-bright)' }} />
           <p style={{ fontSize: '0.92rem', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '0.4rem' }}>
-            Vincula tu perfil de jugador
+            {t('linkPlayerModal.title')}
           </p>
           <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginBottom: '1.25rem', lineHeight: 1.6 }}>
-            Para ver tus estadísticas de Predecessor, busca tu nombre de jugador y vincúlalo a tu cuenta.
+            {t('linkPlayerModal.description')}
           </p>
           <button
             onClick={() => setShowLinkModal(true)}
             className="btn-primary"
             style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.88rem', padding: '0.55rem 1.25rem' }}
           >
-            Buscar mi perfil en Predecessor
+            {t('matchList.searchProfile')}
           </button>
         </div>
         {showLinkModal && (
@@ -672,7 +680,7 @@ function PlayerStandaloneView() {
     );
   }
 
-  if (loading) return <div style={{ padding: '2rem', color: 'var(--text-muted)', textAlign: 'center' }}>Cargando tu perfil…</div>;
+  if (loading) return <div style={{ padding: '2rem', color: 'var(--text-muted)', textAlign: 'center' }}>{t('common.loading')}</div>;
 
   if (!profile) return null;
 
@@ -684,9 +692,9 @@ function PlayerStandaloneView() {
       {/* Stats */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '1rem' }}>
         {[
-          { label: 'KDA', value: kda ?? '—', color: 'var(--accent-teal-bright)' },
-          { label: 'Win Rate', value: wr ? `${wr}%` : '—', color: wr && wr >= 50 ? 'var(--accent-win)' : 'var(--accent-loss)' },
-          { label: 'Partidas', value: profile.recentMatches.length, color: 'var(--text-primary)' },
+          { label: t('playerScouting.kda'), value: kda ?? '—', color: 'var(--accent-teal-bright)' },
+          { label: t('dashboard.winRate'), value: wr ? `${wr}%` : '—', color: wr && wr >= 50 ? 'var(--accent-win)' : 'var(--accent-loss)' },
+          { label: t('dashboard.matches'), value: profile.recentMatches.length, color: 'var(--text-primary)' },
           ...(profile.heroStats[0] ? [{ label: 'Main Hero', value: profile.heroStats[0].heroData?.name ?? profile.heroStats[0].heroData?.slug ?? '—', color: 'var(--accent-blue)' }] : []),
         ].map(({ label, value, color }) => (
           <div key={label} className="glass-card" style={{ textAlign: 'center', padding: '1rem' }}>
@@ -699,7 +707,7 @@ function PlayerStandaloneView() {
       {/* Last 5 matches */}
       {profile.recentMatches.length > 0 && (
         <div className="glass-card" style={{ padding: '1rem 1.25rem' }}>
-          <div style={{ fontSize: '0.68rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '0.75rem' }}>Últimas partidas</div>
+          <div style={{ fontSize: '0.68rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '0.75rem' }}>{t('dashboard.recentMatches')}</div>
           <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
             {profile.recentMatches.slice(0, 8).map((m, i) => (
               <div key={i} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.25rem' }}>
@@ -719,8 +727,8 @@ function PlayerStandaloneView() {
           <div className="glass-card landing-feature-card" style={{ display: 'flex', alignItems: 'center', gap: '0.85rem', padding: '0.9rem 1.1rem', cursor: 'pointer', borderLeft: '3px solid var(--accent-teal-bright)' }}>
             <Users size={18} style={{ color: 'var(--accent-teal-bright)', flexShrink: 0 }} />
             <div>
-              <div style={{ fontWeight: 700, fontSize: '0.85rem', color: 'var(--text-primary)' }}>Mi perfil completo</div>
-              <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '0.1rem' }}>Stats, héroes, evolución</div>
+              <div style={{ fontWeight: 700, fontSize: '0.85rem', color: 'var(--text-primary)' }}>{t('playerScouting.title')}</div>
+              <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '0.1rem' }}>{t('dashboard.scoutPlayerDesc')}</div>
             </div>
             <ArrowRight size={14} style={{ color: 'var(--text-muted)', marginLeft: 'auto', flexShrink: 0 }} />
           </div>
@@ -729,8 +737,8 @@ function PlayerStandaloneView() {
           <div className="glass-card landing-feature-card" style={{ display: 'flex', alignItems: 'center', gap: '0.85rem', padding: '0.9rem 1.1rem', cursor: 'pointer', borderLeft: '3px solid var(--accent-violet)' }}>
             <BookOpen size={18} style={{ color: 'var(--accent-violet)', flexShrink: 0 }} />
             <div>
-              <div style={{ fontWeight: 700, fontSize: '0.85rem', color: 'var(--text-primary)' }}>Mis partidas</div>
-              <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '0.1rem' }}>Historial completo</div>
+              <div style={{ fontWeight: 700, fontSize: '0.85rem', color: 'var(--text-primary)' }}>{t('nav.matches')}</div>
+              <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '0.1rem' }}>{t('dashboard.recentMatches')}</div>
             </div>
             <ArrowRight size={14} style={{ color: 'var(--text-muted)', marginLeft: 'auto', flexShrink: 0 }} />
           </div>

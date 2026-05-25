@@ -427,6 +427,8 @@ model User {
   /// Links to a Player record — enables personal match feed and player goals.
   /// Set via profile page or automatically during pred.gg OAuth login.
   linkedPlayerId      String?          @unique
+  /// "en" | "es" — UI language preference
+  language            String           @default("en")
   /// "FREE" | "PRO" | "PREMIUM"
   playerTier          String           @default("FREE")
   playerTierExpiresAt DateTime?

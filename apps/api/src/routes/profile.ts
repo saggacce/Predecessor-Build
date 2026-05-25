@@ -11,7 +11,7 @@ profileRouter.use(requireAuth);
 const SAFE_USER_SELECT = {
   id: true, email: true, name: true, globalRole: true, isActive: true,
   createdAt: true, lastLoginAt: true,
-  avatarUrl: true, bio: true, timezone: true,
+  avatarUrl: true, bio: true, timezone: true, language: true,
   playerTier: true, playerTierExpiresAt: true,
   discordId: true, discordUsername: true,
   epicGamesId: true, epicGamesUsername: true,
@@ -48,6 +48,7 @@ profileRouter.patch('/', async (req, res, next) => {
       bio: z.string().max(300).optional().nullable(),
       avatarUrl: z.string().url().max(500).optional().nullable(),
       timezone: z.string().max(60).optional().nullable(),
+      language: z.enum(['en', 'es']).optional(),
     }).parse(req.body);
 
     const user = await db.user.update({

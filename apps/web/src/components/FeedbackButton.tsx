@@ -1,6 +1,7 @@
 import { useState, useRef } from 'react';
 import { MessageSquarePlus, X, Upload, Bug, Lightbulb, Zap, Send } from 'lucide-react';
 import { toast } from 'sonner';
+import { useTranslation } from 'react-i18next';
 import { apiClient } from '../api/client';
 
 const APP_SECTIONS = [
@@ -9,13 +10,14 @@ const APP_SECTIONS = [
   'VOD Index', 'Staff Management', 'Platform Admin', 'Profile', 'Otro',
 ];
 
-const TYPE_CONFIG = {
-  bug:         { label: 'Bug / Error',    icon: <Bug size={14} />,       color: 'var(--accent-loss)',        bg: 'rgba(248,113,113,0.12)' },
-  suggestion:  { label: 'Sugerencia',     icon: <Lightbulb size={14} />, color: 'var(--accent-prime)',       bg: 'rgba(240,180,41,0.12)' },
-  improvement: { label: 'Mejora',         icon: <Zap size={14} />,       color: 'var(--accent-blue)',        bg: 'rgba(91,156,246,0.12)' },
-} as const;
-
 export function FeedbackButton() {
+  const { t } = useTranslation();
+
+  const TYPE_CONFIG = {
+    bug:         { label: t('feedbackButton.typeBug'),         icon: <Bug size={14} />,       color: 'var(--accent-loss)',        bg: 'rgba(248,113,113,0.12)' },
+    suggestion:  { label: t('feedbackButton.typeSuggestion'),  icon: <Lightbulb size={14} />, color: 'var(--accent-prime)',       bg: 'rgba(240,180,41,0.12)' },
+    improvement: { label: t('feedbackButton.typeImprovement'), icon: <Zap size={14} />,       color: 'var(--accent-blue)',        bg: 'rgba(91,156,246,0.12)' },
+  } as const;
   const [open, setOpen] = useState(false);
   const [type, setType] = useState<'bug' | 'suggestion' | 'improvement'>('bug');
   const [section, setSection] = useState('');
@@ -27,7 +29,7 @@ export function FeedbackButton() {
   function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (file.size > 2_000_000) { toast.error('La imagen no puede superar 2 MB'); return; }
+    if (file.size > 2_000_000) { toast.error(t('feedbackButton.screenshotLabel')); return; }
     const reader = new FileReader();
     reader.onload = () => setScreenshot(reader.result as string);
     reader.readAsDataURL(file);
@@ -42,14 +44,14 @@ export function FeedbackButton() {
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
-    if (!section) { toast.error('Selecciona la sección'); return; }
-    if (description.trim().length < 10) { toast.error('Descripción demasiado corta (mín. 10 caracteres)'); return; }
+    if (!section) { toast.error(t('feedbackButton.sectionLabel')); return; }
+    if (description.trim().length < 10) { toast.error(t('feedbackButton.descriptionLabel')); return; }
     setSending(true);
     try {
       await apiClient.feedback.submit({ type, section, description: description.trim(), screenshotBase64: screenshot });
-      toast.success('¡Gracias! Tu reporte ha sido enviado.');
+      toast.success(t('feedbackButton.submitButton'));
       close();
-    } catch { toast.error('Error al enviar — inténtalo de nuevo'); }
+    } catch { toast.error(t('common.error')); }
     finally { setSending(false); }
   }
 
@@ -58,7 +60,7 @@ export function FeedbackButton() {
       {/* Floating button */}
       <button
         onClick={() => setOpen(true)}
-        title="Reportar un problema o enviar sugerencia"
+        title={t('feedbackButton.title')}
         style={{
           position: 'fixed', bottom: '1.5rem', right: '1.5rem', zIndex: 900,
           width: 44, height: 44, borderRadius: '50%',
@@ -85,16 +87,16 @@ export function FeedbackButton() {
             </button>
 
             <h2 style={{ margin: '0 0 0.25rem', fontSize: '1rem', fontWeight: 800, color: 'var(--text-primary)' }}>
-              Reportar problema / Enviar sugerencia
+              {t('feedbackButton.title')}
             </h2>
             <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', margin: '0 0 1.25rem' }}>
-              Tu reporte llega directamente al equipo de administración de Rift Line.
+              {t('feedbackButton.title')}
             </p>
 
             <form onSubmit={submit} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
               {/* Type selector */}
               <div>
-                <label style={{ fontSize: '0.72rem', color: 'var(--text-muted)', display: 'block', marginBottom: '0.45rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Tipo</label>
+                <label style={{ fontSize: '0.72rem', color: 'var(--text-muted)', display: 'block', marginBottom: '0.45rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{t('feedbackButton.typeLabel')}</label>
                 <div style={{ display: 'flex', gap: '0.5rem' }}>
                   {(Object.entries(TYPE_CONFIG) as [keyof typeof TYPE_CONFIG, typeof TYPE_CONFIG[keyof typeof TYPE_CONFIG]][]).map(([key, cfg]) => (
                     <button
@@ -118,7 +120,7 @@ export function FeedbackButton() {
               {/* Section */}
               <div>
                 <label style={{ fontSize: '0.72rem', color: 'var(--text-muted)', display: 'block', marginBottom: '0.35rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                  Sección de la app
+                  {t('feedbackButton.sectionLabel')}
                 </label>
                 <select
                   value={section}
@@ -126,7 +128,7 @@ export function FeedbackButton() {
                   required
                   style={{ width: '100%', padding: '0.45rem 0.7rem', background: 'var(--bg-dark)', border: '1px solid var(--border-color)', borderRadius: 6, color: section ? 'var(--text-primary)' : 'var(--text-muted)', fontSize: '0.85rem' }}
                 >
-                  <option value="">Selecciona una sección…</option>
+                  <option value="">{t('feedbackButton.sectionLabel')}…</option>
                   {APP_SECTIONS.map((s) => <option key={s} value={s}>{s}</option>)}
                 </select>
               </div>
@@ -134,7 +136,7 @@ export function FeedbackButton() {
               {/* Description */}
               <div>
                 <label style={{ fontSize: '0.72rem', color: 'var(--text-muted)', display: 'block', marginBottom: '0.35rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                  Descripción <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>({description.length}/2000)</span>
+                  {t('feedbackButton.descriptionLabel')} <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>({description.length}/2000)</span>
                 </label>
                 <textarea
                   value={description}
@@ -142,10 +144,10 @@ export function FeedbackButton() {
                   required minLength={10} maxLength={2000} rows={4}
                   placeholder={
                     type === 'bug'
-                      ? 'Describe el error: qué estabas haciendo, qué ocurrió y qué esperabas que ocurriera…'
+                      ? t('feedbackButton.placeholderBug')
                       : type === 'suggestion'
-                      ? 'Describe tu sugerencia: qué funcionalidad te gustaría ver y por qué…'
-                      : 'Describe qué mejoraría y cómo afectaría a tu flujo de trabajo…'
+                      ? t('feedbackButton.placeholderSuggestion')
+                      : t('feedbackButton.placeholderImprovement')
                   }
                   style={{ width: '100%', padding: '0.5rem 0.7rem', background: 'var(--bg-dark)', border: '1px solid var(--border-color)', borderRadius: 6, color: 'var(--text-primary)', fontSize: '0.85rem', resize: 'vertical', fontFamily: 'inherit' }}
                 />
@@ -154,7 +156,7 @@ export function FeedbackButton() {
               {/* Screenshot */}
               <div>
                 <label style={{ fontSize: '0.72rem', color: 'var(--text-muted)', display: 'block', marginBottom: '0.35rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                  Pantallazo <span style={{ fontWeight: 400 }}>(opcional, máx. 2 MB)</span>
+                  {t('feedbackButton.screenshotLabel')}
                 </label>
                 {screenshot ? (
                   <div style={{ position: 'relative', borderRadius: 6, overflow: 'hidden', border: '1px solid var(--border-color)', maxHeight: 140 }}>
@@ -173,7 +175,7 @@ export function FeedbackButton() {
                     onClick={() => fileRef.current?.click()}
                     style={{ width: '100%', padding: '0.65rem', border: '1px dashed var(--border-color)', borderRadius: 6, background: 'transparent', color: 'var(--text-muted)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', fontSize: '0.8rem' }}
                   >
-                    <Upload size={14} /> Subir imagen
+                    <Upload size={14} /> {t('feedbackButton.uploadButton')}
                   </button>
                 )}
                 <input ref={fileRef} type="file" accept="image/*" onChange={handleFile} style={{ display: 'none' }} />
@@ -186,7 +188,7 @@ export function FeedbackButton() {
                 className="btn-primary"
                 style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem', opacity: sending ? 0.7 : 1 }}
               >
-                <Send size={14} /> {sending ? 'Enviando…' : 'Enviar reporte'}
+                <Send size={14} /> {sending ? t('dashboard.syncing') : t('feedbackButton.submitButton')}
               </button>
             </form>
           </div>
