@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Search, UserMinus, ArrowUpDown, Users, Plus, ChevronDown } from 'lucide-react';
+import { Search, UserMinus, ArrowUpDown, Users, Plus, ChevronDown, X, Check } from 'lucide-react';
 import { toast } from 'sonner';
 import { apiClient, ApiErrorResponse, type TeamProfile, type PlayerSearchResult, type TeamRole, type RosterMember, type RosterStatus } from '../api/client';
 import { useAuth } from '../hooks/useAuth';
@@ -13,6 +13,9 @@ const ROLE_COLOR: Record<string, string> = {
   CARRY: 'var(--accent-loss)', JUNGLE: 'var(--accent-win)', MIDLANE: 'var(--accent-blue)',
   OFFLANE: 'var(--accent-prime)', SUPPORT: 'var(--accent-teal-bright)',
 };
+
+// pending swap state: which player is being moved and in which direction
+type PendingSwap = { rosterId: string; direction: 'bench' | 'activate' };
 
 export default function TeamRoster() {
   const { user } = useAuth();
@@ -30,8 +33,12 @@ export default function TeamRoster() {
   const [adding, setAdding] = useState(false);
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Edit state
-  const [toggling, setToggling] = useState<string | null>(null);
+  // Swap state
+  const [pendingSwap, setPendingSwap] = useState<PendingSwap | null>(null);
+  const [swapTargetId, setSwapTargetId] = useState<string>('');
+  const [swapping, setSwapping] = useState(false);
+
+  // Remove state
   const [removing, setRemoving] = useState<string | null>(null);
 
   const isPlatformAdmin = user?.globalRole === 'PLATFORM_ADMIN';
@@ -52,6 +59,7 @@ export default function TeamRoster() {
   useEffect(() => {
     if (!teamId) return;
     setProfile(null);
+    setPendingSwap(null);
     apiClient.teams.getProfile(teamId).then(setProfile).catch(() => null);
   }, [teamId]);
 
@@ -59,6 +67,81 @@ export default function TeamRoster() {
     if (!teamId) return;
     const updated = await apiClient.teams.getProfile(teamId);
     setProfile(updated);
+  }
+
+  function openSwap(member: RosterMember) {
+    setPendingSwap({ rosterId: member.rosterId, direction: member.rosterStatus === 'STARTER' ? 'bench' : 'activate' });
+    setSwapTargetId(''); // 'none' for activate, required for bench
+  }
+
+  function cancelSwap() {
+    setPendingSwap(null);
+    setSwapTargetId('');
+  }
+
+  async function confirmSwap() {
+    if (!profile || !pendingSwap) return;
+    const movingMember = profile.roster.find((m) => m.rosterId === pendingSwap.rosterId);
+    if (!movingMember) return;
+
+    // When benching: swapTargetId is required
+    if (pendingSwap.direction === 'bench' && !swapTargetId) {
+      toast.error('Selecciona el suplente que sube al equipo.');
+      return;
+    }
+
+    setSwapping(true);
+    try {
+      const newStatus: RosterStatus = pendingSwap.direction === 'bench' ? 'BENCH' : 'STARTER';
+      const swapStatus: RosterStatus = pendingSwap.direction === 'bench' ? 'STARTER' : 'BENCH';
+
+      if (swapTargetId) {
+        const swapMember = profile.roster.find((m) => m.rosterId === swapTargetId);
+        // Execute both status changes in parallel
+        await Promise.all([
+          apiClient.teams.updateRoster(teamId, pendingSwap.rosterId, movingMember.role as TeamRole | null, newStatus),
+          apiClient.teams.updateRoster(teamId, swapTargetId, swapMember?.role as TeamRole | null ?? null, swapStatus),
+        ]);
+        const movingName = movingMember.customName ?? movingMember.displayName;
+        const swapName = swapMember ? (swapMember.customName ?? swapMember.displayName) : '';
+        toast.success(`${movingName} ↔ ${swapName}`);
+      } else {
+        // Activate without replacing anyone
+        await apiClient.teams.updateRoster(teamId, pendingSwap.rosterId, movingMember.role as TeamRole | null, newStatus);
+        toast.success(`${movingMember.customName ?? movingMember.displayName} → Titular`);
+      }
+
+      setPendingSwap(null);
+      setSwapTargetId('');
+      await refreshProfile();
+    } catch {
+      toast.error('Error al realizar el cambio.');
+    } finally {
+      setSwapping(false);
+    }
+  }
+
+  async function handleChangeRole(member: RosterMember, role: TeamRole | null) {
+    try {
+      await apiClient.teams.updateRoster(teamId, member.rosterId, role, member.rosterStatus);
+      await refreshProfile();
+    } catch {
+      toast.error('Error al cambiar rol.');
+    }
+  }
+
+  async function handleRemove(member: RosterMember) {
+    setRemoving(member.rosterId);
+    try {
+      await apiClient.teams.removePlayer(teamId, member.rosterId);
+      toast.success(`${member.customName ?? member.displayName} retirado del roster.`);
+      if (pendingSwap?.rosterId === member.rosterId) cancelSwap();
+      await refreshProfile();
+    } catch {
+      toast.error('Error al retirar jugador.');
+    } finally {
+      setRemoving(null);
+    }
   }
 
   function handleSearch(q: string) {
@@ -88,42 +171,6 @@ export default function TeamRoster() {
       toast.error(err instanceof ApiErrorResponse ? err.error.message : 'Error al añadir jugador.');
     } finally {
       setAdding(false);
-    }
-  }
-
-  async function handleToggleStatus(member: RosterMember) {
-    const next: RosterStatus = member.rosterStatus === 'STARTER' ? 'BENCH' : 'STARTER';
-    setToggling(member.rosterId);
-    try {
-      await apiClient.teams.updateRoster(teamId, member.rosterId, member.role as TeamRole | null, next);
-      toast.success(`${member.customName ?? member.displayName} → ${next === 'STARTER' ? 'Titular' : 'Suplente'}`);
-      await refreshProfile();
-    } catch {
-      toast.error('Error al cambiar estado.');
-    } finally {
-      setToggling(null);
-    }
-  }
-
-  async function handleChangeRole(member: RosterMember, role: TeamRole | null) {
-    try {
-      await apiClient.teams.updateRoster(teamId, member.rosterId, role, member.rosterStatus);
-      await refreshProfile();
-    } catch {
-      toast.error('Error al cambiar rol.');
-    }
-  }
-
-  async function handleRemove(member: RosterMember) {
-    setRemoving(member.rosterId);
-    try {
-      await apiClient.teams.removePlayer(teamId, member.rosterId);
-      toast.success(`${member.customName ?? member.displayName} retirado del roster.`);
-      await refreshProfile();
-    } catch {
-      toast.error('Error al retirar jugador.');
-    } finally {
-      setRemoving(null);
     }
   }
 
@@ -182,13 +229,27 @@ export default function TeamRoster() {
                 key={m.rosterId}
                 member={m}
                 canEdit={canEdit}
-                toggling={toggling === m.rosterId}
+                isPending={pendingSwap?.rosterId === m.rosterId}
+                isDisabled={!!pendingSwap && pendingSwap.rosterId !== m.rosterId}
                 removing={removing === m.rosterId}
-                onToggle={() => void handleToggleStatus(m)}
+                onOpenSwap={() => openSwap(m)}
                 onRemove={() => void handleRemove(m)}
                 onChangeRole={(role) => void handleChangeRole(m, role)}
               />
             ))}
+            {/* Swap bar for benching a starter */}
+            {pendingSwap?.direction === 'bench' && starters.some((m) => m.rosterId === pendingSwap.rosterId) && (
+              <SwapBar
+                label="¿Quién sube al equipo?"
+                options={bench}
+                selectedId={swapTargetId}
+                required
+                onSelect={setSwapTargetId}
+                onConfirm={() => void confirmSwap()}
+                onCancel={cancelSwap}
+                loading={swapping}
+              />
+            )}
           </section>
 
           {/* BENCH */}
@@ -210,13 +271,27 @@ export default function TeamRoster() {
                 key={m.rosterId}
                 member={m}
                 canEdit={canEdit}
-                toggling={toggling === m.rosterId}
+                isPending={pendingSwap?.rosterId === m.rosterId}
+                isDisabled={!!pendingSwap && pendingSwap.rosterId !== m.rosterId}
                 removing={removing === m.rosterId}
-                onToggle={() => void handleToggleStatus(m)}
+                onOpenSwap={() => openSwap(m)}
                 onRemove={() => void handleRemove(m)}
                 onChangeRole={(role) => void handleChangeRole(m, role)}
               />
             ))}
+            {/* Swap bar for activating a bench player */}
+            {pendingSwap?.direction === 'activate' && bench.some((m) => m.rosterId === pendingSwap.rosterId) && (
+              <SwapBar
+                label="¿A quién quieres sentar? (opcional)"
+                options={starters}
+                selectedId={swapTargetId}
+                required={false}
+                onSelect={setSwapTargetId}
+                onConfirm={() => void confirmSwap()}
+                onCancel={cancelSwap}
+                loading={swapping}
+              />
+            )}
           </section>
 
           {/* ADD PLAYER */}
@@ -254,12 +329,7 @@ export default function TeamRoster() {
                   {results.map((p) => (
                     <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.55rem 0.75rem', borderRadius: 6, background: 'var(--bg-hover)' }}>
                       <span style={{ flex: 1, fontSize: '0.84rem', color: 'var(--text-primary)', fontWeight: 600 }}>{p.displayName}</span>
-                      <button
-                        className="btn-primary"
-                        disabled={adding}
-                        onClick={() => void handleAdd(p)}
-                        style={{ fontSize: '0.72rem', padding: '0.3rem 0.85rem' }}
-                      >
+                      <button className="btn-primary" disabled={adding} onClick={() => void handleAdd(p)} style={{ fontSize: '0.72rem', padding: '0.3rem 0.85rem' }}>
                         Añadir
                       </button>
                     </div>
@@ -274,15 +344,65 @@ export default function TeamRoster() {
   );
 }
 
+// ── Swap bar ──────────────────────────────────────────────────────────────────
+function SwapBar({ label, options, selectedId, required, onSelect, onConfirm, onCancel, loading }: {
+  label: string;
+  options: RosterMember[];
+  selectedId: string;
+  required: boolean;
+  onSelect: (id: string) => void;
+  onConfirm: () => void;
+  onCancel: () => void;
+  loading: boolean;
+}) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.8rem 1.1rem', background: 'rgba(107,170,248,0.06)', borderTop: '1px solid rgba(107,170,248,0.18)', flexWrap: 'wrap' }}>
+      <span style={{ fontSize: '0.75rem', color: 'var(--accent-blue)', fontWeight: 700, flexShrink: 0 }}>{label}</span>
+      <select
+        className="input"
+        value={selectedId}
+        onChange={(e) => onSelect(e.target.value)}
+        style={{ minWidth: 160, fontSize: '0.8rem' }}
+        autoFocus
+      >
+        {!required && <option value="">— Ninguno —</option>}
+        {required && <option value="">Seleccionar…</option>}
+        {options.map((m) => (
+          <option key={m.rosterId} value={m.rosterId}>
+            {m.customName ?? m.displayName}{m.role ? ` · ${ROLE_LABEL[m.role.toUpperCase()] ?? m.role}` : ''}
+          </option>
+        ))}
+      </select>
+      <button
+        className="btn-primary"
+        disabled={loading || (required && !selectedId)}
+        onClick={onConfirm}
+        style={{ fontSize: '0.75rem', padding: '0.35rem 0.85rem', display: 'flex', alignItems: 'center', gap: '0.3rem' }}
+      >
+        <Check size={13} /> Confirmar
+      </button>
+      <button
+        className="btn-secondary"
+        disabled={loading}
+        onClick={onCancel}
+        style={{ fontSize: '0.75rem', padding: '0.35rem 0.6rem', display: 'flex', alignItems: 'center', gap: '0.3rem' }}
+      >
+        <X size={13} /> Cancelar
+      </button>
+    </div>
+  );
+}
+
 // ── Player row ────────────────────────────────────────────────────────────────
 function PlayerRow({
-  member, canEdit, toggling, removing, onToggle, onRemove, onChangeRole,
+  member, canEdit, isPending, isDisabled, removing, onOpenSwap, onRemove, onChangeRole,
 }: {
   member: RosterMember;
   canEdit: boolean;
-  toggling: boolean;
+  isPending: boolean;
+  isDisabled: boolean;
   removing: boolean;
-  onToggle: () => void;
+  onOpenSwap: () => void;
   onRemove: () => void;
   onChangeRole: (role: TeamRole | null) => void;
 }) {
@@ -290,11 +410,18 @@ function PlayerRow({
   const isBench = member.rosterStatus === 'BENCH';
 
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.75rem 1.1rem', borderBottom: '1px solid var(--border-color)' }}>
+    <div style={{
+      display: 'flex', alignItems: 'center', gap: '0.75rem',
+      padding: '0.75rem 1.1rem', borderBottom: '1px solid var(--border-color)',
+      opacity: isDisabled ? 0.4 : 1,
+      background: isPending ? 'rgba(107,170,248,0.05)' : 'transparent',
+      transition: 'opacity 0.15s, background 0.15s',
+    }}>
       {/* Role selector */}
       {canEdit ? (
         <select
           value={member.role ?? ''}
+          disabled={isDisabled}
           onChange={(e) => onChangeRole((e.target.value as TeamRole) || null)}
           style={{ fontSize: '0.65rem', fontWeight: 800, padding: '2px 6px', borderRadius: 4, border: `1px solid ${ROLE_COLOR[role] ?? 'var(--border-color)'}44`, background: 'transparent', color: ROLE_COLOR[role] ?? 'var(--text-muted)', fontFamily: 'var(--font-mono)', cursor: 'pointer', minWidth: 70 }}
         >
@@ -304,13 +431,9 @@ function PlayerRow({
           ))}
         </select>
       ) : (
-        role ? (
-          <span style={{ fontSize: '0.65rem', fontWeight: 800, padding: '2px 8px', borderRadius: 4, border: `1px solid ${ROLE_COLOR[role]}44`, color: ROLE_COLOR[role], fontFamily: 'var(--font-mono)', minWidth: 70, textAlign: 'center' }}>
-            {ROLE_LABEL[role]}
-          </span>
-        ) : (
-          <span style={{ minWidth: 70 }} />
-        )
+        role
+          ? <span style={{ fontSize: '0.65rem', fontWeight: 800, padding: '2px 8px', borderRadius: 4, border: `1px solid ${ROLE_COLOR[role]}44`, color: ROLE_COLOR[role], fontFamily: 'var(--font-mono)', minWidth: 70, textAlign: 'center' }}>{ROLE_LABEL[role]}</span>
+          : <span style={{ minWidth: 70 }} />
       )}
 
       {/* Name */}
@@ -327,21 +450,18 @@ function PlayerRow({
 
       {canEdit && (
         <>
-          {/* Bench / Activar */}
           <button
             className="btn-secondary"
-            disabled={toggling}
-            onClick={onToggle}
-            style={{ fontSize: '0.7rem', padding: '0.3rem 0.75rem', display: 'flex', alignItems: 'center', gap: '0.3rem', color: isBench ? 'var(--accent-teal-bright)' : 'var(--accent-prime)', opacity: toggling ? 0.5 : 1, minWidth: 80 }}
+            disabled={isDisabled || isPending}
+            onClick={onOpenSwap}
+            style={{ fontSize: '0.7rem', padding: '0.3rem 0.75rem', display: 'flex', alignItems: 'center', gap: '0.3rem', color: isPending ? 'var(--accent-blue)' : isBench ? 'var(--accent-teal-bright)' : 'var(--accent-prime)', minWidth: 80 }}
           >
             <ArrowUpDown size={11} />
             {isBench ? 'Activar' : 'Bench'}
           </button>
-
-          {/* Remove */}
           <button
             className="btn-secondary"
-            disabled={removing}
+            disabled={removing || isDisabled}
             onClick={onRemove}
             style={{ padding: '0.35rem', color: 'var(--accent-loss)', opacity: removing ? 0.5 : 1 }}
             title="Retirar del roster"
