@@ -116,8 +116,10 @@ export async function listTeams(type?: 'OWN' | 'RIVAL') {
       roster: {
         where: { activeTo: null },
         select: {
+          id: true,
           player: { select: { id: true, displayName: true, customName: true } },
           role: true,
+          rosterStatus: true,
         },
       },
     },

@@ -155,6 +155,7 @@ export default function StaffManagement() {
 function StaffTab({ user, isPlatformAdmin }: { user: NonNullable<ReturnType<typeof useAuth>['user']>; isPlatformAdmin: boolean }) {
   const [teams, setTeams] = useState<TeamProfile[]>([]);
   const [teamId, setTeamId] = useState('');
+  const [teamProfile, setTeamProfile] = useState<TeamProfile | null>(null);
   const [invitations, setInvitations] = useState<Invitation[]>([]);
   const [email, setEmail] = useState('');
   const [role, setRole] = useState<(typeof ROLES)[number]>('COACH');
@@ -181,6 +182,9 @@ function StaffTab({ user, isPlatformAdmin }: { user: NonNullable<ReturnType<type
       .then((res) => setInvitations(res.invitations))
       .catch((err) => { if (!(err instanceof ApiErrorResponse && err.status === 403)) toast.error('Failed to load invitations.'); setInvitations([]); })
       .finally(() => setLoading(false));
+    // Load full profile to get properly shaped roster (rosterId, rosterStatus, etc.)
+    setTeamProfile(null);
+    apiClient.teams.getProfile(teamId).then(setTeamProfile).catch(() => null);
   }, [teamId]);
 
   useEffect(() => {
@@ -294,8 +298,8 @@ function StaffTab({ user, isPlatformAdmin }: { user: NonNullable<ReturnType<type
         )}
       </section>
 
-      {selectedTeam && (
-        <RosterPanel team={selectedTeam} onRosterChange={(updated) => setTeams((prev) => prev.map((t) => t.id === updated.id ? updated : t))} />
+      {teamProfile && (
+        <RosterPanel team={teamProfile} onRosterChange={setTeamProfile} />
       )}
     </div>
   );
