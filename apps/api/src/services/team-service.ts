@@ -16,6 +16,7 @@ export interface TeamProfile {
     displayName: string;
     customName: string | null;
     role: string | null;
+    rosterStatus: string;
     activeFrom: Date;
     activeTo: Date | null;
     lastSynced: Date;
@@ -62,6 +63,7 @@ export async function getTeamProfile(teamId: string): Promise<TeamProfile> {
       displayName: r.player.displayName,
       customName: r.player.customName,
       role: r.role,
+      rosterStatus: r.rosterStatus,
       activeFrom: r.activeFrom,
       activeTo: r.activeTo,
       lastSynced: r.player.lastSynced,
@@ -152,7 +154,7 @@ export async function deleteTeam(teamId: string) {
   await db.team.delete({ where: { id: teamId } });
 }
 
-export async function addRosterPlayer(teamId: string, playerId: string, role?: string) {
+export async function addRosterPlayer(teamId: string, playerId: string, role?: string, rosterStatus?: string) {
   const team = await db.team.findUnique({ where: { id: teamId } });
   if (!team) throw new AppError(404, `Team not found: ${teamId}`, 'TEAM_NOT_FOUND');
 
@@ -164,14 +166,14 @@ export async function addRosterPlayer(teamId: string, playerId: string, role?: s
   });
   if (existing) throw new AppError(409, 'Player is already in this roster', 'ALREADY_IN_ROSTER');
 
-  return db.teamRoster.create({ data: { teamId, playerId, role: role ?? null } });
+  return db.teamRoster.create({ data: { teamId, playerId, role: role ?? null, rosterStatus: rosterStatus ?? 'STARTER' } });
 }
 
-export async function updateRosterEntry(teamId: string, rosterId: string, role: string | null) {
+export async function updateRosterEntry(teamId: string, rosterId: string, role: string | null, rosterStatus?: string) {
   const entry = await db.teamRoster.findUnique({ where: { id: rosterId } });
   if (!entry) throw new AppError(404, `Roster entry not found: ${rosterId}`, 'ROSTER_NOT_FOUND');
   if (entry.teamId !== teamId) throw new AppError(404, `Roster entry not found: ${rosterId}`, 'ROSTER_NOT_FOUND');
-  return db.teamRoster.update({ where: { id: rosterId }, data: { role } });
+  return db.teamRoster.update({ where: { id: rosterId }, data: { role, ...(rosterStatus !== undefined && { rosterStatus }) } });
 }
 
 export async function removeRosterPlayer(teamId: string, rosterId: string) {

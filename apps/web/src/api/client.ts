@@ -121,12 +121,15 @@ export interface PlayerProfile {
   recentMatches: RecentMatch[];
 }
 
+export type RosterStatus = 'STARTER' | 'BENCH';
+
 export interface RosterMember {
   rosterId: string;
   playerId: string;
   displayName: string;
   customName: string | null;
   role: string | null;
+  rosterStatus: RosterStatus;
   activeFrom: string;
   activeTo: string | null;
   lastSynced: string;
@@ -845,10 +848,10 @@ export const apiClient = {
       fetchApi<TeamProfile>(`/teams/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
     delete: (id: string) =>
       fetchApi<{ ok: boolean }>(`/teams/${id}`, { method: 'DELETE' }),
-    addPlayer: (teamId: string, playerId: string, role?: TeamRole) =>
-      fetchApi<{ id: string }>(`/teams/${teamId}/roster`, { method: 'POST', body: JSON.stringify({ playerId, role }) }),
-    updateRoster: (teamId: string, rosterId: string, role: TeamRole | null) =>
-      fetchApi<{ id: string }>(`/teams/${teamId}/roster/${rosterId}`, { method: 'PATCH', body: JSON.stringify({ role }) }),
+    addPlayer: (teamId: string, playerId: string, role?: TeamRole, rosterStatus?: RosterStatus) =>
+      fetchApi<{ id: string }>(`/teams/${teamId}/roster`, { method: 'POST', body: JSON.stringify({ playerId, role, rosterStatus }) }),
+    updateRoster: (teamId: string, rosterId: string, role: TeamRole | null, rosterStatus?: RosterStatus) =>
+      fetchApi<{ id: string }>(`/teams/${teamId}/roster/${rosterId}`, { method: 'PATCH', body: JSON.stringify({ role, rosterStatus }) }),
     removePlayer: (teamId: string, rosterId: string) =>
       fetchApi<{ ok: boolean }>(`/teams/${teamId}/roster/${rosterId}`, { method: 'DELETE' }),
     getAnalysis: (id: string) => fetchApi<TeamAnalysis>(`/teams/${id}/analysis`),

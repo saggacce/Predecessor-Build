@@ -120,6 +120,8 @@ model TeamRoster {
   playerId   String
   /// In-game role: "CARRY" | "JUNGLE" | "MIDLANE" | "OFFLANE" | "SUPPORT"
   role       String?
+  /// "STARTER" | "BENCH" — whether the player is in the main 5 or on the bench
+  rosterStatus String  @default("STARTER")
   activeFrom DateTime  @default(now())
   /// null = currently active; set when the player leaves the roster
   activeTo   DateTime?
