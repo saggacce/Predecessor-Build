@@ -4,7 +4,7 @@ import {
   AlertTriangle, Calendar, Target, Sparkles, X, Maximize2, Minimize2,
   ThumbsUp, ThumbsDown, CheckCircle, LayoutDashboard, PenLine, Users,
   CalendarDays, Menu, Pencil, Minus, ArrowRight, Circle, Square,
-  Eraser, Undo2, Trash2, TreePine, Zap, Shield, Heart,
+  Eraser, Undo2, Trash2,
 } from 'lucide-react';
 import {
   apiClient, type Insight, type ScrimScheduleItem, type TeamGoal,
@@ -43,8 +43,12 @@ const ROLE_COLOR: Record<string, string> = {
 const ROLE_LABEL: Record<string, string> = {
   CARRY: 'Carry', JUNGLE: 'Jungle', MIDLANE: 'Mid', OFFLANE: 'Offlane', SUPPORT: 'Support',
 };
-const ROLE_ICON: Record<string, React.FC<{ size?: number; style?: React.CSSProperties }>> = {
-  CARRY: Target, JUNGLE: TreePine, MIDLANE: Zap, OFFLANE: Shield, SUPPORT: Heart,
+const ROLE_ICON: Record<string, string> = {
+  CARRY: '/icons/roles/carry.png',
+  JUNGLE: '/icons/roles/jungle.png',
+  MIDLANE: '/icons/roles/midlane.png',
+  OFFLANE: '/icons/roles/offlane.png',
+  SUPPORT: '/icons/roles/support.png',
 };
 const DRAW_COLORS = ['#ffffff', '#f87171', '#60a5fa', '#4ade80', '#fbbf24', '#a78bfa', '#fb923c'];
 const DRAW_TOOLS: Array<{ id: DrawTool; label: string; Icon: React.FC<{ size?: number }> }> = [
@@ -337,7 +341,15 @@ function RosterTooltip({ member, stats, x, y }: TooltipState) {
       display: 'flex', flexDirection: 'column', gap: '0.4rem',
       pointerEvents: 'none',
     }}>
-      {/* Header */}
+      {/* Role icon + name header */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.1rem' }}>
+        {ROLE_ICON[role] && (
+          <img src={ROLE_ICON[role]} alt={role} style={{ width: 16, height: 16, objectFit: 'contain', opacity: 0.9 }} />
+        )}
+        <span style={{ fontSize: '0.6rem', fontWeight: 800, color: roleColor, textTransform: 'uppercase', letterSpacing: '0.1em' }}>
+          {ROLE_LABEL[role] ?? role}
+        </span>
+      </div>
       <div style={{ fontWeight: 700, fontSize: '1rem', color: 'var(--text-primary)', lineHeight: 1.2 }}>{name}</div>
       {member.customName && member.customName !== member.displayName && (
         <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>IG: {member.displayName}</div>
@@ -423,7 +435,7 @@ function RosterSection({
         {members.map((m) => {
           const role = (m.role ?? '').toUpperCase();
           const roleColor = ROLE_COLOR[role] ?? 'var(--text-muted)';
-          const RoleIcon = ROLE_ICON[role];
+          const roleIcon = ROLE_ICON[role];
           const name = m.customName ?? m.displayName;
           const stat = statsMap.get(m.playerId) ?? null;
           const wrColor = stat
@@ -444,8 +456,10 @@ function RosterSection({
               }}
             >
               {/* Role + icon */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
-                {RoleIcon && <RoleIcon size={11} style={{ color: roleColor, flexShrink: 0 }} />}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                {roleIcon && (
+                  <img src={roleIcon} alt={role} style={{ width: 14, height: 14, objectFit: 'contain', flexShrink: 0, opacity: 0.9 }} />
+                )}
                 <span style={{ fontSize: '0.58rem', fontWeight: 800, color: roleColor, textTransform: 'uppercase', letterSpacing: '0.1em' }}>
                   {(ROLE_LABEL[role] ?? role) || 'Sin rol'}
                 </span>
