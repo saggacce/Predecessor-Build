@@ -34,6 +34,7 @@ import PermissionsPage from './pages/PermissionsPage';
 import { FeedbackButton } from './components/FeedbackButton';
 import { PermissionsProvider } from './contexts/PermissionsContext';
 import LandingPage from './pages/LandingPage';
+import ScrimPlanner from './pages/ScrimPlanner';
 import { useAuth } from './hooks/useAuth';
 import { ViewAsProvider, useViewAs, type ViewAsRole } from './hooks/useViewAs';
 import { apiClient } from './api/client';
@@ -552,6 +553,7 @@ function AppContent() {
             {/* Matches */}
             <Route path="/matches" element={<MatchList />} />
             <Route path="/matches/:id" element={<MatchDetail />} />
+            <Route path="/matches/live/:predggUuid" element={<MatchDetail liveMode />} />
 
             {/* Analysis */}
             <Route path="/analysis/teams" element={<TeamAnalysis />} />
@@ -564,7 +566,7 @@ function AppContent() {
             <Route path="/tools/goals" element={<Navigate to="/tools/review" replace />} />
             <Route path="/tools/board" element={<ComingSoon section="Tactical Board" description="Free-form tactical planning board over the Predecessor map." issue={53} />} />
             <Route path="/tools/vod" element={<VodIndex />} />
-            <Route path="/tools/scrims" element={<ComingSoon section="Scrim Planner" description="Plan scrims with focus areas linked to team goals." issue={64} />} />
+            <Route path="/tools/scrims" element={<ScrimPlanner />} />
 
             {/* Reports */}
             <Route path="/reports/scrim" element={<ScrimReport />} />
