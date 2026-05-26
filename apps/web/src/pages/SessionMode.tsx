@@ -29,15 +29,16 @@ export default function SessionMode() {
   const navigate = useNavigate();
 
   const isPlatformAdmin = user?.globalRole === 'PLATFORM_ADMIN';
-  // memberships from session have flat shape: { teamId, role, playerId }
+  // memberships have flat shape: { teamId, role, playerId }
   const staffTeamIds = new Set(
     (user?.memberships ?? [])
       .filter((m) => m.role === 'COACH' || m.role === 'MANAGER')
-      .map((m) => (m as unknown as { teamId: string }).teamId),
+      .map((m) => m.teamId),
   );
 
   const [allTeams, setAllTeams] = useState<Array<{ id: string; name: string }>>([]);
   const [teamId, setTeamId] = useState('');
+  const [teamsError, setTeamsError] = useState<string | null>(null);
 
   const [insights, setInsights] = useState<Insight[]>([]);
   const [schedule, setSchedule] = useState<ScrimScheduleItem[]>([]);
@@ -73,15 +74,30 @@ export default function SessionMode() {
         const filtered = isPlatformAdmin
           ? teams
           : teams.filter((t) => staffTeamIds.has(t.id));
+
+        // Debug info visible in console
+        console.debug('[SessionMode] globalRole:', user?.globalRole);
+        console.debug('[SessionMode] memberships:', user?.memberships);
+        console.debug('[SessionMode] staffTeamIds:', [...staffTeamIds]);
+        console.debug('[SessionMode] OWN teams from API:', teams.map((t) => ({ id: t.id, name: t.name })));
+        console.debug('[SessionMode] filtered teams:', filtered.map((t) => t.name));
+
         setAllTeams(filtered);
         if (filtered.length > 0) {
           setTeamId(filtered[0].id);
-          // loading stays true — the data effect will clear it when teamId changes
         } else {
+          const reason = teams.length === 0
+            ? 'La API devolvió 0 equipos de tipo OWN'
+            : `API devolvió ${teams.length} equipo(s) OWN pero ninguno coincide con staffTeamIds: [${[...staffTeamIds].join(', ')}]`;
+          setTeamsError(reason);
           setLoading(false);
         }
       })
-      .catch(() => setLoading(false));
+      .catch((err) => {
+        console.error('[SessionMode] teams.list error:', err);
+        setTeamsError(`Error al cargar equipos: ${String(err)}`);
+        setLoading(false);
+      });
   }, []);
 
   // Load session data when teamId changes
@@ -217,8 +233,13 @@ export default function SessionMode() {
           Cargando sesión…
         </div>
       ) : !teamId ? (
-        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', fontSize: '0.9rem' }}>
-          No hay equipos asignados a tu cuenta.
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', color: 'var(--text-muted)', fontSize: '0.9rem', padding: '2rem' }}>
+          <span>No hay equipos asignados a tu cuenta.</span>
+          {teamsError && (
+            <code style={{ fontSize: '0.72rem', color: 'var(--accent-prime)', background: 'rgba(251,191,36,0.08)', border: '1px solid rgba(251,191,36,0.2)', borderRadius: 4, padding: '0.4rem 0.75rem', maxWidth: 500, textAlign: 'center' }}>
+              {teamsError}
+            </code>
+          )}
         </div>
       ) : (
         <div style={{
