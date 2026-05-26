@@ -313,7 +313,7 @@ function RosterPanel({ team }: { team: TeamProfile | null }) {
               display: 'flex', flexDirection: 'column', gap: '0.4rem',
             }}>
               <div style={{ fontSize: '0.58rem', fontWeight: 800, color: roleColor, textTransform: 'uppercase', letterSpacing: '0.1em' }}>
-                {ROLE_LABEL[role] ?? role || 'Sin rol'}
+                {(ROLE_LABEL[role] ?? role) || 'Sin rol'}
               </div>
               <div style={{ fontSize: '1.1rem', fontWeight: 700, color: 'var(--text-primary)', lineHeight: 1.2 }}>
                 {name}
