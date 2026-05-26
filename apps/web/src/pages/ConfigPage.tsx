@@ -22,12 +22,12 @@ export default function ConfigPage() {
       .catch(() => { toast.error(t('config.loadError')); setLoading(false); });
   }, [t]);
 
-  const numericVisible = entries.filter((e) => e.group === tab && e.textValue === null && e.minValue !== null);
+  const numericVisible = entries.filter((e) => e.group === tab && !e.textValue && e.minValue !== null);
   const llmEntries = entries.filter((e) => e.group === 'llm');
   const llmEnabled = llmEntries.find((e) => e.key === 'llm_enabled');
   const llmApiKeyEntry = llmEntries.find((e) => e.key === 'llm_api_key');
-  const llmTextEntries = llmEntries.filter((e) => e.textValue !== null && e.key !== 'llm_api_key');
-  const llmNumericEntries = llmEntries.filter((e) => e.textValue === null && e.key !== 'llm_enabled');
+  const llmTextEntries = llmEntries.filter((e) => e.textValue && e.key !== 'llm_api_key');
+  const llmNumericEntries = llmEntries.filter((e) => !e.textValue && e.key !== 'llm_enabled');
 
   function getDraft(entry: PlatformConfigEntry): string {
     return drafts[entry.key] ?? String(entry.value);
