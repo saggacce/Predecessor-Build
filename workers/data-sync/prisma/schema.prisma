@@ -106,9 +106,16 @@ model Team {
   /// Subscription tier: "FREE" | "PRO" | "TEAM" | "ENTERPRISE"
   teamTier          String           @default("FREE")
   teamTierExpiresAt DateTime?
+  /// If set, this team is the academy/feeder team of the referenced OWN team
+  academyOf         String?
   llmAnalyses       LlmAnalysis[]
   memberships       TeamMembership[]
   roster            TeamRoster[]
+  scrimSchedules    ScrimSchedule[]  @relation("HomeTeam")
+  rivalSchedules    ScrimSchedule[]  @relation("RivalTeam")
+  comms             TeamComm[]
+  parentTeam        Team?            @relation("AcademyTeams", fields: [academyOf], references: [id])
+  academyTeams      Team[]           @relation("AcademyTeams")
 }
 
 /// Links a Player to a Team for a specific time period.
@@ -442,6 +449,10 @@ model User {
   sentInvitations     Invitation[]     @relation("InvitedBy")
   memberships         TeamMembership[]
   linkedPlayer        Player?          @relation(fields: [linkedPlayerId], references: [id])
+  sentComms           TeamComm[]       @relation("SentComms")
+  receivedComms       TeamComm[]       @relation("ReceivedComms")
+  scrimSchedules      ScrimSchedule[]
+  weeklyGoals         WeeklyGoal[]
 }
 
 /// Maps a User to a Team with a specific role.
@@ -471,7 +482,8 @@ model Invitation {
   token       String    @unique @default(cuid())
   /// Email address of the recipient
   email       String
-  teamId      String
+  /// Null when the invitation is for a standalone JUGADOR with no team assignment
+  teamId      String?
   /// Role the invitee will receive on the team
   role        String
   /// For JUGADOR invitations — pre-links the new user to a Player record
@@ -718,6 +730,89 @@ model FeedbackReport {
   reviewedAt       DateTime?
   /// Admin note added during review
   reviewNote       String?
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SCHEDULING & COMMS
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// A scheduled scrim or official match for an OWN team.
+/// rivalTeamId references a RIVAL team in the DB (optional — free-text rivalName as fallback).
+/// type: "SCRIM" | "OFFICIAL" | "PRACTICE"
+/// result: null = not played yet; "WIN" | "LOSS" | "DRAW" after the fact
+model ScrimSchedule {
+  id           String    @id @default(cuid())
+  teamId       String
+  /// RIVAL team from the DB (optional)
+  rivalTeamId  String?
+  /// Free-text rival name when not in DB
+  rivalName    String?
+  scheduledAt  DateTime
+  /// "SCRIM" | "OFFICIAL" | "PRACTICE"
+  type         String    @default("SCRIM")
+  notes        String?
+  /// Filled after the match: "WIN" | "LOSS" | "DRAW"
+  result       String?
+  createdById  String
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  team         Team      @relation("HomeTeam", fields: [teamId], references: [id])
+  rivalTeam    Team?     @relation("RivalTeam", fields: [rivalTeamId], references: [id])
+  createdBy    User      @relation(fields: [createdById], references: [id])
+}
+
+/// Personal weekly goal set by a standalone player (soloQ).
+/// Coach-set goals use PlayerGoal. This is self-directed.
+/// metricKey: "winrate" | "kda" | "cs_per_min" | "gpm" | "dpm" | "custom"
+/// status: "ACTIVE" | "ACHIEVED" | "FAILED"
+model WeeklyGoal {
+  id           String   @id @default(cuid())
+  userId       String
+  /// Linked player profile for metric calculation
+  playerId     String?
+  title        String
+  /// "winrate" | "kda" | "cs_per_min" | "gpm" | "dpm" | "custom"
+  metricKey    String   @default("custom")
+  targetValue  Float?
+  currentValue Float    @default(0)
+  /// ISO week start date (Monday 00:00 UTC)
+  weekStart    DateTime
+  /// "ACTIVE" | "ACHIEVED" | "FAILED"
+  status       String   @default("ACTIVE")
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  user         User     @relation(fields: [userId], references: [id])
+}
+
+/// Internal communication between team members.
+/// Coach → Analyst = scouting / report request (type "REQUEST")
+/// Manager → Team  = announcement (type "ANNOUNCEMENT")
+/// type: "REQUEST" | "ANNOUNCEMENT" | "NOTE"
+/// status: "OPEN" | "IN_PROGRESS" | "DONE" | "DISMISSED"
+/// toRole: target role ("ANALISTA" | "COACH" | "MANAGER" | "JUGADOR" | null = all)
+model TeamComm {
+  id            String    @id @default(cuid())
+  teamId        String
+  fromUserId    String
+  /// Role-broadcast target (null = addressed to specific user only)
+  toRole        String?
+  /// Specific user target (null = broadcast to role)
+  toUserId      String?
+  /// "REQUEST" | "ANNOUNCEMENT" | "NOTE"
+  type          String    @default("REQUEST")
+  subject       String
+  body          String
+  /// "normal" | "urgent"
+  priority      String    @default("normal")
+  /// "OPEN" | "IN_PROGRESS" | "DONE" | "DISMISSED"
+  status        String    @default("OPEN")
+  resolvedAt    DateTime?
+  resolvedById  String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  team          Team      @relation(fields: [teamId], references: [id])
+  fromUser      User      @relation("SentComms", fields: [fromUserId], references: [id])
+  toUser        User?     @relation("ReceivedComms", fields: [toUserId], references: [id])
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
