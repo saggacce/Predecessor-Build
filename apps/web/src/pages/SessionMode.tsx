@@ -74,9 +74,14 @@ export default function SessionMode() {
           ? teams
           : teams.filter((t) => staffTeamIds.has(t.id));
         setAllTeams(filtered);
-        if (filtered.length > 0) setTeamId(filtered[0].id);
+        if (filtered.length > 0) {
+          setTeamId(filtered[0].id);
+          // loading stays true — the data effect will clear it when teamId changes
+        } else {
+          setLoading(false);
+        }
       })
-      .catch(() => null);
+      .catch(() => setLoading(false));
   }, []);
 
   // Load session data when teamId changes
