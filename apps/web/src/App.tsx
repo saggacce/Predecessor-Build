@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react';
-import { BrowserRouter, Routes, Route, NavLink, Navigate, Link, useLocation } from 'react-router';
+import { BrowserRouter, Routes, Route, NavLink, Navigate, Link, useLocation, useNavigate } from 'react-router';
 import { Toaster, toast } from 'sonner';
 import { useTranslation } from 'react-i18next';
 import {
   Film, BarChart2, Wrench, FileText, Users, Settings,
   LogIn, LogOut, Loader, Radio, Zap, ChevronDown, ChevronRight,
-  LayoutDashboard, KeyRound,
+  LayoutDashboard, KeyRound, Presentation,
 } from 'lucide-react';
 import type { VersionRecord } from '@predecessor/data-model';
 import Dashboard from './pages/Dashboard';
@@ -35,6 +35,7 @@ import { FeedbackButton } from './components/FeedbackButton';
 import { PermissionsProvider } from './contexts/PermissionsContext';
 import LandingPage from './pages/LandingPage';
 import ScrimPlanner from './pages/ScrimPlanner';
+import SessionMode from './pages/SessionMode';
 import { useAuth } from './hooks/useAuth';
 import { ViewAsProvider, useViewAs, type ViewAsRole } from './hooks/useViewAs';
 import { apiClient } from './api/client';
@@ -47,6 +48,7 @@ import './App.css';
 function WorkspaceHeader() {
   const { authenticated, user, refreshInternalSession } = useAuth();
   const { t } = useTranslation();
+  const navigate = useNavigate();
 
   async function handleInternalLogout() {
     try {
@@ -71,6 +73,8 @@ function WorkspaceHeader() {
     return () => window.removeEventListener('versions-synced', onVersionsSync);
   }, []);
 
+  const isStaff = isAdmin || (user?.memberships?.some((m) => m.role === 'COACH' || m.role === 'MANAGER') ?? false);
+
   const initials = user?.name
     ? user.name.split(/\s+/).map((p) => p[0]).join('').slice(0, 2).toUpperCase()
     : '?';
@@ -91,6 +95,25 @@ function WorkspaceHeader() {
         {/* View As role selector — admin only */}
         {isAdmin && (
           <ViewAsSelector />
+        )}
+
+        {/* Session Mode button — COACH / MANAGER / ADMIN */}
+        {isStaff && (
+          <button
+            onClick={() => navigate('/session')}
+            title="Modo Sesión — vista de proyección para sesiones de equipo"
+            style={{
+              display: 'flex', alignItems: 'center', gap: '0.35rem',
+              background: 'rgba(167,139,250,0.1)', border: '1px solid rgba(167,139,250,0.25)',
+              borderRadius: 5, cursor: 'pointer', color: 'var(--accent-violet)',
+              padding: '0.2rem 0.6rem', fontSize: '0.72rem', fontWeight: 600,
+              transition: 'background 0.15s',
+            }}
+            onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = 'rgba(167,139,250,0.2)'; }}
+            onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = 'rgba(167,139,250,0.1)'; }}
+          >
+            <Presentation size={13} /> Sesión
+          </button>
         )}
 
         {/* Patch badge — everyone */}
@@ -536,6 +559,11 @@ function AppContent() {
     );
   }
 
+  // Session mode renders fullscreen without sidebar/header
+  if (location.pathname === '/session') {
+    return <SessionMode />;
+  }
+
   return (
       <div className="app-container">
         {showLangModal && <LanguageFirstTimeModal onDismiss={() => setShowLangModal(false)} />}
@@ -587,6 +615,9 @@ function AppContent() {
             <Route path="/admin/audit-logs" element={<AuditLogsPage />} />
             <Route path="/admin/feedback" element={<FeedbackPage />} />
             <Route path="/management/roles" element={<PermissionsPage />} />
+
+            {/* Session Mode */}
+            <Route path="/session" element={<SessionMode />} />
 
             {/* Backward compatibility redirects */}
             <Route path="/players" element={<Navigate to="/analysis/players" replace />} />
