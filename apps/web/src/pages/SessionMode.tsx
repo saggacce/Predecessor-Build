@@ -325,7 +325,7 @@ function RosterTooltip({ member, stats, x, y }: TooltipState) {
   const top  = Math.min(y - 8, window.innerHeight - 320);
 
   const wrColor = stats
-    ? stats.winRate >= 0.55 ? 'var(--accent-win)' : stats.winRate < 0.45 ? 'var(--accent-loss)' : 'var(--text-secondary)'
+    ? stats.winRate >= 55 ? 'var(--accent-win)' : stats.winRate < 45 ? 'var(--accent-loss)' : 'var(--text-secondary)'
     : undefined;
   const recentTotal = stats ? (stats.recentWins + stats.recentLosses) : 0;
 
@@ -365,7 +365,7 @@ function RosterTooltip({ member, stats, x, y }: TooltipState) {
           <div style={{ height: 1, background: 'rgba(255,255,255,0.07)', margin: '0.25rem 0' }} />
           {/* Core stats */}
           <StatRow label="Partidas" value={String(stats.matches)} />
-          <StatRow label="Win Rate" value={`${(stats.winRate * 100).toFixed(1)}%`} color={wrColor} />
+          <StatRow label="Win Rate" value={`${stats.winRate.toFixed(1)}%`} color={wrColor} />
           <StatRow label="KDA" value={stats.kda.toFixed(2)} color={stats.kda >= 3 ? 'var(--accent-win)' : stats.kda < 2 ? 'var(--accent-loss)' : undefined} />
           {stats.avgGPM != null && <StatRow label="GPM" value={stats.avgGPM.toFixed(0)} />}
           {stats.avgDPM != null && <StatRow label="DPM" value={stats.avgDPM.toFixed(0)} />}
@@ -394,7 +394,7 @@ function RosterTooltip({ member, stats, x, y }: TooltipState) {
                 <span style={{ color: 'var(--text-secondary)', fontWeight: 600 }}>
                   {stats.topHeroes[0].name}
                   <span style={{ color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', fontWeight: 400 }}>
-                    {' '}· {(stats.topHeroes[0].winRate * 100).toFixed(0)}% WR
+                    {' '}· {stats.topHeroes[0].winRate.toFixed(0)}% WR
                   </span>
                 </span>
               </div>
@@ -439,7 +439,7 @@ function RosterSection({
           const name = m.customName ?? m.displayName;
           const stat = statsMap.get(m.playerId) ?? null;
           const wrColor = stat
-            ? stat.winRate >= 0.55 ? 'var(--accent-win)' : stat.winRate < 0.45 ? 'var(--accent-loss)' : 'var(--text-muted)'
+            ? stat.winRate >= 55 ? 'var(--accent-win)' : stat.winRate < 45 ? 'var(--accent-loss)' : 'var(--text-muted)'
             : 'var(--text-muted)';
           return (
             <div
@@ -471,7 +471,7 @@ function RosterSection({
               {/* Quick stats */}
               {stat ? (
                 <div style={{ display: 'flex', gap: '0.6rem', fontSize: '0.68rem', fontFamily: 'var(--font-mono)', marginTop: '0.1rem' }}>
-                  <span style={{ color: wrColor }}>{(stat.winRate * 100).toFixed(0)}% WR</span>
+                  <span style={{ color: wrColor }}>{stat.winRate.toFixed(0)}% WR</span>
                   <span style={{ color: 'var(--text-muted)' }}>·</span>
                   <span style={{ color: 'var(--text-muted)' }}>{stat.kda.toFixed(1)} KDA</span>
                 </div>
