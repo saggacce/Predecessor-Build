@@ -61,6 +61,9 @@ function StaffTab({ user, isPlatformAdmin }: { user: NonNullable<ReturnType<type
   const [loading, setLoading] = useState(false);
   const [creating, setCreating] = useState(false);
 
+  // JUGADOR invitations can be teamless (standalone player) when created by PLATFORM_ADMIN
+  const isStandalonePlayer = role === 'JUGADOR' && isPlatformAdmin && !teamId;
+
   const manageableTeams = useMemo(() => {
     if (isPlatformAdmin) return teams;
     const managerIds = new Set(user.memberships.filter((m) => m.role === 'MANAGER').map((m) => m.teamId));
@@ -89,10 +92,10 @@ function StaffTab({ user, isPlatformAdmin }: { user: NonNullable<ReturnType<type
 
   async function handleCreate(event: FormEvent) {
     event.preventDefault();
-    if (!teamId) return;
+    if (!teamId && !isStandalonePlayer) return;
     setCreating(true);
     try {
-      const res = await apiClient.invitations.create({ email, teamId, role, playerId: playerId || undefined });
+      const res = await apiClient.invitations.create({ email, teamId: teamId || undefined, role, playerId: playerId || undefined });
       setInvitations((prev) => [res.invitation, ...prev]);
       setEmail('');
       setRole('COACH');
@@ -117,9 +120,16 @@ function StaffTab({ user, isPlatformAdmin }: { user: NonNullable<ReturnType<type
         </div>
         <label style={{ display: 'grid', gap: '0.4rem', fontSize: '0.76rem', color: 'var(--text-muted)', fontWeight: 700 }}>
           {t('staffManagement.teamLabel')}
-          <select className="input" value={teamId} onChange={(e) => setTeamId(e.target.value)} required>
+          {role === 'JUGADOR' && isPlatformAdmin && <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)', fontWeight: 400 }}>({t('common.optional')})</span>}
+          <select className="input" value={teamId} onChange={(e) => setTeamId(e.target.value)} required={role !== 'JUGADOR' || !isPlatformAdmin}>
+            {role === 'JUGADOR' && isPlatformAdmin && <option value="">{t('staffManagement.noTeamOption')}</option>}
             {manageableTeams.map((team) => <option key={team.id} value={team.id}>{team.name}</option>)}
           </select>
+          {isStandalonePlayer && (
+            <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)', fontWeight: 400 }}>
+              {t('staffManagement.playerOnlyNote')}
+            </span>
+          )}
         </label>
         <label style={{ display: 'grid', gap: '0.4rem', fontSize: '0.76rem', color: 'var(--text-muted)', fontWeight: 700 }}>
           {t('staffManagement.emailLabel')}
@@ -147,7 +157,7 @@ function StaffTab({ user, isPlatformAdmin }: { user: NonNullable<ReturnType<type
             </span>
           </label>
         )}
-        <button className="btn-primary" type="submit" disabled={creating || manageableTeams.length === 0}>
+        <button className="btn-primary" type="submit" disabled={creating || (!teamId && !isStandalonePlayer)}>
           <Plus size={16} />{creating ? t('staffManagement.creatingButton') : t('staffManagement.createButton')}
         </button>
       </form>

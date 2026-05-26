@@ -5,6 +5,7 @@ import { streamLlmSummary, saveLlmFeedback } from '../services/llm-service.js';
 import { requireAuth } from '../middleware/require-auth.js';
 import { requireRole } from '../middleware/require-role.js';
 import { db } from '../db.js';
+import type { InsightLang } from '../services/insight-strings.js';
 
 export const analystRouter = Router();
 
@@ -12,7 +13,9 @@ const staffRoles = ['COACH', 'ANALISTA', 'MANAGER'];
 
 analystRouter.get('/insights/:teamId', requireAuth, requireRole(staffRoles), async (req, res, next) => {
   try {
-    const insights = await getTeamInsights(req.params.teamId);
+    const teamId = String(req.params.teamId);
+    const lang: InsightLang = req.query.lang === 'en' ? 'en' : 'es';
+    const insights = await getTeamInsights(teamId, lang);
     res.json({ insights });
   } catch (err) {
     next(err);
@@ -26,11 +29,13 @@ analystRouter.get('/insights/:teamId', requireAuth, requireRole(staffRoles), asy
  */
 analystRouter.get('/insights/:teamId/summary', requireAuth, requireRole(staffRoles), async (req, res, next) => {
   try {
-    const team = await db.team.findUnique({ where: { id: req.params.teamId }, select: { name: true } });
+    const teamId = String(req.params.teamId);
+    const team = await db.team.findUnique({ where: { id: teamId }, select: { name: true } });
     if (!team) { res.status(404).json({ error: { message: 'Team not found', code: 'TEAM_NOT_FOUND' } }); return; }
 
-    const insights = await getTeamInsights(req.params.teamId);
-    await streamLlmSummary(req.params.teamId, team.name, insights, res);
+    const lang: InsightLang = req.query.lang === 'en' ? 'en' : 'es';
+    const insights = await getTeamInsights(teamId, lang);
+    await streamLlmSummary(teamId, team.name, insights, res);
   } catch (err) {
     next(err);
   }
@@ -48,7 +53,7 @@ const feedbackSchema = z.object({
 analystRouter.patch('/insights/summary/:id/feedback', requireAuth, requireRole(staffRoles), async (req, res, next) => {
   try {
     const { feedback, correction } = feedbackSchema.parse(req.body);
-    await saveLlmFeedback(req.params.id, feedback, correction);
+    await saveLlmFeedback(String(req.params.id), feedback, correction);
     res.json({ ok: true });
   } catch (err) {
     next(err);

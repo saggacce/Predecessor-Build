@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { ChevronDown, ChevronRight, RotateCcw, Save, Shield } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { apiClient, type PlatformPermissions, type ConfigurableRole, type PermissionKey } from '../api/client';
 
@@ -167,6 +168,7 @@ function Toggle({ value, onChange }: { value: boolean; onChange: (v: boolean) =>
 }
 
 export default function PermissionsPage() {
+  const { t } = useTranslation();
   const [perms, setPerms] = useState<PlatformPermissions | null>(null);
   const [defaults, setDefaults] = useState<PlatformPermissions | null>(null);
   const [loading, setLoading] = useState(true);
@@ -177,7 +179,7 @@ export default function PermissionsPage() {
   useEffect(() => {
     apiClient.admin.getPermissions()
       .then((res) => { setPerms(res.permissions); setDefaults(res.defaults); })
-      .catch(() => toast.error('Error cargando permisos'))
+      .catch(() => toast.error(t('permissions.loadError')))
       .finally(() => setLoading(false));
   }, []);
 
@@ -207,9 +209,9 @@ export default function PermissionsPage() {
     setSaving(true);
     try {
       await apiClient.admin.savePermissions(perms);
-      toast.success('Permisos guardados');
+      toast.success(t('permissions.saveChanges'));
     } catch {
-      toast.error('Error guardando permisos');
+      toast.error(t('permissions.saveError'));
     } finally {
       setSaving(false);
     }
@@ -221,16 +223,16 @@ export default function PermissionsPage() {
     try {
       const res = await apiClient.admin.resetPermissions();
       setPerms(res.permissions);
-      toast.success('Permisos restaurados a defaults');
+      toast.success(t('permissions.restoreDefaults'));
     } catch {
-      toast.error('Error restaurando permisos');
+      toast.error(t('permissions.resetError'));
     } finally {
       setSaving(false);
     }
   }
 
-  if (loading) return <div style={{ padding: '2rem', color: 'var(--text-muted)' }}>Cargando permisos…</div>;
-  if (!perms) return <div style={{ padding: '2rem', color: 'var(--accent-loss)' }}>Error cargando permisos.</div>;
+  if (loading) return <div style={{ padding: '2rem', color: 'var(--text-muted)' }}>{t('common.loading')}</div>;
+  if (!perms) return <div style={{ padding: '2rem', color: 'var(--accent-loss)' }}>{t('permissions.loadError')}</div>;
 
   return (
     <div style={{ maxWidth: 1100 }}>
@@ -250,7 +252,7 @@ export default function PermissionsPage() {
           onClick={() => setAdvanced((v) => !v)}
           style={{ fontSize: '0.8rem', padding: '0.35rem 0.85rem', borderRadius: 6, border: '1px solid var(--border-color)', background: advanced ? 'rgba(167,139,250,0.15)' : 'transparent', color: advanced ? 'var(--accent-violet)' : 'var(--text-secondary)', cursor: 'pointer' }}
         >
-          {advanced ? 'Vista básica' : 'Vista avanzada'}
+          {advanced ? t('permissions.basicView') : t('permissions.advancedView')}
         </button>
         <div style={{ marginLeft: 'auto', display: 'flex', gap: '0.5rem' }}>
           <button
@@ -258,14 +260,14 @@ export default function PermissionsPage() {
             disabled={saving}
             style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.8rem', padding: '0.35rem 0.85rem', borderRadius: 6, border: '1px solid var(--border-color)', background: 'transparent', color: 'var(--text-muted)', cursor: 'pointer' }}
           >
-            <RotateCcw size={13} /> Restaurar defaults
+            <RotateCcw size={13} /> {t('permissions.restoreDefaults')}
           </button>
           <button
             onClick={handleSave}
             disabled={saving}
             style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.8rem', padding: '0.35rem 0.85rem', borderRadius: 6, border: 'none', background: 'var(--accent-blue)', color: '#fff', cursor: saving ? 'not-allowed' : 'pointer', opacity: saving ? 0.7 : 1 }}
           >
-            <Save size={13} /> {saving ? 'Guardando…' : 'Guardar cambios'}
+            <Save size={13} /> {saving ? '…' : t('permissions.saveChanges')}
           </button>
         </div>
       </div>

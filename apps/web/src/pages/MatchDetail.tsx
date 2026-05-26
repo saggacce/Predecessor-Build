@@ -7,21 +7,39 @@ import { ArrowLeft, Trophy, Skull, Clock, RefreshCw, Pencil, Check, X, Monitor, 
 import { toast } from 'sonner';
 import { apiClient, type MatchDetail as MatchDetailData, type MatchPlayerDetail, type MatchEvents, ApiErrorResponse } from '../api/client';
 
-export default function MatchDetail() {
-  const { id } = useParams<{ id: string }>();
+export default function MatchDetail({ liveMode = false }: { liveMode?: boolean }) {
+  const { id, predggUuid } = useParams<{ id?: string; predggUuid?: string }>();
   const navigate = useNavigate();
   const location = useLocation();
   const fromState = location.state as { fromPlayerId?: string; fromPlayerName?: string } | null;
   const heroMeta = useHeroMeta();
   const [match, setMatch] = useState<MatchDetailData | null>(null);
+  const [preloadedEvents, setPreloadedEvents] = useState<MatchEvents | null>(null);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<'scoreboard' | 'statistics' | 'timeline' | 'analysis'>('scoreboard');
   const [syncing, setSyncing] = useState(false);
   const [editingPlayerId, setEditingPlayerId] = useState<string | null>(null);
   const [editingValue, setEditingValue] = useState('');
 
+  // Live mode: fetch ephemeral match directly from pred.gg, no DB
   useEffect(() => {
-    if (!id) return;
+    if (!liveMode || !predggUuid) return;
+    void (async () => {
+      try {
+        const { detail, events } = await apiClient.matches.getLive(predggUuid);
+        setMatch(detail);
+        setPreloadedEvents(events);
+      } catch (err) {
+        toast.error(err instanceof ApiErrorResponse ? err.error.message : 'Failed to load match.');
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, [liveMode, predggUuid]);
+
+  // Normal mode: load from DB with optional auto-sync
+  useEffect(() => {
+    if (liveMode || !id) return;
     void (async () => {
       try {
         const data = await apiClient.matches.getDetail(id);
@@ -47,7 +65,7 @@ export default function MatchDetail() {
         setLoading(false);
       }
     })();
-  }, [id]);
+  }, [liveMode, id]);
 
   async function handleSaveCustomName(playerId: string) {
     try {
@@ -75,7 +93,12 @@ export default function MatchDetail() {
     }
   }
 
-  if (loading) return <div style={{ padding: '2rem', color: 'var(--text-muted)' }}>Loading match…</div>;
+  if (loading) return (
+    <div style={{ padding: '2rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+      <div style={{ width: 16, height: 16, border: '2px solid var(--border-color)', borderTopColor: 'var(--accent-blue)', borderRadius: '50%', animation: 'spin 0.8s linear infinite', flexShrink: 0 }} />
+      {liveMode ? 'Preparando informe…' : 'Loading match…'}
+    </div>
+  );
   if (!match) return <div style={{ padding: '2rem', color: 'var(--accent-loss)' }}>Match not found.</div>;
 
   const isAram = match.gameMode === 'ARAM' || match.gameMode === 'BRAWL';
@@ -83,7 +106,7 @@ export default function MatchDetail() {
   const dawnWon = match.winningTeam === 'DAWN';
   const hasHidden = [...match.dusk, ...match.dawn].some((p) => p.playerName === 'HIDDEN');
   const fullySynced = match.rosterSynced && match.eventStreamSynced;
-  const showSyncButton = !fullySynced || hasHidden;
+  const showSyncButton = !liveMode && (!fullySynced || hasHidden);
 
   const tabs: { key: typeof tab; label: string; disabled?: boolean }[] = [
     { key: 'scoreboard', label: 'Scoreboard' },
@@ -166,6 +189,7 @@ export default function MatchDetail() {
         <ScoreboardTab
           match={match} duskWon={duskWon} dawnWon={dawnWon} isAram={isAram}
           heroMeta={heroMeta}
+          liveMode={liveMode}
           editingPlayerId={editingPlayerId} editingValue={editingValue}
           onStartEdit={(playerId, current) => { setEditingPlayerId(playerId); setEditingValue(current); }}
           onSaveEdit={handleSaveCustomName}
@@ -177,10 +201,10 @@ export default function MatchDetail() {
         <StatisticsTab match={match} duskWon={duskWon} dawnWon={dawnWon} onResync={handleSyncPlayers} syncing={syncing} />
       )}
       {tab === 'timeline' && (
-        <TimelineTab match={match} onResync={handleSyncPlayers} syncing={syncing} />
+        <TimelineTab match={match} onResync={handleSyncPlayers} syncing={syncing} preloadedEvents={preloadedEvents ?? undefined} />
       )}
       {tab === 'analysis' && (
-        <AnalysisTab match={match} duskWon={duskWon} dawnWon={dawnWon} onResync={handleSyncPlayers} syncing={syncing} />
+        <AnalysisTab match={match} duskWon={duskWon} dawnWon={dawnWon} onResync={handleSyncPlayers} syncing={syncing} preloadedEvents={preloadedEvents ?? undefined} />
       )}
     </div>
   );
@@ -256,12 +280,13 @@ function HeaderTooltip({ label, tip, style }: { label: string; tip: string; styl
   );
 }
 
-function ScoreboardTab({ match, duskWon, dawnWon, isAram, heroMeta, editingPlayerId, editingValue, onStartEdit, onSaveEdit, onCancelEdit, onEditValueChange }: {
+function ScoreboardTab({ match, duskWon, dawnWon, isAram, heroMeta, liveMode, editingPlayerId, editingValue, onStartEdit, onSaveEdit, onCancelEdit, onEditValueChange }: {
   match: MatchDetailData;
   duskWon: boolean;
   dawnWon: boolean;
   isAram: boolean;
   heroMeta: Map<string, import('../api/client').HeroMeta>;
+  liveMode: boolean;
   editingPlayerId: string | null;
   editingValue: string;
   onStartEdit: (playerId: string, current: string) => void;
@@ -330,6 +355,7 @@ function ScoreboardTab({ match, duskWon, dawnWon, isAram, heroMeta, editingPlaye
                 teamKills={teamKills}
                 matchDuration={match.duration}
                 heroMeta={heroMeta}
+                liveMode={liveMode}
                 isEditing={editingPlayerId === p.playerId}
                 editingValue={editingValue}
                 onStartEdit={onStartEdit}
@@ -345,9 +371,10 @@ function ScoreboardTab({ match, duskWon, dawnWon, isAram, heroMeta, editingPlaye
   );
 }
 
-function PlayerRow({ player, isAram, teamColor, maxDamage, teamKills, matchDuration, heroMeta, isEditing, editingValue, onStartEdit, onSaveEdit, onCancelEdit, onEditValueChange }: {
+function PlayerRow({ player, isAram, teamColor, maxDamage, teamKills, matchDuration, heroMeta, liveMode, isEditing, editingValue, onStartEdit, onSaveEdit, onCancelEdit, onEditValueChange }: {
   player: MatchPlayerDetail; isAram: boolean; teamColor: string; maxDamage: number; teamKills: number; matchDuration: number;
   heroMeta: Map<string, import('../api/client').HeroMeta>;
+  liveMode: boolean;
   isEditing: boolean; editingValue: string;
   onStartEdit: (playerId: string, current: string) => void;
   onSaveEdit: (playerId: string) => void;
@@ -417,7 +444,7 @@ function PlayerRow({ player, isAram, teamColor, maxDamage, teamKills, matchDurat
                 : <Monitor size={11} style={{ flexShrink: 0, color: 'var(--text-muted)', opacity: 0.4 }} />
               }
               {player.customName && <span style={{ fontSize: '0.6rem', color: 'var(--accent-violet)', fontFamily: 'var(--font-mono)', flexShrink: 0 }}>custom</span>}
-              {player.playerId && (
+              {!liveMode && player.playerId && (
                 <button
                   onClick={(e) => { e.stopPropagation(); onStartEdit(player.playerId!, player.customName ?? ''); }}
                   title="Set custom name"
@@ -547,21 +574,22 @@ const OBJ_GROUPS = [
   { key: 'river',     label: 'River',      types: ['RIVER','SEEDLING'],               color: '#38d4c8' },
 ] as const;
 
-function AnalysisTab({ match, duskWon, dawnWon: _dawnWon, onResync, syncing }: {
+function AnalysisTab({ match, duskWon, dawnWon: _dawnWon, onResync, syncing, preloadedEvents }: {
   match: MatchDetailData; duskWon: boolean; dawnWon: boolean;
-  onResync: () => void; syncing: boolean;
+  onResync: () => void; syncing: boolean; preloadedEvents?: MatchEvents;
 }) {
-  const [events, setEvents] = useState<MatchEvents | null>(null);
+  const [events, setEvents] = useState<MatchEvents | null>(preloadedEvents ?? null);
   const [loadingEvents, setLoadingEvents] = useState(false);
 
   useEffect(() => {
+    if (preloadedEvents) return;
     if (!match.eventStreamSynced) return;
     setLoadingEvents(true);
     void apiClient.matches.getEvents(match.id)
       .then(setEvents)
       .catch(() => toast.error('Failed to load analysis data.'))
       .finally(() => setLoadingEvents(false));
-  }, [match.id, match.eventStreamSynced]);
+  }, [match.id, match.eventStreamSynced, preloadedEvents]);
 
   if (!match.eventStreamSynced) {
     return (
@@ -1109,10 +1137,10 @@ function teamColor(team: string | null) {
   return team === 'DUSK' ? 'var(--accent-teal-bright)' : team === 'DAWN' ? 'var(--accent-loss)' : 'var(--text-muted)';
 }
 
-function TimelineTab({ match, onResync, syncing }: {
-  match: MatchDetailData; onResync: () => void; syncing: boolean;
+function TimelineTab({ match, onResync, syncing, preloadedEvents }: {
+  match: MatchDetailData; onResync: () => void; syncing: boolean; preloadedEvents?: MatchEvents;
 }) {
-  const [events, setEvents] = useState<MatchEvents | null>(null);
+  const [events, setEvents] = useState<MatchEvents | null>(preloadedEvents ?? null);
   const [loadingEvents, setLoadingEvents] = useState(false);
   const [zoomIdx, setZoomIdx] = useState(ZOOM_DEFAULT);
   const [visible, setVisible] = useState<Set<TimelineSection>>(
@@ -1122,13 +1150,14 @@ function TimelineTab({ match, onResync, syncing }: {
   const [pinnedDots, setPinnedDots] = useState<MapDot[]>([]);
 
   useEffect(() => {
+    if (preloadedEvents) return;
     if (!match.eventStreamSynced) return;
     setLoadingEvents(true);
     void apiClient.matches.getEvents(match.id)
       .then(setEvents)
       .catch(() => toast.error('Failed to load timeline events.'))
       .finally(() => setLoadingEvents(false));
-  }, [match.id, match.eventStreamSynced]);
+  }, [match.id, match.eventStreamSynced, preloadedEvents]);
 
   if (!match.eventStreamSynced) {
     return (

@@ -16,7 +16,8 @@
     "register": "Registrarse",
     "copied": "Copiado",
     "revoked": "Revocada.",
-    "patch": "Parche v{{name}}"
+    "patch": "Parche v{{name}}",
+    "optional": "opcional"
   },
   "nav": {
     "dashboard": "Dashboard",
@@ -79,7 +80,10 @@
     "syncMatches": "Sincronizar partidas",
     "syncing": "Sincronizando...",
     "syncDone": "{{count}} partida(s) sincronizadas. {{remaining}} pendientes.",
-    "checkingSession": "Verificando sesión..."
+    "checkingSession": "Verificando sesión...",
+    "managerNoTeam": "Aún no tienes un equipo",
+    "managerNoTeamDesc": "Como manager, tu primer paso es crear tu equipo. Una vez creado, podrás invitar al staff y a los jugadores.",
+    "createTeam": "Crear equipo"
   },
   "teamRoster": {
     "title": "Equipos y Plantilla",
@@ -136,7 +140,9 @@
     "failedLoadTeams": "Error al cargar los equipos.",
     "failedLoadInvitations": "Error al cargar las invitaciones.",
     "failedCreate": "Error al crear la invitación",
-    "expires": "Expira el {{date}}"
+    "expires": "Expira el {{date}}",
+    "noTeamOption": "— Sin equipo (jugador independiente) —",
+    "playerOnlyNote": "Esto crea una cuenta de jugador independiente sin equipo. Puedes asignarlo a un equipo más tarde."
   },
   "playerScouting": {
     "title": "Scouting de Jugadores",
@@ -162,7 +168,13 @@
     "phaseAnalysis": "Análisis de fases",
     "visionControl": "Control de visión",
     "objectiveControl": "Control de objetivos",
-    "draftAnalysis": "Análisis de draft"
+    "draftAnalysis": "Análisis de draft",
+    "errorTitle": "Error en el análisis",
+    "phaseMacro": "Macro",
+    "phaseVision": "Visión",
+    "phaseDraft": "Draft",
+    "phasePerformance": "Rendimiento",
+    "phaseEconomy": "Economía"
   },
   "rivalScouting": {
     "title": "Scouting Rival",
@@ -314,7 +326,16 @@
     "checkingSession": "Verificando sesión...",
     "requiresAdmin": "Requiere cuenta Platform Admin.",
     "loading": "Cargando...",
-    "noRecords": "No se encontraron registros."
+    "noRecords": "No se encontraron registros.",
+    "allModules": "Todos los módulos",
+    "allEntities": "Todas las entidades",
+    "allStatuses": "Todos los estados",
+    "columnDatetime": "Fecha y hora",
+    "columnModule": "Módulo",
+    "columnDetail": "Detalle / Error",
+    "columnStatus": "Estado",
+    "columnUser": "Usuario",
+    "sourceUser": "Usuario"
   },
   "apiStatus": {
     "title": "Estado de la API",
@@ -327,7 +348,8 @@
     "per24hModule": "Por módulo (24h)",
     "lastSuccessfulSync": "Última sync exitosa",
     "refreshButton": "Actualizar",
-    "requiresAdmin": "Requiere cuenta Platform Admin."
+    "requiresAdmin": "Requiere cuenta Platform Admin.",
+    "loadError": "Error al cargar el estado. Reinicia el servidor si acabas de desplegar cambios."
   },
   "config": {
     "title": "Configuración de plataforma",
@@ -336,14 +358,21 @@
     "loading": "Cargando configuración…",
     "modified": "MODIFICADO",
     "saveButton": "Guardar",
-    "resetButton": "Restablecer al valor por defecto"
+    "resetButton": "Restablecer al valor por defecto",
+    "loadError": "Error cargando configuración",
+    "invalidValue": "Valor no válido",
+    "saveError": "Error al guardar",
+    "resetError": "Error al restablecer"
   },
   "permissions": {
     "title": "Permisos de plataforma",
     "basicView": "Vista básica",
     "advancedView": "Vista avanzada",
     "restoreDefaults": "Restaurar defaults",
-    "saveChanges": "Guardar cambios"
+    "saveChanges": "Guardar cambios",
+    "loadError": "Error cargando permisos",
+    "saveError": "Error guardando permisos",
+    "resetError": "Error restaurando permisos"
   },
   "users": {
     "title": "Gestión de usuarios",
@@ -399,6 +428,23 @@
     "statusReviewed": "Revisado",
     "statusDismissed": "Descartado",
     "allStatus": "Todos los estados",
+    "allStatuses": "Todos los estados",
+    "filterNew": "Nuevos",
+    "filterReviewed": "Revisados",
+    "filterDismissed": "Descartados",
+    "allTypes": "Todos los tipos",
+    "filterBugs": "Bugs",
+    "filterSuggestions": "Sugerencias",
+    "filterImprovements": "Mejoras",
+    "anonymous": "Anónimo",
+    "sentLabel": "Enviado:",
+    "emailLabel": "Email:",
+    "reviewedLabel": "Revisado:",
+    "reviewerNote": "Nota del revisor:",
+    "internalNotePlaceholder": "Nota interna (opcional)…",
+    "loadError": "Error cargando feedbacks",
+    "screenshotError": "Error cargando pantallazo",
+    "updateError": "Error al actualizar",
     "markReviewed": "Marcar revisado",
     "dismiss": "Descartar",
     "reopen": "Reabrir"

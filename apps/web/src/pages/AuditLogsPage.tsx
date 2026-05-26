@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { CheckCircle, XCircle, AlertTriangle, Shield } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { apiClient, type SyncLog } from '../api/client';
 import { useAuth } from '../hooks/useAuth';
@@ -10,15 +11,16 @@ const STATUS_COLORS: Record<string, string> = {
   skipped: 'var(--accent-prime)', partial: 'var(--accent-prime)',
 };
 
-const SOURCE_LABELS: Record<string, { label: string; color: string }> = {
-  'event-stream': { label: 'Event Stream', color: 'var(--accent-blue)' },
-  'cron':         { label: 'Cron',         color: 'var(--accent-teal-bright)' },
-  'user':         { label: 'Usuario',      color: 'var(--accent-violet)' },
-  'admin':        { label: 'Admin',        color: 'var(--accent-prime)' },
-};
-
 export default function AuditLogsPage() {
+  const { t } = useTranslation();
   const { user, internalLoading } = useAuth();
+
+  const SOURCE_LABELS: Record<string, { label: string; color: string }> = {
+    'event-stream': { label: 'Event Stream', color: 'var(--accent-blue)' },
+    'cron':         { label: 'Cron',         color: 'var(--accent-teal-bright)' },
+    'user':         { label: t('auditLogs.sourceUser'), color: 'var(--accent-violet)' },
+    'admin':        { label: 'Admin',        color: 'var(--accent-prime)' },
+  };
   const [logs, setLogs] = useState<SyncLog[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(false);
@@ -46,7 +48,7 @@ export default function AuditLogsPage() {
         <div className="glass-card" style={{ display: 'grid', gap: '1rem' }}>
           <Shield size={34} style={{ color: 'var(--accent-loss)' }} />
           <h1 className="header-title">Audit Logs</h1>
-          <p style={{ color: 'var(--text-muted)', fontSize: '0.88rem' }}>Requiere cuenta Platform Admin.</p>
+          <p style={{ color: 'var(--text-muted)', fontSize: '0.88rem' }}>{t('auditLogs.requiresAdmin')}</p>
           <a className="btn-primary" href="/login" style={{ width: 'fit-content' }}>Login</a>
         </div>
       </div>
@@ -64,15 +66,15 @@ export default function AuditLogsPage() {
 
       <div className="glass-card" style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap', marginBottom: '1rem' }}>
         <select className="input" value={sourceFilter} onChange={(e) => setSourceFilter(e.target.value)} style={{ flex: '1 1 140px' }}>
-          <option value="">Todos los módulos</option>
+          <option value="">{t('auditLogs.allModules')}</option>
           {Object.entries(SOURCE_LABELS).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
         </select>
         <select className="input" value={entityFilter} onChange={(e) => setEntityFilter(e.target.value)} style={{ flex: '1 1 140px' }}>
-          <option value="">Todas las entidades</option>
+          <option value="">{t('auditLogs.allEntities')}</option>
           {['player', 'match', 'version', 'auth', 'sync:cron', 'sync:on-demand', 'Invitation'].map((e) => <option key={e} value={e}>{e}</option>)}
         </select>
         <select className="input" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} style={{ flex: '1 1 120px' }}>
-          <option value="">Todos los estados</option>
+          <option value="">{t('auditLogs.allStatuses')}</option>
           {['ok', 'success', 'error', 'partial', 'skipped'].map((s) => <option key={s} value={s}>{s}</option>)}
         </select>
         <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.72rem', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
@@ -82,19 +84,19 @@ export default function AuditLogsPage() {
 
       <div className="glass-card" style={{ padding: 0, overflow: 'clip' }}>
         <div style={{ display: 'grid', gridTemplateColumns: '150px 120px 1fr 80px 120px', padding: '0.4rem 1rem', fontSize: '0.62rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', borderBottom: '1px solid var(--border-color)', background: 'var(--bg-card)', position: 'sticky', top: 0 }}>
-          <span>Fecha y hora</span><span>Módulo</span><span>Detalle / Error</span><span>Estado</span><span>Usuario</span>
+          <span>{t('auditLogs.columnDatetime')}</span><span>{t('auditLogs.columnModule')}</span><span>{t('auditLogs.columnDetail')}</span><span>{t('auditLogs.columnStatus')}</span><span>{t('auditLogs.columnUser')}</span>
         </div>
         {loading ? (
-          <div style={{ padding: '1.5rem', color: 'var(--text-muted)' }}>Cargando...</div>
+          <div style={{ padding: '1.5rem', color: 'var(--text-muted)' }}>{t('auditLogs.loading')}</div>
         ) : logs.length === 0 ? (
-          <div style={{ padding: '1.5rem', color: 'var(--text-muted)' }}>No se encontraron registros.</div>
+          <div style={{ padding: '1.5rem', color: 'var(--text-muted)' }}>{t('auditLogs.noRecords')}</div>
         ) : logs.map((log) => {
           const src = log.source ? SOURCE_LABELS[log.source] : null;
           const isError = log.status === 'error';
           return (
             <div key={log.id} style={{ display: 'grid', gridTemplateColumns: '150px 120px 1fr 80px 120px', padding: '0.5rem 1rem', borderBottom: '1px solid var(--border-color)', alignItems: 'start', fontSize: '0.76rem', background: isError ? 'rgba(248,113,113,0.03)' : undefined }}>
               <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.67rem', color: 'var(--text-muted)' }}>
-                {new Date(log.syncedAt).toLocaleString('es-ES', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                {new Date(log.syncedAt).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' })}
               </span>
               <span>
                 {src

@@ -16,7 +16,8 @@
     "register": "Register",
     "copied": "Copied",
     "revoked": "Revoked.",
-    "patch": "Patch v{{name}}"
+    "patch": "Patch v{{name}}",
+    "optional": "optional"
   },
   "nav": {
     "dashboard": "Dashboard",
@@ -79,7 +80,10 @@
     "syncMatches": "Sync matches",
     "syncing": "Syncing...",
     "syncDone": "Synced {{count}} match(es). {{remaining}} remaining.",
-    "checkingSession": "Checking session..."
+    "checkingSession": "Checking session...",
+    "managerNoTeam": "You don't have a team yet",
+    "managerNoTeamDesc": "As a manager, your first step is to create your team. Once created, you can invite staff and players.",
+    "createTeam": "Create team"
   },
   "teamRoster": {
     "title": "Teams & Roster",
@@ -136,7 +140,9 @@
     "failedLoadTeams": "Failed to load teams.",
     "failedLoadInvitations": "Failed to load invitations.",
     "failedCreate": "Failed to create invitation",
-    "expires": "Expires {{date}}"
+    "expires": "Expires {{date}}",
+    "noTeamOption": "— No team (standalone player) —",
+    "playerOnlyNote": "This creates a standalone player account with no team. You can assign them to a team later."
   },
   "playerScouting": {
     "title": "Player Scouting",
@@ -162,7 +168,13 @@
     "phaseAnalysis": "Phase Analysis",
     "visionControl": "Vision Control",
     "objectiveControl": "Objective Control",
-    "draftAnalysis": "Draft Analysis"
+    "draftAnalysis": "Draft Analysis",
+    "errorTitle": "Analysis error",
+    "phaseMacro": "Macro",
+    "phaseVision": "Vision",
+    "phaseDraft": "Draft",
+    "phasePerformance": "Performance",
+    "phaseEconomy": "Economy"
   },
   "rivalScouting": {
     "title": "Rival Scouting",
@@ -314,7 +326,16 @@
     "checkingSession": "Checking session...",
     "requiresAdmin": "Requires Platform Admin account.",
     "loading": "Loading...",
-    "noRecords": "No records found."
+    "noRecords": "No records found.",
+    "allModules": "All modules",
+    "allEntities": "All entities",
+    "allStatuses": "All statuses",
+    "columnDatetime": "Date & time",
+    "columnModule": "Module",
+    "columnDetail": "Detail / Error",
+    "columnStatus": "Status",
+    "columnUser": "User",
+    "sourceUser": "User"
   },
   "apiStatus": {
     "title": "API Status",
@@ -327,7 +348,8 @@
     "per24hModule": "By module (24h)",
     "lastSuccessfulSync": "Last successful sync",
     "refreshButton": "Refresh",
-    "requiresAdmin": "Requires Platform Admin account."
+    "requiresAdmin": "Requires Platform Admin account.",
+    "loadError": "Failed to load status. Restart the server if you just deployed changes."
   },
   "config": {
     "title": "Platform configuration",
@@ -336,14 +358,21 @@
     "loading": "Loading configuration…",
     "modified": "MODIFIED",
     "saveButton": "Save",
-    "resetButton": "Reset to default"
+    "resetButton": "Reset to default",
+    "loadError": "Error loading configuration",
+    "invalidValue": "Invalid value",
+    "saveError": "Error saving",
+    "resetError": "Error resetting"
   },
   "permissions": {
     "title": "Platform permissions",
     "basicView": "Basic view",
     "advancedView": "Advanced view",
     "restoreDefaults": "Restore defaults",
-    "saveChanges": "Save changes"
+    "saveChanges": "Save changes",
+    "loadError": "Error loading permissions",
+    "saveError": "Error saving permissions",
+    "resetError": "Error resetting permissions"
   },
   "users": {
     "title": "User Management",
@@ -399,6 +428,23 @@
     "statusReviewed": "Reviewed",
     "statusDismissed": "Dismissed",
     "allStatus": "All statuses",
+    "allStatuses": "All statuses",
+    "filterNew": "New",
+    "filterReviewed": "Reviewed",
+    "filterDismissed": "Dismissed",
+    "allTypes": "All types",
+    "filterBugs": "Bugs",
+    "filterSuggestions": "Suggestions",
+    "filterImprovements": "Improvements",
+    "anonymous": "Anonymous",
+    "sentLabel": "Sent:",
+    "emailLabel": "Email:",
+    "reviewedLabel": "Reviewed:",
+    "reviewerNote": "Reviewer note:",
+    "internalNotePlaceholder": "Internal note (optional)…",
+    "loadError": "Error loading feedback",
+    "screenshotError": "Error loading screenshot",
+    "updateError": "Error updating",
     "markReviewed": "Mark reviewed",
     "dismiss": "Dismiss",
     "reopen": "Reopen"
