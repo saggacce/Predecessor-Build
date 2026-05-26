@@ -25,7 +25,8 @@ export default function ConfigPage() {
   const numericVisible = entries.filter((e) => e.group === tab && e.textValue === null && e.minValue !== null);
   const llmEntries = entries.filter((e) => e.group === 'llm');
   const llmEnabled = llmEntries.find((e) => e.key === 'llm_enabled');
-  const llmTextEntries = llmEntries.filter((e) => e.textValue !== null);
+  const llmApiKeyEntry = llmEntries.find((e) => e.key === 'llm_api_key');
+  const llmTextEntries = llmEntries.filter((e) => e.textValue !== null && e.key !== 'llm_api_key');
   const llmNumericEntries = llmEntries.filter((e) => e.textValue === null && e.key !== 'llm_enabled');
 
   function getDraft(entry: PlatformConfigEntry): string {
@@ -150,6 +151,7 @@ export default function ConfigPage() {
       ) : tab === 'llm' ? (
         <LlmConfigTab
           llmEnabled={llmEnabled}
+          llmApiKeyEntry={llmApiKeyEntry}
           llmTextEntries={llmTextEntries}
           llmNumericEntries={llmNumericEntries}
           saving={saving}
@@ -193,11 +195,12 @@ export default function ConfigPage() {
 
 // ── LLM Config Tab ─────────────────────────────────────────────────────────────
 function LlmConfigTab({
-  llmEnabled, llmTextEntries, llmNumericEntries, saving, textDrafts: _textDrafts,
+  llmEnabled, llmApiKeyEntry, llmTextEntries, llmNumericEntries, saving, textDrafts,
   getTextDraft, setTextDraft, isTextDirty, getDraft, setDraft, isDirty,
   onToggle, onSaveText, onSaveNum,
 }: {
   llmEnabled: PlatformConfigEntry | undefined;
+  llmApiKeyEntry: PlatformConfigEntry | undefined;
   llmTextEntries: PlatformConfigEntry[];
   llmNumericEntries: PlatformConfigEntry[];
   saving: string | null;
@@ -214,6 +217,10 @@ function LlmConfigTab({
 }) {
   const isEnabled = llmEnabled?.value === 1;
   const isToggling = saving === 'llm_enabled';
+  const apiKeyIsSet = llmApiKeyEntry?.textValue === '__SET__';
+  const apiKeyDraft = textDrafts['llm_api_key'] ?? '';
+  const apiKeyDirty = apiKeyDraft.trim().length > 0;
+  const apiKeySaving = saving === 'llm_api_key';
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
@@ -226,7 +233,7 @@ function LlmConfigTab({
               Focus of the Day
             </div>
             <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', lineHeight: 1.5 }}>
-              Genera un análisis diario con IA para el coach basado en los insights del equipo. Aparece en el Dashboard de COACH y MANAGER. Requiere una API key válida en la variable de entorno <code style={{ fontFamily: 'var(--font-mono)', fontSize: '0.72rem', background: 'rgba(255,255,255,0.06)', padding: '1px 5px', borderRadius: 3 }}>OPENROUTER_API_KEY</code>.
+              Genera un análisis diario con IA para el coach basado en los insights del equipo. Aparece en el Dashboard de COACH y MANAGER. Requiere una API key configurada abajo.
             </div>
           </div>
           <button
@@ -256,6 +263,68 @@ function LlmConfigTab({
           )}
         </div>
       </div>
+
+      {/* API Key */}
+      {llmApiKeyEntry && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+          <div style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+            Autenticación
+          </div>
+          <div className="glass-card" style={{ padding: '1rem 1.25rem', borderLeft: `3px solid ${apiKeyIsSet ? 'var(--accent-teal-bright)' : 'var(--accent-loss)'}` }}>
+            <div style={{ fontWeight: 700, fontSize: '0.88rem', color: 'var(--text-primary)', marginBottom: '0.2rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              API Key
+              <span style={{
+                fontSize: '0.62rem', fontWeight: 700, padding: '1px 7px', borderRadius: 4,
+                background: apiKeyIsSet ? 'rgba(56,212,200,0.12)' : 'rgba(255,80,80,0.12)',
+                color: apiKeyIsSet ? 'var(--accent-teal-bright)' : 'var(--accent-loss)',
+              }}>
+                {apiKeyIsSet ? 'CONFIGURADA' : 'NO CONFIGURADA'}
+              </span>
+              {apiKeyDirty && (
+                <span style={{ fontSize: '0.6rem', fontWeight: 700, color: 'var(--accent-prime)', background: 'rgba(240,180,41,0.12)', padding: '1px 6px', borderRadius: 4 }}>
+                  nueva clave lista para guardar
+                </span>
+              )}
+            </div>
+            <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', margin: '0 0 0.7rem', lineHeight: 1.5 }}>
+              Clave de autenticación del proveedor LLM (OpenRouter, OpenAI, etc.). Se almacena de forma segura en el servidor y nunca se devuelve en texto plano.
+            </p>
+            <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+              <input
+                type="password"
+                value={apiKeyDraft}
+                onChange={(e) => setTextDraft('llm_api_key', e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && apiKeyDirty && llmApiKeyEntry) onSaveText(llmApiKeyEntry);
+                }}
+                placeholder={apiKeyIsSet ? 'Introduce una nueva clave para reemplazarla' : 'sk-or-v1-…'}
+                style={{
+                  flex: 1, padding: '0.4rem 0.65rem',
+                  background: 'var(--bg-dark)',
+                  border: `1px solid ${apiKeyDirty ? 'var(--accent-blue)' : 'var(--border-color)'}`,
+                  borderRadius: 6, color: 'var(--text-primary)',
+                  fontFamily: 'var(--font-mono)', fontSize: '0.82rem',
+                }}
+              />
+              <button
+                onClick={() => llmApiKeyEntry && onSaveText(llmApiKeyEntry)}
+                disabled={!apiKeyDirty || apiKeySaving}
+                style={{
+                  padding: '0.4rem 0.7rem', border: 'none', borderRadius: 6,
+                  cursor: apiKeyDirty ? 'pointer' : 'not-allowed',
+                  background: apiKeyDirty ? 'var(--accent-blue)' : 'var(--bg-dark)',
+                  color: apiKeyDirty ? '#fff' : 'var(--text-muted)',
+                  fontSize: '0.72rem', fontWeight: 700,
+                  display: 'flex', alignItems: 'center', gap: '0.3rem',
+                  opacity: apiKeySaving ? 0.6 : 1,
+                }}
+              >
+                <Save size={12} /> {apiKeySaving ? '…' : 'Guardar'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Text config fields (model, base URL) */}
       {llmTextEntries.length > 0 && (
@@ -379,14 +448,6 @@ function LlmConfigTab({
         </div>
       )}
 
-      <div className="glass-card" style={{ padding: '1rem 1.25rem', background: 'rgba(255,255,255,0.02)' }}>
-        <div style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--text-muted)', marginBottom: '0.5rem', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-          API Key
-        </div>
-        <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', margin: 0, lineHeight: 1.6 }}>
-          La API key del proveedor LLM se configura como variable de entorno en el servidor (<code style={{ fontFamily: 'var(--font-mono)', fontSize: '0.72rem', background: 'rgba(255,255,255,0.06)', padding: '1px 5px', borderRadius: 3 }}>OPENROUTER_API_KEY</code>). No se almacena en la base de datos por seguridad.
-        </p>
-      </div>
     </div>
   );
 }

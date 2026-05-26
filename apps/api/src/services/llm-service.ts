@@ -37,7 +37,7 @@ async function getLlmConfig(): Promise<{ enabled: boolean; model: string; baseUr
     enabled: (numMap.get('llm_enabled') ?? 0) === 1,
     model: textMap.get('llm_model') ?? process.env.LLM_MODEL ?? 'deepseek/deepseek-chat-v4',
     baseUrl: textMap.get('llm_base_url') ?? process.env.LLM_BASE_URL ?? 'https://openrouter.ai/api/v1',
-    apiKey: process.env.OPENROUTER_API_KEY ?? '',
+    apiKey: textMap.get('llm_api_key') ?? process.env.OPENROUTER_API_KEY ?? '',
     maxTokens: Math.round(numMap.get('llm_max_tokens') ?? 400),
   };
 }

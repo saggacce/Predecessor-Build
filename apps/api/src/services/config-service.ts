@@ -41,9 +41,14 @@ export async function getTextConfigMap(db: PrismaClient): Promise<Map<string, st
   return textCache.map;
 }
 
+const MASKED_KEYS = new Set(['llm_api_key']);
+
 export async function getAllConfig(db: PrismaClient): Promise<ConfigEntry[]> {
   const rows = await db.platformConfig.findMany({ orderBy: [{ group: 'asc' }, { key: 'asc' }] });
-  return rows as ConfigEntry[];
+  return rows.map((r) => ({
+    ...r,
+    textValue: MASKED_KEYS.has(r.key) ? (r.textValue ? '__SET__' : null) : r.textValue,
+  })) as ConfigEntry[];
 }
 
 export async function updateConfigValue(
