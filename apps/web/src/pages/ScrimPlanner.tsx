@@ -37,7 +37,7 @@ export default function ScrimPlanner() {
   const [editingResult, setEditingResult] = useState<string | null>(null);
 
   const isPlatformAdmin = user?.globalRole === 'PLATFORM_ADMIN';
-  const canEdit = isPlatformAdmin || (user?.memberships?.some((m) => m.team.id === teamId && m.role === 'COACH') ?? false);
+  const canEdit = isPlatformAdmin || (user?.memberships?.some((m) => m.teamId === teamId && m.role === 'COACH') ?? false);
 
   useEffect(() => {
     Promise.all([
