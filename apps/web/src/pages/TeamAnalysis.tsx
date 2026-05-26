@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState, type ChangeEvent, type CSSProperties, type ReactNode, type KeyboardEvent, type MouseEvent } from 'react';
+import { useTranslation } from 'react-i18next';
 import { createPortal } from 'react-dom';
 import { Link } from 'react-router';
 import { RankIcon } from '../components/RankIcon';
@@ -50,10 +51,10 @@ const emptyForm = (): TeamFormData => ({ name: '', abbreviation: '', logoUrl: ''
 
 
 class TeamAnalysisErrorBoundary extends React.Component<
-  { children: React.ReactNode },
+  { children: React.ReactNode; errorTitle: string; closeLabel: string },
   { error: Error | null }
 > {
-  constructor(props: { children: React.ReactNode }) {
+  constructor(props: { children: React.ReactNode; errorTitle: string; closeLabel: string }) {
     super(props);
     this.state = { error: null };
   }
@@ -62,9 +63,9 @@ class TeamAnalysisErrorBoundary extends React.Component<
     if (this.state.error) {
       return (
         <div className="glass-card" style={{ padding: '1.5rem', borderLeft: '3px solid var(--accent-loss)', margin: '1rem 0' }}>
-          <div style={{ fontWeight: 700, color: 'var(--accent-loss)', marginBottom: '0.5rem' }}>Error en el análisis</div>
+          <div style={{ fontWeight: 700, color: 'var(--accent-loss)', marginBottom: '0.5rem' }}>{this.props.errorTitle}</div>
           <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', marginBottom: '1rem' }}>{this.state.error.message}</div>
-          <button className="btn-secondary" style={{ fontSize: '0.8rem' }} onClick={() => this.setState({ error: null })}>Cerrar</button>
+          <button className="btn-secondary" style={{ fontSize: '0.8rem' }} onClick={() => this.setState({ error: null })}>{this.props.closeLabel}</button>
         </div>
       );
     }
@@ -73,6 +74,7 @@ class TeamAnalysisErrorBoundary extends React.Component<
 }
 
 export default function TeamAnalysis() {
+  const { t } = useTranslation();
   const [teams, setTeams] = useState<TeamProfile[]>([]);
   const [selected, setSelected] = useState<TeamProfile | null>(null);
   const [loading, setLoading] = useState(true);
@@ -520,7 +522,7 @@ export default function TeamAnalysis() {
 
             {/* Performance Tab */}
             {detailTab === 'performance' && selected && (
-              <TeamAnalysisErrorBoundary>
+              <TeamAnalysisErrorBoundary errorTitle={t('teamAnalysis.errorTitle')} closeLabel={t('common.close')}>
               <PerformanceTab
                 teamId={selected.id}
                 analysis={analysis}
@@ -1224,6 +1226,7 @@ const OBJ_LABELS: Record<string, string> = {
 function PerformanceTab({ teamId, analysis, loading, onRefresh }: {
   teamId: string; analysis: TeamAnalysis | null; loading: boolean; onRefresh: () => void;
 }) {
+  const { i18n } = useTranslation();
   const [syncingMatches, setSyncingMatches] = useState(false);
   const [syncResult, setSyncResult] = useState<{ synced: number; remaining: number } | null>(null);
   const [insights, setInsights] = useState<Insight[] | null>(null);
@@ -1235,11 +1238,11 @@ function PerformanceTab({ teamId, analysis, loading, onRefresh }: {
 
   useEffect(() => {
     setLoadingInsights(true);
-    apiClient.analyst.insights(teamId)
+    apiClient.analyst.insights(teamId, i18n.language)
       .then((res) => setInsights(res.insights))
       .catch(() => setInsights([]))
       .finally(() => setLoadingInsights(false));
-  }, [teamId]);
+  }, [teamId, i18n.language]);
 
   async function handleSyncMatches() {
     setSyncingMatches(true);
@@ -1643,13 +1646,17 @@ const SEVERITY_BG: Record<string, string> = {
   low: 'rgba(255,255,255,0.03)',
   positive: 'rgba(74,222,128,0.08)',
 };
-const CATEGORY_LABEL: Record<string, string> = {
-  macro: 'Macro', vision: 'Visión', draft: 'Draft', performance: 'Rendimiento', economy: 'Economía',
-};
-
 function InsightCard({ insight: ins, last, expanded, onToggle, teamId }: {
   insight: Insight; last: boolean; expanded: boolean; onToggle: () => void; teamId: string;
 }) {
+  const { t } = useTranslation();
+  const CATEGORY_LABEL: Record<string, string> = {
+    macro: t('teamAnalysis.phaseMacro'),
+    vision: t('teamAnalysis.phaseVision'),
+    draft: t('teamAnalysis.phaseDraft'),
+    performance: t('teamAnalysis.phasePerformance'),
+    economy: t('teamAnalysis.phaseEconomy'),
+  };
   const [added, setAdded] = useState(false);
 
   async function handleAddToReview() {
