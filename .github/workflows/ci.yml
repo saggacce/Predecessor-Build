@@ -60,6 +60,9 @@ jobs:
             echo "→ Building frontend..."
             cd apps/web && npm run build && cd ../..
 
+            echo "→ Clearing tsx cache..."
+            rm -rf ~/.cache/tsx
+
             echo "→ Restarting API..."
             pm2 restart riftline-api --update-env
 
