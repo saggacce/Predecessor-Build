@@ -4,10 +4,11 @@ import {
   AlertTriangle, Calendar, Target, Sparkles, X, Maximize2, Minimize2,
   ThumbsUp, ThumbsDown, CheckCircle, LayoutDashboard, PenLine, Users,
   CalendarDays, Menu, Pencil, Minus, ArrowRight, Circle, Square,
-  Eraser, Undo2, Trash2,
+  Eraser, Undo2, Trash2, TreePine, Zap, Shield, Heart,
 } from 'lucide-react';
 import {
-  apiClient, type Insight, type ScrimScheduleItem, type TeamGoal, type TeamProfile,
+  apiClient, type Insight, type ScrimScheduleItem, type TeamGoal,
+  type TeamProfile, type PlayerAnalysisStat,
 } from '../api/client';
 import { useAuth } from '../hooks/useAuth';
 
@@ -41,6 +42,9 @@ const ROLE_COLOR: Record<string, string> = {
 };
 const ROLE_LABEL: Record<string, string> = {
   CARRY: 'Carry', JUNGLE: 'Jungle', MIDLANE: 'Mid', OFFLANE: 'Offlane', SUPPORT: 'Support',
+};
+const ROLE_ICON: Record<string, React.FC<{ size?: number; style?: React.CSSProperties }>> = {
+  CARRY: Target, JUNGLE: TreePine, MIDLANE: Zap, OFFLANE: Shield, SUPPORT: Heart,
 };
 const DRAW_COLORS = ['#ffffff', '#f87171', '#60a5fa', '#4ade80', '#fbbf24', '#a78bfa', '#fb923c'];
 const DRAW_TOOLS: Array<{ id: DrawTool; label: string; Icon: React.FC<{ size?: number }> }> = [
@@ -291,92 +295,117 @@ const STATUS_LABEL: Record<string, string> = {
 
 interface TooltipState {
   member: RosterMember;
+  stats: PlayerAnalysisStat | null;
   x: number;
   y: number;
 }
 
-function RosterTooltip({ member, x, y }: TooltipState) {
+function StatRow({ label, value, mono = true, color }: { label: string; value: string; mono?: boolean; color?: string }) {
+  return (
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.72rem' }}>
+      <span style={{ color: 'var(--text-muted)' }}>{label}</span>
+      <span style={{ color: color ?? 'var(--text-secondary)', fontFamily: mono ? 'var(--font-mono)' : 'inherit', fontWeight: 600 }}>
+        {value}
+      </span>
+    </div>
+  );
+}
+
+function RosterTooltip({ member, stats, x, y }: TooltipState) {
   const role = (member.role ?? '').toUpperCase();
   const roleColor = ROLE_COLOR[role] ?? 'var(--text-muted)';
   const name = member.customName ?? member.displayName;
-  const status = (member.rosterStatus ?? '').toUpperCase();
-  const since = member.activeFrom
-    ? new Date(member.activeFrom).toLocaleDateString(undefined, { month: 'long', year: 'numeric' })
-    : null;
 
-  // Clamp so tooltip stays inside viewport
-  const tipW = 240;
-  const left = Math.min(x + 14, window.innerWidth - tipW - 12);
-  const top  = y - 8;
+  const tipW = 260;
+  const left = Math.min(x + 16, window.innerWidth - tipW - 12);
+  const top  = Math.min(y - 8, window.innerHeight - 320);
+
+  const wrColor = stats
+    ? stats.winRate >= 0.55 ? 'var(--accent-win)' : stats.winRate < 0.45 ? 'var(--accent-loss)' : 'var(--text-secondary)'
+    : undefined;
+  const recentTotal = stats ? (stats.recentWins + stats.recentLosses) : 0;
 
   return (
     <div style={{
       position: 'fixed', left, top, width: tipW, zIndex: 200,
-      background: 'var(--bg-panel, #131929)',
+      background: '#0f1623',
       border: `1px solid ${roleColor}44`,
       borderLeft: `3px solid ${roleColor}`,
       borderRadius: 8,
-      padding: '0.85rem 1rem',
-      boxShadow: '0 8px 32px rgba(0,0,0,0.55)',
-      display: 'flex', flexDirection: 'column', gap: '0.45rem',
+      padding: '0.9rem 1rem',
+      boxShadow: '0 12px 40px rgba(0,0,0,0.65)',
+      display: 'flex', flexDirection: 'column', gap: '0.4rem',
       pointerEvents: 'none',
     }}>
-      {/* Role badge */}
-      <span style={{ fontSize: '0.58rem', fontWeight: 800, color: roleColor, textTransform: 'uppercase', letterSpacing: '0.1em' }}>
-        {(ROLE_LABEL[role] ?? role) || 'Sin rol'}
-      </span>
-      {/* Name */}
-      <div style={{ fontWeight: 700, fontSize: '1rem', color: 'var(--text-primary)', lineHeight: 1.2 }}>
-        {name}
-      </div>
-      {/* In-game name vs custom name */}
+      {/* Header */}
+      <div style={{ fontWeight: 700, fontSize: '1rem', color: 'var(--text-primary)', lineHeight: 1.2 }}>{name}</div>
       {member.customName && member.customName !== member.displayName && (
-        <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
-          IG: {member.displayName}
-        </div>
+        <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>IG: {member.displayName}</div>
       )}
-      <div style={{ height: 1, background: 'rgba(255,255,255,0.06)', margin: '0.1rem 0' }} />
-      {/* Status */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.72rem' }}>
-        <span style={{ color: 'var(--text-muted)' }}>Estado</span>
-        <span style={{ color: 'var(--text-secondary)', fontWeight: 600 }}>
-          {STATUS_LABEL[status] ?? status}
-        </span>
-      </div>
-      {/* Rating */}
       {member.rating?.rankLabel && (
-        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.72rem' }}>
-          <span style={{ color: 'var(--text-muted)' }}>Ranking</span>
-          <span style={{ color: 'var(--text-secondary)', fontFamily: 'var(--font-mono)', fontWeight: 600 }}>
-            {member.rating.rankLabel}
-          </span>
+        <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
+          {member.rating.rankLabel}{member.rating.ratingPoints != null && ` · ${member.rating.ratingPoints} pts`}
         </div>
       )}
-      {member.rating?.ratingPoints != null && (
-        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.72rem' }}>
-          <span style={{ color: 'var(--text-muted)' }}>Puntos</span>
-          <span style={{ color: 'var(--text-secondary)', fontFamily: 'var(--font-mono)' }}>
-            {member.rating.ratingPoints}
-          </span>
-        </div>
-      )}
-      {/* Since */}
-      {since && (
-        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.72rem' }}>
-          <span style={{ color: 'var(--text-muted)' }}>En el equipo</span>
-          <span style={{ color: 'var(--text-secondary)' }}>desde {since}</span>
-        </div>
+
+      {stats ? (
+        <>
+          <div style={{ height: 1, background: 'rgba(255,255,255,0.07)', margin: '0.25rem 0' }} />
+          {/* Core stats */}
+          <StatRow label="Partidas" value={String(stats.matches)} />
+          <StatRow label="Win Rate" value={`${(stats.winRate * 100).toFixed(1)}%`} color={wrColor} />
+          <StatRow label="KDA" value={stats.kda.toFixed(2)} color={stats.kda >= 3 ? 'var(--accent-win)' : stats.kda < 2 ? 'var(--accent-loss)' : undefined} />
+          {stats.avgGPM != null && <StatRow label="GPM" value={stats.avgGPM.toFixed(0)} />}
+          {stats.avgDPM != null && <StatRow label="DPM" value={stats.avgDPM.toFixed(0)} />}
+
+          {/* Recent form */}
+          {recentTotal > 0 && (
+            <>
+              <div style={{ height: 1, background: 'rgba(255,255,255,0.07)', margin: '0.15rem 0' }} />
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.72rem' }}>
+                <span style={{ color: 'var(--text-muted)' }}>Forma reciente</span>
+                <span style={{ fontFamily: 'var(--font-mono)', display: 'flex', gap: '0.25rem' }}>
+                  <span style={{ color: 'var(--accent-win)', fontWeight: 700 }}>{stats.recentWins}V</span>
+                  <span style={{ color: 'var(--text-muted)' }}>/</span>
+                  <span style={{ color: 'var(--accent-loss)', fontWeight: 700 }}>{stats.recentLosses}D</span>
+                </span>
+              </div>
+            </>
+          )}
+
+          {/* Top hero */}
+          {stats.topHeroes.length > 0 && (
+            <>
+              <div style={{ height: 1, background: 'rgba(255,255,255,0.07)', margin: '0.15rem 0' }} />
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.72rem' }}>
+                <span style={{ color: 'var(--text-muted)' }}>Hero principal</span>
+                <span style={{ color: 'var(--text-secondary)', fontWeight: 600 }}>
+                  {stats.topHeroes[0].name}
+                  <span style={{ color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', fontWeight: 400 }}>
+                    {' '}· {(stats.topHeroes[0].winRate * 100).toFixed(0)}% WR
+                  </span>
+                </span>
+              </div>
+            </>
+          )}
+        </>
+      ) : (
+        <>
+          <div style={{ height: 1, background: 'rgba(255,255,255,0.07)', margin: '0.25rem 0' }} />
+          <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontStyle: 'italic' }}>Sin estadísticas disponibles</div>
+        </>
       )}
     </div>
   );
 }
 
 function RosterSection({
-  title, members, onHover, onLeave,
+  title, members, statsMap, onHover, onLeave,
 }: {
   title: string;
   members: RosterMember[];
-  onHover: (m: RosterMember, e: React.MouseEvent) => void;
+  statsMap: Map<string, PlayerAnalysisStat>;
+  onHover: (m: RosterMember, s: PlayerAnalysisStat | null, e: React.MouseEvent) => void;
   onLeave: () => void;
 }) {
   if (members.length === 0) return null;
@@ -388,42 +417,56 @@ function RosterSection({
         marginBottom: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.5rem',
       }}>
         {title}
-        <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-muted)', opacity: 0.6, fontWeight: 400 }}>
-          {members.length}
-        </span>
+        <span style={{ fontFamily: 'var(--font-mono)', opacity: 0.6, fontWeight: 400 }}>{members.length}</span>
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '0.75rem' }}>
         {members.map((m) => {
           const role = (m.role ?? '').toUpperCase();
           const roleColor = ROLE_COLOR[role] ?? 'var(--text-muted)';
+          const RoleIcon = ROLE_ICON[role];
           const name = m.customName ?? m.displayName;
+          const stat = statsMap.get(m.playerId) ?? null;
+          const wrColor = stat
+            ? stat.winRate >= 0.55 ? 'var(--accent-win)' : stat.winRate < 0.45 ? 'var(--accent-loss)' : 'var(--text-muted)'
+            : 'var(--text-muted)';
           return (
             <div
               key={m.rosterId}
               className="glass-card"
-              onMouseEnter={(e) => onHover(m, e)}
-              onMouseMove={(e) => onHover(m, e)}
+              onMouseEnter={(e) => onHover(m, stat, e)}
+              onMouseMove={(e) => onHover(m, stat, e)}
               onMouseLeave={onLeave}
               style={{
                 padding: '1rem 1.25rem',
                 borderLeft: `3px solid ${roleColor}`,
-                display: 'flex', flexDirection: 'column', gap: '0.35rem',
-                cursor: 'default', transition: 'background 0.15s',
+                display: 'flex', flexDirection: 'column', gap: '0.4rem',
+                cursor: 'default',
               }}
             >
-              <span style={{ fontSize: '0.58rem', fontWeight: 800, color: roleColor, textTransform: 'uppercase', letterSpacing: '0.1em' }}>
-                {(ROLE_LABEL[role] ?? role) || 'Sin rol'}
-              </span>
+              {/* Role + icon */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                {RoleIcon && <RoleIcon size={11} style={{ color: roleColor, flexShrink: 0 }} />}
+                <span style={{ fontSize: '0.58rem', fontWeight: 800, color: roleColor, textTransform: 'uppercase', letterSpacing: '0.1em' }}>
+                  {(ROLE_LABEL[role] ?? role) || 'Sin rol'}
+                </span>
+              </div>
+              {/* Name */}
               <div style={{ fontSize: '1.05rem', fontWeight: 700, color: 'var(--text-primary)', lineHeight: 1.2 }}>
                 {name || <span style={{ color: 'var(--text-muted)', fontStyle: 'italic', fontSize: '0.85rem' }}>Sin nombre</span>}
               </div>
-              {m.rating?.rankLabel ? (
+              {/* Quick stats */}
+              {stat ? (
+                <div style={{ display: 'flex', gap: '0.6rem', fontSize: '0.68rem', fontFamily: 'var(--font-mono)', marginTop: '0.1rem' }}>
+                  <span style={{ color: wrColor }}>{(stat.winRate * 100).toFixed(0)}% WR</span>
+                  <span style={{ color: 'var(--text-muted)' }}>·</span>
+                  <span style={{ color: 'var(--text-muted)' }}>{stat.kda.toFixed(1)} KDA</span>
+                </div>
+              ) : m.rating?.rankLabel ? (
                 <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
                   {m.rating.rankLabel}
-                  {m.rating.ratingPoints != null && ` · ${m.rating.ratingPoints} pts`}
                 </div>
               ) : (
-                <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)', opacity: 0.5, fontStyle: 'italic' }}>Sin ranking</div>
+                <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)', opacity: 0.4, fontStyle: 'italic' }}>Sin datos</div>
               )}
             </div>
           );
@@ -435,16 +478,22 @@ function RosterSection({
 
 function RosterPanel({ teamId }: { teamId: string }) {
   const [profile, setProfile]   = useState<TeamProfile | null>(null);
+  const [statsMap, setStatsMap] = useState<Map<string, PlayerAnalysisStat>>(new Map());
   const [loading, setLoading]   = useState(true);
   const [tooltip, setTooltip]   = useState<TooltipState | null>(null);
 
   useEffect(() => {
     if (!teamId) return;
     setLoading(true);
-    apiClient.teams.getProfile(teamId)
-      .then(setProfile)
-      .catch(() => null)
-      .finally(() => setLoading(false));
+    Promise.all([
+      apiClient.teams.getProfile(teamId).catch(() => null),
+      apiClient.teams.getAnalysis(teamId).catch(() => null),
+    ]).then(([prof, analysis]) => {
+      setProfile(prof);
+      const map = new Map<string, PlayerAnalysisStat>();
+      for (const s of analysis?.playerStats ?? []) map.set(s.playerId, s);
+      setStatsMap(map);
+    }).finally(() => setLoading(false));
   }, [teamId]);
 
   if (loading) return (
@@ -471,14 +520,14 @@ function RosterPanel({ teamId }: { teamId: string }) {
     </div>
   );
 
-  const handleHover = (m: RosterMember, e: React.MouseEvent) =>
-    setTooltip({ member: m, x: e.clientX, y: e.clientY });
+  const handleHover = (m: RosterMember, s: PlayerAnalysisStat | null, e: React.MouseEvent) =>
+    setTooltip({ member: m, stats: s, x: e.clientX, y: e.clientY });
 
   return (
     <div style={{ flex: 1, overflowY: 'auto', padding: '1.5rem', position: 'relative' }}>
       <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem', maxWidth: 1280, margin: '0 auto' }}>
-        <RosterSection title="Titulares" members={starters} onHover={handleHover} onLeave={() => setTooltip(null)} />
-        <RosterSection title="Suplentes" members={bench}    onHover={handleHover} onLeave={() => setTooltip(null)} />
+        <RosterSection title="Titulares" members={starters} statsMap={statsMap} onHover={handleHover} onLeave={() => setTooltip(null)} />
+        <RosterSection title="Suplentes" members={bench}    statsMap={statsMap} onHover={handleHover} onLeave={() => setTooltip(null)} />
       </div>
       {tooltip && <RosterTooltip {...tooltip} />}
     </div>
