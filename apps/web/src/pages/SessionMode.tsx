@@ -28,13 +28,16 @@ export default function SessionMode() {
   const { user } = useAuth();
   const navigate = useNavigate();
 
-  const staffTeams = (user?.memberships ?? [])
-    .filter((m) => m.role === 'COACH' || m.role === 'MANAGER')
-    .map((m) => m.team);
   const isPlatformAdmin = user?.globalRole === 'PLATFORM_ADMIN';
+  // memberships from session have flat shape: { teamId, role, playerId }
+  const staffTeamIds = new Set(
+    (user?.memberships ?? [])
+      .filter((m) => m.role === 'COACH' || m.role === 'MANAGER')
+      .map((m) => (m as unknown as { teamId: string }).teamId),
+  );
 
-  const [allTeams, setAllTeams] = useState(staffTeams);
-  const [teamId, setTeamId] = useState(staffTeams[0]?.id ?? '');
+  const [allTeams, setAllTeams] = useState<Array<{ id: string; name: string }>>([]);
+  const [teamId, setTeamId] = useState('');
 
   const [insights, setInsights] = useState<Insight[]>([]);
   const [schedule, setSchedule] = useState<ScrimScheduleItem[]>([]);
@@ -62,17 +65,19 @@ export default function SessionMode() {
     return () => document.removeEventListener('fullscreenchange', onFsc);
   }, []);
 
-  // Platform admin: fetch all own teams if no staff memberships
+  // Fetch own teams from API — filter by staff role for non-admins
   useEffect(() => {
-    if (isPlatformAdmin && staffTeams.length === 0) {
-      apiClient.teams.list('OWN')
-        .then((r) => {
-          setAllTeams(r.teams ?? []);
-          if (r.teams?.length) setTeamId(r.teams[0].id);
-        })
-        .catch(() => null);
-    }
-  }, [isPlatformAdmin]);
+    apiClient.teams.list('OWN')
+      .then((r) => {
+        const teams = r.teams ?? [];
+        const filtered = isPlatformAdmin
+          ? teams
+          : teams.filter((t) => staffTeamIds.has(t.id));
+        setAllTeams(filtered);
+        if (filtered.length > 0) setTeamId(filtered[0].id);
+      })
+      .catch(() => null);
+  }, []);
 
   // Load session data when teamId changes
   useEffect(() => {
