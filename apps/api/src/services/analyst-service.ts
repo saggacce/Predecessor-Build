@@ -2,6 +2,7 @@ import { type PrismaClient } from '@prisma/client';
 import { db } from '../db.js';
 import { AppError } from '../middleware/error-handler.js';
 import { getConfigMap } from './config-service.js';
+import { insightStrings, type InsightLang } from './insight-strings.js';
 
 export interface Insight {
   id: string;
@@ -42,7 +43,7 @@ function fmt(n: number) {
 
 // ── Main export ───────────────────────────────────────────────────────────────
 
-export async function getTeamInsights(teamId: string): Promise<Insight[]> {
+export async function getTeamInsights(teamId: string, lang: InsightLang = 'es'): Promise<Insight[]> {
   const team = await db.team.findUnique({
     where: { id: teamId },
     include: {
@@ -221,24 +222,17 @@ export async function getTeamInsights(teamId: string): Promise<Insight[]> {
     const critPct = pct(matchesWithCritDeath, eventMatchIds.length);
     if (critPct >= 60) {
       const roles = [...new Set(affectedByMatch.map((a) => a.playerName))].slice(0, 3);
+      const objTypes = [...new Set(affectedByMatch.map((a) => a.objType))];
+      // See insight-strings.ts for text
+      const txt = insightStrings['rule-crit-death-obj'](lang, {
+        critPct, matchesWithCritDeath, totalMatches: eventMatchIds.length,
+        roles, objTypes, isRival, teamRef,
+      });
       insights.push({
         id: 'rule-crit-death-obj',
         severity: 'critical',
         category: 'macro',
-        title: isRival
-          ? `Rival vulnerable antes de objetivos (${critPct}% de partidas)`
-          : 'Muertes críticas antes de objetivos mayores',
-        body: isRival
-          ? `${teamRef} pierde jugadores en los 60s previos a objetivos mayores en el ${critPct}% de sus partidas. Aprovechar este patrón contestando el objetivo cuando detectes que están en desventaja de vida.`
-          : `En el ${critPct}% de las partidas analizadas, un jugador del roster muere en los 60s previos a un objetivo mayor (Fangtooth, Prime, Shaper).`,
-        evidence: [
-          `${matchesWithCritDeath} de ${eventMatchIds.length} partidas con death pre-objetivo`,
-          `Jugadores más afectados: ${roles.join(', ')}`,
-          `Objetivos: ${[...new Set(affectedByMatch.map((a) => a.objType))].join(', ')}`,
-        ],
-        recommendation: isRival
-          ? 'Forzar peleas de teamfight 60-90s antes de cada spawn de objetivo mayor. Si caen 1-2 jugadores rivales, contestar inmediatamente sin esperar setup propio.'
-          : 'Revisar el posicionamiento y el timing de setup 90s antes de cada objetivo mayor. Priorizar reset si hay ventaja de vida insuficiente.',
+        ...txt,
         reviewRequired: !isRival,
         affectedPlayers: roles,
       });
@@ -270,23 +264,16 @@ export async function getTeamInsights(teamId: string): Promise<Insight[]> {
 
     const noVisionPct = pct(objsWithNoVision, totalObjs);
     if (totalObjs >= MIN_OBJ_OPPORTUNITIES && noVisionPct >= 50) {
+      // See insight-strings.ts for text
+      const txt = insightStrings['rule-low-vision-obj'](lang, {
+        noVisionPct, objsWithNoVision, totalObjs, totalMatches: eventMatchIds.length,
+        isRival, teamRef,
+      });
       insights.push({
         id: 'rule-low-vision-obj',
         severity: 'high',
         category: 'vision',
-        title: isRival
-          ? `Rival sin visión pre-objetivo (${noVisionPct}% de objetivos)`
-          : 'Sin setup de visión antes de objetivos',
-        body: isRival
-          ? `${teamRef} no coloca wards en los 90s previos al ${noVisionPct}% de sus objetivos mayores. Explotar esta ceguera: entrar a la zona del objetivo sin establecer visión y sorprender en el contest.`
-          : `${teamRef} no coloca wards en los 90s previos al ${noVisionPct}% de los objetivos mayores disputados.`,
-        evidence: [
-          `${objsWithNoVision} de ${totalObjs} objetivos sin wards previas`,
-          `Se analizaron ${eventMatchIds.length} partidas con event stream`,
-        ],
-        recommendation: isRival
-          ? 'Preparar el contest del objetivo antes de que el rival establezca visión. El soporte rival llega tarde — entrar por los flancos y forzar el teamfight sin información del rival.'
-          : 'Establecer una rutina de visión obligatoria 90-120s antes de cada Fangtooth/Prime/Shaper. El support y el jungla deben iniciar el setup.',
+        ...txt,
         reviewRequired: !isRival,
       });
     }
@@ -317,23 +304,15 @@ export async function getTeamInsights(teamId: string): Promise<Insight[]> {
 
     const cleanedPct = pct(objsWithCleanedVision, totalObjs);
     if (totalObjs >= MIN_OBJ_OPPORTUNITIES && cleanedPct >= 40) {
+      // See insight-strings.ts for text
+      const txt = insightStrings['rule-vision-cleaned'](lang, {
+        cleanedPct, objsWithCleanedVision, totalObjs, isRival, teamRef,
+      });
       insights.push({
         id: 'rule-vision-cleaned',
         severity: 'high',
         category: 'vision',
-        title: isRival
-          ? `El rival hace denial de visión activo (${cleanedPct}% de objetivos)`
-          : 'El rival limpia la visión antes de objetivos',
-        body: isRival
-          ? `${teamRef} destruye sistemáticamente 2 o más wards en los 120s previos al ${cleanedPct}% de los objetivos. Anticipar este patrón: colocar wards adicionales de backup o usar sweepers antes del spawn.`
-          : `En el ${cleanedPct}% de los objetivos, el rival destruye 2 o más wards propias en los 120s previos, llegando sin información.`,
-        evidence: [
-          `${objsWithCleanedVision} de ${totalObjs} objetivos con visión limpiada`,
-          isRival ? 'El rival tiene una rutina establecida de denial de visión' : 'El rival está haciendo denial activo de visión antes de contestar',
-        ],
-        recommendation: isRival
-          ? 'Colocar wards de backup en zonas secundarias que el rival no limpia. Usar oráculos propios para detectar al sweeper rival antes de que limpie el setup principal.'
-          : 'Usar wards de tipo Oracle/Sentry para proteger zonas de visión propia. Colocar wards de backup más tarde para no perder todo el setup.',
+        ...txt,
         reviewRequired: false,
       });
     }
@@ -362,23 +341,15 @@ export async function getTeamInsights(teamId: string): Promise<Insight[]> {
 
     const notConvPct = pct(notConverted, teamPrimes.length);
     if (teamPrimes.length >= MIN_OBJ_TYPE && notConvPct >= 50) {
+      // See insight-strings.ts for text
+      const txt = insightStrings['rule-prime-no-conv'](lang, {
+        notConvPct, notConverted, teamPrimesLength: teamPrimes.length, isRival, teamRef,
+      });
       insights.push({
         id: 'rule-prime-no-conv',
         severity: 'high',
         category: 'macro',
-        title: isRival
-          ? `Rival no convierte Primes en estructura (${notConvPct}%)`
-          : 'Orb Prime sin conversión en estructura',
-        body: isRival
-          ? `${teamRef} no presiona ninguna estructura en los 3 minutos posteriores al ${notConvPct}% de los Primes que consigue. Aprovechar ese tiempo para resetear, recuperar posición y preparar el siguiente objetivo.`
-          : `${teamRef} no destruye ninguna estructura en los 3 minutos siguientes al ${notConvPct}% de los Orb Prime que asegura.`,
-        evidence: [
-          `${notConverted} de ${teamPrimes.length} primes sin estructura posterior`,
-          isRival ? 'El rival desperdicia la ventaja de mapa de Prime sistemáticamente' : 'Se pierde la ventaja de mapa que genera Orb Prime',
-        ],
-        recommendation: isRival
-          ? 'Cuando el rival consiga Prime, dispersarse rápidamente, recuperar vida y preparar el siguiente contest. El rival no explotará el Prime — tenemos tiempo para reposicionarnos.'
-          : 'Definir un protocolo post-Prime: ejecutar split push o ataque de inhibidor inmediatamente. No resetear hasta presionar una estructura.',
+        ...txt,
         reviewRequired: !isRival,
       });
     }
@@ -400,23 +371,15 @@ export async function getTeamInsights(teamId: string): Promise<Insight[]> {
     if (top2Pct >= 65) {
       const name = playerName.get(playerId) ?? 'Unknown';
       const heroes = sorted.slice(0, 2).map(([h]) => h).join(' + ');
+      // See insight-strings.ts for text
+      const txt = insightStrings['rule-draft-dep'](lang, {
+        name, top2Pct, top2, mpsLength: mps.length, heroes, poolSize: sorted.length, isRival,
+      });
       insights.push({
         id: `rule-draft-dep-${playerId}`,
         severity: 'medium',
         category: 'draft',
-        title: isRival
-          ? `Banear a ${name}: pool de solo 2 héroes`
-          : `Dependencia de draft: ${name}`,
-        body: isRival
-          ? `${name} (rival) juega el ${top2Pct}% de sus partidas con ${heroes}. Si baneamos uno de estos héroes, obligamos al rival a salir de su zona de confort.`
-          : `${name} concentra el ${top2Pct}% de sus partidas en solo 2 héroes (${heroes}). Alta vulnerabilidad si uno es baneado.`,
-        evidence: [
-          `${top2} de ${mps.length} partidas con ${heroes}`,
-          `Pool total: ${sorted.length} héroes distintos`,
-        ],
-        recommendation: isRival
-          ? `Priorizar el ban de ${heroes.split(' + ')[0]} en la fase de bans. Forzar a ${name} a un héroe secundario reduce significativamente su impacto.`
-          : `Ampliar el pool de ${name} con al menos 1 héroe adicional viable. Priorizar en sesiones de scrim.`,
+        ...txt,
         reviewRequired: false,
         affectedPlayers: [name],
       });
@@ -467,23 +430,13 @@ export async function getTeamInsights(teamId: string): Promise<Insight[]> {
     }
 
     if (throwMatches >= 4) {
+      // See insight-strings.ts for text
+      const txt = insightStrings['rule-throw'](lang, { throwMatches, isRival, teamRef });
       insights.push({
         id: 'rule-throw',
         severity: 'high',
         category: 'economy',
-        title: isRival
-          ? `Rival throw en ${throwMatches} partidas — vulnerable en ventaja`
-          : `Patrón de throw detectado (${throwMatches} partidas)`,
-        body: isRival
-          ? `${teamRef} pierde partidas en las que tuvo +3.000 oro de ventaja (${throwMatches} casos). Si conseguimos igualar o superar su gold en partidas que van perdiendo, pueden cometer errores de cierre.`
-          : `En ${throwMatches} derrotas, ${teamRef} tuvo una ventaja de +3.000 oro en algún momento y no cerró la partida.`,
-        evidence: [
-          `${throwMatches} partidas con gold lead >3k que terminaron en derrota`,
-          isRival ? 'El rival no convierte ventaja económica — una comeback es viable si aguantamos' : 'El equipo no convierte ventaja económica en objetivos o estructura',
-        ],
-        recommendation: isRival
-          ? 'Si vamos por detrás en oro, mantenernos vivos y esperar el error del rival en la fase de cierre. Evitar teamfights directas cuando la ventaja rival supera 5k.'
-          : 'Definir una regla de cierre cuando la ventaja supera 3k: priorizar Prime, inhibidor o push coordinado. No dispersarse después de objetivos grandes.',
+        ...txt,
         reviewRequired: !isRival,
       });
     }
@@ -511,23 +464,15 @@ export async function getTeamInsights(teamId: string): Promise<Insight[]> {
     const delta = recentKda - historicalKda;
     if (delta < -1.0 && recentKda < 2.0) {
       const name = playerName.get(playerId) ?? 'Unknown';
+      // See insight-strings.ts for text
+      const txt = insightStrings['rule-slump'](lang, {
+        name, recentKda, historicalKda, delta, isRival,
+      });
       insights.push({
         id: `rule-slump-${playerId}`,
         severity: 'medium',
         category: 'performance',
-        title: isRival
-          ? `${name} (rival) en bajón de forma — momento para explotar`
-          : `Bajón de rendimiento: ${name}`,
-        body: isRival
-          ? `${name} está rindiendo por debajo de su nivel habitual (KDA reciente ${recentKda.toFixed(2)} vs histórico ${historicalKda.toFixed(2)}). Buen momento para presionarle directamente durante la partida.`
-          : `KDA de ${name} en las últimas 10 partidas (${recentKda.toFixed(2)}) es significativamente inferior a su histórico (${historicalKda.toFixed(2)}).`,
-        evidence: [
-          `KDA histórico: ${historicalKda.toFixed(2)}`,
-          `KDA últimas 10: ${recentKda.toFixed(2)} (${delta.toFixed(2)} de diferencia)`,
-        ],
-        recommendation: isRival
-          ? `Dirigir la presión hacia el carril de ${name}. Campear su jungla o carril, forzar errores cuando ya está en bajón de confianza.`
-          : `Revisar partidas recientes de ${name} para identificar si es un problema de draft, rol, posicionamiento o momento individual.`,
+        ...txt,
         reviewRequired: false,
         affectedPlayers: [name],
       });
@@ -557,20 +502,17 @@ export async function getTeamInsights(teamId: string): Promise<Insight[]> {
   }
 
   if (lowVisionPlayers.length > 0) {
+    // See insight-strings.ts for text
+    const txt = insightStrings['rule-vision-gaps'](lang, {
+      lowVisionPlayersCount: lowVisionPlayers.length,
+      lowVisionPlayers,
+      isRival,
+    });
     insights.push({
       id: 'rule-vision-gaps',
       severity: 'medium',
       category: 'vision',
-      title: isRival
-        ? `Rival con visión deficiente en ${lowVisionPlayers.length} rol(es)`
-        : 'Actividad de visión por debajo del umbral',
-      body: isRival
-        ? `${lowVisionPlayers.length} jugador(es) rival(es) colocan significativamente menos wards de las esperadas para su rol. El mapa del rival tendrá zonas ciegas que podemos explotar.`
-        : `${lowVisionPlayers.length} jugador(es) del roster tienen un ratio de wards/min notablemente inferior al esperado para su rol.`,
-      evidence: lowVisionPlayers,
-      recommendation: isRival
-        ? 'Moverse por las zonas de menor cobertura de visión rival para ganar información sin ser detectados. Especialmente valioso para el jungla en las rutas de invasión.'
-        : 'Establecer objetivos individuales de visión. En scrims, contar wards colocadas por el support y jungla antes de cada objetivo.',
+      ...txt,
       reviewRequired: false,
       affectedPlayers: lowVisionPlayers.map((s) => s.split(' (')[0]),
     });
@@ -602,39 +544,29 @@ export async function getTeamInsights(teamId: string): Promise<Insight[]> {
   const primeCtrl = pct(primeData.team, primeTotal);
 
   if (ftTotal >= MIN_OBJ_OPPORTUNITIES && ftCtrl >= 70) {
+    // See insight-strings.ts for text
+    const txt = insightStrings['rule-positive-ft'](lang, {
+      ftCtrl, ftDataTeam: ftData.team, ftTotal, isRival, teamRef,
+    });
     insights.push({
       id: 'rule-positive-ft',
       severity: isRival ? 'high' : 'positive',
       category: 'macro',
-      title: isRival
-        ? `Alerta: rival domina Fangtooth (${ftCtrl}%)`
-        : `Control de Fangtooth destacado: ${ftCtrl}%`,
-      body: isRival
-        ? `${teamRef} controla el ${ftCtrl}% de los Fangtoots disputados. Priorizar contestar este objetivo o diseñar el draft para poder disputarlo en igualdad.`
-        : `${teamRef} controla el ${ftCtrl}% de los Fangtoots disputados — fortaleza macro clara.`,
-      evidence: [`${ftData.team} Fangtoots conseguidos de ${ftTotal} totales`],
-      recommendation: isRival
-        ? 'Diseñar el draft con campeones de teamfight temprana para poder disputar Fangtooth. Priorizar el setup de visión en la zona norte del mapa desde el minuto 4.'
-        : 'Mantener la prioridad temprana y explotar esta ventaja en el diseño del draft.',
+      ...txt,
       reviewRequired: false,
     });
   }
 
   if (primeTotal >= MIN_OBJ_OPPORTUNITIES && primeCtrl >= 70) {
+    // See insight-strings.ts for text
+    const txt = insightStrings['rule-positive-prime'](lang, {
+      primeCtrl, primeDataTeam: primeData.team, primeTotal, isRival, teamRef,
+    });
     insights.push({
       id: 'rule-positive-prime',
       severity: isRival ? 'high' : 'positive',
       category: 'macro',
-      title: isRival
-        ? `Alerta: rival domina Prime (${primeCtrl}%)`
-        : `Dominio de Prime: ${primeCtrl}%`,
-      body: isRival
-        ? `${teamRef} controla el ${primeCtrl}% de los objetivos de Prime. Hay que tener una respuesta clara cuando el rival consiga Prime o evitar que lleguen a él en ventaja.`
-        : `${teamRef} controla el ${primeCtrl}% de los objetivos de Prime (Mini + Orb).`,
-      evidence: [`${primeData.team} Primes conseguidos de ${primeTotal} totales`],
-      recommendation: isRival
-        ? 'No contestar Prime si el rival tiene ventaja de vida. Mejor dispersarse, recuperar y preparar el próximo respawn. Forzar pelea pre-Prime para evitar que lleguen al spawn con ventaja.'
-        : 'El control de Prime es una ventaja competitiva real. Reforzar con setup de visión para mantenerlo bajo presión.',
+      ...txt,
       reviewRequired: false,
     });
   }
@@ -673,20 +605,15 @@ export async function getTeamInsights(teamId: string): Promise<Insight[]> {
       }
       const p = pct(matchCount, eventMatchIds.length);
       if (p >= 40) {
+        // See insight-strings.ts for text
+        const txt = insightStrings['rule-role-death-obj'](lang, {
+          label, p, ev: [...new Set(ev)].slice(0, 4), isRival,
+        });
         insights.push({
           id,
           severity: 'high',
           category: 'macro',
-          title: isRival
-            ? `Rival pierde ${label} antes de objetivos (${p}%)`
-            : `${label} muerto/a antes de objetivos mayores (${p}%)`,
-          body: isRival
-            ? `El rival pierde al ${label} en los 60s previos a objetivos mayores en el ${p}% de las partidas. Contestar el objetivo cuando caiga ese jugador.`
-            : `El ${label} muere en los 60s previos a un objetivo mayor en el ${p}% de las partidas analizadas.`,
-          evidence: [...new Set(ev)].slice(0, 4),
-          recommendation: isRival
-            ? `Forzar el teamfight antes del spawn objetivo apuntando al ${label} rival. Si cae, contestar el objetivo inmediatamente.`
-            : `El ${label} debe retirarse o resetear 90s antes del spawn de cada objetivo mayor. Priorizar supervivencia sobre presión.`,
+          ...txt,
           reviewRequired: !isRival,
         });
       }
@@ -712,20 +639,15 @@ export async function getTeamInsights(teamId: string): Promise<Insight[]> {
     }
     const multiPct = pct(multiMatchCount, eventMatchIds.length);
     if (multiPct >= 40) {
+      // See insight-strings.ts for text
+      const txt = insightStrings['rule-multi-death-obj'](lang, {
+        multiPct, multiMatchCount, ev: [...new Set(multiEv)].slice(0, 4), isRival, teamRef,
+      });
       insights.push({
         id: 'rule-multi-death-obj',
         severity: 'critical',
         category: 'macro',
-        title: isRival
-          ? `Rival llega a objetivos con bajas múltiples (${multiPct}%)`
-          : `Múltiples muertes antes de objetivos mayores (${multiPct}%)`,
-        body: isRival
-          ? `${teamRef} llega a objetivos mayores habiendo perdido ≥2 jugadores en los 60s previos en el ${multiPct}% de las partidas. El momento más peligroso para contestar.`
-          : `En el ${multiPct}% de las partidas, el equipo pierde ≥2 jugadores en los 60s antes de un objetivo mayor.`,
-        evidence: [...new Set(multiEv)].slice(0, 4),
-        recommendation: isRival
-          ? 'Si el rival llega al objetivo con 2+ bajas, contestar agresivamente. Es el mejor momento para robar o forzar una pelea ganada.'
-          : 'Revisar la preparación colectiva del equipo antes de objetivos: nadie debe entrar en zonas de peligro sin confirmación de equipo 90s antes del spawn.',
+        ...txt,
         reviewRequired: !isRival,
       });
     }
@@ -754,20 +676,15 @@ export async function getTeamInsights(teamId: string): Promise<Insight[]> {
       }
       const p = pct(lateSetupObjs, totalMajorObjs);
       if (totalMajorObjs >= MIN_OBJ_OPPORTUNITIES && p >= 40) {
+        // See insight-strings.ts for text
+        const txt = insightStrings['rule-late-vision-setup'](lang, {
+          p, lateSetupObjs, totalMajorObjs, isRival, teamRef,
+        });
         insights.push({
           id: 'rule-late-vision-setup',
           severity: 'medium',
           category: 'vision',
-          title: isRival
-            ? `Rival coloca visión demasiado tarde pre-objetivo (${p}%)`
-            : `Setup de visión tardío antes de objetivos (${p}%)`,
-          body: isRival
-            ? `${teamRef} coloca sus wards en los últimos 30s antes del objetivo en el ${p}% de los casos. Entrar por los flancos antes de que establezcan visión.`
-            : `En el ${p}% de los objetivos, las wards se colocan en los últimos 30s — demasiado tarde para detectar rotaciones rivales.`,
-          evidence: [`${lateSetupObjs} de ${totalMajorObjs} objetivos con setup <30s`],
-          recommendation: isRival
-            ? 'Iniciar el movimiento hacia el objetivo cuando el rival todavía no tiene visión. La ventana es los 90-30s antes del spawn.'
-            : 'El support y jungla deben iniciar el setup de visión entre 90 y 120s antes del spawn. Un ward a tiempo vale más que tres cuando ya es tarde.',
+          ...txt,
           reviewRequired: false,
         });
       }
@@ -794,20 +711,15 @@ export async function getTeamInsights(teamId: string): Promise<Insight[]> {
       }
       const p = pct(noBackupCount, totalDestructions);
       if (totalDestructions >= MIN_WARD_EVENTS && p >= 50) {
+        // See insight-strings.ts for text
+        const txt = insightStrings['rule-no-backup-vision'](lang, {
+          p, noBackupCount, totalDestructions, isRival, teamRef,
+        });
         insights.push({
           id: 'rule-no-backup-vision',
           severity: 'medium',
           category: 'vision',
-          title: isRival
-            ? `Rival no repone visión tras destrucción (${p}%)`
-            : `Sin visión de respaldo tras destrucción (${p}%)`,
-          body: isRival
-            ? `${teamRef} no reemplaza el ${p}% de las wards que le destruyen. Una vez limpiada su visión, el mapa queda ciego para ellos.`
-            : `El ${p}% de las wards destruidas no se reponen en los 90s siguientes, dejando zonas del mapa sin cobertura.`,
-          evidence: [`${noBackupCount} de ${totalDestructions} wards destruidas sin reposición en 90s`],
-          recommendation: isRival
-            ? 'Usar sweepers para limpiar visión rival justo antes del setup propio. Una vez limpiada, el rival tardará en recuperarla.'
-            : 'Establecer un protocolo de reposición inmediata: cuando el jungla detecte una ward destruida, colocar una nueva en zona alternativa.',
+          ...txt,
           reviewRequired: false,
         });
       }
@@ -835,20 +747,15 @@ export async function getTeamInsights(teamId: string): Promise<Insight[]> {
       }
       const p = pct(visionLostObjs, totalObjsChecked);
       if (totalObjsChecked >= MIN_OBJ_OPPORTUNITIES && p >= 40) {
+        // See insight-strings.ts for text
+        const txt = insightStrings['rule-vision-lost-no-recovery'](lang, {
+          p, visionLostObjs, totalObjsChecked, isRival, teamRef,
+        });
         insights.push({
           id: 'rule-vision-lost-no-recovery',
           severity: 'high',
           category: 'vision',
-          title: isRival
-            ? `Rival pierde visión pre-objetivo sin recuperarla (${p}%)`
-            : `Visión destruida sin recuperación pre-objetivo (${p}%)`,
-          body: isRival
-            ? `${teamRef} pierde toda su visión en los 120s previos al objetivo y no la repone antes del spawn en el ${p}% de los casos. El mejor momento para iniciar el contest es justo después de limpiar sus wards.`
-            : `En el ${p}% de los objetivos, las wards propias son destruidas y el equipo llega al spawn sin información.`,
-          evidence: [`${visionLostObjs} de ${totalObjsChecked} objetivos con visión perdida sin recuperar`],
-          recommendation: isRival
-            ? 'Limpiar la visión rival y entrar inmediatamente al pit del objetivo. No dar tiempo a que repongan wards.'
-            : 'Tener siempre wards de backup listas para colocar si la visión primaria cae. El support debe llevar 2 wards al setup de cada objetivo.',
+          ...txt,
           reviewRequired: !isRival,
         });
       }
@@ -882,20 +789,15 @@ export async function getTeamInsights(teamId: string): Promise<Insight[]> {
 
       const p = pct(notConverted, teamObjs.length);
       if (p >= 50) {
+        // See insight-strings.ts for text
+        const txt = insightStrings['rule-obj-no-structure'](lang, {
+          label, p, notConverted, teamObjsLength: teamObjs.length, convWindow, isRival, teamRef,
+        });
         insights.push({
           id,
           severity: 'medium',
           category: 'macro',
-          title: isRival
-            ? `Rival no convierte ${label} en estructura (${p}%)`
-            : `${label} sin conversión en estructura (${p}%)`,
-          body: isRival
-            ? `${teamRef} no presiona ninguna estructura en los ${convWindow}s posteriores al ${p}% de sus ${label}. Aprovechar ese tiempo para resetear y preparar el siguiente objetivo.`
-            : `${teamRef} no destruye ninguna estructura en los ${convWindow}s siguientes al ${p}% de los ${label} que asegura.`,
-          evidence: [`${notConverted} de ${teamObjs.length} ${label}s sin estructura posterior`],
-          recommendation: isRival
-            ? `Cuando el rival consiga ${label}, ejecutar un reset rápido y preparar el próximo spawn. El rival no explotará la ventaja.`
-            : `Definir un objetivo claro al conseguir ${label}: qué estructura presionar y por qué carril. No resetear sin haber intentado una estructura.`,
+          ...txt,
           reviewRequired: false,
         });
       }
@@ -928,20 +830,15 @@ export async function getTeamInsights(teamId: string): Promise<Insight[]> {
       }
     }
     if (objLostAfterDeathCount >= MIN_CHAIN_OCC) {
+      // See insight-strings.ts for text
+      const txt = insightStrings['rule-obj-lost-after-death'](lang, {
+        objLostAfterDeathCount, ev: objLostEv.slice(0, 4), isRival,
+      });
       insights.push({
         id: 'rule-obj-lost-after-death',
         severity: 'high',
         category: 'macro',
-        title: isRival
-          ? `Rival vulnerable: sus muertes preceden objetivos nuestros (${objLostAfterDeathCount} partidas)`
-          : `Objetivo perdido tras muerte aliada (${objLostAfterDeathCount} partidas)`,
-        body: isRival
-          ? `En ${objLostAfterDeathCount} partidas, una muerte rival precede directamente a un objetivo tomado por nuestro equipo. Identificar y presionar al jugador más débil para crear estas cadenas.`
-          : `En ${objLostAfterDeathCount} partidas, una muerte de un jugador del equipo va seguida de un objetivo rival en los 90s siguientes.`,
-        evidence: objLostEv.slice(0, 4),
-        recommendation: isRival
-          ? 'Estudiar qué jugador rival muere primero con más frecuencia. Apuntar a ese jugador para crear la cadena muerte → objetivo.'
-          : 'Revisar las posiciones y el spacing antes de objetivos. Una muerte en zona de peligro puede costar el objetivo.',
+        ...txt,
         reviewRequired: !isRival,
       });
     }
@@ -965,20 +862,15 @@ export async function getTeamInsights(teamId: string): Promise<Insight[]> {
       }
     }
     if (objTakenAfterKillCount >= MIN_CHAIN_OCC) {
+      // See insight-strings.ts for text
+      const txt = insightStrings['rule-obj-taken-after-kill'](lang, {
+        objTakenAfterKillCount, ev: objTakenEv.slice(0, 4), isRival, teamRef,
+      });
       insights.push({
         id: 'rule-obj-taken-after-kill',
         severity: isRival ? 'high' : 'positive',
         category: 'macro',
-        title: isRival
-          ? `Rival convierte kills en objetivos (${objTakenAfterKillCount} partidas)`
-          : `El equipo convierte kills en objetivos (${objTakenAfterKillCount} partidas)`,
-        body: isRival
-          ? `${teamRef} aprovecha sus kills para tomar objetivos mayores en los 90s siguientes en ${objTakenAfterKillCount} partidas. Estar preparados para defender objetivos inmediatamente cuando caiga un jugador.`
-          : `En ${objTakenAfterKillCount} partidas, un kill se traduce en un objetivo mayor en menos de 90s — señal de buena lectura macro.`,
-        evidence: objTakenEv.slice(0, 4),
-        recommendation: isRival
-          ? 'Cuando un jugador rival cae, proteger inmediatamente el objetivo más cercano. No resetear — el rival buscará convertir esa muerte en macro.'
-          : 'Mantener este patrón: tras un pick, ejecutar el objetivo más cercano sin demorarse. Comunicar el objetivo destino antes del teamfight.',
+        ...txt,
         reviewRequired: false,
       });
     }
@@ -1006,20 +898,13 @@ export async function getTeamInsights(teamId: string): Promise<Insight[]> {
       const recentGpm = last10Gpm.reduce((s, m) => s + m.gold! / (m.match.duration / 60), 0) / last10Gpm.length;
       const prevGpm = prev10Gpm.reduce((s, m) => s + m.gold! / (m.match.duration / 60), 0) / prev10Gpm.length;
       if (recentGpm < prevGpm * 0.80 && recentGpm < 300) {
+        // See insight-strings.ts for text
+        const txt = insightStrings['rule-gpm-slump'](lang, { name, recentGpm, prevGpm, isRival });
         insights.push({
           id: `rule-gpm-slump-${playerId}`,
           severity: 'medium',
           category: 'performance',
-          title: isRival
-            ? `${name} (rival) con bajón económico — GPM bajo`
-            : `Bajón económico: ${name}`,
-          body: isRival
-            ? `${name} está generando oro muy por debajo de su nivel habitual (${fmt(recentGpm)} GPM vs ${fmt(prevGpm)} GPM anterior). Menor impacto de items en la partida.`
-            : `${name} ha caído de ${fmt(prevGpm)} a ${fmt(recentGpm)} GPM en las últimas 10 partidas.`,
-          evidence: [`GPM reciente: ${fmt(recentGpm)}/min`, `GPM anterior: ${fmt(prevGpm)}/min`],
-          recommendation: isRival
-            ? `Presionar el carril de ${name} para reducir aún más su farm. Peor economía significa menos potencial de items.`
-            : `Revisar la eficiencia de farm de ${name}: CS/min, gold wasted en base y rotaciones de campo.`,
+          ...txt,
           reviewRequired: false,
           affectedPlayers: [name],
         });
@@ -1033,20 +918,13 @@ export async function getTeamInsights(teamId: string): Promise<Insight[]> {
       const recentDpm = last10Dpm.reduce((s, m) => s + m.heroDamage! / (m.match.duration / 60), 0) / last10Dpm.length;
       const prevDpm = prev10Dpm.reduce((s, m) => s + m.heroDamage! / (m.match.duration / 60), 0) / prev10Dpm.length;
       if (recentDpm < prevDpm * 0.75 && recentDpm < 400) {
+        // See insight-strings.ts for text
+        const txt = insightStrings['rule-dpm-slump'](lang, { name, recentDpm, prevDpm, isRival });
         insights.push({
           id: `rule-dpm-slump-${playerId}`,
           severity: 'medium',
           category: 'performance',
-          title: isRival
-            ? `${name} (rival) con bajón de daño — menos impacto`
-            : `Bajón de daño: ${name}`,
-          body: isRival
-            ? `${name} está haciendo significativamente menos daño que en su nivel habitual (${fmt(recentDpm)} DPM vs ${fmt(prevDpm)} anterior).`
-            : `${name} ha bajado de ${fmt(prevDpm)} a ${fmt(recentDpm)} DPM — señal de menor impacto en peleas.`,
-          evidence: [`DPM reciente: ${fmt(recentDpm)}/min`, `DPM anterior: ${fmt(prevDpm)}/min`],
-          recommendation: isRival
-            ? `El daño de ${name} está caído — es menos amenazante. Posicionarse para ignorarle y focusear a otros jugadores más peligrosos.`
-            : `Revisar con ${name} si el bajón es de posicionamiento, draft o economía. Comparar sus builds recientes vs las anteriores.`,
+          ...txt,
           reviewRequired: false,
           affectedPlayers: [name],
         });
@@ -1065,20 +943,15 @@ export async function getTeamInsights(teamId: string): Promise<Insight[]> {
           return s + (m.kills + m.assists) / tk;
         }, 0) / kpMps.length;
       if (avgKp < 0.35) {
+        // See insight-strings.ts for text
+        const txt = insightStrings['rule-kp-low'](lang, {
+          name, avgKpPct: Math.round(avgKp * 100), kpMpsLength: kpMps.length, isRival,
+        });
         insights.push({
           id: `rule-kp-low-${playerId}`,
           severity: 'medium',
           category: 'performance',
-          title: isRival
-            ? `${name} (rival) con baja participación en kills`
-            : `Baja participación en peleas: ${name}`,
-          body: isRival
-            ? `${name} participa en solo el ${Math.round(avgKp * 100)}% de los kills de su equipo. Jugador desconectado del juego colectivo rival.`
-            : `${name} está participando en solo el ${Math.round(avgKp * 100)}% de los kills del equipo — señal de desconexión en peleas.`,
-          evidence: [`KP promedio últimas ${kpMps.length} partidas: ${Math.round(avgKp * 100)}%`],
-          recommendation: isRival
-            ? `${name} no presiona junto al equipo — sus compañeros hacen el trabajo. Enfocar la presión en los jugadores con mayor KP.`
-            : `Hablar con ${name} sobre su posicionamiento en teamfights y su timing de rotación. ¿Está farmeando cuando el equipo pelea?`,
+          ...txt,
           reviewRequired: false,
           affectedPlayers: [name],
         });
@@ -1097,20 +970,15 @@ export async function getTeamInsights(teamId: string): Promise<Insight[]> {
           return s + m.deaths / td;
         }, 0) / deathMps.length;
       if (avgDs > 0.35) {
+        // See insight-strings.ts for text
+        const txt = insightStrings['rule-death-share'](lang, {
+          name, avgDsPct: Math.round(avgDs * 100), deathMpsLength: deathMps.length, isRival,
+        });
         insights.push({
           id: `rule-death-share-${playerId}`,
           severity: 'medium',
           category: 'performance',
-          title: isRival
-            ? `${name} (rival) concentra las muertes de su equipo`
-            : `Muertes concentradas en ${name}`,
-          body: isRival
-            ? `${name} acumula el ${Math.round(avgDs * 100)}% de las muertes de su equipo. Es el objetivo más fácil a eliminar para generar cadenas.`
-            : `${name} acumula el ${Math.round(avgDs * 100)}% de las muertes del equipo en las últimas ${deathMps.length} partidas.`,
-          evidence: [`Death share promedio: ${Math.round(avgDs * 100)}%`],
-          recommendation: isRival
-            ? `Apuntar a ${name} en las peleas — cae con frecuencia y su caída puede generar picks en cadena o acceso a objetivos.`
-            : `Revisar con ${name} las decisiones de posicionamiento y entradas. ¿Está entrando solo o sin visión?`,
+          ...txt,
           reviewRequired: false,
           affectedPlayers: [name],
         });
@@ -1131,24 +999,19 @@ export async function getTeamInsights(teamId: string): Promise<Insight[]> {
         const avgDmgShare =
           gdMps.reduce((s, m) => s + m.heroDamage! / (teamDmgPerMatch.get(`${m.matchId}:${m.team}`) ?? 1), 0) / gdMps.length;
         if (avgGoldShare - avgDmgShare > 0.10) {
+          // See insight-strings.ts for text
+          const txt = insightStrings['rule-gold-low-dmg'](lang, {
+            name,
+            avgGoldSharePct: Math.round(avgGoldShare * 100),
+            avgDmgSharePct: Math.round(avgDmgShare * 100),
+            gapPct: Math.round((avgGoldShare - avgDmgShare) * 100),
+            isRival,
+          });
           insights.push({
             id: `rule-gold-low-dmg-${playerId}`,
             severity: 'medium',
             category: 'performance',
-            title: isRival
-              ? `${name} (rival): mucho oro, poco daño — resources mal convertidos`
-              : `${name}: alto farm, bajo impacto de daño`,
-            body: isRival
-              ? `${name} recibe el ${Math.round(avgGoldShare * 100)}% del oro de su equipo pero solo hace el ${Math.round(avgDmgShare * 100)}% del daño. Sus items no están traduciendo en amenaza real.`
-              : `${name} genera el ${Math.round(avgGoldShare * 100)}% del oro del equipo pero solo hace el ${Math.round(avgDmgShare * 100)}% del daño total.`,
-            evidence: [
-              `Gold share: ${Math.round(avgGoldShare * 100)}%`,
-              `Damage share: ${Math.round(avgDmgShare * 100)}%`,
-              `Gap: +${Math.round((avgGoldShare - avgDmgShare) * 100)}pp de oro vs daño`,
-            ],
-            recommendation: isRival
-              ? `${name} tiene recursos pero no los convierte en daño. Es menos peligroso de lo que parece su farm. Enfocar en otros jugadores.`
-              : `Revisar con ${name} si está llegando a las peleas tarde, si sus items tienen sinergía con el rol, o si hay un problema de posicionamiento en los teamfights.`,
+            ...txt,
             reviewRequired: false,
             affectedPlayers: [name],
           });
@@ -1174,20 +1037,15 @@ export async function getTeamInsights(teamId: string): Promise<Insight[]> {
     const snap = snapshots.get(best.playerId);
     const hist = snap ? (((snap.generalStats as Record<string, unknown>)?.kda as number) ?? 0) : 0;
     const recent = mps.slice(0, 10).reduce((s, m) => s + (m.kills + m.assists) / Math.max(m.deaths, 1), 0) / Math.min(mps.length, 10);
+    // See insight-strings.ts for text
+    const txt = insightStrings['rule-positive-player-form'](lang, {
+      name: best.name, recentKda: recent, historicalKda: hist, delta: best.delta, isRival,
+    });
     insights.push({
       id: `rule-positive-player-form-${best.playerId}`,
       severity: isRival ? 'high' : 'positive',
       category: 'performance',
-      title: isRival
-        ? `Alerta: ${best.name} (rival) en racha — rendimiento elevado`
-        : `${best.name} en buena racha de forma`,
-      body: isRival
-        ? `${best.name} tiene un KDA de ${recent.toFixed(2)} en las últimas 10 partidas vs su histórico de ${hist.toFixed(2)}. Es el jugador rival más peligroso en este momento.`
-        : `${best.name} ha subido de un KDA histórico de ${hist.toFixed(2)} a ${recent.toFixed(2)} en las últimas 10 partidas.`,
-      evidence: [`KDA histórico: ${hist.toFixed(2)}`, `KDA reciente: ${recent.toFixed(2)} (+${best.delta.toFixed(2)})`],
-      recommendation: isRival
-        ? `Priorizar el ban o el matchup desfavorable contra ${best.name}. No dejarle en un pick cómodo en este momento de forma.`
-        : `Mantener a ${best.name} en un rol y composición que potencie su momento actual. Es el mejor momento para construir alrededor de su forma.`,
+      ...txt,
       reviewRequired: false,
       affectedPlayers: [best.name],
     });
@@ -1220,45 +1078,27 @@ export async function getTeamInsights(teamId: string): Promise<Insight[]> {
 
     if (totalClassified >= 4) {
       if (magicalCount === 0 && physicalCount >= 3) {
+        // See insight-strings.ts for text
+        const txt = insightStrings['rule-draft-dmg-imbalance-ap'](lang, {
+          physicalCount, magicalCount, totalClassified, isRival, teamRef,
+        });
         insights.push({
           id: 'rule-draft-dmg-imbalance-ap',
           severity: 'medium',
           category: 'draft',
-          title: isRival
-            ? 'Rival sin daño mágico — composición todo AD'
-            : 'Composición sin daño mágico (todo AD)',
-          body: isRival
-            ? `${teamRef} no tiene ningún Mage en su pool habitual. Una comp con magia y reducción de armadura mágica puede castigarles duramente.`
-            : `Ningún jugador del equipo tiene un Mage como héroe principal. El rival puede buildear resistencia física y minimizar el daño.`,
-          evidence: [
-            `Jugadores físicos: ${physicalCount}`,
-            `Jugadores mágicos: ${magicalCount}`,
-            `Clasificados: ${totalClassified}`,
-          ],
-          recommendation: isRival
-            ? 'Incluir al menos un Mage en el draft o un héroe con daño mágico relevante. El rival no tendrá resistencia mágica prioritaria.'
-            : 'Considerar incluir un Mage en la composición, especialmente en Midlane o Support. Diversifica el daño y hace más difícil el building del rival.',
+          ...txt,
           reviewRequired: false,
         });
       } else if (physicalCount === 0 && magicalCount >= 3) {
+        // See insight-strings.ts for text
+        const txt = insightStrings['rule-draft-dmg-imbalance-ad'](lang, {
+          physicalCount, magicalCount, totalClassified, isRival, teamRef,
+        });
         insights.push({
           id: 'rule-draft-dmg-imbalance-ad',
           severity: 'medium',
           category: 'draft',
-          title: isRival
-            ? 'Rival sin daño físico — composición todo AP'
-            : 'Composición sin daño físico (todo AP)',
-          body: isRival
-            ? `${teamRef} juega mayoritariamente con Mages. Un carry físico o un Assassin físico puede ser especialmente efectivo contra ellos.`
-            : `La composición del equipo carece de daño físico relevante. El rival puede buildear resistencia mágica y neutralizar el output.`,
-          evidence: [
-            `Jugadores mágicos: ${magicalCount}`,
-            `Jugadores físicos: ${physicalCount}`,
-            `Clasificados: ${totalClassified}`,
-          ],
-          recommendation: isRival
-            ? 'Priorizar héroes de daño físico en el draft para explotar la falta de armadura física del rival. Un carry Sharpshooter o Fighter puede dominar.'
-            : 'Incluir al menos un Carry o Fighter físico en la composición para diversificar el daño.',
+          ...txt,
           reviewRequired: false,
         });
       }
@@ -1278,37 +1118,35 @@ export async function getTeamInsights(teamId: string): Promise<Insight[]> {
 
       // Rival objective focused (high control by the team being analyzed = threat if rival)
       if (isRival && teamObjPct >= 55) {
+        const objDetails = [...objControlMap.entries()]
+          .filter(([, d]) => d.team > 0)
+          .map(([type, d]) => `${type}: ${d.team} de ${d.team + d.rival}`)
+          .slice(0, 3);
+        // See insight-strings.ts for text
+        const txt = insightStrings['rule-rival-obj-focused'](lang, {
+          teamObjPct, totalObjTeam, grandTotal, objDetails, teamRef,
+        });
         insights.push({
           id: 'rule-rival-obj-focused',
           severity: 'high',
           category: 'macro',
-          title: `Rival centrado en control de objetivos (${teamObjPct}%)`,
-          body: `${teamRef} controla el ${teamObjPct}% de todos los objetivos disputados. Su identidad de juego gira en torno al control macro. Necesitamos una respuesta clara para cada objetivo.`,
-          evidence: [
-            `${totalObjTeam} objetivos controlados de ${grandTotal} totales`,
-            ...([...objControlMap.entries()]
-              .filter(([, d]) => d.team > 0)
-              .map(([type, d]) => `${type}: ${d.team} de ${d.team + d.rival}`)
-              .slice(0, 3)),
-          ],
-          recommendation: 'Diseñar el draft para poder disputar objetivos en igualdad o superioridad. Priorizar campeones de teamfight y control de multitudes. Nunca dejar un objetivo sin contest cuando el rival tiene vida para pelear.',
+          ...txt,
           reviewRequired: false,
         });
       }
 
       // Rival weak objective defense (low control = opportunity for own team)
       if (isRival && teamObjPct <= 40) {
+        // See insight-strings.ts for text
+        const txt = insightStrings['rule-rival-weak-defense'](lang, {
+          teamObjPct, totalObjTeam, grandTotal,
+          ourImplicitCtrl: pct(totalObjRival, grandTotal), teamRef,
+        });
         insights.push({
           id: 'rule-rival-weak-defense',
           severity: 'positive',
           category: 'macro',
-          title: `Rival con pobre control de objetivos (${teamObjPct}%)`,
-          body: `${teamRef} solo controla el ${teamObjPct}% de los objetivos disputados. Una estrategia centrada en objetivos tiene altas probabilidades de éxito.`,
-          evidence: [
-            `${totalObjTeam} objetivos del rival de ${grandTotal} totales`,
-            `Nuestro control implícito: ${pct(totalObjRival, grandTotal)}%`,
-          ],
-          recommendation: 'Priorizar todos los objetivos desde el draft. Incluir campeones que puedan hacer secure y generar presión de mapa constante.',
+          ...txt,
           reviewRequired: false,
         });
       }
@@ -1339,20 +1177,15 @@ export async function getTeamInsights(teamId: string): Promise<Insight[]> {
         }
         const p = pct(goodVisionObjs, totalObjs);
         if (totalObjs >= MIN_OBJ_OPPORTUNITIES && p >= 70) {
+          // See insight-strings.ts for text
+          const txt = insightStrings['rule-positive-vision-setup'](lang, {
+            p, goodVisionObjs, totalObjs, isRival, teamRef,
+          });
           insights.push({
             id: 'rule-positive-vision-setup',
             severity: isRival ? 'high' : 'positive',
             category: 'vision',
-            title: isRival
-              ? `Alerta: rival con excelente visión pre-objetivo (${p}%)`
-              : `Buen setup de visión antes de objetivos (${p}%)`,
-            body: isRival
-              ? `${teamRef} coloca ≥2 wards en los 90s previos al ${p}% de los objetivos. Tendrán información completa antes de cada spawn.`
-              : `${teamRef} coloca ≥2 wards antes del ${p}% de los objetivos mayores — una fortaleza real de visión.`,
-            evidence: [`${goodVisionObjs} de ${totalObjs} objetivos con setup de ≥2 wards`],
-            recommendation: isRival
-              ? 'Usar sweepers para limpiar esa visión antes de intentar el contest. Sin limpiar las wards, el rival tendrá toda la información.'
-              : 'Mantener esta rutina de visión. Es una de las pocas áreas donde el equipo está por encima de la media.',
+            ...txt,
             reviewRequired: false,
           });
         }
@@ -1377,20 +1210,15 @@ export async function getTeamInsights(teamId: string): Promise<Insight[]> {
         }
         const p = pct(converted, teamPrimes.length);
         if (p >= 70) {
+          // See insight-strings.ts for text
+          const txt = insightStrings['rule-positive-prime-conv'](lang, {
+            p, converted, teamPrimesLength: teamPrimes.length, isRival, teamRef,
+          });
           insights.push({
             id: 'rule-positive-prime-conv',
             severity: isRival ? 'high' : 'positive',
             category: 'macro',
-            title: isRival
-              ? `Alerta: rival convierte Primes eficientemente (${p}%)`
-              : `Excelente conversión de Prime en estructura (${p}%)`,
-            body: isRival
-              ? `${teamRef} convierte el ${p}% de sus Primes en destrucción de estructura en los 3 minutos siguientes. Cada Prime rival es una amenaza real de cierre.`
-              : `${teamRef} convierte el ${p}% de sus Orb Prime en presión de estructura — cierre macro eficiente.`,
-            evidence: [`${converted} de ${teamPrimes.length} Primes convertidos en estructura`],
-            recommendation: isRival
-              ? 'Cuando el rival consiga Prime, defender inmediatamente la estructura más amenazada. Nunca resetear sin protegerla primero.'
-              : 'Excelente patrón de cierre. Seguir definiendo el objetivo de estructura antes de ejecutar el Prime.',
+            ...txt,
             reviewRequired: false,
           });
         }
@@ -1411,34 +1239,24 @@ export async function getTeamInsights(teamId: string): Promise<Insight[]> {
     `${eventDataOk ? '✓' : '✗'} Event stream de equipo: ${eventMatchIds.length} partidas sincronizadas${eventDataOk ? '' : ` — necesita ≥${MIN_EVENT_MATCHES}`}`,
   ];
 
-  let statusBody: string;
-  let statusRec: string;
-
-  if (rosterOk && playerDataOk && eventDataOk) {
-    statusBody = 'Todos los datos disponibles. Las reglas de rendimiento individual y análisis macro están activas.';
-    statusRec = 'El análisis está completo. Los insights se actualizan automáticamente con cada nueva partida sincronizada.';
-  } else if (rosterOk && playerDataOk && !eventDataOk) {
-    statusBody = 'Datos individuales de los jugadores correctos. Faltan partidas de equipo con event stream para activar las reglas macro (objetivos, visión, throws).';
-    statusRec = 'Ve a Team Analysis → Performance → Objective Control y pulsa "Sync matches" para sincronizar el event stream de las partidas del equipo.';
-  } else if (!rosterOk) {
-    statusBody = `Roster insuficiente (${rosterPlayerIds.length} jugadores). Las reglas de equipo requieren ≥3 jugadores activos.`;
-    statusRec = 'Añade al menos 3 jugadores al roster en la pestaña Roster.';
-  } else {
-    const lacking = rosterPlayerIds.length - playersWithEnoughData;
-    statusBody = `${lacking} jugador(es) tienen pocas partidas sincronizadas. Las reglas de rendimiento y visión necesitan ≥${MIN_PLAYER_MATCHES} partidas por jugador para ser estadísticamente fiables.`;
-    statusRec = 'Ve al Dashboard y pulsa "Sync Players" para actualizar el historial de partidas de los jugadores.';
-  }
-
+  const lacking = rosterPlayerIds.length - playersWithEnoughData;
+  // See insight-strings.ts for text
+  const statusTxt = insightStrings['data-status'](lang, {
+    isRival, rosterOk, playerDataOk, eventDataOk,
+    rosterCount: rosterPlayerIds.length,
+    playersWithEnoughData,
+    totalMPs,
+    minPlayerMatches: MIN_PLAYER_MATCHES as number,
+    minEventMatches: MIN_EVENT_MATCHES as number,
+    eventMatchCount: eventMatchIds.length,
+    lacking,
+    statusEvidence,
+  });
   insights.push({
     id: 'data-status',
     severity: 'low',
     category: 'performance',
-    title: isRival ? 'Estado del scouting' : 'Estado de datos del análisis',
-    body: isRival
-      ? statusBody.replace('El equipo', 'El rival').replace('el equipo', 'el rival')
-      : statusBody,
-    evidence: statusEvidence,
-    recommendation: statusRec,
+    ...statusTxt,
     reviewRequired: false,
   });
 
