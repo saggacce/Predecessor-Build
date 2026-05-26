@@ -201,7 +201,7 @@ describe('POST /teams/:id/roster', () => {
     expect(res.status).toBe(201);
     expect(res.body.id).toBe('roster-1');
     expect(mockTeamRoster.create).toHaveBeenCalledWith({
-      data: { teamId: 'team-1', playerId: 'player-1', role: 'jungle' },
+      data: { teamId: 'team-1', playerId: 'player-1', role: 'jungle', rosterStatus: 'STARTER' },
     });
   });
 

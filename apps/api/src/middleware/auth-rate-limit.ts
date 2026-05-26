@@ -30,7 +30,7 @@ function authRateLimitKey(req: Request): string {
 
   const ip = req.ip;
   if (ip && ip !== '::1' && ip !== '127.0.0.1' && ip !== 'unknown') {
-    return ip;
+    return ipKeyGenerator(req);
   }
 
   // WSL/offline fallback: use email so each user has their own bucket.
