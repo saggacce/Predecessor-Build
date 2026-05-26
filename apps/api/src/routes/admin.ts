@@ -838,6 +838,57 @@ adminRouter.post('/cleanup-old-data', async (_req, res, next) => {
 });
 
 /**
+ * POST /admin/cleanup-non-team-data
+ * Deletes Match records (+ cascade: MatchPlayer, HeroKill, ObjectiveKill, WardEvent,
+ * StructureDestruction, Transaction) for matches where NO player belongs to a team.
+ * Standalone / scouted players now use live pred.gg queries — no persistent match data needed.
+ */
+adminRouter.post('/cleanup-non-team-data', async (_req, res, next) => {
+  try {
+    // Collect all player IDs linked to any TeamMembership (role=JUGADOR)
+    const teamMemberships = await db.teamMembership.findMany({
+      where: { playerId: { not: null } },
+      select: { playerId: true },
+    });
+    const teamPlayerIds = [...new Set(teamMemberships.map((m) => m.playerId).filter((id): id is string => id != null))];
+
+    logger.info({ teamPlayerCount: teamPlayerIds.length }, 'admin: cleanup-non-team-data — finding orphan matches');
+
+    // Find matches where none of the MatchPlayers belong to a team player
+    const orphanMatches = await db.match.findMany({
+      where: {
+        matchPlayers: {
+          none: { playerId: { in: teamPlayerIds } },
+        },
+      },
+      select: { id: true },
+    });
+
+    const orphanIds = orphanMatches.map((m) => m.id);
+    logger.info({ orphanCount: orphanIds.length }, 'admin: cleanup-non-team-data — deleting orphan matches');
+
+    // Delete in batches of 200 to avoid giant IN clauses
+    let deleted = 0;
+    const BATCH = 200;
+    for (let i = 0; i < orphanIds.length; i += BATCH) {
+      const batch = orphanIds.slice(i, i + BATCH);
+      const result = await db.match.deleteMany({ where: { id: { in: batch } } });
+      deleted += result.count;
+    }
+
+    // Also clean up PlayerSnapshot records for players not on any team
+    const snapResult = await db.playerSnapshot.deleteMany({
+      where: {
+        playerId: { notIn: teamPlayerIds },
+      },
+    });
+
+    logger.info({ deletedMatches: deleted, deletedSnapshots: snapResult.count }, 'admin: cleanup-non-team-data complete');
+    res.json({ ok: true, deletedMatches: deleted, deletedSnapshots: snapResult.count, teamPlayers: teamPlayerIds.length });
+  } catch (err) { next(err); }
+});
+
+/**
  * GET /admin/permissions
  * Returns platform-wide role permissions config.
  */
