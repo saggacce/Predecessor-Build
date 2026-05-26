@@ -283,13 +283,160 @@ function TacticalBoard() {
 
 // ── RosterPanel ───────────────────────────────────────────────────────────────
 
+import type { RosterMember } from '../api/client';
+
 const STATUS_LABEL: Record<string, string> = {
   STARTER: 'Titular', BENCH: 'Suplente', TRIAL: 'A prueba', INACTIVE: 'Inactivo',
 };
 
+interface TooltipState {
+  member: RosterMember;
+  x: number;
+  y: number;
+}
+
+function RosterTooltip({ member, x, y }: TooltipState) {
+  const role = (member.role ?? '').toUpperCase();
+  const roleColor = ROLE_COLOR[role] ?? 'var(--text-muted)';
+  const name = member.customName ?? member.displayName;
+  const status = (member.rosterStatus ?? '').toUpperCase();
+  const since = member.activeFrom
+    ? new Date(member.activeFrom).toLocaleDateString(undefined, { month: 'long', year: 'numeric' })
+    : null;
+
+  // Clamp so tooltip stays inside viewport
+  const tipW = 240;
+  const left = Math.min(x + 14, window.innerWidth - tipW - 12);
+  const top  = y - 8;
+
+  return (
+    <div style={{
+      position: 'fixed', left, top, width: tipW, zIndex: 200,
+      background: 'var(--bg-panel, #131929)',
+      border: `1px solid ${roleColor}44`,
+      borderLeft: `3px solid ${roleColor}`,
+      borderRadius: 8,
+      padding: '0.85rem 1rem',
+      boxShadow: '0 8px 32px rgba(0,0,0,0.55)',
+      display: 'flex', flexDirection: 'column', gap: '0.45rem',
+      pointerEvents: 'none',
+    }}>
+      {/* Role badge */}
+      <span style={{ fontSize: '0.58rem', fontWeight: 800, color: roleColor, textTransform: 'uppercase', letterSpacing: '0.1em' }}>
+        {(ROLE_LABEL[role] ?? role) || 'Sin rol'}
+      </span>
+      {/* Name */}
+      <div style={{ fontWeight: 700, fontSize: '1rem', color: 'var(--text-primary)', lineHeight: 1.2 }}>
+        {name}
+      </div>
+      {/* In-game name vs custom name */}
+      {member.customName && member.customName !== member.displayName && (
+        <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
+          IG: {member.displayName}
+        </div>
+      )}
+      <div style={{ height: 1, background: 'rgba(255,255,255,0.06)', margin: '0.1rem 0' }} />
+      {/* Status */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.72rem' }}>
+        <span style={{ color: 'var(--text-muted)' }}>Estado</span>
+        <span style={{ color: 'var(--text-secondary)', fontWeight: 600 }}>
+          {STATUS_LABEL[status] ?? status}
+        </span>
+      </div>
+      {/* Rating */}
+      {member.rating?.rankLabel && (
+        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.72rem' }}>
+          <span style={{ color: 'var(--text-muted)' }}>Ranking</span>
+          <span style={{ color: 'var(--text-secondary)', fontFamily: 'var(--font-mono)', fontWeight: 600 }}>
+            {member.rating.rankLabel}
+          </span>
+        </div>
+      )}
+      {member.rating?.ratingPoints != null && (
+        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.72rem' }}>
+          <span style={{ color: 'var(--text-muted)' }}>Puntos</span>
+          <span style={{ color: 'var(--text-secondary)', fontFamily: 'var(--font-mono)' }}>
+            {member.rating.ratingPoints}
+          </span>
+        </div>
+      )}
+      {/* Since */}
+      {since && (
+        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.72rem' }}>
+          <span style={{ color: 'var(--text-muted)' }}>En el equipo</span>
+          <span style={{ color: 'var(--text-secondary)' }}>desde {since}</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function RosterSection({
+  title, members, onHover, onLeave,
+}: {
+  title: string;
+  members: RosterMember[];
+  onHover: (m: RosterMember, e: React.MouseEvent) => void;
+  onLeave: () => void;
+}) {
+  if (members.length === 0) return null;
+  return (
+    <div>
+      <div style={{
+        fontSize: '0.6rem', fontWeight: 800, color: 'var(--text-muted)',
+        textTransform: 'uppercase', letterSpacing: '0.12em',
+        marginBottom: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.5rem',
+      }}>
+        {title}
+        <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-muted)', opacity: 0.6, fontWeight: 400 }}>
+          {members.length}
+        </span>
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '0.75rem' }}>
+        {members.map((m) => {
+          const role = (m.role ?? '').toUpperCase();
+          const roleColor = ROLE_COLOR[role] ?? 'var(--text-muted)';
+          const name = m.customName ?? m.displayName;
+          return (
+            <div
+              key={m.rosterId}
+              className="glass-card"
+              onMouseEnter={(e) => onHover(m, e)}
+              onMouseMove={(e) => onHover(m, e)}
+              onMouseLeave={onLeave}
+              style={{
+                padding: '1rem 1.25rem',
+                borderLeft: `3px solid ${roleColor}`,
+                display: 'flex', flexDirection: 'column', gap: '0.35rem',
+                cursor: 'default', transition: 'background 0.15s',
+              }}
+            >
+              <span style={{ fontSize: '0.58rem', fontWeight: 800, color: roleColor, textTransform: 'uppercase', letterSpacing: '0.1em' }}>
+                {(ROLE_LABEL[role] ?? role) || 'Sin rol'}
+              </span>
+              <div style={{ fontSize: '1.05rem', fontWeight: 700, color: 'var(--text-primary)', lineHeight: 1.2 }}>
+                {name || <span style={{ color: 'var(--text-muted)', fontStyle: 'italic', fontSize: '0.85rem' }}>Sin nombre</span>}
+              </div>
+              {m.rating?.rankLabel ? (
+                <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
+                  {m.rating.rankLabel}
+                  {m.rating.ratingPoints != null && ` · ${m.rating.ratingPoints} pts`}
+                </div>
+              ) : (
+                <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)', opacity: 0.5, fontStyle: 'italic' }}>Sin ranking</div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function RosterPanel({ teamId }: { teamId: string }) {
-  const [profile, setProfile] = useState<TeamProfile | null>(null);
-  const [loading, setLoading]  = useState(true);
+  const [profile, setProfile]   = useState<TeamProfile | null>(null);
+  const [loading, setLoading]   = useState(true);
+  const [tooltip, setTooltip]   = useState<TooltipState | null>(null);
 
   useEffect(() => {
     if (!teamId) return;
@@ -306,66 +453,34 @@ function RosterPanel({ teamId }: { teamId: string }) {
     </div>
   );
 
-  const active = (profile?.roster ?? []).filter((m) => !m.activeTo);
-  if (active.length === 0) return (
+  const ORDER = ['CARRY', 'JUNGLE', 'MIDLANE', 'OFFLANE', 'SUPPORT'];
+  const allActive = (profile?.roster ?? [])
+    .filter((m) => !m.activeTo)
+    .sort((a, b) => {
+      const ia = ORDER.indexOf((a.role ?? '').toUpperCase());
+      const ib = ORDER.indexOf((b.role ?? '').toUpperCase());
+      return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib);
+    });
+
+  const starters = allActive.filter((m) => (m.rosterStatus ?? '').toUpperCase() === 'STARTER');
+  const bench    = allActive.filter((m) => (m.rosterStatus ?? '').toUpperCase() !== 'STARTER');
+
+  if (allActive.length === 0) return (
     <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', fontSize: '0.9rem' }}>
       No hay jugadores activos en el roster.
     </div>
   );
 
-  const ORDER = ['CARRY', 'JUNGLE', 'MIDLANE', 'OFFLANE', 'SUPPORT'];
-  const sorted = [...active].sort((a, b) => {
-    const ia = ORDER.indexOf((a.role ?? '').toUpperCase());
-    const ib = ORDER.indexOf((b.role ?? '').toUpperCase());
-    return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib);
-  });
+  const handleHover = (m: RosterMember, e: React.MouseEvent) =>
+    setTooltip({ member: m, x: e.clientX, y: e.clientY });
 
   return (
-    <div style={{ flex: 1, overflowY: 'auto', padding: '1.5rem' }}>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: '1rem', maxWidth: 1280, margin: '0 auto' }}>
-        {sorted.map((m) => {
-          const role = (m.role ?? '').toUpperCase();
-          const roleColor = ROLE_COLOR[role] ?? 'var(--text-muted)';
-          const name = m.customName ?? m.displayName;
-          const status = (m.rosterStatus ?? '').toUpperCase();
-          const isBench = status === 'BENCH' || status === 'INACTIVE';
-          return (
-            <div key={m.rosterId} className="glass-card" style={{
-              padding: '1.25rem 1.5rem',
-              borderLeft: `3px solid ${roleColor}`,
-              display: 'flex', flexDirection: 'column', gap: '0.5rem',
-              opacity: isBench ? 0.6 : 1,
-            }}>
-              {/* Role + status */}
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <span style={{ fontSize: '0.58rem', fontWeight: 800, color: roleColor, textTransform: 'uppercase', letterSpacing: '0.1em' }}>
-                  {(ROLE_LABEL[role] ?? role) || 'Sin rol'}
-                </span>
-                {status && status !== 'STARTER' && (
-                  <span style={{ fontSize: '0.58rem', color: 'var(--text-muted)', background: 'rgba(255,255,255,0.06)', borderRadius: 3, padding: '1px 6px', textTransform: 'uppercase', letterSpacing: '0.07em' }}>
-                    {STATUS_LABEL[status] ?? status}
-                  </span>
-                )}
-              </div>
-              {/* Name */}
-              <div style={{ fontSize: '1.15rem', fontWeight: 700, color: 'var(--text-primary)', lineHeight: 1.2 }}>
-                {name || <span style={{ color: 'var(--text-muted)', fontStyle: 'italic', fontSize: '0.9rem' }}>Sin nombre</span>}
-              </div>
-              {/* Rating */}
-              {m.rating?.rankLabel ? (
-                <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', fontFamily: 'var(--font-mono)' }}>
-                  {m.rating.rankLabel}
-                  {m.rating.ratingPoints != null && (
-                    <span style={{ color: 'var(--text-muted)' }}> · {m.rating.ratingPoints} pts</span>
-                  )}
-                </div>
-              ) : (
-                <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontStyle: 'italic' }}>Sin datos de ranking</div>
-              )}
-            </div>
-          );
-        })}
+    <div style={{ flex: 1, overflowY: 'auto', padding: '1.5rem', position: 'relative' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem', maxWidth: 1280, margin: '0 auto' }}>
+        <RosterSection title="Titulares" members={starters} onHover={handleHover} onLeave={() => setTooltip(null)} />
+        <RosterSection title="Suplentes" members={bench}    onHover={handleHover} onLeave={() => setTooltip(null)} />
       </div>
+      {tooltip && <RosterTooltip {...tooltip} />}
     </div>
   );
 }
