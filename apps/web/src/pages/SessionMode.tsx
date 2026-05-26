@@ -25,16 +25,10 @@ const SEVERITY_BG: Record<string, string> = {
 };
 
 export default function SessionMode() {
-  const { user } = useAuth();
+  const { user, internalLoading } = useAuth();
   const navigate = useNavigate();
 
   const isPlatformAdmin = user?.globalRole === 'PLATFORM_ADMIN';
-  // memberships have flat shape: { teamId, role, playerId }
-  const staffTeamIds = new Set(
-    (user?.memberships ?? [])
-      .filter((m) => m.role === 'COACH' || m.role === 'MANAGER')
-      .map((m) => m.teamId),
-  );
 
   const [allTeams, setAllTeams] = useState<Array<{ id: string; name: string }>>([]);
   const [teamId, setTeamId] = useState('');
@@ -66,21 +60,22 @@ export default function SessionMode() {
     return () => document.removeEventListener('fullscreenchange', onFsc);
   }, []);
 
-  // Fetch own teams from API — filter by staff role for non-admins
+  // Fetch own teams — wait for internal auth to finish so user/memberships are available
   useEffect(() => {
+    if (internalLoading || !user) return;
+
+    // Compute inside effect so we capture the real user data, not the null from first render
+    const isAdmin = user.globalRole === 'PLATFORM_ADMIN';
+    const staffTeamIds = new Set(
+      user.memberships
+        .filter((m) => m.role === 'COACH' || m.role === 'MANAGER')
+        .map((m) => m.teamId),
+    );
+
     apiClient.teams.list('OWN')
       .then((r) => {
         const teams = r.teams ?? [];
-        const filtered = isPlatformAdmin
-          ? teams
-          : teams.filter((t) => staffTeamIds.has(t.id));
-
-        // Debug info visible in console
-        console.debug('[SessionMode] globalRole:', user?.globalRole);
-        console.debug('[SessionMode] memberships:', user?.memberships);
-        console.debug('[SessionMode] staffTeamIds:', [...staffTeamIds]);
-        console.debug('[SessionMode] OWN teams from API:', teams.map((t) => ({ id: t.id, name: t.name })));
-        console.debug('[SessionMode] filtered teams:', filtered.map((t) => t.name));
+        const filtered = isAdmin ? teams : teams.filter((t) => staffTeamIds.has(t.id));
 
         setAllTeams(filtered);
         if (filtered.length > 0) {
@@ -88,7 +83,7 @@ export default function SessionMode() {
         } else {
           const reason = teams.length === 0
             ? 'La API devolvió 0 equipos de tipo OWN'
-            : `API devolvió ${teams.length} equipo(s) OWN pero ninguno coincide con staffTeamIds: [${[...staffTeamIds].join(', ')}]`;
+            : `API devolvió ${teams.length} equipo(s) OWN pero ninguno coincide con tus membresías (${[...staffTeamIds].length} equipos de staff)`;
           setTeamsError(reason);
           setLoading(false);
         }
@@ -98,7 +93,7 @@ export default function SessionMode() {
         setTeamsError(`Error al cargar equipos: ${String(err)}`);
         setLoading(false);
       });
-  }, []);
+  }, [internalLoading]);
 
   // Load session data when teamId changes
   useEffect(() => {
