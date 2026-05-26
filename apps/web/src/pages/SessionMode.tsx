@@ -390,54 +390,61 @@ export default function SessionMode() {
           </div>
 
           {/* Row 3 — Objetivos del equipo */}
-          {goals.length > 0 && (
-            <div className="glass-card" style={{ padding: '1.5rem', borderLeft: '3px solid var(--accent-teal-bright)' }}>
+          <div className="glass-card" style={{ padding: '1.5rem', borderLeft: '3px solid var(--accent-teal-bright)' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1.1rem' }}>
                 <Target size={13} style={{ color: 'var(--accent-teal-bright)' }} />
                 <span style={{ fontSize: '0.62rem', fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
                   Objetivos del equipo
                 </span>
-                <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.68rem', color: 'var(--text-muted)', marginLeft: 'auto' }}>
-                  {goals.length} activo{goals.length !== 1 ? 's' : ''}
-                </span>
+                {goals.length > 0 && (
+                  <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.68rem', color: 'var(--text-muted)', marginLeft: 'auto' }}>
+                    {goals.length} activo{goals.length !== 1 ? 's' : ''}
+                  </span>
+                )}
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: '0.75rem' }}>
-                {goals.map((g) => {
-                  const pct = g.targetValue && g.currentValue != null
-                    ? Math.min(100, Math.round((g.currentValue / g.targetValue) * 100))
-                    : null;
-                  const achieved = pct !== null && pct >= 100;
+              {goals.length === 0 ? (
+                <div style={{ color: 'var(--text-muted)', fontSize: '0.88rem' }}>
+                  No hay objetivos activos para este equipo.
+                </div>
+              ) : (
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: '0.75rem' }}>
+                  {goals.map((g) => {
+                    const pct = g.targetValue && g.currentValue != null
+                      ? Math.min(100, Math.round((g.currentValue / g.targetValue) * 100))
+                      : null;
+                    const achieved = pct !== null && pct >= 100;
 
-                  return (
-                    <div key={g.id} style={{
-                      padding: '0.85rem 1rem',
-                      background: achieved ? 'rgba(74,222,128,0.07)' : 'rgba(255,255,255,0.03)',
-                      borderRadius: 6,
-                      border: `1px solid ${achieved ? 'rgba(74,222,128,0.25)' : 'var(--border-color)'}`,
-                    }}>
-                      <div style={{ fontWeight: 600, fontSize: '0.9rem', color: achieved ? 'var(--accent-win)' : 'var(--text-primary)', marginBottom: g.description ? '0.25rem' : 0 }}>
-                        {achieved ? '✓ ' : ''}{g.title}
-                      </div>
-                      {g.description && (
-                        <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: pct !== null ? '0.5rem' : 0 }}>
-                          {g.description}
+                    return (
+                      <div key={g.id} style={{
+                        padding: '0.85rem 1rem',
+                        background: achieved ? 'rgba(74,222,128,0.07)' : 'rgba(255,255,255,0.03)',
+                        borderRadius: 6,
+                        border: `1px solid ${achieved ? 'rgba(74,222,128,0.25)' : 'var(--border-color)'}`,
+                      }}>
+                        <div style={{ fontWeight: 600, fontSize: '0.9rem', color: achieved ? 'var(--accent-win)' : 'var(--text-primary)', marginBottom: g.description ? '0.25rem' : 0 }}>
+                          {achieved ? '✓ ' : ''}{g.title}
                         </div>
-                      )}
-                      {pct !== null && (
-                        <>
-                          <div style={{ height: 5, background: 'var(--border-color)', borderRadius: 3, marginTop: g.description ? 0 : '0.5rem' }}>
-                            <div style={{ height: '100%', width: `${pct}%`, background: achieved ? 'var(--accent-win)' : 'var(--accent-teal-bright)', borderRadius: 3, transition: 'width 0.3s' }} />
+                        {g.description && (
+                          <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: pct !== null ? '0.5rem' : 0 }}>
+                            {g.description}
                           </div>
-                          <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)', marginTop: '0.25rem', fontFamily: 'var(--font-mono)' }}>
-                            {g.currentValue?.toFixed(1)} / {g.targetValue} · {pct}%
-                          </div>
-                        </>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
+                        )}
+                        {pct !== null && (
+                          <>
+                            <div style={{ height: 5, background: 'var(--border-color)', borderRadius: 3, marginTop: g.description ? 0 : '0.5rem' }}>
+                              <div style={{ height: '100%', width: `${pct}%`, background: achieved ? 'var(--accent-win)' : 'var(--accent-teal-bright)', borderRadius: 3, transition: 'width 0.3s' }} />
+                            </div>
+                            <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)', marginTop: '0.25rem', fontFamily: 'var(--font-mono)' }}>
+                              {g.currentValue?.toFixed(1)} / {g.targetValue} · {pct}%
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           )}
 
