@@ -122,7 +122,7 @@ let server: ReturnType<typeof app.listen> | undefined;
 if (process.env.NODE_ENV !== 'test') {
   server = app.listen(PORT, () => {
     logger.info({ port: PORT }, 'api server started');
-    logger.info('endpoints: GET /health | GET /players/search | POST /players/sync | GET /players/:id | POST /players/compare | GET /teams | GET /teams/:id | POST /reports/scrim | GET /patches | GET /patches/latest | POST /admin/sync-versions | POST /admin/sync-stale | GET /admin/sync-logs');
+    logger.info('endpoints: GET /health | GET /players/search | POST /players/sync | GET /players/:id/scout | GET /players/:id | POST /players/compare | GET /teams | GET /teams/:id | GET /matches/live/:predggUuid | GET|POST /schedule | GET|POST /weekly-goals | GET|POST /comms | POST /reports/scrim | GET /patches | GET /patches/latest | POST /admin/sync-versions | POST /admin/sync-stale | POST /admin/cleanup-non-team-data | GET /admin/sync-logs');
   });
 }
 

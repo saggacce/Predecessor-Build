@@ -10,16 +10,19 @@ export interface ConfigEntry {
   description: string;
   group: string;
   unit: string | null;
+  textValue: string | null;
   updatedAt: Date;
   updatedBy: string | null;
 }
 
 // In-process cache — invalidated on write
 let cache: { map: Map<string, number>; ts: number } | null = null;
+let textCache: { map: Map<string, string | null>; ts: number } | null = null;
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 
 export function invalidateConfigCache() {
   cache = null;
+  textCache = null;
 }
 
 export async function getConfigMap(db: PrismaClient): Promise<Map<string, number>> {
@@ -28,6 +31,14 @@ export async function getConfigMap(db: PrismaClient): Promise<Map<string, number
   const map = new Map(rows.map((r) => [r.key, r.value]));
   cache = { map, ts: Date.now() };
   return map;
+}
+
+export async function getTextConfigMap(db: PrismaClient): Promise<Map<string, string | null>> {
+  if (textCache && Date.now() - textCache.ts < CACHE_TTL) return textCache.map;
+  const rows = await db.platformConfig.findMany({ select: { key: true, textValue: true } });
+  const map = new Map(rows.map((r) => [r.key, r.textValue]));
+  textCache = { map, ts: Date.now() };
+  return textCache.map;
 }
 
 export async function getAllConfig(db: PrismaClient): Promise<ConfigEntry[]> {
@@ -52,6 +63,22 @@ export async function updateConfigValue(
   const updated = await db.platformConfig.update({
     where: { key },
     data: { value, updatedBy: userId },
+  });
+  invalidateConfigCache();
+  return updated as ConfigEntry;
+}
+
+export async function updateConfigText(
+  db: PrismaClient,
+  key: string,
+  textValue: string,
+  userId: string,
+): Promise<ConfigEntry> {
+  const existing = await db.platformConfig.findUnique({ where: { key } });
+  if (!existing) throw new Error(`Config key not found: ${key}`);
+  const updated = await db.platformConfig.update({
+    where: { key },
+    data: { textValue, updatedBy: userId },
   });
   invalidateConfigCache();
   return updated as ConfigEntry;

@@ -135,17 +135,52 @@ Tablero de tareas generales y subtareas.
 - [x] Error boundaries en PlayerScouting y TeamAnalysis para diagnóstico de crashes
 - [x] Documentación de patrones de crash React → `docs/react_crash_patterns.md`
 
+## [x] Tarea 26 — Dashboard operacional, Recruiting Scouting y Live Match (PR #195)
+*Extensión de funcionalidades operacionales para staff de equipo y scouting en tiempo real.*
+
+### Dashboard operacional por rol
+- [x] Panel **Scrim Calendar** (MANAGER/COACH) — vista de próximos scrims con acceso directo a ScrimPlanner
+- [x] Panel **Coach Comms** (COACH) — buzón de comunicaciones internas del equipo
+- [x] Panel **Weekly Goals** (JUGADOR standalone) — progreso semanal de objetivos personales
+- [x] Panel **Roster Form** (MANAGER) — estado actual del roster con rosterStatus (STARTER/BENCH)
+
+### Recruiting Scouting
+- [x] `GET /players/:id/scout` — perfil de scouting: stats agregados, héroes, alertas, compatibilidad
+- [x] `PlayerScouting.tsx` refactorizado como **Recruiting Scorecard** — sin lista de partidas, datos live de pred.gg
+- [x] Sync solo para jugadores de equipos OWN (`POST /players/sync` modificado)
+
+### Live Match viewer
+- [x] `GET /matches/live/:predggUuid` — proxy de pred.gg para ver partida en curso (sin persistencia en BD)
+- [x] Ruta `/matches/live/:predggUuid` en App.tsx con `<MatchDetail liveMode />`
+- [x] `MatchDetail` en liveMode: spinner "Preparando informe…", sin botón sync/rename, eventos preloaded
+- [x] Timeline y Analysis tabs usan `preloadedEvents` cuando viene de liveMode (evita segundo fetch)
+
+### Schema
+- [x] `ScrimSchedule` — calendario de scrims/partidas oficiales por equipo
+- [x] `WeeklyGoal` — objetivos semanales para jugadores standalone
+- [x] `TeamComm` — comunicaciones internas (coach → analista, anuncios de manager)
+- [x] `TeamRoster.rosterStatus` — STARTER | BENCH
+- [x] `User.language` — preferencia de idioma (en | es)
+- [x] `Team.academyOf` — relación de academia entre equipos OWN
+- [x] `Invitation.teamId` nullable — invitaciones JUGADOR sin equipo asignado
+
+### Backend routes
+- [x] `GET|POST|PATCH|DELETE /schedule` — CRUD de ScrimSchedule
+- [x] `GET|POST|PATCH /weekly-goals` — CRUD de WeeklyGoal
+- [x] `GET|POST|PATCH /comms` — CRUD de TeamComm
+- [x] `POST /admin/cleanup-non-team-data` — purga datos de jugadores sin equipo
+
 ## [x] Tarea 22 — Infraestructura: despliegue y retención de datos
 - [x] Saneamiento de DB: borrado de datos anteriores a Feb 2026 + jugadores inactivos + QA seed
 - [x] Sistema de retención configurable (`DATA_RETENTION_MONTHS`, por defecto 3)
 - [x] `cleanupOldData()` en sync-service — borra event stream + matches + jugadores inactivos
-- [x] Endpoint `POST /admin/cleanup-old-data` para ejecución manual
+- [x] Endpoint `POST /admin/cleanup-non-team-data` para ejecución manual (y retención mensual automática)
 - [x] Cron mensual automático (día 1, 03:00h) con `node-cron`
-- [x] Filtro de retención en sync: `syncRecentMatchesForPlayer` no persiste partidas antiguas
-- [x] `railway.toml` — build: `npm install + prisma generate + vite build`; start: `tsx apps/api/src/index.ts`
+- [x] Filtro de retención en sync: `syncRecentMatchesForPlayer` solo para jugadores de equipos OWN
 - [x] API sirve el frontend estático en producción (single service)
 - [x] Migración de assets a `apps/web/public/` (servidos por Vite directamente)
-- [ ] **Despliegue activo en Railway** — PR #152 mergeado, DB migrada, variables configuradas
+- [x] **Despliegue activo en Hetzner** — servidor `riftline.app`, CI/CD vía GitHub Actions + SSH, PM2 + tsx
+- [x] CI/CD fix: `rm -rf ~/.cache/tsx` antes del restart de PM2 (tsx servía código cacheado en deploys)
 
 ---
 
@@ -226,12 +261,11 @@ Vista limpia para proyectar en Discord/stream interno.
 
 ---
 
-## Tarea 19 — Team Tools: Scrim Planner, Playbook, Review Sessions
-*Fase posterior — construir cuando Review Queue y Tactical Board estén validados.*
+## [~] Tarea 19 — Team Tools: Scrim Planner, Playbook, Review Sessions
 
-- [ ] Scrim Planner — planificador con focus area vinculada a métrica
-- [ ] Playbook — biblioteca de estrategias, setups y reglas tácticas del equipo
-- [ ] Review Sessions — sesiones organizadas con agenda, boards y action items
+- [x] **Scrim Planner** — `ScrimPlanner.tsx` + backend `ScrimSchedule` + migraciones. CRUD completo: crear scrim, vista lista, filtros por tipo (SCRIM/OFICIAL/ENTRENAMIENTO/TORNEO), estado (PENDIENTE/CONFIRMADO/CANCELADO), notas y resultado. (PR #195)
+- [ ] **Playbook** — biblioteca de estrategias, setups y reglas tácticas del equipo
+- [ ] **Review Sessions** — sesiones organizadas con agenda, boards y action items
 
 ---
 

@@ -639,6 +639,8 @@ model PlatformConfig {
   group        String
   /// Display unit (e.g. "wards/min", "seconds", "%")
   unit         String?
+  /// Free-text value for non-numeric config entries (model name, URL, etc.)
+  textValue    String?
   updatedAt    DateTime @updatedAt
   updatedBy    String?
 }
