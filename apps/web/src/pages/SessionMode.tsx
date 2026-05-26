@@ -283,11 +283,32 @@ function TacticalBoard() {
 
 // ── RosterPanel ───────────────────────────────────────────────────────────────
 
-function RosterPanel({ team }: { team: TeamProfile | null }) {
-  if (!team) return null;
-  const active = team.roster.filter((m) => !m.activeTo);
+const STATUS_LABEL: Record<string, string> = {
+  STARTER: 'Titular', BENCH: 'Suplente', TRIAL: 'A prueba', INACTIVE: 'Inactivo',
+};
+
+function RosterPanel({ teamId }: { teamId: string }) {
+  const [profile, setProfile] = useState<TeamProfile | null>(null);
+  const [loading, setLoading]  = useState(true);
+
+  useEffect(() => {
+    if (!teamId) return;
+    setLoading(true);
+    apiClient.teams.getProfile(teamId)
+      .then(setProfile)
+      .catch(() => null)
+      .finally(() => setLoading(false));
+  }, [teamId]);
+
+  if (loading) return (
+    <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)' }}>
+      Cargando roster…
+    </div>
+  );
+
+  const active = (profile?.roster ?? []).filter((m) => !m.activeTo);
   if (active.length === 0) return (
-    <div style={{ padding: '2rem', color: 'var(--text-muted)', fontSize: '0.9rem' }}>
+    <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', fontSize: '0.9rem' }}>
       No hay jugadores activos en el roster.
     </div>
   );
@@ -301,28 +322,45 @@ function RosterPanel({ team }: { team: TeamProfile | null }) {
 
   return (
     <div style={{ flex: 1, overflowY: 'auto', padding: '1.5rem' }}>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: '1rem', maxWidth: 1280, margin: '0 auto' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: '1rem', maxWidth: 1280, margin: '0 auto' }}>
         {sorted.map((m) => {
           const role = (m.role ?? '').toUpperCase();
           const roleColor = ROLE_COLOR[role] ?? 'var(--text-muted)';
           const name = m.customName ?? m.displayName;
+          const status = (m.rosterStatus ?? '').toUpperCase();
+          const isBench = status === 'BENCH' || status === 'INACTIVE';
           return (
             <div key={m.rosterId} className="glass-card" style={{
               padding: '1.25rem 1.5rem',
               borderLeft: `3px solid ${roleColor}`,
-              display: 'flex', flexDirection: 'column', gap: '0.4rem',
+              display: 'flex', flexDirection: 'column', gap: '0.5rem',
+              opacity: isBench ? 0.6 : 1,
             }}>
-              <div style={{ fontSize: '0.58rem', fontWeight: 800, color: roleColor, textTransform: 'uppercase', letterSpacing: '0.1em' }}>
-                {(ROLE_LABEL[role] ?? role) || 'Sin rol'}
+              {/* Role + status */}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <span style={{ fontSize: '0.58rem', fontWeight: 800, color: roleColor, textTransform: 'uppercase', letterSpacing: '0.1em' }}>
+                  {(ROLE_LABEL[role] ?? role) || 'Sin rol'}
+                </span>
+                {status && status !== 'STARTER' && (
+                  <span style={{ fontSize: '0.58rem', color: 'var(--text-muted)', background: 'rgba(255,255,255,0.06)', borderRadius: 3, padding: '1px 6px', textTransform: 'uppercase', letterSpacing: '0.07em' }}>
+                    {STATUS_LABEL[status] ?? status}
+                  </span>
+                )}
               </div>
-              <div style={{ fontSize: '1.1rem', fontWeight: 700, color: 'var(--text-primary)', lineHeight: 1.2 }}>
-                {name}
+              {/* Name */}
+              <div style={{ fontSize: '1.15rem', fontWeight: 700, color: 'var(--text-primary)', lineHeight: 1.2 }}>
+                {name || <span style={{ color: 'var(--text-muted)', fontStyle: 'italic', fontSize: '0.9rem' }}>Sin nombre</span>}
               </div>
-              {m.rating?.rankLabel && (
-                <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
+              {/* Rating */}
+              {m.rating?.rankLabel ? (
+                <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', fontFamily: 'var(--font-mono)' }}>
                   {m.rating.rankLabel}
-                  {m.rating.ratingPoints != null && ` · ${m.rating.ratingPoints} pts`}
+                  {m.rating.ratingPoints != null && (
+                    <span style={{ color: 'var(--text-muted)' }}> · {m.rating.ratingPoints} pts</span>
+                  )}
                 </div>
+              ) : (
+                <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontStyle: 'italic' }}>Sin datos de ranking</div>
               )}
             </div>
           );
@@ -399,7 +437,7 @@ export default function SessionMode() {
   const { user, internalLoading } = useAuth();
   const navigate = useNavigate();
 
-  const [allTeams, setAllTeams]   = useState<TeamProfile[]>([]);
+  const [allTeams, setAllTeams]   = useState<Array<{ id: string; name: string }>>([]);
   const [teamId, setTeamId]       = useState('');
   const [teamsError, setTeamsError] = useState<string | null>(null);
 
@@ -489,8 +527,7 @@ export default function SessionMode() {
     .filter((s) => new Date(s.scheduledAt) >= new Date())
     .sort((a, b) => +new Date(a.scheduledAt) - +new Date(b.scheduledAt))[0] ?? null;
 
-  const currentTeam = allTeams.find((t) => t.id === teamId) ?? null;
-  const teamName = currentTeam?.name ?? '';
+  const teamName = allTeams.find((t) => t.id === teamId)?.name ?? '';
 
   function toggleFullscreen() {
     if (!document.fullscreenElement) {
@@ -646,7 +683,7 @@ export default function SessionMode() {
         <TacticalBoard />
 
       ) : activeTab === 'roster' ? (
-        <RosterPanel team={currentTeam} />
+        <RosterPanel teamId={teamId} />
 
       ) : activeTab === 'schedule' ? (
         <SchedulePanel items={schedule} />
