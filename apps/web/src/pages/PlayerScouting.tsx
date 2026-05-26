@@ -106,29 +106,29 @@ export default function PlayerScouting() {
       setPhase(players.length > 0 ? { tag: 'results', players } : { tag: 'empty', query: q });
       setProfilePhase({ tag: 'idle' });
     } catch (err) {
-      const msg = err instanceof ApiErrorResponse ? err.error.message : 'Search failed.';
+      const msg = err instanceof ApiErrorResponse ? err.error.message : 'Error en la búsqueda.';
       setPhase({ tag: 'error', message: msg });
     }
   }
 
   async function handleSyncFromPredgg(name: string) {
-    setPhase({ tag: 'syncing', step: 'Connecting to pred.gg...' });
+    setPhase({ tag: 'syncing', step: 'Conectando con pred.gg...' });
     await new Promise((r) => setTimeout(r, 400));
-    setPhase({ tag: 'syncing', step: `Searching for "${name}" on pred.gg...` });
+    setPhase({ tag: 'syncing', step: `Buscando "${name}" en pred.gg...` });
     try {
       const res = await apiClient.players.sync(name);
-      setPhase({ tag: 'syncing', step: 'Saving to local database...' });
+      setPhase({ tag: 'syncing', step: 'Guardando en base de datos local...' });
       await new Promise((r) => setTimeout(r, 300));
       setPhase({ tag: 'synced', player: res.player });
-      toast.success(`"${res.player.displayName}" synced successfully`);
+      toast.success(`"${res.player.displayName}" sincronizado correctamente`);
       void handleSelectPlayer(res.player.id);
     } catch (err) {
       if (err instanceof ApiErrorResponse && err.status === 404) {
         setPhase({ tag: 'not_found', query: name });
       } else if (err instanceof ApiErrorResponse && err.error.code === 'PREDGG_AUTH_REQUIRED') {
-        setPhase({ tag: 'error', message: 'pred.gg requires login to search players. Use the "Login with pred.gg" button in the sidebar.' });
+        setPhase({ tag: 'error', message: 'pred.gg requiere autenticación para buscar jugadores. Usa el botón de iniciar sesión en la barra lateral.' });
       } else {
-        const msg = err instanceof ApiErrorResponse ? err.error.message : 'Sync failed.';
+        const msg = err instanceof ApiErrorResponse ? err.error.message : 'Error al sincronizar.';
         setPhase({ tag: 'error', message: msg });
         toast.error(msg);
       }
@@ -163,7 +163,7 @@ export default function PlayerScouting() {
       setProfilePhase({ tag: 'loaded', profile, playerId });
       toast.success('Perfil actualizado', { id: toastId });
     } catch (err) {
-      const msg = err instanceof ApiErrorResponse ? err.error.message : 'Sync failed.';
+      const msg = err instanceof ApiErrorResponse ? err.error.message : 'Error al sincronizar.';
       toast.error(msg, { id: toastId });
       setProfilePhase({ tag: 'error', message: msg });
     }
@@ -186,7 +186,7 @@ export default function PlayerScouting() {
               style={{ position: 'absolute', left: '1rem', top: '50%', transform: 'translateY(-50%)' }} />
             <input
               type="text"
-              placeholder="Enter player name..."
+              placeholder="Nombre del jugador..."
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               disabled={phase.tag === 'searching' || phase.tag === 'syncing'}
@@ -202,16 +202,16 @@ export default function PlayerScouting() {
           <button type="submit"
             disabled={phase.tag === 'searching' || phase.tag === 'syncing' || !query.trim()}
             className="btn-primary" style={{ padding: '0 2rem' }}>
-            {phase.tag === 'searching' ? 'Searching...' : 'Search'}
+            {phase.tag === 'searching' ? 'Buscando...' : 'Buscar'}
           </button>
           {phase.tag !== 'idle' && (
-            <button type="button" onClick={reset} className="btn-secondary" style={{ padding: '0 1rem' }}>Clear</button>
+            <button type="button" onClick={reset} className="btn-secondary" style={{ padding: '0 1rem' }}>Limpiar</button>
           )}
         </form>
       </div>
 
       {phase.tag === 'searching' && (
-        <StatusCard icon={<Spinner />} title="Searching local database..." color="var(--accent-blue)" />
+        <StatusCard icon={<Spinner />} title="Buscando en base de datos local..." color="var(--accent-blue)" />
       )}
 
       {profilePhase.tag !== 'idle' && (
@@ -249,13 +249,13 @@ export default function PlayerScouting() {
           platformFilter === 'all' ? true : platformFilter === 'console' ? p.isConsole : !p.isConsole
         );
         const opts: Array<{ key: typeof platformFilter; label: string }> = [
-          { key: 'all', label: 'All' }, { key: 'pc', label: 'PC' }, { key: 'console', label: 'Console' },
+          { key: 'all', label: 'Todos' }, { key: 'pc', label: 'PC' }, { key: 'console', label: 'Consola' },
         ];
         return (
           <>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem' }}>
               <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem', margin: 0 }}>
-                {filtered.length} player{filtered.length !== 1 ? 's' : ''} found
+                {filtered.length} jugador{filtered.length !== 1 ? 'es' : ''} encontrado{filtered.length !== 1 ? 's' : ''}
               </p>
               <div style={{ display: 'flex', gap: '0.35rem' }}>
                 {opts.map(({ key, label }) => (
@@ -284,26 +284,26 @@ export default function PlayerScouting() {
         <div className="glass-card" style={{ textAlign: 'center', padding: '2.5rem' }}>
           <div style={{ marginBottom: '1rem' }}><Search color="var(--text-muted)" size={40} /></div>
           <h3 style={{ color: 'var(--text-primary)', marginBottom: '0.5rem' }}>
-            "{phase.query}" not in local database
+            "{phase.query}" no está en la base de datos local
           </h3>
           {authenticated ? (
             <>
               <p style={{ color: 'var(--text-muted)', marginBottom: '1.5rem', fontSize: '0.875rem' }}>
-                Fetch the player directly from pred.gg and save them locally.
+                Busca al jugador directamente en pred.gg y guárdalo localmente.
               </p>
               <button onClick={() => void handleSyncFromPredgg(phase.query)}
                 className="btn-primary" style={{ padding: '0.75rem 2rem' }}>
-                Search in pred.gg
+                Buscar en pred.gg
               </button>
             </>
           ) : (
             <>
               <p style={{ color: 'var(--text-muted)', marginBottom: '1.5rem', fontSize: '0.875rem' }}>
-                Login with pred.gg to search and sync players from the API.
+                Inicia sesión con pred.gg para buscar y sincronizar jugadores desde la API.
               </p>
               <a href={apiClient.auth.loginUrl()} className="btn-primary"
                 style={{ padding: '0.75rem 2rem', display: 'inline-flex', alignItems: 'center', gap: '0.5rem' }}>
-                <LogIn size={16} /> Login with pred.gg
+                <LogIn size={16} /> Iniciar sesión con pred.gg
               </a>
             </>
           )}
@@ -314,7 +314,7 @@ export default function PlayerScouting() {
       {phase.tag === 'syncing' && (
         <div className="glass-card" style={{ padding: '2.5rem', textAlign: 'center' }}>
           <div style={{ marginBottom: '1.5rem' }}><Spinner size={40} color="var(--accent-purple)" /></div>
-          <h3 style={{ color: 'var(--text-primary)', marginBottom: '0.5rem' }}>Syncing player...</h3>
+          <h3 style={{ color: 'var(--text-primary)', marginBottom: '0.5rem' }}>Sincronizando jugador...</h3>
           <p style={{ color: 'var(--accent-blue)', fontSize: '0.875rem', fontWeight: 500 }}>{phase.step}</p>
           <SyncSteps currentStep={phase.step} />
         </div>
@@ -323,14 +323,14 @@ export default function PlayerScouting() {
       {phase.tag === 'synced' && (
         <div className="glass-card" style={{ padding: '2rem' }}>
           <p style={{ color: 'var(--accent-success)', fontWeight: 600, marginBottom: '1rem' }}>
-            ✓ Player synced — loading scouting report...
+            ✓ Jugador sincronizado — cargando informe de scouting...
           </p>
         </div>
       )}
 
       {phase.tag === 'not_found' && (
         <StatusCard icon={<AlertCircle color="var(--accent-danger)" size={24} />}
-          title={`"${phase.query}" not found on pred.gg`} color="var(--accent-danger)" />
+          title={`"${phase.query}" no encontrado en pred.gg`} color="var(--accent-danger)" />
       )}
 
       {phase.tag === 'error' && (
@@ -374,7 +374,7 @@ function PlayerCard({ player, onSelect }: { player: PlayerSearchResult; onSelect
           {player.customName ?? player.displayName}
         </div>
         <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-          {player.isConsole ? <><Gamepad2 size={10} /> Console</> : <><Monitor size={10} /> PC</>}
+          {player.isConsole ? <><Gamepad2 size={10} /> Consola</> : <><Monitor size={10} /> PC</>}
           {player.inferredRegion && <span>· {player.inferredRegion}</span>}
         </div>
       </div>
@@ -411,12 +411,12 @@ function ScoutingPanel({
         <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '1.25rem' }}>
           <button type="button" onClick={onClose} className="btn-secondary"
             style={{ padding: '0.5rem 0.75rem', display: 'inline-flex', alignItems: 'center', gap: '0.5rem' }}>
-            <ArrowLeft size={16} /> Back
+            <ArrowLeft size={16} /> Volver
           </button>
           {onRefresh && (
             <button type="button" onClick={onRefresh} className="btn-secondary"
               style={{ padding: '0.5rem 0.75rem', display: 'inline-flex', alignItems: 'center', gap: '0.5rem' }}>
-              <RefreshCw size={16} /> Refresh
+              <RefreshCw size={16} /> Actualizar
             </button>
           )}
         </div>

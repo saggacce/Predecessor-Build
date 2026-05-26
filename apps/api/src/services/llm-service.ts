@@ -2,11 +2,8 @@ import OpenAI from 'openai';
 import { Response } from 'express';
 import { db } from '../db.js';
 import { logger } from '../logger.js';
+import { getConfigMap, getTextConfigMap } from './config-service.js';
 import type { Insight } from './analyst-service.js';
-
-const MODEL = process.env.LLM_MODEL ?? 'deepseek/deepseek-chat-v4';
-const BASE_URL = process.env.LLM_BASE_URL ?? 'https://openrouter.ai/api/v1';
-const API_KEY = process.env.OPENROUTER_API_KEY ?? '';
 
 const SYSTEM_PROMPT = `Eres un analista táctico especializado en el videojuego Predecessor, un MOBA (Multiplayer Online Battle Arena) competitivo.
 
@@ -34,19 +31,43 @@ FORMATO DE RESPUESTA (sin numeración, solo texto):
 • [Recomendación 2]
 • [Recomendación 3]`;
 
+async function getLlmConfig(): Promise<{ enabled: boolean; model: string; baseUrl: string; apiKey: string; maxTokens: number }> {
+  const [numMap, textMap] = await Promise.all([getConfigMap(db), getTextConfigMap(db)]);
+  return {
+    enabled: (numMap.get('llm_enabled') ?? 0) === 1,
+    model: textMap.get('llm_model') ?? process.env.LLM_MODEL ?? 'deepseek/deepseek-chat-v4',
+    baseUrl: textMap.get('llm_base_url') ?? process.env.LLM_BASE_URL ?? 'https://openrouter.ai/api/v1',
+    apiKey: process.env.OPENROUTER_API_KEY ?? '',
+    maxTokens: Math.round(numMap.get('llm_max_tokens') ?? 400),
+  };
+}
+
+export async function isLlmEnabled(): Promise<boolean> {
+  const cfg = await getLlmConfig();
+  return cfg.enabled && !!cfg.apiKey;
+}
+
 export async function streamLlmSummary(
   teamId: string,
   teamName: string,
   insights: Insight[],
   res: Response
 ): Promise<void> {
-  if (!API_KEY) {
-    res.write(`data: ${JSON.stringify({ error: 'LLM not configured' })}\n\n`);
+  const cfg = await getLlmConfig();
+
+  if (!cfg.enabled) {
+    res.write(`data: ${JSON.stringify({ error: 'LLM_DISABLED' })}\n\n`);
     res.end();
     return;
   }
 
-  const client = new OpenAI({ apiKey: API_KEY, baseURL: BASE_URL });
+  if (!cfg.apiKey) {
+    res.write(`data: ${JSON.stringify({ error: 'LLM_NO_KEY' })}\n\n`);
+    res.end();
+    return;
+  }
+
+  const client = new OpenAI({ apiKey: cfg.apiKey, baseURL: cfg.baseUrl });
 
   const topInsights = insights
     .filter((i) => i.severity !== 'positive')
@@ -59,10 +80,7 @@ export async function streamLlmSummary(
       recommendation: i.recommendation,
     }));
 
-  const userMessage = JSON.stringify({
-    team: teamName,
-    insights: topInsights,
-  });
+  const userMessage = JSON.stringify({ team: teamName, insights: topInsights });
 
   let fullOutput = '';
   let promptTokens: number | undefined;
@@ -70,13 +88,13 @@ export async function streamLlmSummary(
 
   try {
     const stream = await client.chat.completions.create({
-      model: MODEL,
+      model: cfg.model,
       messages: [
         { role: 'system', content: SYSTEM_PROMPT },
         { role: 'user', content: userMessage },
       ],
       stream: true,
-      max_tokens: 400,
+      max_tokens: cfg.maxTokens,
       temperature: 0.4,
     });
 
@@ -101,11 +119,10 @@ export async function streamLlmSummary(
     res.write(`data: ${JSON.stringify({ done: true })}\n\n`);
     res.end();
 
-    // Save to DB for future fine-tuning dataset
     const saved = await db.llmAnalysis.create({
       data: {
         teamId,
-        model: MODEL,
+        model: cfg.model,
         insightsJson: topInsights,
         outputText: fullOutput,
         promptTokens,
@@ -113,7 +130,7 @@ export async function streamLlmSummary(
       },
     });
 
-    logger.info({ teamId, analysisId: saved.id, model: MODEL, promptTokens, outputTokens }, 'llm analysis saved');
+    logger.info({ teamId, analysisId: saved.id, model: cfg.model, promptTokens, outputTokens }, 'llm analysis saved');
   } catch (err) {
     logger.error({ err, teamId }, 'llm stream failed');
     if (!res.headersSent) {

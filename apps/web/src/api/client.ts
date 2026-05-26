@@ -172,6 +172,7 @@ export interface PlatformConfigEntry {
   description: string;
   group: string;
   unit: string | null;
+  textValue: string | null;
   updatedAt: string;
   updatedBy: string | null;
 }
@@ -1050,6 +1051,7 @@ export const apiClient = {
       return fetchApi<{ insights: Insight[] }>(`/analysis/insights/${teamId}${params}`);
     },
     summaryUrl: (teamId: string) => `${API_BASE}/analysis/insights/${teamId}/summary`,
+    llmStatus: () => fetchApi<{ enabled: boolean }>('/analysis/llm-status'),
     saveFeedback: (analysisId: string, feedback: 'positive' | 'negative', correction?: string) =>
       fetchApi<{ ok: boolean }>(`/analysis/insights/summary/${analysisId}/feedback`, {
         method: 'PATCH',
@@ -1186,6 +1188,8 @@ export const apiClient = {
       fetchApi<{ config: PlatformConfigEntry }>(`/admin/config/${key}`, { method: 'PATCH', body: JSON.stringify({ value }) }),
     resetConfig: (key: string) =>
       fetchApi<{ config: PlatformConfigEntry }>(`/admin/config/${key}/reset`, { method: 'POST' }),
+    updateConfigText: (key: string, textValue: string) =>
+      fetchApi<{ config: PlatformConfigEntry }>(`/admin/config/${key}/text`, { method: 'PATCH', body: JSON.stringify({ textValue }) }),
     syncLogs: (limit = 50, entity?: string, status?: string, source?: string) => {
       const params = new URLSearchParams({ limit: String(limit) });
       if (entity) params.set('entity', entity);
