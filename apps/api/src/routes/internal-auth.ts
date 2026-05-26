@@ -224,22 +224,28 @@ internalAuthRouter.post('/register', registerRateLimit, async (req, res, next) =
           email: invitation.email.toLowerCase(),
           name,
           passwordHash,
+          // Standalone JUGADOR invitations (no team) get PLAYER global role
+          ...(invitation.teamId == null ? { globalRole: 'PLAYER' } : {}),
         },
       });
-      const membership = await tx.teamMembership.create({
-        data: {
-          userId: createdUser.id,
-          teamId: invitation.teamId,
-          role: invitation.role,
-          playerId: invitation.playerId ?? null,
-        },
-        select: { teamId: true, role: true, playerId: true },
-      });
+      const memberships: Array<{ teamId: string; role: string; playerId: string | null }> = [];
+      if (invitation.teamId) {
+        const membership = await tx.teamMembership.create({
+          data: {
+            userId: createdUser.id,
+            teamId: invitation.teamId,
+            role: invitation.role,
+            playerId: invitation.playerId ?? null,
+          },
+          select: { teamId: true, role: true, playerId: true },
+        });
+        memberships.push(membership);
+      }
       await tx.invitation.update({
         where: { id: invitation.id },
         data: { usedAt: new Date() },
       });
-      return { ...createdUser, memberships: [membership] };
+      return { ...createdUser, memberships };
     });
 
     await setSessionCookie(res, user);
