@@ -711,7 +711,7 @@ export interface Invitation {
   id: string;
   token: string;
   email: string;
-  teamId: string;
+  teamId: string | null;
   role: 'MANAGER' | 'COACH' | 'ANALISTA' | 'JUGADOR' | string;
   playerId?: string | null;
   expiresAt: string;
@@ -721,7 +721,7 @@ export interface Invitation {
 
 export interface PublicInvitation {
   email: string;
-  teamId: string;
+  teamId: string | null;
   role: string;
   playerId?: string | null;
   expiresAt: string;
@@ -779,6 +779,129 @@ export interface SyncLog {
   userName?: string | null;
 }
 
+export interface ScrimScheduleItem {
+  id: string;
+  teamId: string;
+  rivalTeamId: string | null;
+  rivalName: string | null;
+  scheduledAt: string;
+  type: 'SCRIM' | 'OFFICIAL' | 'PRACTICE';
+  notes: string | null;
+  result: 'WIN' | 'LOSS' | 'DRAW' | null;
+  createdById: string;
+  createdAt: string;
+  updatedAt: string;
+  rivalTeam: { id: string; name: string; abbreviation: string | null; logoUrl: string | null } | null;
+  createdBy: { id: string; name: string };
+}
+
+export interface WeeklyGoalItem {
+  id: string;
+  userId: string;
+  playerId: string | null;
+  title: string;
+  metricKey: 'winrate' | 'kda' | 'cs_per_min' | 'gpm' | 'dpm' | 'custom';
+  targetValue: number | null;
+  currentValue: number;
+  weekStart: string;
+  status: 'ACTIVE' | 'ACHIEVED' | 'FAILED';
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface TeamCommItem {
+  id: string;
+  teamId: string;
+  fromUserId: string;
+  toRole: string | null;
+  toUserId: string | null;
+  type: 'REQUEST' | 'ANNOUNCEMENT' | 'NOTE';
+  subject: string;
+  body: string;
+  priority: 'normal' | 'urgent';
+  status: 'OPEN' | 'IN_PROGRESS' | 'DONE' | 'DISMISSED';
+  resolvedAt: string | null;
+  resolvedById: string | null;
+  createdAt: string;
+  updatedAt: string;
+  fromUser: { id: string; name: string; avatarUrl: string | null };
+  toUser: { id: string; name: string } | null;
+}
+
+export interface ScoutingHero {
+  heroSlug: string;
+  heroName: string;
+  heroImageUrl: string | null;
+  matches: number;
+  wins: number;
+  winRate: number;
+  kda: number;
+  heroDamagePerMatch: number;
+}
+
+export interface ScoutingRoleStat {
+  role: string;
+  matches: number;
+  winRate: number;
+  kda: number;
+}
+
+export interface ScoutingFormMatch {
+  predggMatchId: string;
+  date: string;
+  heroSlug: string;
+  heroName: string | null;
+  heroImageUrl: string | null;
+  result: 'win' | 'loss';
+  kills: number;
+  deaths: number;
+  assists: number;
+  gold: number | null;
+  heroDamage: number | null;
+  wardsPlaced: number | null;
+  gameMode: string;
+  duration: number;
+  patch: string | null;
+  role: string | null;
+}
+
+export interface ScoutingProfile {
+  predggUuid: string;
+  name: string;
+  favRole: string | null;
+  firstPlayedAt: string | null;
+  lastPlayedAt: string | null;
+  rating: {
+    current: { points: number; rankName: string; tierName: string; percentile: number | null } | null;
+    peak: { points: number; rankName: string; tierName: string } | null;
+  };
+  generalStats: {
+    matches: number;
+    wins: number;
+    losses: number;
+    winRate: number;
+    kills: number;
+    deaths: number;
+    assists: number;
+    kda: number;
+    heroDamagePerMatch: number;
+    wardsPlacedPerMatch: number;
+    wardsDestroyedPerMatch: number;
+    csPerMatch: number;
+    objectiveDamagePerMatch: number;
+    avgGameMinutes: number | null;
+    multiKills: { double: number; triple: number; quadra: number; penta: number };
+  };
+  heroPool: ScoutingHero[];
+  roleDistribution: ScoutingRoleStat[];
+  recentForm: ScoutingFormMatch[];
+}
+
+export interface LiveMatchResponse {
+  detail: MatchDetail;
+  events: MatchEvents;
+}
+
 // ── Fetch helper ─────────────────────────────────────────────────────────────
 
 async function fetchApi<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
@@ -823,6 +946,7 @@ export const apiClient = {
         body: JSON.stringify({ name }),
       }),
     getProfile: (id: string) => fetchApi<PlayerProfile>(`/players/${id}`),
+    scout: (id: string) => fetchApi<ScoutingProfile>(`/players/${id}/scout`),
     compare: (playerIdA: string, playerIdB: string) =>
       fetchApi<{ players: [PlayerProfile, PlayerProfile]; deltas: unknown[] }>('/players/compare', {
         method: 'POST',
@@ -909,6 +1033,7 @@ export const apiClient = {
     getDetail: (id: string) => fetchApi<MatchDetail>(`/matches/${id}`),
     syncPlayers: (id: string) => fetchApi<MatchDetail>(`/matches/${id}/sync`, { method: 'POST' }),
     getEvents: (id: string) => fetchApi<MatchEvents>(`/matches/${id}/events`),
+    getLive: (predggUuid: string) => fetchApi<LiveMatchResponse>(`/matches/live/${predggUuid}`),
   },
 
   reports: {
@@ -920,8 +1045,10 @@ export const apiClient = {
   },
 
   analyst: {
-    insights: (teamId: string) =>
-      fetchApi<{ insights: Insight[] }>(`/analysis/insights/${teamId}`),
+    insights: (teamId: string, lang?: string) => {
+      const params = lang ? `?lang=${encodeURIComponent(lang)}` : '';
+      return fetchApi<{ insights: Insight[] }>(`/analysis/insights/${teamId}${params}`);
+    },
     summaryUrl: (teamId: string) => `${API_BASE}/analysis/insights/${teamId}/summary`,
     saveFeedback: (analysisId: string, feedback: 'positive' | 'negative', correction?: string) =>
       fetchApi<{ ok: boolean }>(`/analysis/insights/summary/${analysisId}/feedback`, {
@@ -1015,7 +1142,7 @@ export const apiClient = {
       const params = new URLSearchParams({ teamId });
       return fetchApi<{ invitations: Invitation[] }>(`/invitations?${params}`);
     },
-    create: (data: { email: string; teamId: string; role: string; playerId?: string }) =>
+    create: (data: { email: string; teamId?: string; role: string; playerId?: string }) =>
       fetchApi<{ invitation: Invitation }>('/invitations', {
         method: 'POST',
         body: JSON.stringify(data),
@@ -1077,5 +1204,37 @@ export const apiClient = {
   sync: {
     myMatches: () =>
       fetchApi<{ newMatches: number; message: string }>('/sync/my-matches', { method: 'POST' }),
+  },
+
+  schedule: {
+    list: (teamId: string) =>
+      fetchApi<{ items: ScrimScheduleItem[] }>(`/schedule?teamId=${encodeURIComponent(teamId)}`),
+    create: (data: { teamId: string; scheduledAt: string; type?: 'SCRIM' | 'OFFICIAL' | 'PRACTICE'; rivalTeamId?: string; rivalName?: string; notes?: string }) =>
+      fetchApi<{ item: ScrimScheduleItem }>('/schedule', { method: 'POST', body: JSON.stringify(data) }),
+    update: (id: string, data: { scheduledAt?: string; type?: 'SCRIM' | 'OFFICIAL' | 'PRACTICE'; rivalTeamId?: string | null; rivalName?: string | null; notes?: string | null; result?: 'WIN' | 'LOSS' | 'DRAW' | null }) =>
+      fetchApi<{ item: ScrimScheduleItem }>(`/schedule/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+    delete: (id: string) =>
+      fetchApi<{ ok: boolean }>(`/schedule/${id}`, { method: 'DELETE' }),
+  },
+
+  weeklyGoals: {
+    mine: () => fetchApi<{ goals: WeeklyGoalItem[]; weekStart: string }>('/weekly-goals/me'),
+    create: (data: { title: string; metricKey?: WeeklyGoalItem['metricKey']; targetValue?: number; playerId?: string }) =>
+      fetchApi<{ goal: WeeklyGoalItem }>('/weekly-goals', { method: 'POST', body: JSON.stringify(data) }),
+    update: (id: string, data: { currentValue?: number; status?: WeeklyGoalItem['status']; title?: string; targetValue?: number | null }) =>
+      fetchApi<{ goal: WeeklyGoalItem }>(`/weekly-goals/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+    delete: (id: string) =>
+      fetchApi<{ ok: boolean }>(`/weekly-goals/${id}`, { method: 'DELETE' }),
+  },
+
+  comms: {
+    list: (teamId: string) =>
+      fetchApi<{ items: TeamCommItem[] }>(`/comms?teamId=${encodeURIComponent(teamId)}`),
+    create: (data: { teamId: string; type: TeamCommItem['type']; subject: string; body: string; toRole?: string; toUserId?: string; priority?: 'normal' | 'urgent' }) =>
+      fetchApi<{ item: TeamCommItem }>('/comms', { method: 'POST', body: JSON.stringify(data) }),
+    update: (id: string, data: { status?: TeamCommItem['status']; body?: string }) =>
+      fetchApi<{ item: TeamCommItem }>(`/comms/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+    delete: (id: string) =>
+      fetchApi<{ ok: boolean }>(`/comms/${id}`, { method: 'DELETE' }),
   },
 };
