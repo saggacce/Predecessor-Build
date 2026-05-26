@@ -107,38 +107,54 @@ El deploy requiere aprobación en **GitHub → Environments → production** ant
 
 ## 6. Migraciones de BD en producción (Hetzner)
 
-El proyecto usa `prisma db push` en desarrollo, pero las tablas de TimescaleDB (hypertables con chunks comprimidos) bloquean alteraciones automáticas. Toda migración de esquema sigue este protocolo:
+El proyecto usa **Prisma Migrate** para gestionar el esquema. Los ficheros de migración viven en `workers/data-sync/prisma/migrations/` y son la fuente de verdad de todos los cambios de esquema.
 
-### En desarrollo (local)
+### Crear una migración (desarrollo local)
+
 ```bash
-# Añadir campos nuevos directamente con SQL
-psql "postgresql://predecessor:predecessor@localhost:5432/predecessor_build" \
-  -c 'ALTER TABLE "ModelName" ADD COLUMN IF NOT EXISTS "campo" tipo;'
-
-# Regenerar cliente Prisma
+# 1. Modificar schema.prisma
+# 2. Crear el fichero de migración SQL manualmente en:
+#    workers/data-sync/prisma/migrations/YYYYMMDDHHMMSS_nombre_descriptivo/migration.sql
+# 3. Regenerar el cliente Prisma
 npx prisma generate --schema workers/data-sync/prisma/schema.prisma
 ```
 
-### En producción (Hetzner) — antes del deploy
-Cada PR que añade campos al schema debe incluir en el body el SQL de migración exacto. Antes de que el nuevo código arranque en producción, ejecutar contra la BD de Hetzner:
+> **Convención de nombre:** `YYYYMMDDHHMMSS_descripcion_snake_case` — el timestamp garantiza el orden de aplicación.
 
-```bash
-# Conectar a Hetzner (SSH + psql o acceso directo según configuración)
-psql "$DATABASE_URL_PRODUCTION" -c 'ALTER TABLE "ModelName" ADD COLUMN IF NOT EXISTS "campo" tipo;'
+El fichero `migration.sql` debe usar `IF NOT EXISTS` / `IF EXISTS` donde sea posible para ser idempotente:
+
+```sql
+ALTER TABLE "ModelName" ADD COLUMN IF NOT EXISTS "campo" TEXT NOT NULL DEFAULT 'valor';
+ALTER TABLE "Invitation" ALTER COLUMN "teamId" DROP NOT NULL;
 ```
 
-**Orden obligatorio:**
+### Desplegar migraciones en producción (Hetzner)
+
+**Orden obligatorio antes de aprobar el deploy:**
+
+```bash
+# Desde el servidor Hetzner o con DATABASE_URL apuntando a producción:
+npx prisma migrate deploy --schema workers/data-sync/prisma/schema.prisma
+```
+
+Este comando aplica todas las migraciones pendientes en orden. Si el deploy de la app arranca antes de que las migraciones se apliquen, el servidor fallará al acceder a campos nuevos.
+
+**Flujo completo de sprint con migraciones:**
+
 1. Merge del sprint PR a `main`
-2. **Ejecutar el ALTER TABLE en Hetzner** antes de aprobar el deploy
+2. **Ejecutar `prisma migrate deploy` en Hetzner** antes de aprobar el deploy
 3. Aprobar el deploy en GitHub → Environments → production
 4. Verificar en `https://riftline.app`
 
-> Si el servicio arranca antes de añadir la columna, el servidor fallará al acceder al campo nuevo.
+### Después de aplicar una migración que cambia tipos
 
-### Columnas pendientes de aplicar en Hetzner
-| PR | Tabla | SQL |
-|----|-------|-----|
-| #182 | `MatchPlayer` | `ALTER TABLE "MatchPlayer" ADD COLUMN IF NOT EXISTS "perks" jsonb;` |
+Si la migración hace que el cliente Prisma cambie tipos (e.g., `String` → `String?`), regenerar el cliente en producción es parte del build:
+
+```bash
+npx prisma generate --schema workers/data-sync/prisma/schema.prisma
+```
+
+Esto ya ocurre automáticamente si `railway.toml` / `package.json` incluye `prisma generate` en el script de build.
 
 ---
 

@@ -151,13 +151,18 @@ Tablero de tareas generales y subtareas.
 
 # BLOQUE B — EN CURSO / PRÓXIMO
 
-## Tarea 9 — Analyst: LLM (Claude API)
+## [x] Tarea 9 — Analyst: LLM (Claude API)
 *Prerequisito: Tarea 8 completa y validada en producción.*
 
-- [ ] Prompt caching para contexto del juego (system prompt fijo con reglas de Predecessor)
-- [ ] Streaming SSE al frontend → "Focus of the Day" en Dashboard
-- [ ] AI Summary: LLM resume insights ya calculados, no inventa causalidad
-- [ ] Coste estimado: <$0.01 por análisis con claude-sonnet-4-6
+- [x] Prompt caching para contexto del juego (system prompt fijo con reglas de Predecessor)
+- [x] Streaming SSE al frontend → "Focus of the Day" en Dashboard
+- [x] AI Summary: LLM resume insights ya calculados, no inventa causalidad
+- [x] Coste estimado: <$0.01 por análisis con claude-sonnet-4-6
+- [x] **i18n insights (Tarea 9B)** — `insight-strings.ts` como única fuente de verdad para EN/ES; `analyst-service.ts` acepta `lang` param; frontend pasa `i18n.language`; ver `docs/reglas_insights_automaticos.md` para el workflow de añadir nuevos insights
+- [x] **i18n frontend completo** — todos los ficheros de traducción EN/ES migrados; 6 páginas pendientes completadas (ApiStatusPage, AuditLogsPage, ConfigPage, FeedbackPage, PermissionsPage, TeamAnalysis)
+- [x] **Invitaciones sin equipo** — `Invitation.teamId` nullable; PLATFORM_ADMIN puede crear invitaciones JUGADOR sin teamId; registro crea `globalRole: 'PLAYER'` cuando no hay teamId
+- [x] **Dashboard manager sin equipo** — `ManagerNoTeamPrompt` cuando `isManagerWithNoTeam`; link a `/analysis/teams`
+- [x] **Migraciones SQL** — ficheros en `workers/data-sync/prisma/migrations/` para `rosterStatus`, `User.language` e `Invitation.teamId` nullable; listas para `prisma migrate deploy` en producción
 
 ---
 
