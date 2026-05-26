@@ -37,9 +37,7 @@ export default function ScrimPlanner() {
   const [editingResult, setEditingResult] = useState<string | null>(null);
 
   const isPlatformAdmin = user?.globalRole === 'PLATFORM_ADMIN';
-  const isManager = user?.memberships?.some((m) => m.role === 'MANAGER') ?? false;
-  const isCoach = user?.memberships?.some((m) => m.role === 'COACH') ?? false;
-  const canEdit = isPlatformAdmin || isManager || isCoach;
+  const canEdit = isPlatformAdmin || (user?.memberships?.some((m) => m.team.id === teamId && m.role === 'COACH') ?? false);
 
   useEffect(() => {
     Promise.all([
@@ -236,6 +234,7 @@ function ScrimCard({ item, canEdit, onDelete, onSetResult, editingResult, setEdi
   setEditingResult: (id: string | null) => void;
   isPast?: boolean;
 }) {
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const date = new Date(item.scheduledAt);
   const rival = item.rivalTeam?.name ?? item.rivalName ?? 'Rival por confirmar';
   const typeColor = TYPE_COLOR[item.type] ?? 'var(--text-muted)';
@@ -298,11 +297,25 @@ function ScrimCard({ item, canEdit, onDelete, onSetResult, editingResult, setEdi
               <Edit2 size={11} /> {item.result ? 'Editar' : 'Resultado'}
             </button>
           )}
-          <button onClick={() => { if (confirm('¿Eliminar este scrim?')) onDelete(item.id); }}
-            style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: '4px', opacity: 0.6 }}
-            title="Eliminar">
-            <Trash2 size={14} />
-          </button>
+          {confirmDelete ? (
+            <div style={{ display: 'flex', gap: '0.25rem', alignItems: 'center' }}>
+              <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>¿Eliminar?</span>
+              <button onClick={() => { onDelete(item.id); setConfirmDelete(false); }}
+                style={{ fontSize: '0.65rem', fontWeight: 700, padding: '2px 7px', border: '1px solid var(--accent-loss)', borderRadius: 4, background: 'transparent', cursor: 'pointer', color: 'var(--accent-loss)' }}>
+                Sí
+              </button>
+              <button onClick={() => setConfirmDelete(false)}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: '2px 4px' }}>
+                <X size={13} />
+              </button>
+            </div>
+          ) : (
+            <button onClick={() => setConfirmDelete(true)}
+              style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: '4px', opacity: 0.6 }}
+              title="Eliminar">
+              <Trash2 size={14} />
+            </button>
+          )}
         </div>
       )}
     </div>

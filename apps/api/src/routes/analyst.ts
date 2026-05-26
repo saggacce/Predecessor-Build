@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { getTeamInsights } from '../services/analyst-service.js';
-import { streamLlmSummary, saveLlmFeedback } from '../services/llm-service.js';
+import { streamLlmSummary, saveLlmFeedback, isLlmEnabled } from '../services/llm-service.js';
 import { requireAuth } from '../middleware/require-auth.js';
 import { requireRole } from '../middleware/require-role.js';
 import { db } from '../db.js';
@@ -10,6 +10,14 @@ import type { InsightLang } from '../services/insight-strings.js';
 export const analystRouter = Router();
 
 const staffRoles = ['COACH', 'ANALISTA', 'MANAGER'];
+
+/** GET /analysis/llm-status — returns whether LLM is enabled and configured */
+analystRouter.get('/llm-status', requireAuth, async (_req, res, next) => {
+  try {
+    const enabled = await isLlmEnabled();
+    res.json({ enabled });
+  } catch (err) { next(err); }
+});
 
 analystRouter.get('/insights/:teamId', requireAuth, requireRole(staffRoles), async (req, res, next) => {
   try {

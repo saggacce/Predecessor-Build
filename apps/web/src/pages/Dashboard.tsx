@@ -208,6 +208,12 @@ export default function Dashboard() {
       .catch(() => null);
   }, [isCoach, isManager, ownTeam?.id]);
 
+  // Fetch scrim schedule for JUGADOR (read-only, upcoming scrims only)
+  useEffect(() => {
+    if (!ownTeam || !isJugador) return;
+    apiClient.schedule.list(ownTeam.id).then((r) => setScrimSchedule(r.items)).catch(() => null);
+  }, [isJugador, ownTeam?.id]);
+
   // Fetch player stats for roster form (COACH / MANAGER)
   useEffect(() => {
     if (!ownTeam || (!isCoach && !isManager)) return;
@@ -320,7 +326,7 @@ export default function Dashboard() {
                   <div style={{ fontFamily: 'var(--font-mono)', fontSize: '1.3rem', fontWeight: 700, color: feedbackCount ? 'var(--accent-loss)' : 'var(--text-muted)' }}>
                     {feedbackCount ?? '—'}
                   </div>
-                  <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>{t('dashboard.recentMatches')}</div>
+                  <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>Feedback pendiente</div>
                 </div>
               </div>
             </Link>
@@ -485,7 +491,7 @@ export default function Dashboard() {
 
               {/* Scrim calendar + comms side by side */}
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1rem' }}>
-                <ScrimCalendarPanel items={scrimSchedule} teamId={ownTeam.id} role="COACH" />
+                <ScrimCalendarPanel items={scrimSchedule} teamId={ownTeam.id} role="COACH" onScrimAdded={(item) => setScrimSchedule((p) => [...p, item].sort((a, b) => new Date(a.scheduledAt).getTime() - new Date(b.scheduledAt).getTime()))} />
                 <CoachCommsPanel
                   teamId={ownTeam.id}
                   roster={ownTeam.roster}
@@ -704,29 +710,94 @@ function PlayerHeroPool({ heroStats }: { heroStats: HeroStat[] }) {
   );
 }
 
-// ── Focus of the Day (stub — Próximamente) ────────────────────────────────────
-function FocusOfTheDay({ teamId: _teamId }: { teamId: string }) {
+// ── Focus of the Day ──────────────────────────────────────────────────────────
+function FocusOfTheDay({ teamId }: { teamId: string }) {
   const { t } = useTranslation();
   const { internalAuthenticated } = useAuth();
-  if (!internalAuthenticated) return null;
+  const [llmEnabled, setLlmEnabled] = useState<boolean | null>(null);
+  const [focusState, setFocusState] = useState<FocusState>('idle');
+  const [output, setOutput] = useState('');
+  const [feedback, setFeedback] = useState<FeedbackState>('none');
+  const esRef = useRef<EventSource | null>(null);
+
+  useEffect(() => {
+    apiClient.analyst.llmStatus().then((r) => setLlmEnabled(r.enabled)).catch(() => setLlmEnabled(false));
+    return () => { esRef.current?.close(); };
+  }, []);
+
+  if (!internalAuthenticated || llmEnabled === null) return null;
+
+  function startStream() {
+    if (focusState === 'streaming') return;
+    setOutput('');
+    setFocusState('streaming');
+    setFeedback('none');
+    esRef.current?.close();
+
+    const url = `${apiClient.analyst.summaryUrl(teamId)}?lang=es`;
+    const es = new EventSource(url, { withCredentials: true });
+    esRef.current = es;
+
+    es.onmessage = (e: MessageEvent) => {
+      try {
+        const data = JSON.parse(e.data as string) as { delta?: string; done?: boolean; error?: string };
+        if (data.delta) setOutput((p) => p + data.delta);
+        if (data.done) { setFocusState('done'); es.close(); }
+        if (data.error) { setFocusState('error'); es.close(); }
+      } catch { /* ignore parse errors */ }
+    };
+    es.onerror = () => { setFocusState('error'); es.close(); };
+  }
+
+  if (!llmEnabled) {
+    return (
+      <div className="glass-card" style={{ borderLeft: '3px solid var(--accent-violet)', padding: '1rem 1.25rem' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+          <Sparkles size={15} style={{ color: 'var(--accent-violet)', flexShrink: 0 }} />
+          <span style={{ fontWeight: 700, fontSize: '0.88rem', color: 'var(--text-primary)' }}>Focus of the Day</span>
+          <Link to="/admin/config" style={{ marginLeft: 'auto', fontSize: '0.72rem', color: 'var(--accent-blue)', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}>
+            Activar en configuración <ArrowRight size={11} />
+          </Link>
+        </div>
+        <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', margin: '0.5rem 0 0' }}>
+          {t('comingSoon.description')}
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div className="glass-card" style={{ borderLeft: '3px solid var(--accent-violet)', padding: '1rem 1.25rem' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: output ? '0.75rem' : 0 }}>
         <Sparkles size={15} style={{ color: 'var(--accent-violet)', flexShrink: 0 }} />
         <span style={{ fontWeight: 700, fontSize: '0.88rem', color: 'var(--text-primary)' }}>Focus of the Day</span>
-        <div style={{ marginLeft: 'auto', position: 'relative' }} title={t('comingSoon.description')}>
-          <button disabled className="btn-secondary" style={{ fontSize: '0.72rem', padding: '0.25rem 0.65rem', opacity: 0.45, cursor: 'not-allowed' }}>
-            {t('dashboard.syncMatches')}
+        <div style={{ marginLeft: 'auto', display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+          {focusState === 'done' && (
+            <>
+              <button onClick={() => { setFeedback('positive'); }} title="Útil" style={{ background: 'none', border: 'none', cursor: 'pointer', color: feedback === 'positive' ? 'var(--accent-win)' : 'var(--text-muted)', padding: 0 }}><ThumbsUp size={14} /></button>
+              <button onClick={() => { setFeedback('negative'); }} title="No útil" style={{ background: 'none', border: 'none', cursor: 'pointer', color: feedback === 'negative' ? 'var(--accent-loss)' : 'var(--text-muted)', padding: 0 }}><ThumbsDown size={14} /></button>
+            </>
+          )}
+          <button onClick={startStream} disabled={focusState === 'streaming'} className="btn-secondary" style={{ fontSize: '0.72rem', padding: '0.25rem 0.65rem' }}>
+            {focusState === 'streaming' ? 'Analizando…' : focusState === 'done' ? 'Regenerar' : 'Generar análisis'}
           </button>
-          <span style={{ position: 'absolute', bottom: 'calc(100% + 6px)', right: 0, whiteSpace: 'nowrap', fontSize: '0.62rem', fontWeight: 600, color: 'var(--accent-prime)', background: 'var(--bg-card)', border: '1px solid var(--border-color)', borderRadius: 4, padding: '2px 6px', pointerEvents: 'none' }}>
-            {t('comingSoon.title')}
-          </span>
         </div>
       </div>
-      <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', margin: '0.5rem 0 0' }}>
-        {t('comingSoon.description')}
-      </p>
+      {output && (
+        <pre style={{ whiteSpace: 'pre-wrap', fontFamily: 'inherit', fontSize: '0.82rem', color: 'var(--text-secondary)', lineHeight: 1.6, margin: 0 }}>
+          {output}
+        </pre>
+      )}
+      {focusState === 'idle' && !output && (
+        <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', margin: '0.5rem 0 0' }}>
+          Genera un análisis táctico diario basado en los insights del equipo.
+        </p>
+      )}
+      {focusState === 'error' && (
+        <p style={{ color: 'var(--accent-loss)', fontSize: '0.8rem', margin: '0.5rem 0 0' }}>
+          No se pudo generar el análisis. Inténtalo de nuevo.
+        </p>
+      )}
     </div>
   );
 }
@@ -762,17 +833,15 @@ function RosterFormPanel({ players }: { players: PlayerAnalysisStat[] }) {
 }
 
 // ── Scrim calendar panel ──────────────────────────────────────────────────────
-function ScrimCalendarPanel({ items, teamId, role }: { items: ScrimScheduleItem[]; teamId: string; role: string }) {
+function ScrimCalendarPanel({ items, teamId, role, onScrimAdded }: { items: ScrimScheduleItem[]; teamId: string; role: string; onScrimAdded?: (item: ScrimScheduleItem) => void }) {
   const upcoming = items.filter((i) => new Date(i.scheduledAt) >= new Date()).slice(0, 4);
-  const canEdit = role === 'MANAGER' || role === 'COACH';
+  const canEdit = role === 'COACH' && !!onScrimAdded;
   return (
     <div className="glass-card" style={{ padding: '0.9rem 1.1rem' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.75rem' }}>
         <Calendar size={13} style={{ color: 'var(--accent-blue)' }} />
         <span style={{ fontSize: '0.68rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', flex: 1 }}>Calendario</span>
-        {canEdit && (
-          <AddScrimButton teamId={teamId} onCreated={() => apiClient.schedule.list(teamId).catch(() => null)} />
-        )}
+        {canEdit && onScrimAdded && <AddScrimButton teamId={teamId} onCreated={onScrimAdded} />}
       </div>
       {upcoming.length === 0 ? (
         <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', margin: 0 }}>No hay scrims programados</p>
@@ -800,12 +869,15 @@ function ScrimCalendarPanel({ items, teamId, role }: { items: ScrimScheduleItem[
           })}
         </div>
       )}
+      <Link to="/tools/scrims" style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', marginTop: '0.75rem', fontSize: '0.68rem', color: 'var(--accent-blue)', textDecoration: 'none', justifyContent: 'flex-end' }}>
+        Ver todos <ChevronRight size={11} />
+      </Link>
     </div>
   );
 }
 
 // ── Add scrim button (inline form) ────────────────────────────────────────────
-function AddScrimButton({ teamId, onCreated }: { teamId: string; onCreated: () => void }) {
+function AddScrimButton({ teamId, onCreated }: { teamId: string; onCreated: (item: ScrimScheduleItem) => void }) {
   const [open, setOpen] = useState(false);
   const [dt, setDt] = useState('');
   const [rival, setRival] = useState('');
@@ -824,10 +896,10 @@ function AddScrimButton({ teamId, onCreated }: { teamId: string; onCreated: () =
     if (!dt) return;
     setSaving(true);
     try {
-      await apiClient.schedule.create({ teamId, scheduledAt: new Date(dt).toISOString(), type, rivalName: rival || undefined });
+      const r = await apiClient.schedule.create({ teamId, scheduledAt: new Date(dt).toISOString(), type, rivalName: rival || undefined });
       toast.success('Scrim añadido');
       setOpen(false); setDt(''); setRival(''); setType('SCRIM');
-      onCreated();
+      onCreated(r.item);
     } catch { toast.error('Error al guardar'); }
     finally { setSaving(false); }
   };
@@ -1158,8 +1230,8 @@ function WeeklyGoalWidget({ goals, onGoalsChange }: { goals: WeeklyGoalItem[]; o
       <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.75rem' }}>
         <Trophy size={13} style={{ color: 'var(--accent-prime)' }} />
         <span style={{ fontSize: '0.68rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', flex: 1 }}>Objetivo semanal</span>
-        {!adding && goals.length === 0 && (
-          <button onClick={() => setAdding(true)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--accent-blue)', fontSize: '0.7rem', display: 'flex', alignItems: 'center', gap: '0.25rem', padding: 0 }}>
+        {!adding && (
+          <button onClick={() => goals.length < 3 && setAdding(true)} disabled={goals.length >= 3} title={goals.length >= 3 ? 'Máximo 3 objetivos semanales' : undefined} style={{ background: 'none', border: 'none', cursor: goals.length >= 3 ? 'not-allowed' : 'pointer', color: goals.length >= 3 ? 'var(--text-muted)' : 'var(--accent-blue)', fontSize: '0.7rem', display: 'flex', alignItems: 'center', gap: '0.25rem', padding: 0, opacity: goals.length >= 3 ? 0.45 : 1 }}>
             <PlusCircle size={12} /> Añadir
           </button>
         )}
@@ -1331,7 +1403,7 @@ function PlayerStandaloneView() {
             <ArrowRight size={14} style={{ color: 'var(--text-muted)', marginLeft: 'auto', flexShrink: 0 }} />
           </div>
         </Link>
-        <Link to="/analysis/players" state={{ autoLoadPlayerId: linkedId }} style={{ textDecoration: 'none' }}>
+        <Link to="/matches" style={{ textDecoration: 'none' }}>
           <div className="glass-card landing-feature-card" style={{ display: 'flex', alignItems: 'center', gap: '0.85rem', padding: '0.9rem 1.1rem', cursor: 'pointer', borderLeft: '3px solid var(--accent-violet)' }}>
             <BookOpen size={18} style={{ color: 'var(--accent-violet)', flexShrink: 0 }} />
             <div>

@@ -15,7 +15,7 @@ import {
 } from '../services/sync-service.js';
 import { syncHeroMeta } from '../services/hero-meta-service.js';
 import { invalidateHeroMetaCache } from './hero-meta.js';
-import { getAllConfig, updateConfigValue, resetConfigValue } from '../services/config-service.js';
+import { getAllConfig, updateConfigValue, updateConfigText, resetConfigValue } from '../services/config-service.js';
 import { getPermissions, savePermissions, DEFAULT_PERMISSIONS, CONFIGURABLE_ROLES } from '../services/permissions-service.js';
 import { getValidToken, exchangeToken, COOKIE_REFRESH } from './auth.js';
 import { requireAuth } from '../middleware/require-auth.js';
@@ -721,6 +721,19 @@ adminRouter.patch('/config/:key', requireAuth, requirePlatformAdmin, async (req,
     const { value } = z.object({ value: z.number() }).parse(req.body);
     const userId = (req as { user?: { id: string } }).user?.id ?? 'unknown';
     const updated = await updateConfigValue(db, req.params.key, value, userId);
+    res.json({ config: updated });
+  } catch (err) { next(err); }
+});
+
+/**
+ * PATCH /admin/config/:key/text
+ * Update a text-type config value (model name, URL, etc.).
+ */
+adminRouter.patch('/config/:key/text', requireAuth, requirePlatformAdmin, async (req, res, next) => {
+  try {
+    const { textValue } = z.object({ textValue: z.string().max(500) }).parse(req.body);
+    const userId = (req as { user?: { id: string } }).user?.id ?? 'unknown';
+    const updated = await updateConfigText(db, req.params.key, textValue, userId);
     res.json({ config: updated });
   } catch (err) { next(err); }
 });
