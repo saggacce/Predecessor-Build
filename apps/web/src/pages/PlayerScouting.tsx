@@ -443,7 +443,7 @@ function ScoutingPanel({
                   border: `1px solid ${getRankColor(profile.rating.current.tierName)}44`,
                   borderRadius: '999px', padding: '0.25rem 0.6rem',
                 }}>
-                  <RankIcon tierName={profile.rating.current.tierName} size={14} />
+                  <RankIcon rankLabel={profile.rating.current.tierName} ratingPoints={profile.rating.current.points} size={14} />
                   {profile.rating.current.rankName}
                   {' · '}{Math.round(profile.rating.current.points).toLocaleString()} VP
                 </span>
@@ -544,8 +544,8 @@ function ScoutingHeroPool({ heroes }: { heroes: ScoutingHero[] }) {
                   <span style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     {hero.heroName}
                   </span>
-                  {isPocketPick && <Star size={10} color="#fbbf24" fill="#fbbf24" title="Pocket pick" />}
-                  {isOneTrick && <Zap size={10} color="#a78bfa" fill="#a78bfa" title="One-trick" />}
+                  {isPocketPick && <Star size={10} color="#fbbf24" fill="#fbbf24" aria-label="Pocket pick" />}
+                  {isOneTrick && <Zap size={10} color="#a78bfa" fill="#a78bfa" aria-label="One-trick" />}
                 </div>
                 <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', display: 'flex', gap: '0.5rem' }}>
                   <span style={{ color: winRateColor(hero.winRate), fontWeight: 600 }}>{hero.winRate}% WR</span>
