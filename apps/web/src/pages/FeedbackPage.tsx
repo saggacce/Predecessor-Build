@@ -1,21 +1,23 @@
 import { useEffect, useState } from 'react';
 import { Bug, Lightbulb, Zap, CheckCircle, Eye, XCircle, ChevronDown, ChevronUp, Image } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { apiClient, type FeedbackItem } from '../api/client';
 
-const TYPE_CONFIG = {
-  bug:         { label: 'Bug',        icon: <Bug size={12} />,       color: 'var(--accent-loss)' },
-  suggestion:  { label: 'Sugerencia', icon: <Lightbulb size={12} />, color: 'var(--accent-prime)' },
-  improvement: { label: 'Mejora',     icon: <Zap size={12} />,       color: 'var(--accent-blue)' },
-} as const;
-
-const STATUS_CONFIG = {
-  NEW:       { label: 'Nuevo',     color: 'var(--accent-loss)',  bg: 'rgba(248,113,113,0.12)' },
-  REVIEWED:  { label: 'Revisado',  color: 'var(--accent-win)',   bg: 'rgba(74,222,128,0.12)' },
-  DISMISSED: { label: 'Descartado',color: 'var(--text-muted)',   bg: 'transparent' },
-} as const;
-
 export default function FeedbackPage() {
+  const { t } = useTranslation();
+
+  const TYPE_CONFIG = {
+    bug:         { label: t('feedback.typeBug'),         icon: <Bug size={12} />,       color: 'var(--accent-loss)' },
+    suggestion:  { label: t('feedback.typeSuggestion'),  icon: <Lightbulb size={12} />, color: 'var(--accent-prime)' },
+    improvement: { label: t('feedback.typeImprovement'), icon: <Zap size={12} />,       color: 'var(--accent-blue)' },
+  } as const;
+
+  const STATUS_CONFIG = {
+    NEW:       { label: t('feedback.statusNew'),       color: 'var(--accent-loss)',  bg: 'rgba(248,113,113,0.12)' },
+    REVIEWED:  { label: t('feedback.statusReviewed'),  color: 'var(--accent-win)',   bg: 'rgba(74,222,128,0.12)' },
+    DISMISSED: { label: t('feedback.statusDismissed'), color: 'var(--text-muted)',   bg: 'transparent' },
+  } as const;
   const [reports, setReports] = useState<FeedbackItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState('');
@@ -29,7 +31,7 @@ export default function FeedbackPage() {
     setLoading(true);
     apiClient.feedback.list(statusFilter || undefined, typeFilter || undefined)
       .then(({ reports: r }) => setReports(r))
-      .catch(() => toast.error('Error cargando feedbacks'))
+      .catch(() => toast.error(t('feedback.loadError')))
       .finally(() => setLoading(false));
   }
 
@@ -39,7 +41,7 @@ export default function FeedbackPage() {
     try {
       const { report } = await apiClient.feedback.getDetail(id);
       setScreenshot(report.screenshotBase64 ?? null);
-    } catch { toast.error('Error cargando pantallazo'); }
+    } catch { toast.error(t('feedback.screenshotError')); }
   }
 
   async function updateStatus(id: string, status: 'NEW' | 'REVIEWED' | 'DISMISSED') {
@@ -50,7 +52,7 @@ export default function FeedbackPage() {
       setReports((prev) => prev.map((r) => r.id === id ? { ...r, ...updated } : r));
       if (status !== 'NEW') setExpanded(null);
       toast.success(`Estado actualizado: ${STATUS_CONFIG[status].label}`);
-    } catch { toast.error('Error al actualizar'); }
+    } catch { toast.error(t('feedback.updateError')); }
     finally { setUpdating(null); setReviewNote(''); }
   }
 
@@ -87,17 +89,17 @@ export default function FeedbackPage() {
       <div className="glass-card" style={{ display: 'flex', gap: '0.75rem', marginBottom: '1rem', alignItems: 'center', flexWrap: 'wrap', padding: '0.75rem 1rem' }}>
         <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}
           style={{ padding: '0.38rem 0.65rem', background: 'var(--bg-dark)', border: '1px solid var(--border-color)', borderRadius: 6, color: 'var(--text-primary)', fontSize: '0.82rem' }}>
-          <option value="">Todos los estados</option>
-          <option value="NEW">Nuevos</option>
-          <option value="REVIEWED">Revisados</option>
-          <option value="DISMISSED">Descartados</option>
+          <option value="">{t('feedback.allStatuses')}</option>
+          <option value="NEW">{t('feedback.filterNew')}</option>
+          <option value="REVIEWED">{t('feedback.filterReviewed')}</option>
+          <option value="DISMISSED">{t('feedback.filterDismissed')}</option>
         </select>
         <select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)}
           style={{ padding: '0.38rem 0.65rem', background: 'var(--bg-dark)', border: '1px solid var(--border-color)', borderRadius: 6, color: 'var(--text-primary)', fontSize: '0.82rem' }}>
-          <option value="">Todos los tipos</option>
-          <option value="bug">Bugs</option>
-          <option value="suggestion">Sugerencias</option>
-          <option value="improvement">Mejoras</option>
+          <option value="">{t('feedback.allTypes')}</option>
+          <option value="bug">{t('feedback.filterBugs')}</option>
+          <option value="suggestion">{t('feedback.filterSuggestions')}</option>
+          <option value="improvement">{t('feedback.filterImprovements')}</option>
         </select>
         <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginLeft: 'auto' }}>
           {reports.length} reporte{reports.length !== 1 ? 's' : ''}
@@ -105,7 +107,7 @@ export default function FeedbackPage() {
       </div>
 
       {loading ? (
-        <div style={{ padding: '2rem', color: 'var(--text-muted)', textAlign: 'center' }}>Cargando…</div>
+        <div style={{ padding: '2rem', color: 'var(--text-muted)', textAlign: 'center' }}>{t('common.loading')}</div>
       ) : reports.length === 0 ? (
         <div className="glass-card" style={{ padding: '2.5rem', textAlign: 'center', color: 'var(--text-muted)' }}>
           No hay reportes{statusFilter || typeFilter ? ' con estos filtros' : ' todavía'}.
@@ -129,7 +131,7 @@ export default function FeedbackPage() {
                   <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.section}</span>
                   <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.description.slice(0, 80)}{r.description.length > 80 ? '…' : ''}</span>
                   <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', whiteSpace: 'nowrap' }}>
-                    {r.userName ?? r.userEmail ?? 'Anónimo'}
+                    {r.userName ?? r.userEmail ?? t('feedback.anonymous')}
                   </span>
                   <span style={{ fontSize: '0.65rem', fontWeight: 700, color: status.color, background: status.bg, padding: '2px 7px', borderRadius: 999, textAlign: 'center', whiteSpace: 'nowrap' }}>
                     {status.label}
@@ -142,9 +144,9 @@ export default function FeedbackPage() {
                   <div style={{ borderTop: '1px solid var(--border-color)', padding: '1rem 1.1rem', display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
                     {/* Meta */}
                     <div style={{ display: 'flex', gap: '1.5rem', fontSize: '0.72rem', color: 'var(--text-muted)', flexWrap: 'wrap' }}>
-                      <span>Enviado: <b style={{ color: 'var(--text-secondary)' }}>{new Date(r.createdAt).toLocaleString('es-ES', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</b></span>
-                      {r.userEmail && <span>Email: <b style={{ color: 'var(--text-secondary)' }}>{r.userEmail}</b></span>}
-                      {r.reviewedAt && <span>Revisado: <b style={{ color: 'var(--text-secondary)' }}>{new Date(r.reviewedAt).toLocaleString('es-ES', { day: 'numeric', month: 'short' })}</b></span>}
+                      <span>{t('feedback.sentLabel')} <b style={{ color: 'var(--text-secondary)' }}>{new Date(r.createdAt).toLocaleString(undefined, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</b></span>
+                      {r.userEmail && <span>{t('feedback.emailLabel')} <b style={{ color: 'var(--text-secondary)' }}>{r.userEmail}</b></span>}
+                      {r.reviewedAt && <span>{t('feedback.reviewedLabel')} <b style={{ color: 'var(--text-secondary)' }}>{new Date(r.reviewedAt).toLocaleString(undefined, { day: 'numeric', month: 'short' })}</b></span>}
                     </div>
 
                     {/* Full description */}
@@ -167,7 +169,7 @@ export default function FeedbackPage() {
                     {/* Review note */}
                     {r.reviewNote && (
                       <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', background: 'rgba(74,222,128,0.06)', border: '1px solid rgba(74,222,128,0.2)', borderRadius: 6, padding: '0.6rem 0.85rem' }}>
-                        <b style={{ color: 'var(--accent-win)' }}>Nota del revisor:</b> {r.reviewNote}
+                        <b style={{ color: 'var(--accent-win)' }}>{t('feedback.reviewerNote')}</b> {r.reviewNote}
                       </div>
                     )}
 
@@ -177,18 +179,18 @@ export default function FeedbackPage() {
                         <textarea
                           value={reviewNote}
                           onChange={(e) => setReviewNote(e.target.value)}
-                          placeholder="Nota interna (opcional)…"
+                          placeholder={t('feedback.internalNotePlaceholder')}
                           rows={2}
                           style={{ width: '100%', padding: '0.42rem 0.65rem', background: 'var(--bg-dark)', border: '1px solid var(--border-color)', borderRadius: 6, color: 'var(--text-primary)', fontSize: '0.82rem', resize: 'none', fontFamily: 'inherit' }}
                         />
                         <div style={{ display: 'flex', gap: '0.5rem' }}>
                           <button onClick={() => void updateStatus(r.id, 'REVIEWED')} disabled={!!updating}
                             className="btn-primary" style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.8rem', padding: '0.4rem 0.9rem' }}>
-                            <CheckCircle size={13} /> Marcar revisado
+                            <CheckCircle size={13} /> {t('feedback.markReviewed')}
                           </button>
                           <button onClick={() => void updateStatus(r.id, 'DISMISSED')} disabled={!!updating}
                             className="btn-secondary" style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.8rem', padding: '0.4rem 0.9rem', color: 'var(--text-muted)' }}>
-                            <XCircle size={13} /> Descartar
+                            <XCircle size={13} /> {t('feedback.dismiss')}
                           </button>
                         </div>
                       </div>
@@ -196,7 +198,7 @@ export default function FeedbackPage() {
                     {r.status !== 'NEW' && (
                       <button onClick={() => void updateStatus(r.id, 'NEW')} disabled={!!updating}
                         style={{ alignSelf: 'flex-start', background: 'transparent', border: '1px solid var(--border-color)', borderRadius: 6, padding: '0.32rem 0.7rem', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '0.72rem', display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
-                        <Eye size={11} /> Reabrir
+                        <Eye size={11} /> {t('feedback.reopen')}
                       </button>
                     )}
                   </div>

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { CheckCircle, Plus, Trash2, ChevronDown } from 'lucide-react';
 import { toast } from 'sonner';
 import { apiClient, type ReviewItem, type TeamGoal, type TeamProfile } from '../api/client';
@@ -57,6 +58,7 @@ const GOAL_STATUS_COLOR: Record<string, string> = {
 // ── Main component ────────────────────────────────────────────────────────────
 
 export default function ReviewQueue() {
+  const { t } = useTranslation();
   const [teams, setTeams] = useState<TeamProfile[]>([]);
   const [selectedTeamId, setSelectedTeamId] = useState<string>('');
   const [items, setItems] = useState<ReviewItem[]>([]);
@@ -167,7 +169,7 @@ export default function ReviewQueue() {
         <div>
           <h1 className="header-title">Review Queue</h1>
           <p style={{ fontSize: '0.82rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>
-            Eventos críticos detectados por el Analyst y objetivos de entrenamiento del equipo.
+            {t('reviewQueue.description')}
           </p>
         </div>
       </header>
@@ -325,6 +327,7 @@ function ReviewItemCard({ item, last, expanded, onToggle, onStatusChange, onTagC
   onCommentSave: (c: string) => void;
   onDelete: () => void;
 }) {
+  const { t } = useTranslation();
   const [comment, setComment] = useState(item.coachComment ?? '');
   const prioColor = PRIORITY_COLOR[item.priority] ?? 'var(--text-muted)';
   const statusColor = STATUS_COLOR[item.status] ?? 'var(--text-muted)';
@@ -364,22 +367,22 @@ function ReviewItemCard({ item, last, expanded, onToggle, onStatusChange, onTagC
               </select>
             </div>
             <div>
-              <label style={{ fontSize: '0.65rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 700, display: 'block', marginBottom: '0.3rem' }}>Causa</label>
+              <label style={{ fontSize: '0.65rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 700, display: 'block', marginBottom: '0.3rem' }}>{t('reviewQueue.causeLabel')}</label>
               <select value={item.tag ?? ''} onChange={(e) => onTagChange(e.target.value)} className="input" style={{ fontSize: '0.75rem', padding: '0.3rem 0.5rem' }}>
-                <option value="">— Sin etiquetar —</option>
+                <option value="">{t('reviewQueue.untagged')}</option>
                 {TAG_OPTIONS.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
               </select>
             </div>
           </div>
           <div style={{ marginBottom: '0.75rem' }}>
-            <label style={{ fontSize: '0.65rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 700, display: 'block', marginBottom: '0.3rem' }}>Nota del coach</label>
+            <label style={{ fontSize: '0.65rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 700, display: 'block', marginBottom: '0.3rem' }}>{t('reviewQueue.coachNoteLabel')}</label>
             <textarea
               className="input"
               value={comment}
               onChange={(e) => setComment(e.target.value)}
               rows={2}
               style={{ resize: 'vertical', fontSize: '0.78rem', width: '100%' }}
-              placeholder="Añade contexto, causa real o acción correctiva…"
+              placeholder={t('reviewQueue.coachNotePlaceholder')}
             />
           </div>
           <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>

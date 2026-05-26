@@ -9,7 +9,9 @@ import { syncHeroMeta } from './hero-meta-service.js';
 
 const GQL_URL = process.env.PRED_GG_GQL_URL ?? 'https://pred.gg/gql';
 const API_KEY = process.env.PRED_GG_CLIENT_SECRET;
-const STALE_THRESHOLD_MS = 24 * 60 * 60 * 1000; // 24 hours
+const STALE_THRESHOLD_MS = 24 * 60 * 60 * 1000; // 24 hours — active players
+const STALE_THRESHOLD_INACTIVE_MS = 7 * 24 * 60 * 60 * 1000; // 7 days — inactive players
+const ACTIVE_WINDOW_MS = 7 * 24 * 60 * 60 * 1000; // player with match in last 7 days = active
 const DATA_RETENTION_MONTHS = parseInt(process.env.DATA_RETENTION_MONTHS ?? '3', 10);
 
 function getRetentionCutoff(): Date {
@@ -17,8 +19,10 @@ function getRetentionCutoff(): Date {
   cutoff.setMonth(cutoff.getMonth() - DATA_RETENTION_MONTHS);
   return cutoff;
 }
-const STALE_SYNC_BATCH   = 30;   // max players per "Sync Players" click
-const STALE_CONCURRENCY  = 5;    // concurrent pred.gg calls within the batch
+const STALE_SYNC_BATCH        = 30;   // batch for manual "Sync Players" click
+const STALE_SYNC_BATCH_ACTIVE = 100;  // larger batch for active players (auto-sync)
+const STALE_CONCURRENCY       = 5;    // concurrent pred.gg calls within the batch
+const STALE_CONCURRENCY_ACTIVE = 15;  // higher concurrency for active players
 
 async function predggQuery<T>(
   query: string,
@@ -690,30 +694,68 @@ export async function syncPlayerByName(
 }
 
 /**
- * Re-syncs up to STALE_SYNC_BATCH players whose lastSynced is older than STALE_THRESHOLD_MS.
- * Runs STALE_CONCURRENCY syncs in parallel to keep total time under ~30s.
+ * Re-syncs stale players with intelligent prioritization:
+ * - Active players (match in last 7d) stale >24h → large batch, high concurrency
+ * - Inactive players stale >7d → small batch, low concurrency
  */
-export async function syncStalePlayers(db: PrismaClient, userToken?: string): Promise<SyncResult & { total: number }> {
+export async function syncStalePlayers(
+  db: PrismaClient,
+  userToken?: string,
+  manualBatch = false,
+): Promise<SyncResult & { total: number; activeTotal: number }> {
   const staleThreshold = new Date(Date.now() - STALE_THRESHOLD_MS);
-  const stalePlayers = await db.player.findMany({
+  const inactiveThreshold = new Date(Date.now() - STALE_THRESHOLD_INACTIVE_MS);
+  const activeWindow = new Date(Date.now() - ACTIVE_WINDOW_MS);
+
+  const baseWhere = { displayName: { not: 'HIDDEN' }, isConsole: false };
+
+  // P2 — Active players: had a match in last 7 days AND stale >24h
+  const activePlayers = await db.player.findMany({
     where: {
+      ...baseWhere,
       lastSynced: { lt: staleThreshold },
-      displayName: { not: 'HIDDEN' },
-      isConsole: false,   // console players have no pred.gg account — skip
+      matchPlayers: { some: { match: { startTime: { gte: activeWindow } } } },
     },
     select: { displayName: true },
-    orderBy: { lastSynced: 'asc' }, // oldest first
-    take: STALE_SYNC_BATCH,
+    orderBy: { lastSynced: 'asc' },
+    take: manualBatch ? STALE_SYNC_BATCH : STALE_SYNC_BATCH_ACTIVE,
   });
 
-  const total = await db.player.count({
-    where: { lastSynced: { lt: staleThreshold }, displayName: { not: 'HIDDEN' }, isConsole: false },
-  });
-  const result: SyncResult & { total: number } = { synced: 0, skipped: 0, errors: 0, total };
+  // P3 — Inactive players: no recent match AND stale >7 days
+  const remainingSlots = Math.max(0, STALE_SYNC_BATCH - activePlayers.length);
+  const inactivePlayers = manualBatch && remainingSlots > 0
+    ? await db.player.findMany({
+        where: {
+          ...baseWhere,
+          lastSynced: { lt: inactiveThreshold },
+          matchPlayers: { none: { match: { startTime: { gte: activeWindow } } } },
+        },
+        select: { displayName: true },
+        orderBy: { lastSynced: 'asc' },
+        take: remainingSlots,
+      })
+    : [];
 
-  // Process in chunks of STALE_CONCURRENCY
-  for (let i = 0; i < stalePlayers.length; i += STALE_CONCURRENCY) {
-    const chunk = stalePlayers.slice(i, i + STALE_CONCURRENCY);
+  const [activeTotal, inactiveTotal] = await Promise.all([
+    db.player.count({
+      where: { ...baseWhere, lastSynced: { lt: staleThreshold }, matchPlayers: { some: { match: { startTime: { gte: activeWindow } } } } },
+    }),
+    db.player.count({
+      where: { ...baseWhere, lastSynced: { lt: inactiveThreshold }, matchPlayers: { none: { match: { startTime: { gte: activeWindow } } } } },
+    }),
+  ]);
+
+  const result: SyncResult & { total: number; activeTotal: number } = {
+    synced: 0, skipped: 0, errors: 0,
+    total: activeTotal + inactiveTotal,
+    activeTotal,
+  };
+
+  const concurrency = manualBatch ? STALE_CONCURRENCY : STALE_CONCURRENCY_ACTIVE;
+  const allPlayers = [...activePlayers, ...inactivePlayers];
+
+  for (let i = 0; i < allPlayers.length; i += concurrency) {
+    const chunk = allPlayers.slice(i, i + concurrency);
     const outcomes = await Promise.allSettled(
       chunk.map((p) => syncPlayerByName(db, p.displayName, userToken))
     );
@@ -727,7 +769,7 @@ export async function syncStalePlayers(db: PrismaClient, userToken?: string): Pr
     }
   }
 
-  logger.info(result, 'stale player sync complete');
+  logger.info({ ...result, activeBatch: activePlayers.length, inactiveBatch: inactivePlayers.length }, 'stale player sync complete');
   return result;
 }
 
@@ -756,7 +798,7 @@ export async function syncVersionsFromPredgg(db: PrismaClient): Promise<number> 
   for (const v of data.versions) {
     await db.version.upsert({
       where: { predggId: v.id },
-      update: { name: v.name || 'Unknown', patchType: v.patchType || 'UNKNOWN', syncedAt: now },
+      update: { name: v.name || 'Unknown', patchType: v.patchType || 'UNKNOWN', releaseDate: new Date(v.releaseDate), syncedAt: now },
       create: {
         predggId: v.id,
         name: v.name || 'Unknown',

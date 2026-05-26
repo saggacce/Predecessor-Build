@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router';
 import { Film } from 'lucide-react';
 import { apiClient } from '../api/client';
@@ -7,6 +8,7 @@ import { LinkPlayerModal } from '../components/LinkPlayerModal';
 import type { TeamProfile, TeamMatch } from '../api/client';
 
 export default function MatchList() {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const { user } = useAuth();
 
@@ -71,7 +73,7 @@ export default function MatchList() {
               Vincula tu perfil de jugador
             </p>
             <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginBottom: '1.25rem', lineHeight: 1.6 }}>
-              Para ver tus partidas, busca tu nombre en Predecessor y vincúlalo a tu cuenta.
+              {t('matchList.linkProfileDesc')}
             </p>
             <button
               onClick={() => setShowLinkModal(true)}
@@ -94,7 +96,7 @@ export default function MatchList() {
 
   // ── Team match list ────────────────────────────────────────────────
   if (loading) {
-    return <div style={{ padding: '2rem', color: 'var(--text-muted)' }}>Cargando equipos...</div>;
+    return <div style={{ padding: '2rem', color: 'var(--text-muted)' }}>{t('matchList.loadingTeams')}</div>;
   }
 
   return (
@@ -114,11 +116,11 @@ export default function MatchList() {
         </select>
       </div>
 
-      {matchLoading && <div style={{ padding: '1rem', color: 'var(--text-muted)' }}>Cargando partidas...</div>}
+      {matchLoading && <div style={{ padding: '1rem', color: 'var(--text-muted)' }}>{t('matchList.loadingMatches')}</div>}
 
       {!matchLoading && matches.length === 0 && (
         <div className="glass-card" style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>
-          No hay partidas registradas para este equipo.
+          {t('matchList.noMatches')}
         </div>
       )}
 
@@ -133,7 +135,7 @@ export default function MatchList() {
           >
             <div style={{ flex: 1 }}>
               <div style={{ fontWeight: 600, fontSize: '0.85rem', color: 'var(--text-primary)' }}>
-                {new Date(m.startTime).toLocaleDateString('es-ES', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                {new Date(m.startTime).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
               </div>
               <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '0.15rem' }}>
                 {m.gameMode} · {Math.floor((m.duration ?? 0) / 60)}m{((m.duration ?? 0) % 60).toString().padStart(2, '0')}s

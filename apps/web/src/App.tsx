@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { BrowserRouter, Routes, Route, NavLink, Navigate, Link, useLocation } from 'react-router';
 import { Toaster, toast } from 'sonner';
+import { useTranslation } from 'react-i18next';
 import {
   Film, BarChart2, Wrench, FileText, Users, Settings,
   LogIn, LogOut, Loader, Radio, Zap, ChevronDown, ChevronRight,
@@ -21,6 +22,7 @@ import Login from './pages/Login';
 import Register from './pages/Register';
 import Unauthorized from './pages/Unauthorized';
 import StaffManagement from './pages/StaffManagement';
+import TeamRoster from './pages/TeamRoster';
 import DataQualityPage from './pages/DataQualityPage';
 import AuditLogsPage from './pages/AuditLogsPage';
 import UsersPage from './pages/UsersPage';
@@ -32,22 +34,26 @@ import PermissionsPage from './pages/PermissionsPage';
 import { FeedbackButton } from './components/FeedbackButton';
 import { PermissionsProvider } from './contexts/PermissionsContext';
 import LandingPage from './pages/LandingPage';
+import ScrimPlanner from './pages/ScrimPlanner';
 import { useAuth } from './hooks/useAuth';
 import { ViewAsProvider, useViewAs, type ViewAsRole } from './hooks/useViewAs';
 import { apiClient } from './api/client';
+import { LanguageFirstTimeModal, shouldShowLanguageModal } from './components/LanguageSwitcher';
+import i18n, { isSupportedLanguage } from './i18n';
 import './App.css';
 
 // ── Workspace header ──────────────────────────────────────────────────────────
 
 function WorkspaceHeader() {
   const { authenticated, user, refreshInternalSession } = useAuth();
+  const { t } = useTranslation();
 
   async function handleInternalLogout() {
     try {
       await apiClient.auth.internalLogout();
       window.location.reload();
     } catch {
-      toast.error('Logout failed');
+      toast.error(t('common.error'));
     }
   }
   const [latestPatch, setLatestPatch] = useState<VersionRecord | null>(null);
@@ -57,6 +63,12 @@ function WorkspaceHeader() {
     void apiClient.patches.latest()
       .then(setLatestPatch)
       .catch(() => setLatestPatch(null));
+
+    const onVersionsSync = () => {
+      void apiClient.patches.latest().then(setLatestPatch).catch(() => null);
+    };
+    window.addEventListener('versions-synced', onVersionsSync);
+    return () => window.removeEventListener('versions-synced', onVersionsSync);
   }, []);
 
   const initials = user?.name
@@ -68,8 +80,8 @@ function WorkspaceHeader() {
       {/* Left — only shown for admins */}
       {isAdmin ? (
         <div>
-          <div className="workspace-title">Predecessor competitive workspace</div>
-          <div className="workspace-subtitle">Competitive Intel · by Synapsight</div>
+          <div className="workspace-title">{t('workspace.title')}</div>
+          <div className="workspace-subtitle">{t('workspace.subtitle')}</div>
         </div>
       ) : (
         <div />
@@ -85,7 +97,7 @@ function WorkspaceHeader() {
         {latestPatch && (
           <div className="workspace-chip">
             <Zap size={13} />
-            Patch v{latestPatch.name}
+            {t('common.patch', { name: latestPatch.name })}
           </div>
         )}
 
@@ -95,10 +107,10 @@ function WorkspaceHeader() {
             href="/api/auth/predgg"
             className={`workspace-chip ${authenticated ? 'connected' : ''}`}
             style={{ textDecoration: 'none', cursor: 'pointer' }}
-            title={authenticated ? 'pred.gg conectado — click para reconectar' : 'Click para conectar con pred.gg'}
+            title={authenticated ? t('workspace.predggTooltipConnected') : t('workspace.predggTooltipDisconnected')}
           >
             <Radio size={13} />
-            {authenticated ? 'pred.gg connected' : 'pred.gg disconnected'}
+            {authenticated ? t('workspace.predggConnected') : t('workspace.predggDisconnected')}
           </a>
         )}
 
@@ -118,7 +130,7 @@ function WorkspaceHeader() {
             </Link>
             <button
               onClick={handleInternalLogout}
-              title="Cerrar sesión"
+              title={t('common.logout')}
               style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 28, height: 28, borderRadius: 6, border: '1px solid var(--border-color)', background: 'transparent', cursor: 'pointer', color: 'var(--text-muted)', transition: 'color 0.15s, border-color 0.15s' }}
               onMouseEnter={(e) => { const b = e.currentTarget; b.style.color = 'var(--accent-loss)'; b.style.borderColor = 'rgba(248,113,113,0.4)'; }}
               onMouseLeave={(e) => { const b = e.currentTarget; b.style.color = 'var(--text-muted)'; b.style.borderColor = 'var(--border-color)'; }}
@@ -207,81 +219,85 @@ function SidebarSectionEl({ section, isOpen, onToggle, badgeCount = 0 }: Sidebar
 
 // ── Sidebar ───────────────────────────────────────────────────────────────────
 
-const sections: SidebarSection[] = [
-  {
-    id: 'dashboard',
-    label: 'Dashboard',
-    icon: <LayoutDashboard size={17} />,
-    to: '/',
-  },
-  {
-    id: 'matches',
-    label: 'Matches',
-    icon: <Film size={17} />,
-    to: '/matches',
-  },
-  {
-    id: 'analysis',
-    label: 'Analysis',
-    icon: <BarChart2 size={17} />,
-    defaultOpen: true,
-    items: [
-      { to: '/analysis/teams', label: 'Team Analysis' },
-      { to: '/analysis/players', label: 'Player Scouting' },
-      { to: '/analysis/rival', label: 'Rival Scouting' },
-      { to: '/analysis/draft', label: 'Draft Analysis' },
-    ],
-  },
-  {
-    id: 'tools',
-    label: 'Team Tools',
-    icon: <Wrench size={17} />,
-    items: [
-      { to: '/tools/review', label: 'Review Queue' },
-      { to: '/tools/vod', label: 'VOD Index' },
-      { to: '/tools/board', label: 'Tactical Board' },
-      { to: '/tools/scrims', label: 'Scrim Planner' },
-    ],
-  },
-  {
-    id: 'reports',
-    label: 'Reports',
-    icon: <FileText size={17} />,
-    items: [
-      { to: '/reports/scrim', label: 'Scrim Report' },
-      { to: '/reports/weekly', label: 'Weekly Reports' },
-      { to: '/reports/players', label: 'Player Development' },
-    ],
-  },
-  {
-    id: 'management',
-    label: 'Team Management',
-    icon: <Users size={17} />,
-    items: [
-      { to: '/management/staff', label: 'Staff & Invitations' },
-      { to: '/management/teams', label: 'Teams & Rosters' },
-    ],
-  },
-  {
-    id: 'admin',
-    label: 'Platform Admin',
-    icon: <Settings size={17} />,
-    items: [
-      { to: '/admin/users', label: 'Users' },
-      { to: '/admin/data-quality', label: 'Data Quality' },
-      { to: '/management/roles', label: 'Roles & Permissions' },
-      { to: '/admin/api-status', label: 'API Status' },
-      { to: '/admin/audit-logs', label: 'Audit Logs' },
-      { to: '/admin/config', label: 'Configuración' },
-      { to: '/admin/feedback', label: 'Feedback' },
-    ],
-  },
-];
+function useSections(t: (key: string) => string): SidebarSection[] {
+  return [
+    {
+      id: 'dashboard',
+      label: t('nav.dashboard'),
+      icon: <LayoutDashboard size={17} />,
+      to: '/',
+    },
+    {
+      id: 'management',
+      label: t('nav.management'),
+      icon: <Users size={17} />,
+      items: [
+        { to: '/management/teams', label: t('nav.teamsRoster') },
+        { to: '/management/staff', label: t('nav.staffInvitations') },
+      ],
+    },
+    {
+      id: 'matches',
+      label: t('nav.matches'),
+      icon: <Film size={17} />,
+      to: '/matches',
+    },
+    {
+      id: 'analysis',
+      label: t('nav.analysis'),
+      icon: <BarChart2 size={17} />,
+      defaultOpen: true,
+      items: [
+        { to: '/analysis/teams', label: t('nav.teamAnalysis') },
+        { to: '/analysis/players', label: t('nav.playerScouting') },
+        { to: '/analysis/rival', label: t('nav.rivalScouting') },
+        { to: '/analysis/draft', label: 'Draft Analysis' },
+      ],
+    },
+    {
+      id: 'tools',
+      label: 'Team Tools',
+      icon: <Wrench size={17} />,
+      items: [
+        { to: '/tools/review', label: t('nav.reviewQueue') },
+        { to: '/tools/vod', label: t('nav.vodIndex') },
+        { to: '/tools/board', label: 'Tactical Board' },
+        { to: '/tools/scrims', label: 'Scrim Planner' },
+      ],
+    },
+    {
+      id: 'reports',
+      label: 'Reports',
+      icon: <FileText size={17} />,
+      items: [
+        { to: '/reports/scrim', label: t('nav.scrimReport') },
+        { to: '/reports/weekly', label: 'Weekly Reports' },
+        { to: '/reports/players', label: 'Player Development' },
+      ],
+    },
+    {
+      id: 'admin',
+      label: t('nav.platformAdmin'),
+      icon: <Settings size={17} />,
+      items: [
+        { to: '/admin/users', label: t('nav.users') },
+        { to: '/admin/data-quality', label: t('nav.dataQuality') },
+        { to: '/management/roles', label: t('nav.rolesPermissions') },
+        { to: '/admin/api-status', label: t('nav.apiStatus') },
+        { to: '/admin/audit-logs', label: t('nav.auditLogs') },
+        { to: '/admin/config', label: t('nav.config') },
+        { to: '/admin/feedback', label: t('nav.feedback') },
+      ],
+    },
+  ];
+}
 
 function Sidebar() {
   const { authenticated, loading, user, internalLoading } = useAuth();
   const { viewAs } = useViewAs();
   const location = useLocation();
+  const { t } = useTranslation();
+  const sections = useSections(t);
   const [feedbackUnread, setFeedbackUnread] = useState(0);
 
   // Load unread feedback count for platform admins
@@ -432,11 +448,12 @@ const VIEW_AS_OPTIONS: Array<{ value: ViewAsRole; label: string; color: string }
 
 function ViewAsSelector() {
   const { viewAs, setViewAs } = useViewAs();
+  const { t } = useTranslation();
   const current = VIEW_AS_OPTIONS.find(o => o.value === viewAs) ?? VIEW_AS_OPTIONS[0];
 
   return (
     <div style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
-      <span style={{ fontSize: '0.55rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Vista:</span>
+      <span style={{ fontSize: '0.55rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>{t('workspace.viewAs')}:</span>
       <select
         value={viewAs ?? ''}
         onChange={(e) => setViewAs((e.target.value || null) as ViewAsRole)}
@@ -476,8 +493,21 @@ export default function App() {
 }
 
 function AppContent() {
-  const { internalAuthenticated, internalLoading } = useAuth();
+  const { internalAuthenticated, internalLoading, user } = useAuth();
   const location = useLocation();
+  const [showLangModal, setShowLangModal] = useState(false);
+
+  // Apply DB language preference when user loads
+  useEffect(() => {
+    if (!user?.language) return;
+    const lang = user.language;
+    if (isSupportedLanguage(lang) && lang !== i18n.language) {
+      void i18n.changeLanguage(lang);
+    }
+    if (shouldShowLanguageModal(user.language)) {
+      setShowLangModal(true);
+    }
+  }, [user?.language]);
 
   // Holographic hover — update --mouse-x/y on every .glass-card
   useEffect(() => {
@@ -508,6 +538,7 @@ function AppContent() {
 
   return (
       <div className="app-container">
+        {showLangModal && <LanguageFirstTimeModal onDismiss={() => setShowLangModal(false)} />}
         <Sidebar />
         <FeedbackButton />
         <main className="main-content">
@@ -522,6 +553,7 @@ function AppContent() {
             {/* Matches */}
             <Route path="/matches" element={<MatchList />} />
             <Route path="/matches/:id" element={<MatchDetail />} />
+            <Route path="/matches/live/:predggUuid" element={<MatchDetail liveMode />} />
 
             {/* Analysis */}
             <Route path="/analysis/teams" element={<TeamAnalysis />} />
@@ -534,7 +566,7 @@ function AppContent() {
             <Route path="/tools/goals" element={<Navigate to="/tools/review" replace />} />
             <Route path="/tools/board" element={<ComingSoon section="Tactical Board" description="Free-form tactical planning board over the Predecessor map." issue={53} />} />
             <Route path="/tools/vod" element={<VodIndex />} />
-            <Route path="/tools/scrims" element={<ComingSoon section="Scrim Planner" description="Plan scrims with focus areas linked to team goals." issue={64} />} />
+            <Route path="/tools/scrims" element={<ScrimPlanner />} />
 
             {/* Reports */}
             <Route path="/reports/scrim" element={<ScrimReport />} />
@@ -543,7 +575,7 @@ function AppContent() {
             <Route path="/reports/rival" element={<Navigate to="/analysis/rival" replace />} />
 
             {/* Team Management */}
-            <Route path="/management/teams" element={<ComingSoon section="Teams & Rosters" description="Create and manage teams, rosters and player assignments." issue={72} />} />
+            <Route path="/management/teams" element={<TeamRoster />} />
             <Route path="/management/staff" element={<StaffManagement />} />
 
             {/* Platform Admin */}

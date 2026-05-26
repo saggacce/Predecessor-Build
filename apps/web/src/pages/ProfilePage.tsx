@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react';
 import { Camera, Key, Link2, Link2Off, Save, Shield, Star, User } from 'lucide-react';
 import { toast } from 'sonner';
+import { useTranslation } from 'react-i18next';
 import { apiClient, type UserProfile } from '../api/client';
 import { useAuth } from '../hooks/useAuth';
+import { LanguageSwitcher } from '../components/LanguageSwitcher';
 import { LinkPlayerModal } from '../components/LinkPlayerModal';
 
 const PLAYER_TIER_CONFIG = {
@@ -206,6 +208,11 @@ export default function ProfilePage() {
               <option value="">— Sin especificar —</option>
               {TIMEZONES.map((tz) => <option key={tz} value={tz}>{tz}</option>)}
             </select>
+          </div>
+
+          <div>
+            <label style={{ fontSize: '0.72rem', color: 'var(--text-muted)', display: 'block', marginBottom: '0.3rem' }}>Language / Idioma</label>
+            <LanguageSwitcher compact />
           </div>
 
           <button onClick={saveProfile} disabled={savingProfile} className="btn-primary" style={{ alignSelf: 'flex-start', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>

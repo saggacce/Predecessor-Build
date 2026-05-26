@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Edit2, Shield, CheckCircle, XCircle, UserPlus, X, Save, Star, KeyRound } from 'lucide-react';
 import { toast } from 'sonner';
 import { apiClient, ApiErrorResponse } from '../api/client';
@@ -32,6 +33,7 @@ const ROLE_COLORS: Record<string, string> = {
 };
 
 export default function UsersPage() {
+  const { t } = useTranslation();
   const { user: me, internalLoading } = useAuth();
   const [users, setUsers] = useState<PlatformUser[]>([]);
   const [loading, setLoading] = useState(false);
@@ -60,14 +62,14 @@ export default function UsersPage() {
       .finally(() => setLoading(false));
   }, [isAdmin]);
 
-  if (internalLoading) return <div style={{ padding: '2rem', color: 'var(--text-muted)' }}>Checking session...</div>;
+  if (internalLoading) return <div style={{ padding: '2rem', color: 'var(--text-muted)' }}>{t('common.loading')}</div>;
   if (!me || me.globalRole !== 'PLATFORM_ADMIN') {
     return (
       <div style={{ maxWidth: '480px' }}>
         <div className="glass-card" style={{ display: 'grid', gap: '1rem' }}>
           <Shield size={34} style={{ color: 'var(--accent-loss)' }} />
           <h1 className="header-title">User Management</h1>
-          <p style={{ color: 'var(--text-muted)', fontSize: '0.88rem' }}>Requiere cuenta Platform Admin.</p>
+          <p style={{ color: 'var(--text-muted)', fontSize: '0.88rem' }}>{t('users.requiresAdmin')}</p>
           <a className="btn-primary" href="/login" style={{ width: 'fit-content' }}>Login</a>
         </div>
       </div>
@@ -103,9 +105,9 @@ export default function UsersPage() {
       const res = await (apiClient as any).admin.updateUser(editUser.id, payload);
       setUsers((prev) => prev.map((u) => u.id === editUser.id ? { ...u, ...res.user } : u));
       setEditUser(null);
-      toast.success('Usuario actualizado');
+      toast.success(t('users.updated'));
     } catch (err) {
-      toast.error(err instanceof ApiErrorResponse ? err.error.message : 'Error al guardar');
+      toast.error(err instanceof ApiErrorResponse ? err.error.message : t('users.saveError'));
     } finally {
       setSaving(false);
     }
@@ -117,21 +119,21 @@ export default function UsersPage() {
         <div>
           <h1 className="header-title">User Management</h1>
           <p style={{ color: 'var(--text-muted)', fontSize: '0.86rem', marginTop: '0.35rem' }}>
-            Todos los usuarios de la plataforma — edita nombre, email, rol y tier.
+            {t('users.description')}
           </p>
         </div>
         <a href="/management/staff" className="btn-secondary" style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', whiteSpace: 'nowrap' }}>
-          <UserPlus size={14} /> Invitar usuario
+          <UserPlus size={14} /> {t('users.inviteButton')}
         </a>
       </header>
 
       {loading ? (
-        <div style={{ padding: '1.5rem', color: 'var(--text-muted)' }}>Cargando usuarios...</div>
+        <div style={{ padding: '1.5rem', color: 'var(--text-muted)' }}>{t('users.loadingUsers')}</div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
           {/* Header row */}
           <div className="glass-card" style={{ display: 'grid', gridTemplateColumns: '1fr 100px 90px 150px 100px 80px', gap: '1rem', padding: '0.45rem 1.25rem', fontSize: '0.62rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-            <span>Usuario</span><span>Rol global</span><span>Player Tier</span><span>Membresías</span><span>Último login</span><span>Acciones</span>
+            <span>{t('users.userColumn')}</span><span>{t('users.roleColumn')}</span><span>{t('users.tierColumn')}</span><span>{t('users.membershipsColumn')}</span><span>{t('users.lastLoginColumn')}</span><span>{t('users.actionsColumn')}</span>
           </div>
 
           {users.map((u) => (
@@ -139,7 +141,7 @@ export default function UsersPage() {
               <div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                   <span style={{ fontWeight: 600 }}>{u.name}</span>
-                  {!u.isActive && <span style={{ fontSize: '0.62rem', color: 'var(--accent-loss)', border: '1px solid rgba(248,113,113,0.4)', borderRadius: 999, padding: '0.1rem 0.4rem' }}>INACTIVO</span>}
+                  {!u.isActive && <span style={{ fontSize: '0.62rem', color: 'var(--accent-loss)', border: '1px solid rgba(248,113,113,0.4)', borderRadius: 999, padding: '0.1rem 0.4rem' }}>{t('users.inactive')}</span>}
                 </div>
                 <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '0.15rem' }}>{u.email}</div>
               </div>
@@ -155,7 +157,7 @@ export default function UsersPage() {
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
                 {u.memberships.length === 0
-                  ? <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>Sin membresías</span>
+                  ? <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>{t('users.noMemberships')}</span>
                   : u.memberships.map((m) => (
                     <div key={m.id} style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
                       <span style={{ fontSize: '0.6rem', fontWeight: 700, color: ROLE_COLORS[m.role] ?? 'var(--text-muted)', flexShrink: 0 }}>{m.role}</span>
@@ -165,10 +167,10 @@ export default function UsersPage() {
                 }
               </div>
               <span style={{ fontSize: '0.68rem', fontFamily: 'var(--font-mono)', color: 'var(--text-muted)' }}>
-                {u.lastLoginAt ? new Date(u.lastLoginAt).toLocaleDateString('es-ES', { month: 'short', day: 'numeric' }) : '—'}
+                {u.lastLoginAt ? new Date(u.lastLoginAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : '—'}
               </span>
               <div style={{ display: 'flex', gap: '0.35rem' }}>
-                <button onClick={() => openEdit(u)} className="btn-secondary" style={{ padding: '0.35rem' }} title="Editar usuario">
+                <button onClick={() => openEdit(u)} className="btn-secondary" style={{ padding: '0.35rem' }} title={t('users.editButton')}>
                   <Edit2 size={13} style={{ color: 'var(--accent-blue)' }} />
                 </button>
                 <button
@@ -176,7 +178,7 @@ export default function UsersPage() {
                   disabled={u.id === me.id}
                   className="btn-secondary"
                   style={{ padding: '0.35rem', opacity: u.id === me.id ? 0.3 : 1 }}
-                  title="Resetear contraseña">
+                  title={t('users.resetPasswordButton')}>
                   <KeyRound size={13} style={{ color: 'var(--accent-prime)' }} />
                 </button>
                 <button
@@ -184,17 +186,17 @@ export default function UsersPage() {
                     try {
                       await (apiClient as any).admin.updateUser(u.id, { isActive: !u.isActive });
                       setUsers((prev) => prev.map((x) => x.id === u.id ? { ...x, isActive: !u.isActive } : x));
-                      toast.success(u.isActive ? 'Usuario desactivado' : 'Usuario activado');
+                      toast.success(u.isActive ? t('users.deactivated') : t('users.activated'));
                     } catch (err) { toast.error(err instanceof ApiErrorResponse ? err.error.message : 'Error'); }
                   }}
-                  disabled={u.id === me.id} className="btn-secondary" style={{ padding: '0.35rem', opacity: u.id === me.id ? 0.3 : 1 }} title={u.isActive ? 'Desactivar' : 'Activar'}>
+                  disabled={u.id === me.id} className="btn-secondary" style={{ padding: '0.35rem', opacity: u.id === me.id ? 0.3 : 1 }} title={u.isActive ? t('users.deactivateButton') : t('users.activateButton')}>
                   {u.isActive ? <XCircle size={13} style={{ color: 'var(--accent-loss)' }} /> : <CheckCircle size={13} style={{ color: 'var(--accent-win)' }} />}
                 </button>
               </div>
             </div>
           ))}
           {users.length === 0 && !loading && (
-            <div className="glass-card" style={{ color: 'var(--text-muted)', textAlign: 'center', padding: '2rem' }}>No hay usuarios registrados aún.</div>
+            <div className="glass-card" style={{ color: 'var(--text-muted)', textAlign: 'center', padding: '2rem' }}>{t('users.noUsers')}</div>
           )}
         </div>
       )}
@@ -206,12 +208,12 @@ export default function UsersPage() {
           <div className="glass-card" style={{ width: 440, padding: '1.5rem', position: 'relative' }}>
             <button onClick={() => setEditUser(null)} style={{ position: 'absolute', top: 12, right: 12, background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-muted)' }}><X size={16} /></button>
 
-            <h2 style={{ margin: '0 0 1.25rem', fontSize: '0.95rem', fontWeight: 800 }}>Editar usuario</h2>
+            <h2 style={{ margin: '0 0 1.25rem', fontSize: '0.95rem', fontWeight: 800 }}>{t('users.editModal.title')}</h2>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
               {[
-                { label: 'Nombre', value: editName, set: setEditName, type: 'text' },
-                { label: 'Email', value: editEmail, set: setEditEmail, type: 'email' },
+                { label: t('users.editModal.nameLabel'), value: editName, set: setEditName, type: 'text' },
+                { label: t('users.editModal.emailLabel'), value: editEmail, set: setEditEmail, type: 'email' },
               ].map(({ label, value, set, type }) => (
                 <div key={label}>
                   <label style={{ fontSize: '0.72rem', color: 'var(--text-muted)', display: 'block', marginBottom: '0.25rem' }}>{label}</label>
@@ -222,7 +224,7 @@ export default function UsersPage() {
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
                 <div>
-                  <label style={{ fontSize: '0.72rem', color: 'var(--text-muted)', display: 'block', marginBottom: '0.25rem' }}>Rol global</label>
+                  <label style={{ fontSize: '0.72rem', color: 'var(--text-muted)', display: 'block', marginBottom: '0.25rem' }}>{t('users.editModal.roleLabel')}</label>
                   <select value={editRole} onChange={(e) => setEditRole(e.target.value)}
                     style={{ width: '100%', padding: '0.42rem 0.55rem', background: 'var(--bg-dark)', border: '1px solid var(--border-color)', borderRadius: 6, color: 'var(--text-primary)', fontSize: '0.82rem' }}>
                     <option value="VIEWER">Viewer</option>
@@ -230,7 +232,7 @@ export default function UsersPage() {
                   </select>
                 </div>
                 <div>
-                  <label style={{ fontSize: '0.72rem', color: 'var(--text-muted)', display: 'block', marginBottom: '0.25rem' }}>Tier</label>
+                  <label style={{ fontSize: '0.72rem', color: 'var(--text-muted)', display: 'block', marginBottom: '0.25rem' }}>{t('users.editModal.tierLabel')}</label>
                   <select value={editTier} onChange={(e) => setEditTier(e.target.value)}
                     style={{ width: '100%', padding: '0.42rem 0.55rem', background: 'var(--bg-dark)', border: '1px solid var(--border-color)', borderRadius: 6, color: 'var(--text-primary)', fontSize: '0.82rem' }}>
                     {['FREE', 'PRO', 'PREMIUM'].map((t) => <option key={t} value={t}>{t}</option>)}
@@ -240,7 +242,7 @@ export default function UsersPage() {
 
               {editTier !== 'FREE' && (
                 <div>
-                  <label style={{ fontSize: '0.72rem', color: 'var(--text-muted)', display: 'block', marginBottom: '0.25rem' }}>Expira el (opcional)</label>
+                  <label style={{ fontSize: '0.72rem', color: 'var(--text-muted)', display: 'block', marginBottom: '0.25rem' }}>{t('users.editModal.tierExpiresLabel')}</label>
                   <input type="date" value={editTierExpiry} onChange={(e) => setEditTierExpiry(e.target.value)}
                     style={{ padding: '0.42rem 0.65rem', background: 'var(--bg-dark)', border: '1px solid var(--border-color)', borderRadius: 6, color: 'var(--text-primary)', fontSize: '0.82rem' }} />
                 </div>
@@ -248,13 +250,13 @@ export default function UsersPage() {
 
               <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: editUser.id !== me.id ? 'pointer' : 'not-allowed', fontSize: '0.82rem', color: editUser.id !== me.id ? 'var(--text-primary)' : 'var(--text-muted)' }}>
                 <input type="checkbox" checked={editActive} onChange={(e) => setEditActive(e.target.checked)} disabled={editUser.id === me.id} />
-                Cuenta activa
+                {t('users.editModal.activeLabel')}
               </label>
 
               <div style={{ display: 'flex', gap: '0.65rem', justifyContent: 'flex-end', marginTop: '0.25rem' }}>
-                <button onClick={() => setEditUser(null)} className="btn-secondary" style={{ fontSize: '0.82rem' }}>Cancelar</button>
+                <button onClick={() => setEditUser(null)} className="btn-secondary" style={{ fontSize: '0.82rem' }}>{t('common.cancel')}</button>
                 <button onClick={saveEdit} disabled={saving} className="btn-primary" style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.82rem' }}>
-                  <Save size={13} /> {saving ? 'Guardando…' : 'Guardar'}
+                  <Save size={13} /> {saving ? t('users.editModal.saving') : t('users.editModal.save')}
                 </button>
               </div>
             </div>
@@ -268,25 +270,25 @@ export default function UsersPage() {
           <div className="glass-card" style={{ width: '100%', maxWidth: 400, padding: '1.5rem' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '0.5rem' }}>
               <KeyRound size={16} style={{ color: 'var(--accent-prime)' }} />
-              <h3 style={{ margin: 0, fontSize: '0.95rem', fontWeight: 800 }}>Resetear contraseña</h3>
+              <h3 style={{ margin: 0, fontSize: '0.95rem', fontWeight: 800 }}>{t('users.resetModal.title')}</h3>
             </div>
             <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginBottom: '1.25rem' }}>
-              Establece una nueva contraseña para <strong style={{ color: 'var(--text-primary)' }}>{resetPasswordUser.name || resetPasswordUser.email}</strong>. Compártela con el usuario de forma segura.
+              {t('users.resetModal.description', { name: resetPasswordUser.name || resetPasswordUser.email })}
             </p>
             <div style={{ marginBottom: '1rem' }}>
-              <label style={{ display: 'block', fontSize: '0.7rem', color: 'var(--text-muted)', fontWeight: 700, marginBottom: '0.3rem', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Nueva contraseña</label>
+              <label style={{ display: 'block', fontSize: '0.7rem', color: 'var(--text-muted)', fontWeight: 700, marginBottom: '0.3rem', textTransform: 'uppercase', letterSpacing: '0.06em' }}>{t('users.resetModal.newPasswordLabel')}</label>
               <input
                 className="input"
                 type="password"
                 value={newPassword}
                 onChange={(e) => setNewPassword(e.target.value)}
-                placeholder="Mínimo 8 caracteres"
+                placeholder={t('users.resetModal.placeholder')}
                 style={{ width: '100%' }}
                 autoFocus
               />
             </div>
             <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
-              <button onClick={() => setResetPasswordUser(null)} className="btn-secondary" style={{ fontSize: '0.82rem' }}>Cancelar</button>
+              <button onClick={() => setResetPasswordUser(null)} className="btn-secondary" style={{ fontSize: '0.82rem' }}>{t('common.cancel')}</button>
               <button
                 disabled={newPassword.length < 8 || resetting}
                 className="btn-primary"
@@ -295,15 +297,15 @@ export default function UsersPage() {
                   setResetting(true);
                   try {
                     await (apiClient as any).admin.resetPassword(resetPasswordUser.id, newPassword);
-                    toast.success('Contraseña restablecida');
+                    toast.success(t('users.resetModal.success'));
                     setResetPasswordUser(null);
                     setNewPassword('');
                   } catch (err) {
-                    toast.error(err instanceof ApiErrorResponse ? err.error.message : 'Error al resetear');
+                    toast.error(err instanceof ApiErrorResponse ? err.error.message : t('users.resetModal.error'));
                   } finally { setResetting(false); }
                 }}
               >
-                <KeyRound size={13} /> {resetting ? 'Guardando…' : 'Restablecer'}
+                <KeyRound size={13} /> {resetting ? t('users.resetModal.resetting') : t('users.resetModal.submit')}
               </button>
             </div>
           </div>

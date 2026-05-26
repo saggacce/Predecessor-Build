@@ -51,13 +51,21 @@ const updateTeamSchema = z.object({
   notes: z.string().max(1000).nullable().optional(),
 });
 
+const rosterStatusValues = ['STARTER', 'BENCH'] as const;
+
+const roleField = z.string().nullable().optional()
+  .transform((v) => (v ? v.toLowerCase() as 'carry' | 'jungle' | 'midlane' | 'offlane' | 'support' : null))
+  .pipe(z.enum(['carry', 'jungle', 'midlane', 'offlane', 'support']).nullable().optional());
+
 const addRosterSchema = z.object({
   playerId: z.string().min(1),
-  role: z.enum(['carry', 'jungle', 'midlane', 'offlane', 'support']).optional(),
+  role: roleField,
+  rosterStatus: z.enum(rosterStatusValues).optional(),
 });
 
 const updateRosterSchema = z.object({
-  role: z.enum(['carry', 'jungle', 'midlane', 'offlane', 'support']).nullable(),
+  role: roleField,
+  rosterStatus: z.enum(rosterStatusValues).optional(),
 });
 
 const staffRoles = ['COACH', 'ANALISTA', 'MANAGER'];
@@ -131,8 +139,8 @@ teamsRouter.delete('/:teamId', requireAuth, requireRole(['MANAGER']), async (req
 
 teamsRouter.post('/:teamId/roster', requireAuth, requireRole(['MANAGER']), async (req, res, next) => {
   try {
-    const { playerId, role } = addRosterSchema.parse(req.body);
-    const entry = await addRosterPlayer(req.params.teamId, playerId, role);
+    const { playerId, role, rosterStatus } = addRosterSchema.parse(req.body);
+    const entry = await addRosterPlayer(req.params.teamId, playerId, role, rosterStatus);
 
     // Get token before sending response (needed for pred.gg auth)
     let userToken: string | null = null;
@@ -155,8 +163,8 @@ teamsRouter.post('/:teamId/roster', requireAuth, requireRole(['MANAGER']), async
 
 teamsRouter.patch('/:teamId/roster/:rosterId', requireAuth, requireRole(['MANAGER']), async (req, res, next) => {
   try {
-    const { role } = updateRosterSchema.parse(req.body);
-    const entry = await updateRosterEntry(req.params.teamId, req.params.rosterId, role);
+    const { role, rosterStatus } = updateRosterSchema.parse(req.body);
+    const entry = await updateRosterEntry(req.params.teamId, req.params.rosterId, role, rosterStatus);
     res.json(entry);
   } catch (err) {
     next(err);
