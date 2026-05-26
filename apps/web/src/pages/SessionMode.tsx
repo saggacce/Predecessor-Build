@@ -446,7 +446,6 @@ export default function SessionMode() {
                 </div>
               )}
             </div>
-          )}
 
         </div>
       )}
