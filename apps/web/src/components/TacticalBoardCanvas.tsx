@@ -8,7 +8,7 @@
  *  - Line / Arrow: straight lines with optional arrowhead
  *  - Text: click to place editable text labels
  *  - Role tokens: 5 roles with game icons, assignable player + hero
- *  - Objective tokens: Fangtooth, Orb Prime, Genesis Core, Seedling, Inhibitor, Nexus
+ *  - Objective tokens: Fangtooth, Orb Prime, Shaper, Seedling, Inhibitor, Nexus
  *  - Ward tokens: Vision / Control
  *  - Color picker for strokes/text/tokens
  *  - Undo (Ctrl+Z) up to 40 steps
@@ -55,7 +55,7 @@ const ROLE_LABELS: Record<string, string> = {
 const OBJECTIVES: Record<string, { label: string; abbr: string; bg: string }> = {
   fangtooth:    { label: 'Fangtooth',    abbr: 'FT', bg: '#7c3aed' },
   orb_prime:    { label: 'Orb Prime',    abbr: 'OP', bg: '#dc2626' },
-  genesis_core: { label: 'Genesis Core', abbr: 'GC', bg: '#0891b2' },
+  genesis_core: { label: 'Shaper',        abbr: 'SH', bg: '#0891b2' },
   seedling:     { label: 'Seedling',     abbr: '🌿', bg: '#16a34a' },
   inhibitor:    { label: 'Inhibitor',    abbr: 'IN', bg: '#d97706' },
   nexus:        { label: 'Nexus',        abbr: 'NX', bg: '#be185d' },
