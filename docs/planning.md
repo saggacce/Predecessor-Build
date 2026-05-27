@@ -320,6 +320,38 @@ El coach inicia una sesión táctica en vivo desde Session Mode. Todos los miemb
 
 ---
 
+## [ ] Tarea 28 — Sistema de Misiones y Logros (onboarding gamificado)
+*Issue: #218. Prerequisito: ProfilePage existente. Relacionado con Tarea 19 (Review Sessions).*
+
+Primera versión del sistema de gamificación: misiones de «primeros pasos» adaptadas al rol de cada usuario. Al completarlas, el usuario gana un logro visible en su perfil. Diseñado para ser extensible a retos semanales, maestría y rangos.
+
+### Roles y misiones
+Cada rol tiene su propio set (8 misiones COACH, 6 MANAGER, 6 ANALISTA, 6 JUGADOR en equipo, 6 JUGADOR solo). Algunas compartidas (completar perfil, vincular pred.gg).
+
+### DB (Prisma)
+- [ ] Modelo `Mission` — catálogo de misiones (id, category, roles[], title, ctaPath, order)
+- [ ] Modelo `UserMissionCompletion` — progreso por usuario
+- [ ] Modelo `UserAchievement` — logros ganados
+- [ ] Campo `onboardingModalSeen Boolean` en `User`
+
+### API
+- [ ] `GET /missions/me` — misiones del rol del usuario con estado completado/pendiente
+- [ ] `POST /missions/complete/:missionId` — marcar completada (frontend-triggered)
+- [ ] `GET /achievements/me` — logros del usuario
+- [ ] Hooks server-side en routes existentes para auto-completar misiones (crear scrim, playbook, weekly-goal, etc.)
+
+### Frontend
+- [ ] Modal de bienvenida (primera entrada) — rol del usuario + lista de primeros pasos
+- [ ] Sección «Primeros pasos» en Dashboard — cards de misiones pendientes + barra de progreso
+- [ ] Confetti + toast + logro al completar todas
+- [ ] Sección «Logros» en ProfilePage — badges con nombre, icono y fecha
+- [ ] Flag `onboardingModalSeen` para no repetir el modal
+
+### Extensibilidad futura
+Sistema preparado para: misiones de exploración/maestría, retos semanales con expiración, XP acumulable, rangos en perfil, recompensas visuales.
+
+---
+
 ## Tarea 18 — Discord Companion Bot
 *Prerequisito: Tarea 8 + Tarea 10 en producción.*
 
