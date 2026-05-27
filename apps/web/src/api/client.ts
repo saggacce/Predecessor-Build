@@ -806,6 +806,24 @@ export interface PostMatchTask extends ScrimScheduleItem {
   reviewPending: boolean;
 }
 
+export type PlaybookPhase = 'ALL' | 'EARLY' | 'MID' | 'LATE';
+export type PlaybookRole  = 'CARRY' | 'JUNGLE' | 'MIDLANE' | 'OFFLANE' | 'SUPPORT';
+
+export interface PlaybookEntry {
+  id: string;
+  teamId: string;
+  title: string;
+  body: string;
+  category: string;
+  phase: PlaybookPhase;
+  roles: PlaybookRole[];
+  pinned: boolean;
+  createdById: string;
+  createdAt: string;
+  updatedAt: string;
+  createdBy: { id: string; name: string };
+}
+
 export interface WeeklyGoalItem {
   id: string;
   userId: string;
@@ -1254,5 +1272,16 @@ export const apiClient = {
       fetchApi<{ item: TeamCommItem }>(`/comms/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
     delete: (id: string) =>
       fetchApi<{ ok: boolean }>(`/comms/${id}`, { method: 'DELETE' }),
+  },
+
+  playbook: {
+    list: (teamId: string) =>
+      fetchApi<{ entries: PlaybookEntry[] }>(`/playbook?teamId=${encodeURIComponent(teamId)}`),
+    create: (data: { teamId: string; title: string; body: string; category?: string; phase?: PlaybookEntry['phase']; roles?: PlaybookEntry['roles']; pinned?: boolean }) =>
+      fetchApi<{ entry: PlaybookEntry }>('/playbook', { method: 'POST', body: JSON.stringify(data) }),
+    update: (id: string, data: { title?: string; body?: string; category?: string; phase?: PlaybookEntry['phase']; roles?: PlaybookEntry['roles']; pinned?: boolean }) =>
+      fetchApi<{ entry: PlaybookEntry }>(`/playbook/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+    delete: (id: string) =>
+      fetchApi<{ ok: boolean }>(`/playbook/${id}`, { method: 'DELETE' }),
   },
 };

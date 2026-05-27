@@ -113,6 +113,7 @@ model Team {
   roster            TeamRoster[]
   scrimSchedules    ScrimSchedule[]  @relation("HomeTeam")
   rivalSchedules    ScrimSchedule[]  @relation("RivalTeam")
+  playbookEntries   PlaybookEntry[]
   comms             TeamComm[]
   parentTeam        Team?            @relation("AcademyTeams", fields: [academyOf], references: [id])
   academyTeams      Team[]           @relation("AcademyTeams")
@@ -452,6 +453,7 @@ model User {
   sentComms           TeamComm[]       @relation("SentComms")
   receivedComms       TeamComm[]       @relation("ReceivedComms")
   scrimSchedules      ScrimSchedule[]
+  playbookEntries     PlaybookEntry[]
   weeklyGoals         WeeklyGoal[]
 }
 
@@ -769,6 +771,28 @@ model ScrimSchedule {
   team         Team      @relation("HomeTeam", fields: [teamId], references: [id])
   rivalTeam    Team?     @relation("RivalTeam", fields: [rivalTeamId], references: [id])
   createdBy    User      @relation(fields: [createdById], references: [id])
+}
+
+/// A tactical entry in the team's playbook — strategies, setups, and rules.
+/// category: free-form tag e.g. "Rotaciones", "Draft", "Objetivos", "Comunicación"
+/// phase: "ALL" | "EARLY" | "MID" | "LATE"
+/// roles: [] = applies to all; ["CARRY", "JUNGLE", ...] = specific roles only
+model PlaybookEntry {
+  id          String   @id @default(cuid())
+  teamId      String
+  title       String
+  body        String
+  category    String   @default("General")
+  /// "ALL" | "EARLY" | "MID" | "LATE"
+  phase       String   @default("ALL")
+  /// In-game roles this entry targets — empty array means all roles
+  roles       String[]
+  pinned      Boolean  @default(false)
+  createdById String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  team        Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  createdBy   User     @relation(fields: [createdById], references: [id])
 }
 
 /// Personal weekly goal set by a standalone player (soloQ).
