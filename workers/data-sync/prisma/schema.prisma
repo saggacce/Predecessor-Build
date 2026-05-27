@@ -752,9 +752,15 @@ model ScrimSchedule {
   scheduledAt  DateTime
   /// "SCRIM" | "OFFICIAL" | "PRACTICE"
   type         String    @default("SCRIM")
+  /// "PENDIENTE" | "CONFIRMADO" | "CANCELADO"
+  status       String    @default("PENDIENTE")
   notes        String?
   /// Filled after the match: "WIN" | "LOSS" | "DRAW"
   result       String?
+  /// Set when analyst marks analysis complete (post-match task)
+  analysedAt   DateTime?
+  /// Set when coach marks post-match review complete
+  reviewedAt   DateTime?
   createdById  String
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt

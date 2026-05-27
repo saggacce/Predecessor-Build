@@ -787,13 +787,21 @@ export interface ScrimScheduleItem {
   rivalName: string | null;
   scheduledAt: string;
   type: 'SCRIM' | 'OFFICIAL' | 'PRACTICE';
+  status: 'PENDIENTE' | 'CONFIRMADO' | 'CANCELADO';
   notes: string | null;
   result: 'WIN' | 'LOSS' | 'DRAW' | null;
+  analysedAt: string | null;
+  reviewedAt: string | null;
   createdById: string;
   createdAt: string;
   updatedAt: string;
   rivalTeam: { id: string; name: string; abbreviation: string | null; logoUrl: string | null } | null;
   createdBy: { id: string; name: string };
+}
+
+export interface PostMatchTask extends ScrimScheduleItem {
+  analysisPending: boolean;
+  reviewPending: boolean;
 }
 
 export interface WeeklyGoalItem {
@@ -1215,10 +1223,14 @@ export const apiClient = {
       fetchApi<{ items: ScrimScheduleItem[] }>(`/schedule?teamId=${encodeURIComponent(teamId)}`),
     create: (data: { teamId: string; scheduledAt: string; type?: 'SCRIM' | 'OFFICIAL' | 'PRACTICE'; rivalTeamId?: string; rivalName?: string; notes?: string }) =>
       fetchApi<{ item: ScrimScheduleItem }>('/schedule', { method: 'POST', body: JSON.stringify(data) }),
-    update: (id: string, data: { scheduledAt?: string; type?: 'SCRIM' | 'OFFICIAL' | 'PRACTICE'; rivalTeamId?: string | null; rivalName?: string | null; notes?: string | null; result?: 'WIN' | 'LOSS' | 'DRAW' | null }) =>
+    update: (id: string, data: { scheduledAt?: string; type?: 'SCRIM' | 'OFFICIAL' | 'PRACTICE'; status?: 'PENDIENTE' | 'CONFIRMADO' | 'CANCELADO'; rivalTeamId?: string | null; rivalName?: string | null; notes?: string | null; result?: 'WIN' | 'LOSS' | 'DRAW' | null }) =>
       fetchApi<{ item: ScrimScheduleItem }>(`/schedule/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
     delete: (id: string) =>
       fetchApi<{ ok: boolean }>(`/schedule/${id}`, { method: 'DELETE' }),
+    pendingTasks: (teamId: string) =>
+      fetchApi<{ tasks: PostMatchTask[] }>(`/schedule/pending-tasks?teamId=${encodeURIComponent(teamId)}`),
+    dismissTask: (id: string, taskType: 'analysis' | 'review') =>
+      fetchApi<{ item: ScrimScheduleItem }>(`/schedule/${id}/dismiss`, { method: 'PATCH', body: JSON.stringify({ taskType }) }),
   },
 
   weeklyGoals: {

@@ -22,6 +22,7 @@ const updateSchema = z.object({
   rivalTeamId: z.string().min(1).optional().nullable(),
   rivalName: z.string().max(100).optional().nullable(),
   type: z.enum(['SCRIM', 'OFFICIAL', 'PRACTICE']).optional(),
+  status: z.enum(['PENDIENTE', 'CONFIRMADO', 'CANCELADO']).optional(),
   notes: z.string().max(500).optional().nullable(),
   result: z.enum(['WIN', 'LOSS', 'DRAW']).optional().nullable(),
 });
@@ -74,6 +75,7 @@ scheduleRouter.patch('/:id', requireAuth, requireRole(['MANAGER', 'COACH']), asy
         ...(data.rivalTeamId !== undefined && { rivalTeamId: data.rivalTeamId }),
         ...(data.rivalName !== undefined && { rivalName: data.rivalName }),
         ...(data.type !== undefined && { type: data.type }),
+        ...(data.status !== undefined && { status: data.status }),
         ...(data.notes !== undefined && { notes: data.notes }),
         ...(data.result !== undefined && { result: data.result }),
       },
@@ -86,5 +88,60 @@ scheduleRouter.delete('/:id', requireAuth, requireRole(['MANAGER', 'COACH']), as
   try {
     await db.scrimSchedule.delete({ where: { id: String(req.params.id) } });
     res.json({ ok: true });
+  } catch (err) { next(err); }
+});
+
+// ── POST-MATCH PENDING TASKS ─────────────────────────────────────────────────
+// Returns scrims that started >3h ago, are not cancelled, and have pending
+// analysis (ANALISTA) or review (COACH) tasks.
+
+scheduleRouter.get('/pending-tasks', requireAuth, requireRole(staffRoles), async (req, res, next) => {
+  try {
+    const teamId = String(req.query.teamId ?? '');
+    if (!teamId) { res.status(400).json({ error: { message: 'teamId required', code: 'BAD_REQUEST' } }); return; }
+
+    const threshold = new Date(Date.now() - 3 * 60 * 60 * 1000); // now - 3h
+
+    const items = await db.scrimSchedule.findMany({
+      where: {
+        teamId,
+        scheduledAt: { lte: threshold },
+        status: { not: 'CANCELADO' },
+        OR: [
+          { analysedAt: null },
+          { reviewedAt: null },
+        ],
+      },
+      orderBy: { scheduledAt: 'desc' },
+      include: {
+        rivalTeam: { select: { id: true, name: true, abbreviation: true, logoUrl: true } },
+      },
+    });
+
+    // Return which tasks are pending per item
+    const tasks = items.map(item => ({
+      ...item,
+      analysisPending: item.analysedAt === null,
+      reviewPending:   item.reviewedAt === null,
+    }));
+
+    res.json({ tasks });
+  } catch (err) { next(err); }
+});
+
+// Mark a specific task as done: PATCH /schedule/:id/dismiss
+// Body: { taskType: 'analysis' | 'review' }
+scheduleRouter.patch('/:id/dismiss', requireAuth, requireRole(staffRoles), async (req, res, next) => {
+  try {
+    const { taskType } = req.body as { taskType?: string };
+    if (taskType !== 'analysis' && taskType !== 'review') {
+      res.status(400).json({ error: { message: 'taskType must be "analysis" or "review"', code: 'BAD_REQUEST' } }); return;
+    }
+    const now = new Date();
+    const item = await db.scrimSchedule.update({
+      where: { id: String(req.params.id) },
+      data: taskType === 'analysis' ? { analysedAt: now } : { reviewedAt: now },
+    });
+    res.json({ item });
   } catch (err) { next(err); }
 });

@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router';
 import { Server, Zap, RefreshCw, CheckCircle, XCircle, ArrowRight, Users, Sparkles, ThumbsUp, ThumbsDown, Send, Download, Target, BookOpen, Shield, Star, TrendingUp, BarChart2, MessageSquare, PlusCircle, Calendar, Bell, Search, ChevronRight, Trophy, AlertTriangle, Clock } from 'lucide-react';
 import { toast } from 'sonner';
 import { useTranslation } from 'react-i18next';
-import { apiClient, ApiErrorResponse, type TeamProfile, type TeamAnalysis, type PlayerProfile, type Insight, type HeroStat, type ScrimScheduleItem, type TeamCommItem, type WeeklyGoalItem, type PlayerAnalysisStat } from '../api/client';
+import { apiClient, ApiErrorResponse, type TeamProfile, type TeamAnalysis, type PlayerProfile, type Insight, type HeroStat, type ScrimScheduleItem, type TeamCommItem, type WeeklyGoalItem, type PlayerAnalysisStat, type PostMatchTask } from '../api/client';
 import { useAuth } from '../hooks/useAuth';
 import { useViewAs } from '../hooks/useViewAs';
 import { LinkPlayerModal } from '../components/LinkPlayerModal';
@@ -99,6 +99,7 @@ export default function Dashboard() {
   const [pendingComms, setPendingComms] = useState<TeamCommItem[]>([]);
   const [weeklyGoals, setWeeklyGoals] = useState<WeeklyGoalItem[]>([]);
   const [playerStats, setPlayerStats] = useState<PlayerAnalysisStat[]>([]);
+  const [postMatchTasks, setPostMatchTasks] = useState<PostMatchTask[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
 
   // Determine role
@@ -219,6 +220,12 @@ export default function Dashboard() {
     if (!ownTeam || (!isCoach && !isManager)) return;
     apiClient.teams.getAnalysis(ownTeam.id).then((r) => setPlayerStats(r.playerStats ?? [])).catch(() => null);
   }, [isCoach, isManager, ownTeam?.id]);
+
+  // Fetch post-match pending tasks for COACH and ANALISTA
+  useEffect(() => {
+    if (!ownTeam || (!isCoach && !isAnalista)) return;
+    apiClient.schedule.pendingTasks(ownTeam.id).then((r) => setPostMatchTasks(r.tasks)).catch(() => null);
+  }, [isCoach, isAnalista, ownTeam?.id]);
 
   // Fetch comms for ANALISTA (coach requests addressed to them)
   useEffect(() => {
@@ -505,6 +512,19 @@ export default function Dashboard() {
                 />
               </div>
 
+              {/* Post-match pending tasks */}
+              {postMatchTasks.filter(t => t.reviewPending).length > 0 && (
+                <PostMatchTasksPanel
+                  tasks={postMatchTasks.filter(t => t.reviewPending)}
+                  role="COACH"
+                  onDismiss={(id) => {
+                    apiClient.schedule.dismissTask(id, 'review')
+                      .then(() => setPostMatchTasks(prev => prev.map(t => t.id === id ? { ...t, reviewedAt: new Date().toISOString(), reviewPending: false } : t)))
+                      .catch(() => toast.error('Error al marcar tarea'));
+                  }}
+                />
+              )}
+
               {/* Quick links */}
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '0.75rem' }}>
                 <QuickLink to="/tools/review" icon={<BookOpen size={16} />} label={t('reviewQueue.title')} description={reviewCount ? `${reviewCount} ${t('reviewQueue.pendingReview')}` : t('dashboard.reviewMatchesDesc')} color="var(--accent-prime)" />
@@ -550,6 +570,19 @@ export default function Dashboard() {
               {/* Coach requests */}
               {pendingComms.length > 0 && (
                 <PlayerCommsPanel items={pendingComms} />
+              )}
+
+              {/* Post-match pending tasks */}
+              {postMatchTasks.filter(t => t.analysisPending).length > 0 && (
+                <PostMatchTasksPanel
+                  tasks={postMatchTasks.filter(t => t.analysisPending)}
+                  role="ANALISTA"
+                  onDismiss={(id) => {
+                    apiClient.schedule.dismissTask(id, 'analysis')
+                      .then(() => setPostMatchTasks(prev => prev.map(t => t.id === id ? { ...t, analysedAt: new Date().toISOString(), analysisPending: false } : t)))
+                      .catch(() => toast.error('Error al marcar tarea'));
+                  }}
+                />
               )}
 
               {/* Quick search */}
@@ -1281,6 +1314,91 @@ function WeeklyGoalWidget({ goals, onGoalsChange }: { goals: WeeklyGoalItem[]; o
           <button onClick={() => { setAdding(false); setNewTitle(''); setNewTarget(''); }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: '0.75rem' }}>✕</button>
         </div>
       )}
+    </div>
+  );
+}
+
+// ── Post-Match Pending Tasks Panel ───────────────────────────────────────────
+function PostMatchTasksPanel({ tasks, role, onDismiss }: {
+  tasks: PostMatchTask[];
+  role: 'COACH' | 'ANALISTA';
+  onDismiss: (id: string) => void;
+}) {
+  const isCoach = role === 'COACH';
+  const accent = isCoach ? 'var(--accent-prime)' : 'var(--accent-blue)';
+  const icon = isCoach ? '📋' : '📊';
+  const title = isCoach ? 'Revisiones pendientes' : 'Análisis pendientes';
+  const desc = isCoach
+    ? 'Partidos que necesitan revisión post-partido'
+    : 'Partidos que necesitan análisis de datos';
+
+  function rivalLabel(t: PostMatchTask) {
+    return t.rivalTeam?.name ?? t.rivalName ?? 'Rival desconocido';
+  }
+  function typeLabel(t: PostMatchTask) {
+    return t.type === 'OFFICIAL' ? 'Oficial' : t.type === 'PRACTICE' ? 'Entrenamiento' : 'Scrim';
+  }
+
+  return (
+    <div className="glass-card" style={{ padding: '0.9rem 1.1rem', borderLeft: `3px solid ${accent}` }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.75rem' }}>
+        <span style={{ fontSize: '0.9rem' }}>{icon}</span>
+        <div>
+          <div style={{ fontWeight: 700, fontSize: '0.82rem', color: 'var(--text-primary)' }}>{title}</div>
+          <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>{desc}</div>
+        </div>
+        <span style={{ marginLeft: 'auto', fontFamily: 'var(--font-mono)', fontWeight: 700, fontSize: '1rem', color: accent }}>{tasks.length}</span>
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+        {tasks.map(task => {
+          const date = new Date(task.scheduledAt);
+          const dateStr = date.toLocaleDateString('es-ES', { weekday: 'short', day: 'numeric', month: 'short' });
+          const timeStr = date.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
+          return (
+            <div key={task.id} style={{
+              display: 'flex', alignItems: 'center', gap: '0.75rem',
+              padding: '0.6rem 0.8rem', borderRadius: 6,
+              background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)',
+            }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  {typeLabel(task)} vs {rivalLabel(task)}
+                </div>
+                <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: 2 }}>
+                  {dateStr} · {timeStr}
+                  {task.result && (
+                    <span style={{ marginLeft: 6, fontWeight: 700, color: task.result === 'WIN' ? 'var(--accent-win)' : task.result === 'LOSS' ? 'var(--accent-loss)' : 'var(--text-muted)' }}>
+                      {task.result}
+                    </span>
+                  )}
+                </div>
+              </div>
+              <div style={{ display: 'flex', gap: '0.4rem', flexShrink: 0 }}>
+                {isCoach ? (
+                  <Link to="/tools/review" style={{ textDecoration: 'none' }}>
+                    <button className="btn-primary" style={{ fontSize: '0.7rem', padding: '4px 10px', whiteSpace: 'nowrap' }}>
+                      Revisar
+                    </button>
+                  </Link>
+                ) : (
+                  <Link to={`/analysis/teams?team=${task.teamId}&tab=analysis`} style={{ textDecoration: 'none' }}>
+                    <button className="btn-primary" style={{ fontSize: '0.7rem', padding: '4px 10px', whiteSpace: 'nowrap' }}>
+                      Analizar
+                    </button>
+                  </Link>
+                )}
+                <button
+                  onClick={() => onDismiss(task.id)}
+                  title="Marcar como completado"
+                  style={{ fontSize: '0.7rem', padding: '4px 8px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 5, cursor: 'pointer', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}
+                >
+                  ✓ Hecho
+                </button>
+              </div>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
