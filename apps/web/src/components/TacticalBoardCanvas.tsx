@@ -23,18 +23,21 @@ import { apiClient } from '../api/client';
 // ── Types ──────────────────────────────────────────────────────────────────────
 
 export type DrawTool =
-  | 'select' | 'pen' | 'line' | 'arrow' | 'text'
+  | 'select' | 'pen' | 'line' | 'arrow' | 'text' | 'circle' | 'rect'
   | 'role_carry' | 'role_jungle' | 'role_midlane' | 'role_offlane' | 'role_support'
   | 'ward_vision' | 'ward_control';
 
-interface PenEl    { kind: 'pen';  id: string; points: number[]; color: string; width: number }
-interface LineEl   { kind: 'line'; id: string; x1: number; y1: number; x2: number; y2: number; color: string; width: number }
-interface ArrowEl  { kind: 'arrow'; id: string; x1: number; y1: number; x2: number; y2: number; color: string; width: number }
-interface TextEl   { kind: 'text'; id: string; x: number; y: number; text: string; color: string; fontSize: number }
-interface RoleEl   { kind: 'role'; id: string; x: number; y: number; role: string; player?: string; hero?: string; color: string }
-interface WardEl   { kind: 'ward'; id: string; x: number; y: number; wardType: 'vision' | 'control' }
+interface PenEl    { kind: 'pen';    id: string; points: number[]; color: string; width: number }
+interface LineEl   { kind: 'line';   id: string; x1: number; y1: number; x2: number; y2: number; color: string; width: number }
+interface ArrowEl  { kind: 'arrow';  id: string; x1: number; y1: number; x2: number; y2: number; color: string; width: number }
+interface TextEl   { kind: 'text';   id: string; x: number; y: number; text: string; color: string; fontSize: number }
+interface RoleEl   { kind: 'role';   id: string; x: number; y: number; role: string; player?: string; hero?: string; color: string }
+interface WardEl   { kind: 'ward';   id: string; x: number; y: number; wardType: 'vision' | 'control' }
+// Zone shapes — x/y = top-left corner for rect; x/y = center for circle
+interface CircleEl { kind: 'circle'; id: string; x: number; y: number; rx: number; ry: number; color: string; width: number }
+interface RectEl   { kind: 'rect';   id: string; x: number; y: number; w: number; h: number; color: string; width: number }
 
-export type BoardElement = PenEl | LineEl | ArrowEl | TextEl | RoleEl | WardEl;
+export type BoardElement = PenEl | LineEl | ArrowEl | TextEl | RoleEl | WardEl | CircleEl | RectEl;
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 
@@ -158,6 +161,13 @@ function hitTest(el: BoardElement, px: number, py: number): boolean {
     case 'role':
     case 'ward':
       return Math.hypot(px - el.x, py - el.y) <= TOKEN_R + 8;
+    case 'circle': {
+      // hit inside ellipse or near border
+      const nx = (px - el.x) / (el.rx + 8), ny = (py - el.y) / (el.ry + 8);
+      return nx * nx + ny * ny <= 1;
+    }
+    case 'rect':
+      return px >= el.x - 8 && px <= el.x + el.w + 8 && py >= el.y - 8 && py <= el.y + el.h + 8;
     default:
       return false;
   }
@@ -340,7 +350,7 @@ export default function TacticalBoardCanvas({ teamId, compact = false, style }: 
 
     // Draw elements back-to-front (pens/lines first, tokens on top)
     const sorted = [...els].sort((a, b) => {
-      const order = { pen: 0, line: 1, arrow: 1, text: 2, ward: 3, obj: 3, role: 4 };
+      const order: Record<string, number> = { circle: 0, rect: 0, pen: 1, line: 2, arrow: 2, text: 3, ward: 4, role: 5 };
       return (order[a.kind] ?? 0) - (order[b.kind] ?? 0);
     });
 
@@ -416,6 +426,32 @@ export default function TacticalBoardCanvas({ teamId, compact = false, style }: 
           drawToken(ctx, el.x, el.y, wardBg, null, wardAbbr, wardLabel, undefined, isSelected);
           break;
         }
+        case 'circle': {
+          ctx.beginPath();
+          ctx.ellipse(el.x, el.y, el.rx, el.ry, 0, 0, Math.PI * 2);
+          ctx.fillStyle = el.color + '33'; // ~20% opacity fill
+          ctx.fill();
+          ctx.strokeStyle = el.color;
+          ctx.lineWidth = el.width;
+          ctx.setLineDash(isSelected ? [6, 3] : []);
+          ctx.stroke();
+          ctx.setLineDash([]);
+          if (isSelected) { ctx.shadowColor = el.color; ctx.shadowBlur = 8; ctx.stroke(); }
+          break;
+        }
+        case 'rect': {
+          ctx.beginPath();
+          ctx.rect(el.x, el.y, el.w, el.h);
+          ctx.fillStyle = el.color + '33';
+          ctx.fill();
+          ctx.strokeStyle = el.color;
+          ctx.lineWidth = el.width;
+          ctx.setLineDash(isSelected ? [6, 3] : []);
+          ctx.stroke();
+          ctx.setLineDash([]);
+          if (isSelected) { ctx.shadowColor = el.color; ctx.shadowBlur = 8; ctx.stroke(); }
+          break;
+        }
       }
       ctx.restore();
     }
@@ -487,6 +523,18 @@ export default function TacticalBoardCanvas({ teamId, compact = false, style }: 
       const next: BoardElement[] = [...elementsRef.current, { kind: 'arrow', id, x1: pos.x, y1: pos.y, x2: pos.x, y2: pos.y, color: colorRef.current, width: strokeWRef.current }];
       setElements(next);
       elementsRef.current = next;
+    } else if (t === 'circle') {
+      const id = uid();
+      activeElRef.current = id;
+      const next: BoardElement[] = [...elementsRef.current, { kind: 'circle', id, x: pos.x, y: pos.y, rx: 1, ry: 1, color: colorRef.current, width: strokeWRef.current }];
+      setElements(next);
+      elementsRef.current = next;
+    } else if (t === 'rect') {
+      const id = uid();
+      activeElRef.current = id;
+      const next: BoardElement[] = [...elementsRef.current, { kind: 'rect', id, x: pos.x, y: pos.y, w: 1, h: 1, color: colorRef.current, width: strokeWRef.current }];
+      setElements(next);
+      elementsRef.current = next;
     } else if (t.startsWith('role_')) {
       const role = t.replace('role_', '');
       const id = uid();
@@ -519,7 +567,9 @@ export default function TacticalBoardCanvas({ teamId, compact = false, style }: 
           case 'arrow': return { ...el, x1: el.x1 + dx, y1: el.y1 + dy, x2: el.x2 + dx, y2: el.y2 + dy };
           case 'text':
           case 'role':
-          case 'ward':  return { ...el, x: ox + (pos.x - mx), y: oy + (pos.y - my) };
+          case 'ward':
+          case 'circle':
+          case 'rect':  return { ...el, x: ox + (pos.x - mx), y: oy + (pos.y - my) };
           default: return el;
         }
       });
@@ -532,12 +582,29 @@ export default function TacticalBoardCanvas({ teamId, compact = false, style }: 
     const active = activeElRef.current;
     if (!active) return;
 
+    const start = drawStart.current;
     const next = elementsRef.current.map(el => {
       if (el.id !== active) return el;
       switch (el.kind) {
         case 'pen':  return { ...el, points: [...el.points, pos.x, pos.y] };
         case 'line':
         case 'arrow': return { ...el, x2: pos.x, y2: pos.y };
+        case 'circle': {
+          if (!start) return el;
+          const rx = Math.abs(pos.x - start.x) / 2;
+          const ry = Math.abs(pos.y - start.y) / 2;
+          return { ...el, x: (start.x + pos.x) / 2, y: (start.y + pos.y) / 2, rx: Math.max(rx, 1), ry: Math.max(ry, 1) };
+        }
+        case 'rect': {
+          if (!start) return el;
+          return {
+            ...el,
+            x: Math.min(start.x, pos.x),
+            y: Math.min(start.y, pos.y),
+            w: Math.abs(pos.x - start.x),
+            h: Math.abs(pos.y - start.y),
+          };
+        }
         default: return el;
       }
     });
@@ -610,6 +677,7 @@ export default function TacticalBoardCanvas({ teamId, compact = false, style }: 
   // ── Tool config ──────────────────────────────────────────────────────────────
 
   const cursorStyle: React.CSSProperties['cursor'] = tool === 'select' ? 'default' : tool === 'text' ? 'text' : 'crosshair';
+
 
   // Role token in popup
   const popupEl = popup ? elementsRef.current.find(el => el.id === popup.id && el.kind === 'role') as RoleEl | undefined : undefined;
@@ -685,6 +753,12 @@ export default function TacticalBoardCanvas({ teamId, compact = false, style }: 
         </ToolBtn>
         <ToolBtn t="text" label="Texto (T)">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M4 6h16v2H4zm2 5h12v2H6zm2 5h8v2H8z"/></svg>
+        </ToolBtn>
+        <ToolBtn t="circle" label="Elipse / zona circular (C)">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><ellipse cx="12" cy="12" rx="9" ry="6"/></svg>
+        </ToolBtn>
+        <ToolBtn t="rect" label="Rectángulo / zona (R)">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="5" width="18" height="14" rx="2"/></svg>
         </ToolBtn>
 
         {SEP}
