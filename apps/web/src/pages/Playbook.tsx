@@ -1,8 +1,10 @@
 import { useEffect, useState, useMemo } from 'react';
-import { BookOpen, PlusCircle, Pin, PinOff, Pencil, Trash2, X, Check, ChevronDown, ChevronUp, Filter } from 'lucide-react';
+import { useNavigate } from 'react-router';
+import { BookOpen, PlusCircle, Pin, PinOff, Pencil, Trash2, X, Check, ChevronDown, ChevronUp, Filter, Map as MapIcon, ExternalLink } from 'lucide-react';
 import { toast } from 'sonner';
 import { apiClient, ApiErrorResponse, type PlaybookEntry, type PlaybookPhase, type PlaybookRole } from '../api/client';
 import { useAuth } from '../hooks/useAuth';
+import TacticalBoardCanvas from '../components/TacticalBoardCanvas';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -258,16 +260,24 @@ function EntryForm({ initial, onSubmit, onCancel, submitLabel }: EntryFormProps)
 interface EntryCardProps {
   entry: PlaybookEntry;
   canEdit: boolean;
+  canOpenBoard: boolean; // staff only — players see map preview but can't open editable board
   onPin: (id: string, pinned: boolean) => void;
   onEdit: (entry: PlaybookEntry) => void;
   onDelete: (id: string) => void;
 }
 
-function EntryCard({ entry, canEdit, onPin, onEdit, onDelete }: EntryCardProps) {
+function EntryCard({ entry, canEdit, canOpenBoard, onPin, onEdit, onDelete }: EntryCardProps) {
+  const navigate = useNavigate();
   const [expanded, setExpanded] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [showMap, setShowMap] = useState(false);
 
   const preview = entry.body.slice(0, 120) + (entry.body.length > 120 ? '…' : '');
+
+  function openInBoard() {
+    sessionStorage.setItem('tacboard_preload', entry.mapSnapshot!);
+    navigate('/tools/tactical-board');
+  }
 
   return (
     <div className="glass-card" style={{ padding: '0.9rem 1.1rem' }}>
@@ -289,12 +299,17 @@ function EntryCard({ entry, canEdit, onPin, onEdit, onDelete }: EntryCardProps) 
           </button>
 
           {/* Badges */}
-          <div style={{ display: 'flex', gap: '0.3rem', flexWrap: 'wrap', marginTop: '0.35rem' }}>
+          <div style={{ display: 'flex', gap: '0.3rem', flexWrap: 'wrap', marginTop: '0.35rem', alignItems: 'center' }}>
             <span style={{ fontSize: '0.6rem', fontWeight: 700, color: 'var(--accent-prime)', border: '1px solid var(--accent-prime)44', borderRadius: 3, padding: '1px 5px', textTransform: 'uppercase' }}>
               {entry.category}
             </span>
             <PhaseBadge phase={entry.phase} />
             {entry.roles.map(r => <RoleBadge key={r} role={r} />)}
+            {entry.mapSnapshot && (
+              <span title="Tiene mapa táctico adjunto" style={{ display: 'flex', alignItems: 'center', gap: 2, fontSize: '0.6rem', color: 'var(--accent-blue)', opacity: 0.8 }}>
+                <MapIcon size={9} /> Mapa
+              </span>
+            )}
           </div>
         </div>
 
@@ -336,13 +351,62 @@ function EntryCard({ entry, canEdit, onPin, onEdit, onDelete }: EntryCardProps) 
       {/* Body */}
       <div style={{ marginTop: '0.55rem' }}>
         {expanded ? (
-          <pre style={{
-            whiteSpace: 'pre-wrap', wordBreak: 'break-word',
-            fontSize: '0.82rem', color: 'var(--text-secondary)', lineHeight: 1.65,
-            fontFamily: 'inherit', margin: 0,
-          }}>
-            {entry.body}
-          </pre>
+          <>
+            <pre style={{
+              whiteSpace: 'pre-wrap', wordBreak: 'break-word',
+              fontSize: '0.82rem', color: 'var(--text-secondary)', lineHeight: 1.65,
+              fontFamily: 'inherit', margin: 0,
+            }}>
+              {entry.body}
+            </pre>
+
+            {/* Map section */}
+            {entry.mapSnapshot && (
+              <div style={{ marginTop: '0.9rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
+                  <button
+                    onClick={() => setShowMap(m => !m)}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: '0.35rem',
+                      fontSize: '0.72rem', fontWeight: 600, padding: '3px 10px',
+                      border: '1px solid var(--accent-blue)', borderRadius: 5,
+                      background: showMap ? 'var(--accent-blue)22' : 'transparent',
+                      color: 'var(--accent-blue)', cursor: 'pointer',
+                    }}
+                  >
+                    <MapIcon size={11} />
+                    {showMap ? 'Ocultar mapa' : 'Ver mapa'}
+                  </button>
+                  {canOpenBoard && (
+                    <button
+                      onClick={openInBoard}
+                      title="Abrir en Tactical Board"
+                      style={{
+                        display: 'flex', alignItems: 'center', gap: '0.3rem',
+                        fontSize: '0.72rem', fontWeight: 600, padding: '3px 10px',
+                        border: '1px solid var(--border-color)', borderRadius: 5,
+                        background: 'transparent', color: 'var(--text-muted)', cursor: 'pointer',
+                      }}
+                    >
+                      <ExternalLink size={11} />
+                      Abrir en tablero
+                    </button>
+                  )}
+                </div>
+
+                {showMap && (
+                  <div style={{ height: 260, borderRadius: 8, overflow: 'hidden', border: '1px solid var(--border-color)' }}>
+                    <TacticalBoardCanvas
+                      readOnly
+                      compact
+                      initialElements={JSON.parse(entry.mapSnapshot)}
+                      style={{ borderRadius: 8 }}
+                    />
+                  </div>
+                )}
+              </div>
+            )}
+          </>
         ) : (
           <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', margin: 0, lineHeight: 1.5 }}>
             {preview}
@@ -381,8 +445,9 @@ export default function Playbook() {
   const membership = user?.memberships?.find(m => m.teamId === teamId);
   const role = isPlatformAdmin ? 'PLATFORM_ADMIN' : (membership?.role ?? '');
 
-  const canEdit   = ['MANAGER', 'COACH', 'ANALISTA', 'PLATFORM_ADMIN'].includes(role);
-  const canDelete = ['MANAGER', 'COACH', 'PLATFORM_ADMIN'].includes(role);
+  const canEdit      = ['MANAGER', 'COACH', 'ANALISTA', 'PLATFORM_ADMIN'].includes(role);
+  const canDelete    = ['MANAGER', 'COACH', 'PLATFORM_ADMIN'].includes(role);
+  const canOpenBoard = canEdit; // same staff roles — players see map preview but not the editable board
 
   // ── Load teams then entries ───────────────────────────────────────────────
   useEffect(() => {
@@ -687,6 +752,7 @@ export default function Playbook() {
                       key={entry.id}
                       entry={entry}
                       canEdit={canEdit && (canDelete || entry.createdById === user?.id)}
+                      canOpenBoard={canOpenBoard}
                       onPin={handlePin}
                       onEdit={setEditingEntry}
                       onDelete={handleDelete}

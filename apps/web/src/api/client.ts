@@ -818,6 +818,7 @@ export interface PlaybookEntry {
   phase: PlaybookPhase;
   roles: PlaybookRole[];
   pinned: boolean;
+  mapSnapshot: string | null;
   createdById: string;
   createdAt: string;
   updatedAt: string;
@@ -1277,9 +1278,9 @@ export const apiClient = {
   playbook: {
     list: (teamId: string) =>
       fetchApi<{ entries: PlaybookEntry[] }>(`/playbook?teamId=${encodeURIComponent(teamId)}`),
-    create: (data: { teamId: string; title: string; body: string; category?: string; phase?: PlaybookEntry['phase']; roles?: PlaybookEntry['roles']; pinned?: boolean }) =>
+    create: (data: { teamId: string; title: string; body: string; category?: string; phase?: PlaybookEntry['phase']; roles?: PlaybookEntry['roles']; pinned?: boolean; mapSnapshot?: string | null }) =>
       fetchApi<{ entry: PlaybookEntry }>('/playbook', { method: 'POST', body: JSON.stringify(data) }),
-    update: (id: string, data: { title?: string; body?: string; category?: string; phase?: PlaybookEntry['phase']; roles?: PlaybookEntry['roles']; pinned?: boolean }) =>
+    update: (id: string, data: { title?: string; body?: string; category?: string; phase?: PlaybookEntry['phase']; roles?: PlaybookEntry['roles']; pinned?: boolean; mapSnapshot?: string | null }) =>
       fetchApi<{ entry: PlaybookEntry }>(`/playbook/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
     delete: (id: string) =>
       fetchApi<{ ok: boolean }>(`/playbook/${id}`, { method: 'DELETE' }),

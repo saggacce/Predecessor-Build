@@ -788,6 +788,8 @@ model PlaybookEntry {
   /// In-game roles this entry targets — empty array means all roles
   roles       String[]
   pinned      Boolean  @default(false)
+  /// JSON-serialized BoardElement[] from TacticalBoardCanvas — null if no map attached
+  mapSnapshot String?
   createdById String
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
