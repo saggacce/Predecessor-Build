@@ -25,7 +25,6 @@ import { apiClient } from '../api/client';
 export type DrawTool =
   | 'select' | 'pen' | 'line' | 'arrow' | 'text'
   | 'role_carry' | 'role_jungle' | 'role_midlane' | 'role_offlane' | 'role_support'
-  | 'obj_seedling' | 'obj_inhibitor' | 'obj_nexus'
   | 'ward_vision' | 'ward_control';
 
 interface PenEl    { kind: 'pen';  id: string; points: number[]; color: string; width: number }
@@ -33,10 +32,9 @@ interface LineEl   { kind: 'line'; id: string; x1: number; y1: number; x2: numbe
 interface ArrowEl  { kind: 'arrow'; id: string; x1: number; y1: number; x2: number; y2: number; color: string; width: number }
 interface TextEl   { kind: 'text'; id: string; x: number; y: number; text: string; color: string; fontSize: number }
 interface RoleEl   { kind: 'role'; id: string; x: number; y: number; role: string; player?: string; hero?: string; color: string }
-interface ObjEl    { kind: 'obj';  id: string; x: number; y: number; label: string; abbr: string; bg: string }
 interface WardEl   { kind: 'ward'; id: string; x: number; y: number; wardType: 'vision' | 'control' }
 
-export type BoardElement = PenEl | LineEl | ArrowEl | TextEl | RoleEl | ObjEl | WardEl;
+export type BoardElement = PenEl | LineEl | ArrowEl | TextEl | RoleEl | WardEl;
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 
@@ -52,11 +50,6 @@ const ROLE_LABELS: Record<string, string> = {
   offlane: 'Offlane', support: 'Support',
 };
 
-const OBJECTIVES: Record<string, { label: string; abbr: string; bg: string }> = {
-  seedling:  { label: 'Seedling',  abbr: '🌿', bg: '#16a34a' },
-  inhibitor: { label: 'Inhibitor', abbr: 'IN', bg: '#d97706' },
-  nexus:     { label: 'Nexus',     abbr: 'NX', bg: '#be185d' },
-};
 
 const PALETTE = ['#38d8c8', '#ef4444', '#f59e0b', '#6baaf8', '#ffffff', '#10b981', '#a78bfa', '#f472b6'];
 
@@ -163,7 +156,6 @@ function hitTest(el: BoardElement, px: number, py: number): boolean {
     case 'text':
       return px >= el.x - 4 && px <= el.x + 200 && py >= el.y - 4 && py <= el.y + el.fontSize + 4;
     case 'role':
-    case 'obj':
     case 'ward':
       return Math.hypot(px - el.x, py - el.y) <= TOKEN_R + 8;
     default:
@@ -417,10 +409,6 @@ export default function TacticalBoardCanvas({ teamId, compact = false, style }: 
           drawToken(ctx, el.x, el.y, bg, img, el.role.slice(0, 2).toUpperCase(), name, el.hero || undefined, isSelected);
           break;
         }
-        case 'obj': {
-          drawToken(ctx, el.x, el.y, el.bg, null, el.abbr, el.label, undefined, isSelected);
-          break;
-        }
         case 'ward': {
           const wardBg = el.wardType === 'vision' ? '#2563eb' : '#9333ea';
           const wardAbbr = el.wardType === 'vision' ? '👁' : '🔮';
@@ -506,16 +494,6 @@ export default function TacticalBoardCanvas({ teamId, compact = false, style }: 
       commitElements(next);
       setSelectedId(id);
       setTool('select');
-    } else if (t.startsWith('obj_')) {
-      const key = t.replace('obj_', '');
-      const def = OBJECTIVES[key];
-      if (def) {
-        const id = uid();
-        const next: BoardElement[] = [...elementsRef.current, { kind: 'obj', id, x: pos.x, y: pos.y, label: def.label, abbr: def.abbr, bg: def.bg }];
-        commitElements(next);
-        setSelectedId(id);
-        setTool('select');
-      }
     } else if (t.startsWith('ward_')) {
       const wardType = t.replace('ward_', '') as 'vision' | 'control';
       const id = uid();
@@ -541,7 +519,6 @@ export default function TacticalBoardCanvas({ teamId, compact = false, style }: 
           case 'arrow': return { ...el, x1: el.x1 + dx, y1: el.y1 + dy, x2: el.x2 + dx, y2: el.y2 + dy };
           case 'text':
           case 'role':
-          case 'obj':
           case 'ward':  return { ...el, x: ox + (pos.x - mx), y: oy + (pos.y - my) };
           default: return el;
         }
@@ -683,26 +660,6 @@ export default function TacticalBoardCanvas({ teamId, compact = false, style }: 
     );
   }
 
-  function ObjBtn({ objKey: k, label }: { objKey: string; label: string }) {
-    const t = `obj_${k}` as DrawTool;
-    const def = OBJECTIVES[k];
-    const active = tool === t;
-    return (
-      <button
-        title={label}
-        onClick={() => { setTool(t); setPopup(null); }}
-        style={{
-          width: TOOL_BTN_SIZE, height: TOOL_BTN_SIZE,
-          border: `1px solid ${active ? def.bg : 'rgba(255,255,255,0.1)'}`,
-          borderRadius: 6, background: active ? `${def.bg}33` : 'rgba(255,255,255,0.04)',
-          cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, flexDirection: 'column', gap: 0,
-        }}
-      >
-        <span style={{ fontSize: 9, fontWeight: 800, color: def.bg, textTransform: 'uppercase', letterSpacing: '0.05em', lineHeight: 1 }}>{def.abbr}</span>
-      </button>
-    );
-  }
-
   const SEP = <div style={{ height: 1, background: 'rgba(255,255,255,0.08)', margin: '4px 0' }} />;
 
   return (
@@ -733,10 +690,6 @@ export default function TacticalBoardCanvas({ teamId, compact = false, style }: 
         {SEP}
         {/* Role tokens */}
         {['carry','jungle','midlane','offlane','support'].map(r => <RoleBtn key={r} role={r} />)}
-
-        {SEP}
-        {/* Objective tokens */}
-        {Object.entries(OBJECTIVES).map(([k]) => <ObjBtn key={k} objKey={k} label={OBJECTIVES[k].label} />)}
 
         {SEP}
         {/* Ward tokens */}
