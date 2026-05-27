@@ -31,7 +31,7 @@ interface PenEl    { kind: 'pen';    id: string; points: number[]; color: string
 interface LineEl   { kind: 'line';   id: string; x1: number; y1: number; x2: number; y2: number; color: string; width: number }
 interface ArrowEl  { kind: 'arrow';  id: string; x1: number; y1: number; x2: number; y2: number; color: string; width: number }
 interface TextEl   { kind: 'text';   id: string; x: number; y: number; text: string; color: string; fontSize: number }
-interface RoleEl   { kind: 'role';   id: string; x: number; y: number; role: string; player?: string; hero?: string; color: string }
+interface RoleEl   { kind: 'role';   id: string; x: number; y: number; role: string; player?: string; hero?: string; color: string; team?: 'own' | 'enemy' }
 interface WardEl   { kind: 'ward';   id: string; x: number; y: number; wardType: 'vision' | 'control' }
 // Zone shapes — x/y = top-left corner for rect; x/y = center for circle
 interface CircleEl { kind: 'circle'; id: string; x: number; y: number; rx: number; ry: number; color: string; width: number }
@@ -41,11 +41,18 @@ export type BoardElement = PenEl | LineEl | ArrowEl | TextEl | RoleEl | WardEl |
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 
-const TOKEN_R = 26; // radius for circular tokens
+const TOKEN_R      = 26; // radius for ward tokens
+const ROLE_TOKEN_R = 18; // radius for role tokens (smaller)
 
 const ROLE_COLORS: Record<string, string> = {
   carry: '#f59e0b', jungle: '#10b981', midlane: '#6366f1',
   offlane: '#ef4444', support: '#38d8c8',
+};
+
+// Team colour overrides — own = blue family, enemy = red family
+const TEAM_COLORS: Record<'own' | 'enemy', Record<string, string>> = {
+  own:   { carry: '#2563eb', jungle: '#1d4ed8', midlane: '#1e40af', offlane: '#1e3a8a', support: '#3b82f6' },
+  enemy: { carry: '#dc2626', jungle: '#b91c1c', midlane: '#991b1b', offlane: '#7f1d1d', support: '#ef4444' },
 };
 
 const ROLE_LABELS: Record<string, string> = {
@@ -84,14 +91,14 @@ function drawArrowHead(ctx: CanvasRenderingContext2D, x1: number, y1: number, x2
   ctx.stroke();
 }
 
-function drawToken(ctx: CanvasRenderingContext2D, x: number, y: number, bg: string, img: HTMLImageElement | null, abbr: string, label?: string, sublabel?: string, selected = false) {
+function drawToken(ctx: CanvasRenderingContext2D, x: number, y: number, bg: string, img: HTMLImageElement | null, abbr: string, label?: string, sublabel?: string, selected = false, r = TOKEN_R) {
   // Shadow
   ctx.shadowColor = 'rgba(0,0,0,0.6)';
   ctx.shadowBlur = 8;
 
   // Circle
   ctx.beginPath();
-  ctx.arc(x, y, TOKEN_R, 0, Math.PI * 2);
+  ctx.arc(x, y, r, 0, Math.PI * 2);
   ctx.fillStyle = bg;
   ctx.fill();
   ctx.shadowBlur = 0;
@@ -99,7 +106,7 @@ function drawToken(ctx: CanvasRenderingContext2D, x: number, y: number, bg: stri
   // Selection ring
   if (selected) {
     ctx.beginPath();
-    ctx.arc(x, y, TOKEN_R + 4, 0, Math.PI * 2);
+    ctx.arc(x, y, r + 4, 0, Math.PI * 2);
     ctx.strokeStyle = '#ffffff';
     ctx.lineWidth = 2;
     ctx.setLineDash([4, 3]);
@@ -109,11 +116,11 @@ function drawToken(ctx: CanvasRenderingContext2D, x: number, y: number, bg: stri
 
   // Icon or abbreviation
   if (img) {
-    const iconSize = TOKEN_R * 1.1;
+    const iconSize = r * 1.1;
     ctx.drawImage(img, x - iconSize / 2, y - iconSize / 2, iconSize, iconSize);
   } else {
     ctx.fillStyle = '#fff';
-    ctx.font = `bold ${abbr.length > 2 ? 16 : 14}px system-ui`;
+    ctx.font = `bold ${abbr.length > 2 ? Math.round(r * 0.65) : Math.round(r * 0.58)}px system-ui`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText(abbr, x, y);
@@ -123,14 +130,14 @@ function drawToken(ctx: CanvasRenderingContext2D, x: number, y: number, bg: stri
   ctx.textAlign = 'center';
   ctx.textBaseline = 'top';
   if (label) {
-    ctx.font = 'bold 11px system-ui';
+    ctx.font = `bold ${Math.round(r * 0.44)}px system-ui`;
     ctx.fillStyle = '#fff';
-    ctx.fillText(label, x, y + TOKEN_R + 4);
+    ctx.fillText(label, x, y + r + 3);
   }
   if (sublabel) {
-    ctx.font = '10px system-ui';
+    ctx.font = `${Math.round(r * 0.4)}px system-ui`;
     ctx.fillStyle = 'rgba(255,255,255,0.7)';
-    ctx.fillText(sublabel, x, y + TOKEN_R + 17);
+    ctx.fillText(sublabel, x, y + r + 3 + Math.round(r * 0.48));
   }
 }
 
@@ -159,6 +166,7 @@ function hitTest(el: BoardElement, px: number, py: number): boolean {
     case 'text':
       return px >= el.x - 4 && px <= el.x + 200 && py >= el.y - 4 && py <= el.y + el.fontSize + 4;
     case 'role':
+      return Math.hypot(px - el.x, py - el.y) <= ROLE_TOKEN_R + 8;
     case 'ward':
       return Math.hypot(px - el.x, py - el.y) <= TOKEN_R + 8;
     case 'circle': {
@@ -414,9 +422,9 @@ export default function TacticalBoardCanvas({ teamId, compact = false, style }: 
         }
         case 'role': {
           const img = roleImgs.current.get(el.role) ?? null;
-          const bg = el.color || ROLE_COLORS[el.role] || '#555';
+          const bg = el.team ? TEAM_COLORS[el.team][el.role] : (el.color || ROLE_COLORS[el.role] || '#555');
           const name = el.player || ROLE_LABELS[el.role] || el.role;
-          drawToken(ctx, el.x, el.y, bg, img, el.role.slice(0, 2).toUpperCase(), name, el.hero || undefined, isSelected);
+          drawToken(ctx, el.x, el.y, bg, img, el.role.slice(0, 2).toUpperCase(), name, el.hero || undefined, isSelected, ROLE_TOKEN_R);
           break;
         }
         case 'ward': {
@@ -647,6 +655,13 @@ export default function TacticalBoardCanvas({ teamId, compact = false, style }: 
     commitElements(next);
   }
 
+  function updateRoleTeam(id: string, team: 'own' | 'enemy' | '') {
+    const next = elementsRef.current.map(el =>
+      el.id === id && el.kind === 'role' ? { ...el, team: team || undefined } : el
+    );
+    commitElements(next);
+  }
+
   // ── Text commit ──────────────────────────────────────────────────────────────
 
   function commitText(text: string) {
@@ -834,6 +849,28 @@ export default function TacticalBoardCanvas({ teamId, compact = false, style }: 
               {ROLE_LABELS[popupEl.role]}
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.45rem' }}>
+              {/* Team selector */}
+              <div>
+                <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)', marginBottom: 4 }}>Equipo</div>
+                <div style={{ display: 'flex', gap: 4 }}>
+                  {(['', 'own', 'enemy'] as const).map(t => {
+                    const active = (popupEl.team ?? '') === t;
+                    const label  = t === '' ? 'Neutro' : t === 'own' ? 'Propio' : 'Rival';
+                    const bg     = t === 'own' ? '#2563eb' : t === 'enemy' ? '#dc2626' : '#555';
+                    return (
+                      <button key={t} onClick={() => updateRoleTeam(popup.id, t)}
+                        style={{ flex: 1, fontSize: '0.68rem', fontWeight: 700, padding: '3px 0',
+                          borderRadius: 5, cursor: 'pointer',
+                          border: `1px solid ${active ? bg : 'rgba(255,255,255,0.12)'}`,
+                          background: active ? `${bg}44` : 'rgba(255,255,255,0.04)',
+                          color: active ? '#fff' : 'var(--text-muted)',
+                        }}>
+                        {label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
               {/* Player selector */}
               <div>
                 <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)', marginBottom: 3 }}>Jugador</div>
