@@ -3,21 +3,20 @@ import { useNavigate } from 'react-router';
 import {
   AlertTriangle, Calendar, Target, Sparkles, X, Maximize2, Minimize2,
   ThumbsUp, ThumbsDown, CheckCircle, LayoutDashboard, PenLine, Users,
-  CalendarDays, Menu, Pencil, Minus, ArrowRight, Circle, Square,
-  Eraser, Undo2, Trash2,
+  CalendarDays, Menu,
 } from 'lucide-react';
 import {
   apiClient, type Insight, type ScrimScheduleItem, type TeamGoal,
   type TeamProfile, type PlayerAnalysisStat,
 } from '../api/client';
 import { useAuth } from '../hooks/useAuth';
+import TacticalBoardCanvas from '../components/TacticalBoardCanvas';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
 type SessionTab = 'overview' | 'tactical' | 'roster' | 'schedule';
 type FocusState = 'idle' | 'streaming' | 'done' | 'error';
 type FeedbackState = 'none' | 'positive' | 'negative';
-type DrawTool = 'pen' | 'line' | 'arrow' | 'circle' | 'rect' | 'eraser';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -50,16 +49,6 @@ const ROLE_ICON: Record<string, string> = {
   OFFLANE: '/icons/roles/offlane.png',
   SUPPORT: '/icons/roles/support.png',
 };
-const DRAW_COLORS = ['#ffffff', '#f87171', '#60a5fa', '#4ade80', '#fbbf24', '#a78bfa', '#fb923c'];
-const DRAW_TOOLS: Array<{ id: DrawTool; label: string; Icon: React.FC<{ size?: number }> }> = [
-  { id: 'pen',    label: 'Lápiz',       Icon: Pencil },
-  { id: 'line',   label: 'Línea',       Icon: Minus },
-  { id: 'arrow',  label: 'Flecha',      Icon: ArrowRight },
-  { id: 'circle', label: 'Círculo',     Icon: Circle },
-  { id: 'rect',   label: 'Rectángulo',  Icon: Square },
-  { id: 'eraser', label: 'Borrador',    Icon: Eraser },
-];
-const STROKE_WIDTHS = [2, 4, 7] as const;
 const SESSION_TABS: Array<{ id: SessionTab; label: string; Icon: React.FC<{ size?: number }> }> = [
   { id: 'overview',  label: 'Vista general',   Icon: LayoutDashboard },
   { id: 'tactical',  label: 'Tablero táctico', Icon: PenLine },
@@ -67,224 +56,16 @@ const SESSION_TABS: Array<{ id: SessionTab; label: string; Icon: React.FC<{ size
   { id: 'schedule',  label: 'Calendario',      Icon: CalendarDays },
 ];
 
-// ── TacticalBoard ─────────────────────────────────────────────────────────────
+// ── TacticalBoard wrapper for Session Mode ────────────────────────────────────
 
-function drawBg(ctx: CanvasRenderingContext2D, w: number, h: number) {
-  ctx.fillStyle = '#080d1a';
-  ctx.fillRect(0, 0, w, h);
-  ctx.strokeStyle = 'rgba(255,255,255,0.035)';
-  ctx.lineWidth = 1;
-  const g = 48;
-  for (let x = 0; x <= w; x += g) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, h); ctx.stroke(); }
-  for (let y = 0; y <= h; y += g) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke(); }
-}
-
-function TacticalBoard() {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
-  const [tool, setTool]           = useState<DrawTool>('pen');
-  const [color, setColor]         = useState('#ffffff');
-  const [lineWidth, setLineWidth] = useState<2 | 4 | 7>(3 as 4);
-  const [isDrawing, setIsDrawing] = useState(false);
-  const [canUndo, setCanUndo]     = useState(false);
-  const historyRef  = useRef<ImageData[]>([]);
-  const startPos    = useRef<{ x: number; y: number } | null>(null);
-  const snapRef     = useRef<ImageData | null>(null);
-
-  function getPos(e: React.MouseEvent<HTMLCanvasElement>) {
-    const c = canvasRef.current!;
-    const r = c.getBoundingClientRect();
-    return {
-      x: (e.clientX - r.left) * (c.width / r.width),
-      y: (e.clientY - r.top)  * (c.height / r.height),
-    };
-  }
-
-  function initCanvas(w: number, h: number) {
-    const c = canvasRef.current!;
-    const prev = c.width > 0 && c.height > 0
-      ? (() => { const t = document.createElement('canvas'); t.width = c.width; t.height = c.height; t.getContext('2d')!.drawImage(c, 0, 0); return t; })()
-      : null;
-    c.width = w; c.height = h;
-    const ctx = c.getContext('2d')!;
-    drawBg(ctx, w, h);
-    if (prev) ctx.drawImage(prev, 0, 0, w, h);
-  }
-
-  useEffect(() => {
-    const container = containerRef.current;
-    if (!container) return;
-    const ro = new ResizeObserver(([e]) => {
-      const { width, height } = e.contentRect;
-      if (width > 0 && height > 0) initCanvas(Math.floor(width), Math.floor(height));
-    });
-    ro.observe(container);
-    return () => ro.disconnect();
-  }, []);
-
-  function saveToHistory() {
-    const c = canvasRef.current!;
-    const snap = c.getContext('2d')!.getImageData(0, 0, c.width, c.height);
-    historyRef.current = [...historyRef.current.slice(-24), snap];
-    setCanUndo(true);
-  }
-
-  function undo() {
-    if (!historyRef.current.length) return;
-    const snap = historyRef.current.at(-1)!;
-    historyRef.current = historyRef.current.slice(0, -1);
-    canvasRef.current!.getContext('2d')!.putImageData(snap, 0, 0);
-    setCanUndo(historyRef.current.length > 0);
-  }
-
-  function clearAll() {
-    saveToHistory();
-    const c = canvasRef.current!;
-    drawBg(c.getContext('2d')!, c.width, c.height);
-  }
-
-  function applyShape(ctx: CanvasRenderingContext2D, t: DrawTool, s: { x: number; y: number }, e: { x: number; y: number }) {
-    ctx.strokeStyle = color; ctx.lineWidth = lineWidth; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-    if (t === 'line') {
-      ctx.beginPath(); ctx.moveTo(s.x, s.y); ctx.lineTo(e.x, e.y); ctx.stroke();
-    } else if (t === 'arrow') {
-      const dx = e.x - s.x, dy = e.y - s.y;
-      const angle = Math.atan2(dy, dx);
-      const len = Math.sqrt(dx * dx + dy * dy);
-      const h = Math.min(18, len * 0.3);
-      ctx.beginPath(); ctx.moveTo(s.x, s.y); ctx.lineTo(e.x, e.y); ctx.stroke();
-      ctx.beginPath();
-      ctx.moveTo(e.x, e.y);
-      ctx.lineTo(e.x - h * Math.cos(angle - Math.PI / 6), e.y - h * Math.sin(angle - Math.PI / 6));
-      ctx.moveTo(e.x, e.y);
-      ctx.lineTo(e.x - h * Math.cos(angle + Math.PI / 6), e.y - h * Math.sin(angle + Math.PI / 6));
-      ctx.stroke();
-    } else if (t === 'circle') {
-      const rx = (e.x - s.x) / 2, ry = (e.y - s.y) / 2;
-      ctx.beginPath(); ctx.ellipse(s.x + rx, s.y + ry, Math.abs(rx), Math.abs(ry), 0, 0, Math.PI * 2); ctx.stroke();
-    } else if (t === 'rect') {
-      ctx.strokeRect(s.x, s.y, e.x - s.x, e.y - s.y);
-    }
-  }
-
-  function onMouseDown(e: React.MouseEvent<HTMLCanvasElement>) {
-    const pos = getPos(e);
-    saveToHistory();
-    snapRef.current = canvasRef.current!.getContext('2d')!.getImageData(0, 0, canvasRef.current!.width, canvasRef.current!.height);
-    startPos.current = pos;
-    setIsDrawing(true);
-    if (tool === 'pen' || tool === 'eraser') {
-      const ctx = canvasRef.current!.getContext('2d')!;
-      ctx.beginPath(); ctx.moveTo(pos.x, pos.y);
-    }
-  }
-
-  function onMouseMove(e: React.MouseEvent<HTMLCanvasElement>) {
-    if (!isDrawing || !startPos.current) return;
-    const pos = getPos(e);
-    const c = canvasRef.current!;
-    const ctx = c.getContext('2d')!;
-    ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-
-    if (tool === 'pen') {
-      ctx.strokeStyle = color; ctx.lineWidth = lineWidth;
-      ctx.lineTo(pos.x, pos.y); ctx.stroke();
-    } else if (tool === 'eraser') {
-      ctx.strokeStyle = '#080d1a'; ctx.lineWidth = lineWidth * 5;
-      ctx.lineTo(pos.x, pos.y); ctx.stroke();
-    } else {
-      if (snapRef.current) ctx.putImageData(snapRef.current, 0, 0);
-      applyShape(ctx, tool, startPos.current, pos);
-    }
-  }
-
-  function onMouseUp(e: React.MouseEvent<HTMLCanvasElement>) {
-    if (!isDrawing) return;
-    setIsDrawing(false);
-    if (startPos.current && !['pen', 'eraser'].includes(tool)) {
-      const ctx = canvasRef.current!.getContext('2d')!;
-      if (snapRef.current) ctx.putImageData(snapRef.current, 0, 0);
-      applyShape(ctx, tool, startPos.current, getPos(e));
-    }
-    startPos.current = null; snapRef.current = null;
-  }
-
+function TacticalBoard({ teamId }: { teamId: string }) {
   return (
-    <div style={{ flex: 1, display: 'flex', minHeight: 0, overflow: 'hidden' }}>
-      {/* Tool palette */}
-      <div style={{
-        width: 56, display: 'flex', flexDirection: 'column', gap: '0.35rem',
-        padding: '0.75rem 0.5rem', borderRight: '1px solid var(--border-color)',
-        background: 'rgba(0,0,0,0.2)', flexShrink: 0, overflowY: 'auto',
-      }}>
-        {DRAW_TOOLS.map(({ id, label, Icon }) => (
-          <button key={id} onClick={() => setTool(id)} title={label} style={{
-            background: tool === id ? 'rgba(107,170,248,0.18)' : 'transparent',
-            border: `1px solid ${tool === id ? 'var(--accent-blue)' : 'transparent'}`,
-            borderRadius: 6, cursor: 'pointer',
-            color: tool === id ? 'var(--accent-blue)' : 'var(--text-muted)',
-            padding: '0.45rem', display: 'flex', alignItems: 'center', justifyContent: 'center',
-          }}>
-            <Icon size={16} />
-          </button>
-        ))}
-
-        <div style={{ height: 1, background: 'var(--border-color)', margin: '0.2rem 0' }} />
-
-        {STROKE_WIDTHS.map((w) => (
-          <button key={w} onClick={() => setLineWidth(w as 2 | 4 | 7)} title={`Grosor ${w}`} style={{
-            background: lineWidth === w ? 'rgba(107,170,248,0.18)' : 'transparent',
-            border: `1px solid ${lineWidth === w ? 'var(--accent-blue)' : 'transparent'}`,
-            borderRadius: 6, cursor: 'pointer',
-            display: 'flex', alignItems: 'center', justifyContent: 'center', height: 32,
-          }}>
-            <div style={{ width: 22, height: w, background: lineWidth === w ? 'var(--accent-blue)' : 'var(--text-muted)', borderRadius: w }} />
-          </button>
-        ))}
-
-        <div style={{ height: 1, background: 'var(--border-color)', margin: '0.2rem 0' }} />
-
-        {DRAW_COLORS.map((c) => (
-          <button key={c} onClick={() => setColor(c)} style={{
-            background: c, borderRadius: 5, cursor: 'pointer', height: 26,
-            border: color === c ? '2px solid white' : '2px solid transparent',
-            outline: color === c ? '1px solid rgba(255,255,255,0.3)' : 'none',
-          }} />
-        ))}
-
-        <div style={{ height: 1, background: 'var(--border-color)', margin: '0.2rem 0' }} />
-
-        <button onClick={undo} disabled={!canUndo} title="Deshacer" style={{
-          background: 'transparent', border: '1px solid transparent', borderRadius: 6,
-          cursor: canUndo ? 'pointer' : 'not-allowed', opacity: canUndo ? 1 : 0.35,
-          color: 'var(--text-muted)', padding: '0.45rem',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-        }}>
-          <Undo2 size={15} />
-        </button>
-        <button onClick={clearAll} title="Limpiar todo" style={{
-          background: 'rgba(248,113,113,0.08)', border: '1px solid rgba(248,113,113,0.25)',
-          borderRadius: 6, cursor: 'pointer', color: 'var(--accent-loss)', padding: '0.45rem',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-        }}>
-          <Trash2 size={15} />
-        </button>
-      </div>
-
-      {/* Canvas */}
-      <div ref={containerRef} style={{ flex: 1, position: 'relative' }}>
-        <canvas
-          ref={canvasRef}
-          onMouseDown={onMouseDown}
-          onMouseMove={onMouseMove}
-          onMouseUp={onMouseUp}
-          onMouseLeave={onMouseUp}
-          style={{
-            display: 'block', width: '100%', height: '100%',
-            cursor: tool === 'eraser' ? 'cell' : 'crosshair',
-          }}
-        />
-      </div>
+    <div style={{ flex: 1, minHeight: 0, position: 'relative' }}>
+      <TacticalBoardCanvas
+        teamId={teamId}
+        compact
+        style={{ position: 'absolute', inset: 0 }}
+      />
     </div>
   );
 }
@@ -858,7 +639,7 @@ export default function SessionMode() {
         </div>
 
       ) : activeTab === 'tactical' ? (
-        <TacticalBoard />
+        <TacticalBoard teamId={teamId} />
 
       ) : activeTab === 'roster' ? (
         <RosterPanel teamId={teamId} />
