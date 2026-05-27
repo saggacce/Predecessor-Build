@@ -321,16 +321,27 @@ export default function TacticalBoardCanvas({ teamId, compact = false, style }: 
 
       // ── Normal mode ──────────────────────────────────────────────────────────
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLSelectElement) return;
+      if (e.ctrlKey || e.metaKey) {
+        if (e.key === 'z') { e.preventDefault(); undo(); }
+        return;
+      }
+      // Tool shortcuts
+      const toolKey: Record<string, DrawTool> = {
+        v: 'select', p: 'pen', l: 'line', a: 'arrow',
+        t: 'text',   c: 'circle', r: 'rect',
+      };
+      if (toolKey[e.key.toLowerCase()]) {
+        e.preventDefault();
+        setTool(toolKey[e.key.toLowerCase()]);
+        setPopup(null);
+        return;
+      }
       if (e.key === 'Delete' || e.key === 'Backspace') {
         const sel = selectedIdRef.current;
         if (!sel) return;
         setPopup(null);
         commitElements(elementsRef.current.filter(el => el.id !== sel));
         setSelectedId(null);
-      }
-      if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
-        e.preventDefault();
-        undo();
       }
       if (e.key === 'Escape') {
         setSelectedId(null);
