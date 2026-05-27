@@ -792,6 +792,8 @@ export interface ScrimScheduleItem {
   result: 'WIN' | 'LOSS' | 'DRAW' | null;
   analysedAt: string | null;
   reviewedAt: string | null;
+  /** pred.gg match UUID auto-detected by the scrim-results worker */
+  predggMatchId: string | null;
   createdById: string;
   createdAt: string;
   updatedAt: string;

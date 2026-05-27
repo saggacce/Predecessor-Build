@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Calendar, PlusCircle, Trash2, CheckCircle, Clock, Shield, AlertTriangle, Edit2, Check, X } from 'lucide-react';
+import { Calendar, PlusCircle, Trash2, CheckCircle, Clock, Shield, AlertTriangle, Edit2, Check, X, ExternalLink } from 'lucide-react';
 import { toast } from 'sonner';
 import { apiClient, ApiErrorResponse, type ScrimScheduleItem, type TeamProfile } from '../api/client';
 import { useAuth } from '../hooks/useAuth';
@@ -288,6 +288,18 @@ function ScrimCard({ item, canEdit, onDelete, onSetResult, onSetStatus, editingR
             <span style={{ fontSize: '0.68rem', fontWeight: 800, color: RESULT_COLOR[item.result], background: `${RESULT_COLOR[item.result]}18`, borderRadius: 3, padding: '1px 6px' }}>
               {item.result}
             </span>
+          )}
+          {item.predggMatchId && (
+            <a
+              href={`https://pred.gg/matches/${item.predggMatchId}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              title="Ver partida en pred.gg"
+              style={{ display: 'inline-flex', alignItems: 'center', gap: '0.2rem', fontSize: '0.62rem', color: 'var(--text-muted)', textDecoration: 'none', opacity: 0.7 }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <ExternalLink size={10} /> pred.gg
+            </a>
           )}
         </div>
         <div style={{ fontSize: '0.73rem', color: 'var(--text-muted)', marginTop: '0.2rem' }}>
