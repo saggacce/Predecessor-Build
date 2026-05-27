@@ -209,10 +209,10 @@ export default function TacticalBoardCanvas({ teamId, compact = false, style }: 
   // Popup for role token enrichment
   const [popup, setPopup] = useState<{ id: string; screenX: number; screenY: number } | null>(null);
 
-  // Text input overlay — visual position in state, canvas coords in ref (avoids stale closure on blur)
-  const [textInput, setTextInput] = useState<{ x: number; y: number } | null>(null);
-  const textCoordsRef = useRef<{ canvasX: number; canvasY: number } | null>(null);
-  const textInputRef  = useRef<HTMLInputElement>(null);
+  // Canvas-based text editing (no HTML input — avoids focus/blur issues)
+  const textEditRef  = useRef<{ canvasX: number; canvasY: number } | null>(null);
+  const textDraftRef = useRef<string>('');
+  const [textDraft, setTextDraft] = useState<string | null>(null); // null = not editing
 
   // History for undo
   const historyRef      = useRef<BoardElement[][]>([[]]);
@@ -286,7 +286,41 @@ export default function TacticalBoardCanvas({ teamId, compact = false, style }: 
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
-      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+      // ── Text editing mode — capture all printable keys ──────────────────────
+      if (textEditRef.current !== null) {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          commitTypedText();
+          return;
+        }
+        if (e.key === 'Escape') {
+          e.preventDefault();
+          cancelTypedText();
+          return;
+        }
+        if (e.key === 'Backspace') {
+          e.preventDefault();
+          textDraftRef.current = textDraftRef.current.slice(0, -1);
+          setTextDraft(textDraftRef.current);
+          return;
+        }
+        if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
+          e.preventDefault();
+          textDraftRef.current += e.key;
+          setTextDraft(textDraftRef.current);
+          return;
+        }
+        if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
+          e.preventDefault();
+          textDraftRef.current = textDraftRef.current.slice(0, -1);
+          setTextDraft(textDraftRef.current);
+          return;
+        }
+        return; // swallow everything else while typing
+      }
+
+      // ── Normal mode ──────────────────────────────────────────────────────────
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLSelectElement) return;
       if (e.key === 'Delete' || e.key === 'Backspace') {
         const sel = selectedIdRef.current;
         if (!sel) return;
@@ -301,12 +335,31 @@ export default function TacticalBoardCanvas({ teamId, compact = false, style }: 
       if (e.key === 'Escape') {
         setSelectedId(null);
         setPopup(null);
-        setTextInput(null);
       }
     }
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, []);
+
+  // ── Text editing helpers ─────────────────────────────────────────────────────
+
+  function commitTypedText() {
+    const pos = textEditRef.current;
+    const txt = textDraftRef.current.trim();
+    if (pos && txt) {
+      const el: TextEl = { kind: 'text', id: uid(), x: pos.canvasX, y: pos.canvasY, text: txt, color: colorRef.current, fontSize: 16 };
+      commitElements([...elementsRef.current, el]);
+    }
+    textEditRef.current  = null;
+    textDraftRef.current = '';
+    setTextDraft(null);
+  }
+
+  function cancelTypedText() {
+    textEditRef.current  = null;
+    textDraftRef.current = '';
+    setTextDraft(null);
+  }
 
   // ── History helpers ──────────────────────────────────────────────────────────
 
@@ -510,9 +563,30 @@ export default function TacticalBoardCanvas({ teamId, compact = false, style }: 
       }
       ctx.restore();
     }
+
+    // ── Active text draft ──────────────────────────────────────────────────────
+    const edit = textEditRef.current;
+    if (edit) {
+      const draft = textDraftRef.current;
+      const display = draft + '|';
+      ctx.font = 'bold 16px system-ui';
+      ctx.fillStyle = colorRef.current;
+      ctx.textBaseline = 'top';
+      ctx.fillText(display, edit.canvasX, edit.canvasY);
+      const w = ctx.measureText(display).width;
+      // Underline hint
+      ctx.strokeStyle = colorRef.current + '88';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(edit.canvasX, edit.canvasY + 20);
+      ctx.lineTo(edit.canvasX + Math.max(w, 60), edit.canvasY + 20);
+      ctx.stroke();
+    }
   }, []);
 
   useEffect(() => { redraw(elements, selectedId); }, [elements, selectedId, redraw]);
+  // Also redraw when text draft changes (to show the cursor)
+  useEffect(() => { redraw(elementsRef.current, selectedIdRef.current); }, [textDraft, redraw]);
 
   // ── Canvas coords ────────────────────────────────────────────────────────────
 
@@ -527,9 +601,10 @@ export default function TacticalBoardCanvas({ teamId, compact = false, style }: 
   function onMouseDown(e: React.MouseEvent<HTMLCanvasElement>) {
     if (e.button !== 0) return;
     setPopup(null);
-    setTextInput(null);
     const pos = getPos(e);
     const t = toolRef.current;
+    // Commit any in-progress text if switching away from text tool
+    if (textEditRef.current && t !== 'text') commitTypedText();
 
     if (t === 'select') {
       // Hit test in reverse order (top elements first)
@@ -550,11 +625,11 @@ export default function TacticalBoardCanvas({ teamId, compact = false, style }: 
     }
 
     if (t === 'text') {
-      const c = canvasRef.current!;
-      const rect = c.getBoundingClientRect();
-      textCoordsRef.current = { canvasX: pos.x, canvasY: pos.y };
-      setTextInput({ x: e.clientX - rect.left, y: e.clientY - rect.top });
-      setTimeout(() => textInputRef.current?.focus(), 50);
+      // If already editing, commit current draft and start new at clicked pos
+      if (textEditRef.current) commitTypedText();
+      textEditRef.current  = { canvasX: pos.x, canvasY: pos.y };
+      textDraftRef.current = '';
+      setTextDraft('');
       return;
     }
 
@@ -710,18 +785,6 @@ export default function TacticalBoardCanvas({ teamId, compact = false, style }: 
     commitElements(next);
   }
 
-  // ── Text commit ──────────────────────────────────────────────────────────────
-
-  function commitText(text: string) {
-    const coords = textCoordsRef.current;
-    if (text.trim() && coords) {
-      const el: TextEl = { kind: 'text', id: uid(), x: coords.canvasX, y: coords.canvasY, text: text.trim(), color: colorRef.current, fontSize: 16 };
-      commitElements([...elementsRef.current, el]);
-    }
-    textCoordsRef.current = null;
-    setTextInput(null);
-  }
-
   // ── Actions ──────────────────────────────────────────────────────────────────
 
   function clearAll() {
@@ -756,7 +819,7 @@ export default function TacticalBoardCanvas({ teamId, compact = false, style }: 
     return (
       <button
         title={label}
-        onClick={() => { setTool(t); setPopup(null); setTextInput(null); }}
+        onClick={() => { setTool(t); setPopup(null); if (textEditRef.current) commitTypedText(); }}
         style={{
           width: TOOL_BTN_SIZE, height: TOOL_BTN_SIZE,
           border: `1px solid ${active ? '#6baaf8' : 'rgba(255,255,255,0.1)'}`,
@@ -865,24 +928,16 @@ export default function TacticalBoardCanvas({ teamId, compact = false, style }: 
           onDoubleClick={onDblClick}
         />
 
-        {/* Text input overlay */}
-        {textInput && (
-          <input
-            ref={textInputRef}
-            autoFocus
-            placeholder="Escribe y pulsa Enter…"
-            onKeyDown={e => {
-              if (e.key === 'Enter') commitText(e.currentTarget.value);
-              if (e.key === 'Escape') setTextInput(null);
-            }}
-            onBlur={e => commitText(e.currentTarget.value)}
-            style={{
-              position: 'absolute', left: textInput.x, top: textInput.y,
-              background: 'rgba(0,0,0,0.8)', border: `1px solid ${color}`,
-              color, fontFamily: 'var(--font-mono)', fontSize: 16, fontWeight: 700,
-              padding: '2px 8px', borderRadius: 4, outline: 'none', minWidth: 120,
-            }}
-          />
+        {/* Text mode hint */}
+        {textDraft !== null && (
+          <div style={{
+            position: 'absolute', bottom: 8, left: '50%', transform: 'translateX(-50%)',
+            background: 'rgba(0,0,0,0.75)', border: '1px solid rgba(255,255,255,0.15)',
+            borderRadius: 6, padding: '3px 10px', fontSize: '0.72rem', color: 'rgba(255,255,255,0.6)',
+            pointerEvents: 'none', whiteSpace: 'nowrap',
+          }}>
+            Escribe · <b style={{ color: '#fff' }}>Enter</b> para confirmar · <b style={{ color: '#fff' }}>Esc</b> para cancelar
+          </div>
         )}
 
         {/* Role token popup */}
