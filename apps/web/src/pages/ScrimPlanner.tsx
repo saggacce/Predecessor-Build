@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Calendar, PlusCircle, Trash2, CheckCircle, Clock, Shield, AlertTriangle, Edit2, Check, X } from 'lucide-react';
+import { Calendar, PlusCircle, Trash2, CheckCircle, Clock, Shield, AlertTriangle, Edit2, Check, X, ExternalLink } from 'lucide-react';
 import { toast } from 'sonner';
 import { apiClient, ApiErrorResponse, type ScrimScheduleItem, type TeamProfile } from '../api/client';
 import { useAuth } from '../hooks/useAuth';
@@ -96,6 +96,14 @@ export default function ScrimPlanner() {
       const r = await apiClient.schedule.update(id, { result });
       setItems((prev) => prev.map((i) => i.id === id ? r.item : i));
       setEditingResult(null);
+    } catch { toast.error('Error al actualizar'); }
+  }
+
+  async function handleSetStatus(id: string, status: 'PENDIENTE' | 'CONFIRMADO' | 'CANCELADO') {
+    try {
+      const r = await apiClient.schedule.update(id, { status });
+      setItems((prev) => prev.map((i) => i.id === id ? r.item : i));
+      toast.success(status === 'CANCELADO' ? 'Partido cancelado' : status === 'CONFIRMADO' ? 'Confirmado' : 'Marcado como pendiente');
     } catch { toast.error('Error al actualizar'); }
   }
 
@@ -203,7 +211,7 @@ export default function ScrimPlanner() {
           </div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem' }}>
-            {upcoming.map((item) => <ScrimCard key={item.id} item={item} canEdit={canEdit} onDelete={handleDelete} onSetResult={handleSetResult} editingResult={editingResult} setEditingResult={setEditingResult} />)}
+            {upcoming.map((item) => <ScrimCard key={item.id} item={item} canEdit={canEdit} onDelete={handleDelete} onSetResult={handleSetResult} onSetStatus={handleSetStatus} editingResult={editingResult} setEditingResult={setEditingResult} />)}
           </div>
         )}
       </section>
@@ -216,7 +224,7 @@ export default function ScrimPlanner() {
             <span style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Historial ({past.length})</span>
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem' }}>
-            {past.slice(0, 10).map((item) => <ScrimCard key={item.id} item={item} canEdit={canEdit} onDelete={handleDelete} onSetResult={handleSetResult} editingResult={editingResult} setEditingResult={setEditingResult} isPast />)}
+            {past.slice(0, 10).map((item) => <ScrimCard key={item.id} item={item} canEdit={canEdit} onDelete={handleDelete} onSetResult={handleSetResult} onSetStatus={handleSetStatus} editingResult={editingResult} setEditingResult={setEditingResult} isPast />)}
           </div>
         </section>
       )}
@@ -225,11 +233,23 @@ export default function ScrimPlanner() {
 }
 
 // ── Scrim card ────────────────────────────────────────────────────────────────
-function ScrimCard({ item, canEdit, onDelete, onSetResult, editingResult, setEditingResult, isPast = false }: {
+const STATUS_COLOR: Record<string, string> = {
+  PENDIENTE:  'var(--text-muted)',
+  CONFIRMADO: 'var(--accent-win)',
+  CANCELADO:  'var(--accent-loss)',
+};
+const STATUS_LABEL: Record<string, string> = {
+  PENDIENTE:  'Pendiente',
+  CONFIRMADO: 'Confirmado',
+  CANCELADO:  'Cancelado',
+};
+
+function ScrimCard({ item, canEdit, onDelete, onSetResult, onSetStatus, editingResult, setEditingResult, isPast = false }: {
   item: ScrimScheduleItem;
   canEdit: boolean;
   onDelete: (id: string) => void;
   onSetResult: (id: string, result: 'WIN' | 'LOSS' | 'DRAW' | null) => void;
+  onSetStatus: (id: string, status: 'PENDIENTE' | 'CONFIRMADO' | 'CANCELADO') => void;
   editingResult: string | null;
   setEditingResult: (id: string | null) => void;
   isPast?: boolean;
@@ -238,9 +258,11 @@ function ScrimCard({ item, canEdit, onDelete, onSetResult, editingResult, setEdi
   const date = new Date(item.scheduledAt);
   const rival = item.rivalTeam?.name ?? item.rivalName ?? 'Rival por confirmar';
   const typeColor = TYPE_COLOR[item.type] ?? 'var(--text-muted)';
+  const status = item.status ?? 'PENDIENTE';
+  const isCancelled = status === 'CANCELADO';
 
   return (
-    <div className="glass-card" style={{ padding: '1rem 1.25rem', display: 'flex', alignItems: 'center', gap: '1rem', opacity: isPast && !item.result ? 0.65 : 1 }}>
+    <div className="glass-card" style={{ padding: '1rem 1.25rem', display: 'flex', alignItems: 'center', gap: '1rem', opacity: isCancelled ? 0.45 : isPast && !item.result ? 0.65 : 1 }}>
       {/* Date block */}
       <div style={{ textAlign: 'center', minWidth: 42, flexShrink: 0 }}>
         <div style={{ fontFamily: 'var(--font-mono)', fontSize: '1.4rem', fontWeight: 800, color: 'var(--text-primary)', lineHeight: 1 }}>{date.getDate()}</div>
@@ -259,10 +281,25 @@ function ScrimCard({ item, canEdit, onDelete, onSetResult, editingResult, setEdi
           <span style={{ fontSize: '0.62rem', fontWeight: 700, color: typeColor, border: `1px solid ${typeColor}44`, borderRadius: 3, padding: '1px 5px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
             {TYPE_LABEL[item.type]}
           </span>
+          <span style={{ fontSize: '0.62rem', fontWeight: 700, color: STATUS_COLOR[status], border: `1px solid ${STATUS_COLOR[status]}44`, borderRadius: 3, padding: '1px 5px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+            {STATUS_LABEL[status]}
+          </span>
           {item.result && (
             <span style={{ fontSize: '0.68rem', fontWeight: 800, color: RESULT_COLOR[item.result], background: `${RESULT_COLOR[item.result]}18`, borderRadius: 3, padding: '1px 6px' }}>
               {item.result}
             </span>
+          )}
+          {item.predggMatchId && (
+            <a
+              href={`https://pred.gg/matches/${item.predggMatchId}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              title="Ver partida en pred.gg"
+              style={{ display: 'inline-flex', alignItems: 'center', gap: '0.2rem', fontSize: '0.62rem', color: 'var(--text-muted)', textDecoration: 'none', opacity: 0.7 }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <ExternalLink size={10} /> pred.gg
+            </a>
           )}
         </div>
         <div style={{ fontSize: '0.73rem', color: 'var(--text-muted)', marginTop: '0.2rem' }}>
@@ -277,6 +314,25 @@ function ScrimCard({ item, canEdit, onDelete, onSetResult, editingResult, setEdi
       {/* Actions */}
       {canEdit && (
         <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center', flexShrink: 0 }}>
+          {/* Confirm / Cancel status — only for upcoming */}
+          {!isPast && !isCancelled && status !== 'CONFIRMADO' && (
+            <button onClick={() => onSetStatus(item.id, 'CONFIRMADO')} title="Confirmar partido"
+              style={{ background: 'none', border: '1px solid var(--accent-win)', borderRadius: 4, cursor: 'pointer', color: 'var(--accent-win)', padding: '4px 7px', fontSize: '0.7rem', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+              <Check size={11} /> Confirmar
+            </button>
+          )}
+          {!isPast && !isCancelled && (
+            <button onClick={() => onSetStatus(item.id, 'CANCELADO')} title="Cancelar partido"
+              style={{ background: 'none', border: '1px solid var(--accent-loss)44', borderRadius: 4, cursor: 'pointer', color: 'var(--text-muted)', padding: '4px 7px', fontSize: '0.7rem', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+              <X size={11} /> Cancelar
+            </button>
+          )}
+          {isCancelled && !isPast && (
+            <button onClick={() => onSetStatus(item.id, 'PENDIENTE')} title="Reactivar partido"
+              style={{ background: 'none', border: '1px solid var(--border-color)', borderRadius: 4, cursor: 'pointer', color: 'var(--text-muted)', padding: '4px 7px', fontSize: '0.7rem' }}>
+              Reactivar
+            </button>
+          )}
           {/* Set result (for past or unresulted) */}
           {(isPast || !item.result) && editingResult === item.id ? (
             <div style={{ display: 'flex', gap: '0.3rem' }}>
