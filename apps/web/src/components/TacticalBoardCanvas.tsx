@@ -188,13 +188,16 @@ function uid() { return Math.random().toString(36).slice(2, 9); }
 interface Props {
   teamId?: string;
   compact?: boolean; // smaller toolbar for Session Mode
+  readOnly?: boolean; // hides toolbar, disables canvas interactions — for Playbook preview
+  initialElements?: BoardElement[]; // elements to load on mount (from Playbook snapshot)
+  onElementsChange?: (els: BoardElement[]) => void; // called whenever elements change
   className?: string;
   style?: React.CSSProperties;
 }
 
 // ── Component ──────────────────────────────────────────────────────────────────
 
-export default function TacticalBoardCanvas({ teamId, compact = false, style }: Props) {
+export default function TacticalBoardCanvas({ teamId, compact = false, readOnly = false, initialElements, onElementsChange, style }: Props) {
   const canvasRef    = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -237,6 +240,23 @@ export default function TacticalBoardCanvas({ teamId, compact = false, style }: 
   useEffect(() => { colorRef.current = color; }, [color]);
   const strokeWRef = useRef(strokeW);
   useEffect(() => { strokeWRef.current = strokeW; }, [strokeW]);
+
+  // ── Load initialElements once on mount ──────────────────────────────────────
+
+  useEffect(() => {
+    if (initialElements && initialElements.length > 0) {
+      historyRef.current = [[], initialElements];
+      historyIndexRef.current = 1;
+      elementsRef.current = initialElements;
+      setElements(initialElements);
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Notify parent when elements change ──────────────────────────────────────
+
+  const onElementsChangeRef = useRef(onElementsChange);
+  useEffect(() => { onElementsChangeRef.current = onElementsChange; }, [onElementsChange]);
+  useEffect(() => { onElementsChangeRef.current?.(elements); }, [elements]);
 
   // ── Load assets ─────────────────────────────────────────────────────────────
 
@@ -872,8 +892,8 @@ export default function TacticalBoardCanvas({ teamId, compact = false, style }: 
   return (
     <div style={{ display: 'flex', width: '100%', height: '100%', minHeight: 0, background: '#0a0e16', borderRadius: 8, overflow: 'hidden', position: 'relative', ...style }}>
 
-      {/* ── Left toolbar ── */}
-      <div style={{
+      {/* ── Left toolbar — hidden in readOnly mode ── */}
+      {!readOnly && <div style={{
         width: compact ? 44 : 52, flexShrink: 0, background: 'rgba(0,0,0,0.55)', borderRight: '1px solid rgba(255,255,255,0.07)',
         display: 'flex', flexDirection: 'column', gap: 4, padding: '6px 4px', overflowY: 'auto', overflowX: 'hidden',
       }}>
@@ -925,18 +945,18 @@ export default function TacticalBoardCanvas({ teamId, compact = false, style }: 
             <div style={{ width: Math.min(w * 3, TOOL_BTN_SIZE - 12), height: w, background: '#fff', borderRadius: w, opacity: strokeW===w?1:0.4 }} />
           </button>
         ))}
-      </div>
+      </div>}
 
       {/* ── Canvas area ── */}
       <div ref={containerRef} style={{ flex: 1, position: 'relative', minWidth: 0, minHeight: 0, overflow: 'hidden' }}>
         <canvas
           ref={canvasRef}
-          style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', cursor: cursorStyle }}
-          onMouseDown={onMouseDown}
-          onMouseMove={onMouseMove}
-          onMouseUp={onMouseUp}
-          onMouseLeave={onMouseUp}
-          onDoubleClick={onDblClick}
+          style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', cursor: readOnly ? 'default' : cursorStyle, pointerEvents: readOnly ? 'none' : undefined }}
+          onMouseDown={readOnly ? undefined : onMouseDown}
+          onMouseMove={readOnly ? undefined : onMouseMove}
+          onMouseUp={readOnly ? undefined : onMouseUp}
+          onMouseLeave={readOnly ? undefined : onMouseUp}
+          onDoubleClick={readOnly ? undefined : onDblClick}
         />
 
         {/* Text mode hint */}
@@ -1024,8 +1044,8 @@ export default function TacticalBoardCanvas({ teamId, compact = false, style }: 
         )}
       </div>
 
-      {/* ── Right panel: colors + actions ── */}
-      <div style={{
+      {/* ── Right panel: colors + actions — hidden in readOnly mode ── */}
+      {!readOnly && <div style={{
         width: compact ? 44 : 52, flexShrink: 0, background: 'rgba(0,0,0,0.55)', borderLeft: '1px solid rgba(255,255,255,0.07)',
         display: 'flex', flexDirection: 'column', gap: 6, padding: '6px 4px', alignItems: 'center',
       }}>
@@ -1063,7 +1083,7 @@ export default function TacticalBoardCanvas({ teamId, compact = false, style }: 
         <button onClick={exportPng} title="Exportar PNG" style={{ width: TOOL_BTN_SIZE, height: TOOL_BTN_SIZE, border: '1px solid rgba(255,255,255,0.1)', borderRadius:6, background:'rgba(255,255,255,0.04)', color:'var(--text-muted)', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center' }}>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
         </button>
-      </div>
+      </div>}
     </div>
   );
 }
