@@ -686,7 +686,7 @@ export default function TacticalBoardCanvas({ teamId, compact = false, style }: 
     );
   }
 
-  function ObjBtn({ key: k, label }: { key: string; label: string }) {
+  function ObjBtn({ objKey: k, label }: { objKey: string; label: string }) {
     const t = `obj_${k}` as DrawTool;
     const def = OBJECTIVES[k];
     const active = tool === t;
@@ -739,7 +739,7 @@ export default function TacticalBoardCanvas({ teamId, compact = false, style }: 
 
         {SEP}
         {/* Objective tokens */}
-        {Object.entries(OBJECTIVES).map(([k]) => <ObjBtn key={k} key2={k} label={OBJECTIVES[k].label} />)}
+        {Object.entries(OBJECTIVES).map(([k]) => <ObjBtn key={k} objKey={k} label={OBJECTIVES[k].label} />)}
 
         {SEP}
         {/* Ward tokens */}
