@@ -25,7 +25,7 @@ import { apiClient } from '../api/client';
 export type DrawTool =
   | 'select' | 'pen' | 'line' | 'arrow' | 'text'
   | 'role_carry' | 'role_jungle' | 'role_midlane' | 'role_offlane' | 'role_support'
-  | 'obj_fangtooth' | 'obj_orb_prime' | 'obj_genesis_core' | 'obj_seedling' | 'obj_inhibitor' | 'obj_nexus'
+  | 'obj_seedling' | 'obj_inhibitor' | 'obj_nexus'
   | 'ward_vision' | 'ward_control';
 
 interface PenEl    { kind: 'pen';  id: string; points: number[]; color: string; width: number }
@@ -53,12 +53,9 @@ const ROLE_LABELS: Record<string, string> = {
 };
 
 const OBJECTIVES: Record<string, { label: string; abbr: string; bg: string }> = {
-  fangtooth:    { label: 'Fangtooth',    abbr: 'FT', bg: '#7c3aed' },
-  orb_prime:    { label: 'Orb Prime',    abbr: 'OP', bg: '#dc2626' },
-  genesis_core: { label: 'Shaper',        abbr: 'SH', bg: '#0891b2' },
-  seedling:     { label: 'Seedling',     abbr: '🌿', bg: '#16a34a' },
-  inhibitor:    { label: 'Inhibitor',    abbr: 'IN', bg: '#d97706' },
-  nexus:        { label: 'Nexus',        abbr: 'NX', bg: '#be185d' },
+  seedling:  { label: 'Seedling',  abbr: '🌿', bg: '#16a34a' },
+  inhibitor: { label: 'Inhibitor', abbr: 'IN', bg: '#d97706' },
+  nexus:     { label: 'Nexus',     abbr: 'NX', bg: '#be185d' },
 };
 
 const PALETTE = ['#38d8c8', '#ef4444', '#f59e0b', '#6baaf8', '#ffffff', '#10b981', '#a78bfa', '#f472b6'];
