@@ -758,9 +758,11 @@ model ScrimSchedule {
   /// Filled after the match: "WIN" | "LOSS" | "DRAW"
   result       String?
   /// Set when analyst marks analysis complete (post-match task)
-  analysedAt   DateTime?
+  analysedAt    DateTime?
   /// Set when coach marks post-match review complete
-  reviewedAt   DateTime?
+  reviewedAt    DateTime?
+  /// pred.gg match UUID detected automatically by the scrim-results worker
+  predggMatchId String?
   createdById  String
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt

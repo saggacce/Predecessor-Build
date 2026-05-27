@@ -2,10 +2,18 @@ import { PrismaClient } from '@prisma/client';
 import { syncVersions } from './sync/versions.js';
 import { syncPlayer, syncStalePlayers } from './sync/players.js';
 import { syncMatch, syncPlayerMatches } from './sync/matches.js';
+import { detectScrimResults } from './sync/scrim-results.js';
 
 const db = new PrismaClient();
 
-type Command = 'sync-all' | 'sync-versions' | 'sync-player' | 'sync-stale' | 'sync-match' | 'sync-player-matches';
+type Command =
+  | 'sync-all'
+  | 'sync-versions'
+  | 'sync-player'
+  | 'sync-stale'
+  | 'sync-match'
+  | 'sync-player-matches'
+  | 'detect-results';
 
 async function main() {
   const [command, ...args] = process.argv.slice(2) as [Command, ...string[]];
@@ -19,6 +27,7 @@ Usage:
   npm run sync -- sync-stale
   npm run sync -- sync-match <matchUuid>
   npm run sync -- sync-player-matches <predggPlayerId> [limit]
+  npm run sync -- detect-results
 `);
     process.exit(0);
   }
@@ -80,6 +89,12 @@ Usage:
         const limit = args[1] ? parseInt(args[1], 10) : 20;
         const count = await syncPlayerMatches(db, playerId, limit);
         console.log(`  ✓ player matches synced: ${count}`);
+        break;
+      }
+
+      case 'detect-results': {
+        const count = await detectScrimResults(db);
+        console.log(`  ✓ scrim results detected: ${count}`);
         break;
       }
 
