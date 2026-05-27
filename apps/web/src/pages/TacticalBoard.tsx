@@ -49,11 +49,11 @@ export default function TacticalBoard() {
         )}
       </div>
 
-      {/* Canvas — fills remaining space */}
-      <div style={{ flex: 1, minHeight: 0, padding: '0.75rem' }}>
+      {/* Canvas — fills remaining space using absolute positioning to avoid ResizeObserver loop */}
+      <div style={{ flex: 1, minHeight: 0, position: 'relative', padding: '0.75rem' }}>
         <TacticalBoardCanvas
           teamId={teamId || undefined}
-          style={{ height: '100%', borderRadius: 8 }}
+          style={{ position: 'absolute', inset: '0.75rem', borderRadius: 8 }}
         />
       </div>
     </div>

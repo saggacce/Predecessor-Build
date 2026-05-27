@@ -765,10 +765,10 @@ export default function TacticalBoardCanvas({ teamId, compact = false, style }: 
       </div>
 
       {/* ── Canvas area ── */}
-      <div ref={containerRef} style={{ flex: 1, position: 'relative', minWidth: 0, minHeight: 0 }}>
+      <div ref={containerRef} style={{ flex: 1, position: 'relative', minWidth: 0, minHeight: 0, overflow: 'hidden' }}>
         <canvas
           ref={canvasRef}
-          style={{ display: 'block', width: '100%', height: '100%', cursor: cursorStyle }}
+          style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', cursor: cursorStyle }}
           onMouseDown={onMouseDown}
           onMouseMove={onMouseMove}
           onMouseUp={onMouseUp}

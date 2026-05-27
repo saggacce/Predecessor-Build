@@ -60,11 +60,13 @@ const SESSION_TABS: Array<{ id: SessionTab; label: string; Icon: React.FC<{ size
 
 function TacticalBoard({ teamId }: { teamId: string }) {
   return (
-    <TacticalBoardCanvas
-      teamId={teamId}
-      compact
-      style={{ flex: 1, minHeight: 0 }}
-    />
+    <div style={{ flex: 1, minHeight: 0, position: 'relative' }}>
+      <TacticalBoardCanvas
+        teamId={teamId}
+        compact
+        style={{ position: 'absolute', inset: 0 }}
+      />
+    </div>
   );
 }
 
