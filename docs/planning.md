@@ -292,7 +292,7 @@ Secciones identificadas con alto valor para sesiones de equipo:
 - [x] **Scrim Planner** — `ScrimPlanner.tsx` + backend `ScrimSchedule` + migraciones. CRUD completo: crear scrim, vista lista, filtros por tipo (SCRIM/OFICIAL/ENTRENAMIENTO/TORNEO), estado (PENDIENTE/CONFIRMADO/CANCELADO), notas y resultado. (PR #195)
 - [x] **Post-match tasks** — 3h tras el inicio, ANALISTA ve «Análisis pendientes» y COACH ve «Revisiones pendientes» en Dashboard. Botón ✓ Hecho por tarea. (PR #210 / #211)
 - [x] **Auto-detección de resultado** — worker `detect-results` cruza el roster del equipo con historial de pred.gg. Si ≥3 jugadores comparten un match UUID en ventana [scheduledAt-30min, +3h] → WIN/LOSS automático + enlace a pred.gg en ScrimPlanner. (PR #210 / #211)
-- [ ] **Cron detect-results en producción** — configurar `30 * * * * node .../index.js detect-results` en Hetzner (ver memoria)
+- [x] **Cron detect-results en producción** — `30 * * * *` en Hetzner, log en `/var/log/riftline-detect-results.log`
 - [ ] **Playbook** — biblioteca de estrategias, setups y reglas tácticas del equipo
 - [ ] **Review Sessions** — sesiones organizadas con agenda, boards y action items
 
