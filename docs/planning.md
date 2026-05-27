@@ -193,22 +193,29 @@ Tablero de tareas generales y subtareas.
 - [x] Streaming SSE al frontend → "Focus of the Day" en Dashboard
 - [x] AI Summary: LLM resume insights ya calculados, no inventa causalidad
 - [x] Coste estimado: <$0.01 por análisis con claude-sonnet-4-6
+- [x] **API key configurable desde la web** — `PlatformConfig.llm_api_key` (masked con `__SET__`); fallback a `OPENROUTER_API_KEY` env var; campo password en ConfigPage con badge CONFIGURADA/NO CONFIGURADA (PR #202)
 - [x] **i18n insights (Tarea 9B)** — `insight-strings.ts` como única fuente de verdad para EN/ES; `analyst-service.ts` acepta `lang` param; frontend pasa `i18n.language`; ver `docs/reglas_insights_automaticos.md` para el workflow de añadir nuevos insights
 - [x] **i18n frontend completo** — todos los ficheros de traducción EN/ES migrados; 6 páginas pendientes completadas (ApiStatusPage, AuditLogsPage, ConfigPage, FeedbackPage, PermissionsPage, TeamAnalysis)
 - [x] **Invitaciones sin equipo** — `Invitation.teamId` nullable; PLATFORM_ADMIN puede crear invitaciones JUGADOR sin teamId; registro crea `globalRole: 'PLAYER'` cuando no hay teamId
 - [x] **Dashboard manager sin equipo** — `ManagerNoTeamPrompt` cuando `isManagerWithNoTeam`; link a `/analysis/teams`
-- [x] **Migraciones SQL** — ficheros en `workers/data-sync/prisma/migrations/` para `rosterStatus`, `User.language` e `Invitation.teamId` nullable; listas para `prisma migrate deploy` en producción
+- [x] **Migraciones SQL** — ficheros en `workers/data-sync/prisma/migrations/` para `rosterStatus`, `User.language`, `Invitation.teamId` nullable y `PlatformConfig llm_api_key`; listas para `prisma migrate deploy` en producción
 
 ---
 
-## Tarea 14 — Team Tools: Tactical Board
+## [x] Tarea 14 — Team Tools: Tactical Board (PR #207 / PR #208)
 Pizarra interactiva sobre el mapa de Predecessor.
 
-- [ ] Modelos `TacticalBoard` + `BoardObject` en schema.prisma
-- [ ] Crear tablero vacío sobre mapa, añadir markers/texto/flechas/zonas
-- [ ] Guardar/cargar tablero, asociar a match/equipo/rival
-- [ ] Exportar como imagen
-- [ ] Librería recomendada: Konva.js
+- [x] Canvas HTML5 interactivo sobre mapa real de Predecessor (1116×1200px con overlay)
+- [x] Herramientas: seleccionar · lápiz · línea · flecha · texto · elipse · rectángulo
+- [x] Tokens de rol (carry/jungle/mid/offlane/support) — icono sin fondo, anillo de equipo
+- [x] Toggle equipo: **Propio** (azul) / **Rival** (rojo) / Neutro — color del anillo
+- [x] Doble clic en token → popup asignar jugador del roster + héroe
+- [x] Wards de visión (👁) y control (🔮)
+- [x] Shortcuts teclado: V · P · L · A · T · C · R · Delete · Ctrl+Z · Esc
+- [x] Undo/redo (40 pasos), clear all, export PNG
+- [x] Ruta propia `/tools/board` + integración en Session Mode (compact mode)
+- [x] ResizeObserver fix: canvas `position:absolute; inset:0` sin layout-affecting height
+- [x] Sin Konva.js — incompatible con React 19 (`ReactDOM.findDOMNode` deprecated)
 
 ---
 
@@ -231,12 +238,30 @@ Para jugadores individuales (PLAYER standalone).
 
 ---
 
-## Tarea 24 — Coach Session Mode
+## [x] Tarea 24 — Coach Session Mode (PR #197 / PR #208)
 Vista limpia para proyectar en Discord/stream interno.
 
-- [ ] Battle Plan + 3 insights clave + objetivos de sesión
-- [ ] Sin distracciones de navegación
-- [ ] Acceso rápido desde header para MANAGER/COACH
+- [x] Vista general: próximo partido, alertas críticas, Focus of the Day (SSE), objetivos del equipo
+- [x] Sin distracciones de navegación — fullscreen nativo
+- [x] Acceso rápido desde header para MANAGER/COACH
+- [x] Tablero táctico integrado (TacticalBoardCanvas compact) — herramientas completas de dibujo
+- [x] Roster: roster activo del equipo ordenado por rol con rating
+- [x] Calendario: todos los partidos programados con estado pasado/futuro
+- [x] Nav de tabs colapsable (botón ☰) para proyección limpia
+
+### Secciones futuras para Session Mode (issue #201)
+
+Secciones identificadas con alto valor para sesiones de equipo:
+
+| Sección | Descripción | Prioridad |
+|---------|-------------|-----------|
+| **Draft Board** | Picks/bans interactivo — arrastrar heroes, marcar bans, simular drafts contra un rival | Alta |
+| **Battle Plan** | Notas tácticas estructuradas para el próximo partido: win conditions, ban targets, estrategias por fase | Alta |
+| **Heatmap del mapa** | Visualización de eventos (kills, objectives) sobre el mapa de Predecessor para análisis en sesión | Media |
+| **Comparativa de stats en vivo** | Tabla lado a lado: métricas propias vs rival del partido anterior para el briefing pre-partido | Media |
+| **Timer de objetivos** | Temporizadores manuales para Shaper, Seedlings, estructuras — para practicar rotaciones | Media |
+| **Pizarra de notas compartida** | Texto libre sincronizado en tiempo real (WebSockets) — visible en múltiples pantallas del equipo | Baja |
+| **VOD Queue** | Playlist de clips seleccionados para revisar en sesión — reproductor integrado sin salir del modo | Baja |
 
 ---
 
