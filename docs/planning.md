@@ -261,7 +261,62 @@ Secciones identificadas con alto valor para sesiones de equipo:
 | **Comparativa de stats en vivo** | Tabla lado a lado: métricas propias vs rival del partido anterior para el briefing pre-partido | Media |
 | **Timer de objetivos** | Temporizadores manuales para Shaper, Seedlings, estructuras — para practicar rotaciones | Media |
 | **Pizarra de notas compartida** | Texto libre sincronizado en tiempo real (WebSockets) — visible en múltiples pantallas del equipo | Baja |
+| ~~Colaboración multiusuario en tiempo real~~ | Promovido a Tarea 20 — ver issue #214 | — |
 | **VOD Queue** | Playlist de clips seleccionados para revisar en sesión — reproductor integrado sin salir del modo | Baja |
+
+---
+
+## [ ] Tarea 20 — Tablero Táctico en Vivo (Live Session colaborativa)
+*Prerequisito: PR #213 (Playbook) mergeado. Issue: #214.*
+
+El coach inicia una sesión táctica en vivo desde Session Mode. Todos los miembros del equipo reciben una notificación en la app y pueden unirse al tablero en modo espectador (read-only, tiempo real). El coach puede dar control de edición a jugadores específicos. Reemplaza el screen sharing de Discord para el dibujo táctico.
+
+### Backend
+- [ ] Instalar `socket.io` en `apps/api`
+- [ ] `apps/api/src/socket/board-socket.ts` — rooms por equipo, broadcast de elementos, gestión de presencia
+- [ ] `apps/api/src/socket/ws-auth.ts` — middleware de autenticación sobre WebSocket (cookie de sesión)
+- [ ] Attach `io` al HTTP server en `apps/api/src/index.ts`
+- [ ] Prisma: modelo `BoardSessionGrant` (teamId, grantedByUserId, grantedToUserId, revokedAt)
+- [ ] Endpoints REST: `POST /session-grants`, `DELETE /session-grants/:id`
+- [ ] Estado del board en memoria: `Map<teamId, BoardElement[]>` — late joiners reciben `board:sync`
+
+### Eventos WebSocket
+
+| Cliente → Servidor | Descripción |
+|-------------------|-------------|
+| `board:join` | Unirse al room del equipo |
+| `board:elements` | Emitir estado completo del canvas |
+| `session:start` | Coach inicia sesión (notifica a todos los miembros) |
+| `session:end` | Coach termina la sesión |
+| `grant:give` | Coach da control de edición a un userId |
+| `grant:revoke` | Coach revoca el control |
+
+| Servidor → Cliente | Descripción |
+|-------------------|-------------|
+| `board:sync` | Estado actual al unirse (late joiners) |
+| `board:elements` | Broadcast de cambios del canvas |
+| `session:started` | Notificación global a miembros del equipo |
+| `session:ended` | Sesión terminada |
+| `grant:created` | Notificación al jugador que recibe control |
+| `grant:revoked` | Notificación al jugador que pierde control |
+| `presence:update` | Lista de usuarios conectados en el room |
+
+### Frontend
+- [ ] Instalar `socket.io-client` en `apps/web`
+- [ ] `apps/web/src/contexts/SocketContext.tsx` — socket global que persiste entre páginas
+- [ ] `apps/web/src/hooks/useSocket.ts` — hook para acceder al socket
+- [ ] `App.tsx` — wrap con `SocketProvider` + listeners globales `session:started` / `grant:created` → toast con CTA
+- [ ] `TacticalBoardCanvas.tsx` — prop `sessionTeamId` activa modo colaborativo: emite `board:elements` en cada `commitElements`, aplica updates remotos (sin echo propio)
+- [ ] `TacticalBoard.tsx` — banner "En vivo", conecta al room si hay sesión activa o grant
+- [ ] `SessionMode.tsx` — botón Iniciar/Terminar sesión, panel de presencia, botón Dar/Revocar control por jugador del roster
+
+### UX — roles en sesión
+
+| Rol | Experiencia |
+|-----|-------------|
+| Coach (host) | Dibuja libremente, ve presencia, gestiona control |
+| Player (espectador) | Canvas read-only actualizado en tiempo real, banner "En vivo" |
+| Player (con control) | Toolbar visible, puede dibujar, coach ve sus cambios |
 
 ---
 
@@ -310,7 +365,7 @@ Secciones identificadas con alto valor para sesiones de equipo:
 | POV automático de replay | No hay soporte oficial. Usar VOD Index con links externos. |
 | Pathing continuo de jugadores | No existe tracking de posición. Solo eventos puntuales. |
 | IA generativa avanzada | Reglas primero. LLM solo para resumir evidencias trazables. |
-| Colaboración multiusuario en tiempo real | Puede venir después. |
+| ~~Colaboración multiusuario en tiempo real~~ | Promovido a Tarea 20 — ver issue #214 |
 | Discord OAuth | Fase 2 de auth — después de validar login interno en producción. |
 
 ---
