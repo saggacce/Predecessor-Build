@@ -36,6 +36,7 @@ import { PermissionsProvider } from './contexts/PermissionsContext';
 import LandingPage from './pages/LandingPage';
 import ScrimPlanner from './pages/ScrimPlanner';
 import SessionMode from './pages/SessionMode';
+import TacticalBoard from './pages/TacticalBoard';
 import { useAuth } from './hooks/useAuth';
 import { ViewAsProvider, useViewAs, type ViewAsRole } from './hooks/useViewAs';
 import { apiClient } from './api/client';
@@ -592,7 +593,7 @@ function AppContent() {
             {/* Team Tools */}
             <Route path="/tools/review" element={<ReviewQueue />} />
             <Route path="/tools/goals" element={<Navigate to="/tools/review" replace />} />
-            <Route path="/tools/board" element={<ComingSoon section="Tactical Board" description="Free-form tactical planning board over the Predecessor map." issue={53} />} />
+            <Route path="/tools/board" element={<TacticalBoard />} />
             <Route path="/tools/vod" element={<VodIndex />} />
             <Route path="/tools/scrims" element={<ScrimPlanner />} />
 
