@@ -366,6 +366,8 @@ export default function Playbook() {
   const { user } = useAuth();
   const [entries, setEntries] = useState<PlaybookEntry[]>([]);
   const [loading, setLoading] = useState(true);
+  const [teamId, setTeamId] = useState('');
+  const [ownTeams, setOwnTeams] = useState<{ id: string; name: string }[]>([]);
   const [showCreate, setShowCreate] = useState(false);
   const [editingEntry, setEditingEntry] = useState<PlaybookEntry | null>(null);
 
@@ -375,16 +377,27 @@ export default function Playbook() {
   const [filterCat,   setFilterCat]   = useState('');
   const [showFilters, setShowFilters] = useState(false);
 
-  const ownTeam = user?.memberships?.[0];
-  const teamId  = ownTeam?.teamId ?? '';
-  const role    = ownTeam?.role ?? user?.globalRole ?? '';
+  const isPlatformAdmin = user?.globalRole === 'PLATFORM_ADMIN';
+  const membership = user?.memberships?.find(m => m.teamId === teamId);
+  const role = isPlatformAdmin ? 'PLATFORM_ADMIN' : (membership?.role ?? '');
 
   const canEdit   = ['MANAGER', 'COACH', 'ANALISTA', 'PLATFORM_ADMIN'].includes(role);
   const canDelete = ['MANAGER', 'COACH', 'PLATFORM_ADMIN'].includes(role);
 
-  // ── Load ──────────────────────────────────────────────────────────────────
+  // ── Load teams then entries ───────────────────────────────────────────────
   useEffect(() => {
-    if (!teamId) { setLoading(false); return; }
+    apiClient.teams.list('OWN')
+      .then(res => {
+        const teams = res.teams ?? [];
+        setOwnTeams(teams);
+        if (teams.length > 0) setTeamId(teams[0].id);
+        else setLoading(false);
+      })
+      .catch(() => { toast.error('Error al cargar equipos'); setLoading(false); });
+  }, []);
+
+  useEffect(() => {
+    if (!teamId) return;
     setLoading(true);
     apiClient.playbook.list(teamId)
       .then(data => setEntries(data.entries))
@@ -472,7 +485,7 @@ export default function Playbook() {
   const categories = useMemo(() => [...new Set(entries.map(e => e.category))], [entries]);
   const activeFilters = (filterPhase !== 'ALL_FILTER' ? 1 : 0) + (filterRole ? 1 : 0) + (filterCat ? 1 : 0);
 
-  if (!teamId) {
+  if (!loading && !teamId) {
     return (
       <div style={{ padding: '2rem', color: 'var(--text-muted)' }}>
         Necesitas pertenecer a un equipo para ver el Playbook.
@@ -487,6 +500,19 @@ export default function Playbook() {
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
           <BookOpen size={22} color="var(--accent-blue)" />
           <h1 className="header-title">Playbook</h1>
+          {ownTeams.length > 1 && (
+            <select
+              value={teamId}
+              onChange={e => setTeamId(e.target.value)}
+              style={{
+                background: 'var(--bg-secondary)', border: '1px solid var(--border-color)',
+                borderRadius: 6, padding: '3px 8px', color: 'var(--text-primary)',
+                fontSize: '0.78rem', outline: 'none',
+              }}
+            >
+              {ownTeams.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+            </select>
+          )}
           <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: 2 }}>
             {entries.length} {entries.length === 1 ? 'entrada' : 'entradas'}
           </span>
