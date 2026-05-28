@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { db } from '../db.js';
 import { requireAuth } from '../middleware/require-auth.js';
 import { requireRole } from '../middleware/require-role.js';
+import { tryCompleteMission } from '../services/missions-service.js';
 
 export const playbookRouter = Router();
 
@@ -71,6 +72,7 @@ playbookRouter.post('/', requireAuth, requireRole(editRoles), async (req, res, n
       include: { createdBy: { select: { id: true, name: true } } },
     });
     res.status(201).json({ entry });
+    void tryCompleteMission(db, req.user!.userId, 'CREATE_PLAYBOOK_ENTRY');
   } catch (err) { next(err); }
 });
 

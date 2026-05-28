@@ -5,6 +5,7 @@ import { AppError } from '../middleware/error-handler.js';
 import { requireAuth } from '../middleware/require-auth.js';
 import { requireRole } from '../middleware/require-role.js';
 import { logger } from '../logger.js';
+import { tryCompleteMission } from '../services/missions-service.js';
 
 export const invitationsRouter = Router();
 
@@ -80,6 +81,7 @@ invitationsRouter.post('/', requireAuth, requireRole(['MANAGER']), async (req, r
       data: { entity: 'Invitation', entityId: invitation.id, operation: 'create', status: 'success' },
     });
     res.status(201).json({ invitation });
+    void tryCompleteMission(db, req.user!.userId, 'INVITE_MEMBER');
   } catch (err) {
     next(err);
   }

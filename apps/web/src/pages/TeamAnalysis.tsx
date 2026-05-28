@@ -114,7 +114,12 @@ export default function TeamAnalysis() {
     }
   }
 
-  useEffect(() => { void loadTeams(); }, []);
+  useEffect(() => {
+    void loadTeams();
+    // Complete onboarding missions triggered by visiting this page
+    void apiClient.missions.complete('VIEW_TEAM_PERFORMANCE').catch(() => null);
+    void apiClient.missions.complete('VIEW_TEAM_ANALYSIS').catch(() => null);
+  }, []);
 
   async function loadAnalysis(teamId: string) {
     setLoadingAnalysis(true);

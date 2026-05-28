@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { db } from '../db.js';
 import { requireAuth } from '../middleware/require-auth.js';
 import { requireRole } from '../middleware/require-role.js';
+import { tryCompleteMission } from '../services/missions-service.js';
 
 export const reviewSessionsRouter = Router();
 
@@ -138,6 +139,9 @@ reviewSessionsRouter.patch('/:id', requireAuth, requireRole(editRoles), async (r
       include: sessionInclude,
     });
     res.json({ session });
+    if (data.status === 'COMPLETADA') {
+      void tryCompleteMission(db, req.user!.userId, 'COMPLETE_REVIEW_SESSION');
+    }
   } catch (err) { next(err); }
 });
 

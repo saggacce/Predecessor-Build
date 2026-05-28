@@ -5,6 +5,7 @@ import { requireAuth } from '../middleware/require-auth.js';
 import { requireRole } from '../middleware/require-role.js';
 import { getTeamInsights } from '../services/analyst-service.js';
 import { logger } from '../logger.js';
+import { tryCompleteMission } from '../services/missions-service.js';
 
 export const scheduleRouter = Router();
 
@@ -109,6 +110,7 @@ scheduleRouter.post('/', requireAuth, requireRole(['MANAGER', 'COACH']), async (
       },
     });
     res.status(201).json({ item });
+    void tryCompleteMission(db, req.user!.userId, 'CREATE_FIRST_SCRIM');
   } catch (err) { next(err); }
 });
 
@@ -294,5 +296,8 @@ scheduleRouter.patch('/:id/dismiss', requireAuth, requireRole(staffRoles), async
     }
 
     res.json({ item, session });
+    if (taskType === 'analysis') {
+      void tryCompleteMission(db, req.user!.userId, 'COMPLETE_ANALYSIS');
+    }
   } catch (err) { next(err); }
 });

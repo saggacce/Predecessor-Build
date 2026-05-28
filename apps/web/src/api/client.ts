@@ -705,7 +705,25 @@ export interface SessionUser {
   linkedPlayerId: string | null;
   avatarUrl?: string | null;
   language?: string;
+  onboardingModalSeen?: boolean;
   memberships: SessionMembership[];
+}
+
+export interface MissionItem {
+  id: string;
+  title: Record<'en' | 'es', string>;
+  description: Record<'en' | 'es', string>;
+  ctaPath: string;
+  order: number;
+  completed: boolean;
+  completedAt: string | null;
+}
+
+export interface UserAchievement {
+  id: string;
+  userId: string;
+  achievementId: string;
+  awardedAt: string;
 }
 
 export interface Invitation {
@@ -1386,5 +1404,12 @@ export const apiClient = {
       fetchApi<{ item: ActionItem }>(`/review-sessions/${sessionId}/actions/${itemId}`, { method: 'PATCH', body: JSON.stringify(data) }),
     deleteActionItem: (sessionId: string, itemId: string) =>
       fetchApi<{ ok: boolean }>(`/review-sessions/${sessionId}/actions/${itemId}`, { method: 'DELETE' }),
+  },
+
+  missions: {
+    me: (role?: string) => fetchApi<{ missions: MissionItem[]; role: string | null; allComplete: boolean }>(`/missions/me${role ? `?role=${encodeURIComponent(role)}` : ''}`),
+    complete: (missionId: string) => fetchApi<{ ok: boolean }>(`/missions/complete/${missionId}`, { method: 'POST' }),
+    achievements: () => fetchApi<{ achievements: UserAchievement[] }>('/missions/achievements'),
+    markOnboardingSeen: () => fetchApi<{ ok: boolean }>('/missions/onboarding-seen', { method: 'PATCH' }),
   },
 };

@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { db } from '../db.js';
 import { requireAuth } from '../middleware/require-auth.js';
+import { tryCompleteMission } from '../services/missions-service.js';
 
 export const weeklyGoalsRouter = Router();
 
@@ -53,6 +54,7 @@ weeklyGoalsRouter.post('/', requireAuth, async (req, res, next) => {
       },
     });
     res.status(201).json({ goal });
+    void tryCompleteMission(db, req.user!.userId, 'SET_WEEKLY_GOAL');
   } catch (err) { next(err); }
 });
 

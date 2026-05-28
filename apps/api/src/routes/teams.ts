@@ -2,6 +2,7 @@ import { Router, type NextFunction, type Request, type Response } from 'express'
 import { z } from 'zod';
 import { db } from '../db.js';
 import { resyncMatch, syncPlayerByName, syncPlayerById } from '../services/sync-service.js';
+import { tryCompleteMission } from '../services/missions-service.js';
 import { logger } from '../logger.js';
 import { getValidToken } from './auth.js';
 import { requireAuth } from '../middleware/require-auth.js';
@@ -148,6 +149,7 @@ teamsRouter.post('/:teamId/roster', requireAuth, requireRole(['MANAGER']), async
     try { userToken = await getValidToken(req, res); } catch { /* no session — sync without auth */ }
 
     res.status(201).json(entry);
+    void tryCompleteMission(db, req.user!.userId, 'ADD_ROSTER_PLAYER');
 
     // Background sync — fire and forget, don't block the response
     db.player.findUnique({ where: { id: playerId }, select: { displayName: true } })
@@ -394,6 +396,7 @@ teamsRouter.post('/:teamId/rival-roster', requireAuth, requireRole(['COACH', 'MA
         ratingPoints: snap?.ratingPoints ?? null,
       },
     });
+    void tryCompleteMission(db, userId, 'ADD_RIVAL_PLAYER');
   } catch (err) {
     next(err);
   }
