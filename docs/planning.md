@@ -373,15 +373,20 @@ Sistema preparado para: misiones de exploración/maestría, retos semanales con 
 
 ---
 
-## [~] Tarea 19 — Team Tools: Scrim Planner, Playbook, Review Sessions
-*Parcialmente completada — Review Sessions pendiente (issue #217).*
+## [x] Tarea 19 — Team Tools: Scrim Planner, Playbook, Review Sessions
+*Completada. PR #195, #210, #211, #213, #215, #219. Issue #217 cerrado.*
 
 - [x] **Scrim Planner** — `ScrimPlanner.tsx` + backend `ScrimSchedule` + migraciones. CRUD completo: crear scrim, vista lista, filtros por tipo (SCRIM/OFICIAL/ENTRENAMIENTO/TORNEO), estado (PENDIENTE/CONFIRMADO/CANCELADO), notas y resultado. (PR #195)
 - [x] **Post-match tasks** — 3h tras el inicio, ANALISTA ve «Análisis pendientes» y COACH ve «Revisiones pendientes» en Dashboard. Botón ✓ Hecho por tarea. (PR #210 / #211)
 - [x] **Auto-detección de resultado** — worker `detect-results` cruza el roster del equipo con historial de pred.gg. Si ≥3 jugadores comparten un match UUID en ventana [scheduledAt-30min, +3h] → WIN/LOSS automático + enlace a pred.gg en ScrimPlanner. (PR #210 / #211)
 - [x] **Cron detect-results en producción** — `30 * * * *` en Hetzner, log en `/var/log/riftline-detect-results.log`
 - [x] **Playbook** — biblioteca táctica: entradas por categoría/fase/rol, pin, edición inline, mapa táctico embebido (PR #213 / #215)
-- [ ] **Review Sessions** — sesiones organizadas con agenda, boards y action items (issue #217)
+- [x] **Review Sessions** — sesiones organizadas con agenda y action items. Modelos `ReviewSession`, `AgendaItem`, `ActionItem`. (PR #219, issue #217)
+  - Agenda con checkmarks, timestamps VOD, ref. jugador, orden configurable
+  - Action items con ciclo de estado (Abierto → En progreso → Completado), asignee, fecha límite
+  - Sesiones agrupadas por estado: En curso / Pendientes / Completadas
+  - Vinculación opcional a scrim del Scrim Planner
+- [x] **Flujo automático post-partida** — al detectar resultado: TeamComm urgente a ANALISTA + normal a COACH. Al marcar análisis como ✓ Hecho: genera `ReviewSession` con hasta 8 agenda items desde insights (CRITICAL→HIGH→MEDIUM), notifica al COACH. Dashboard muestra "⏳ Analizando…" y toast con link directo. (PR #219)
 
 ---
 
