@@ -374,7 +374,7 @@ Sistema preparado para: misiones de exploración/maestría, retos semanales con 
 ---
 
 ## [x] Tarea 19 — Team Tools: Scrim Planner, Playbook, Review Sessions
-*Completada. PR #195, #210, #211, #213, #215, #219, #220, #221. Issue #217 cerrado.*
+*Completada. PR #195, #210, #211, #213, #215, #219, #220, #221, #222, #223, #224. Issue #217 cerrado.*
 
 - [x] **Scrim Planner** — `ScrimPlanner.tsx` + backend `ScrimSchedule` + migraciones. CRUD completo: crear scrim, vista lista, filtros por tipo (SCRIM/OFICIAL/ENTRENAMIENTO/TORNEO), estado (PENDIENTE/CONFIRMADO/CANCELADO), notas y resultado. (PR #195)
 - [x] **Post-match tasks** — 3h tras el inicio, ANALISTA ve «Análisis pendientes» y COACH ve «Revisiones pendientes» en Dashboard. Botón ✓ Hecho por tarea. (PR #210 / #211)
@@ -387,7 +387,7 @@ Sistema preparado para: misiones de exploración/maestría, retos semanales con 
   - Sesiones agrupadas por estado: En curso / Pendientes / Completadas
   - Vinculación opcional a scrim del Scrim Planner
 - [x] **Flujo automático post-partida** — al detectar resultado: TeamComm urgente a ANALISTA + normal a COACH. Al marcar análisis como ✓ Hecho: genera `ReviewSession` con hasta 8 agenda items desde insights (CRITICAL→HIGH→MEDIUM), notifica al COACH. Dashboard muestra "⏳ Analizando…" y toast con link directo. (PR #219)
-- [x] **Rival Roster scouting** — búsqueda de jugadores rivales en pred.gg (via Bearer token) + roster persistente por equipo rival (`RivalRosterEntry`). Sección expandible "Rival Lineup" en ScrimCard. POST auto-sincroniza el jugador si no existe en BD. (PR #221)
+- [x] **Rival Roster scouting** — búsqueda de jugadores rivales en pred.gg (via Bearer token) + roster persistente por equipo rival (`RivalRosterEntry`). Sección expandible "Rival Lineup" en ScrimCard. Creación de equipo rival inline desde ScrimPlanner ("+ Nuevo rival"). Al añadir un jugador: sync completo de pred.gg (`syncPlayerById` — rank, stats, hero pool, 50 partidas) + upsert automático en `TeamRoster` del equipo RIVAL → habilita análisis rival pre-partido en Analysis → Teams. Al eliminar: soft-delete en `TeamRoster`. (PR #221, #223, #224)
 
 ---
 
