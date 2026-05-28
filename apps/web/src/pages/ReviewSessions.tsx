@@ -785,16 +785,19 @@ function CreateSessionModal({ teamId, scrims, onCreated, onClose }: {
 
 export default function ReviewSessions() {
   const { user } = useAuth();
-  const teamId = user?.memberships[0]?.teamId ?? '';
-  const role = user?.memberships[0]?.role ?? user?.globalRole ?? '';
+  const isPlatformAdmin = user?.globalRole === 'PLATFORM_ADMIN';
 
-  const canEdit = ['MANAGER', 'COACH', 'ANALISTA', 'PLATFORM_ADMIN'].includes(role);
-  const canDelete = ['MANAGER', 'COACH', 'PLATFORM_ADMIN'].includes(role);
-
+  const [ownTeams, setOwnTeams] = useState<Array<{ id: string; name: string }>>([]);
+  const [teamId, setTeamId] = useState('');
   const [sessions, setSessions] = useState<ReviewSession[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
   const [scrims, setScrims] = useState<Array<{ id: string; scheduledAt: string; rivalName: string | null; type: string }>>([]);
+
+  const membership = user?.memberships?.find((m) => m.teamId === teamId);
+  const role = isPlatformAdmin ? 'PLATFORM_ADMIN' : (membership?.role ?? '');
+  const canEdit = ['MANAGER', 'COACH', 'ANALISTA', 'PLATFORM_ADMIN'].includes(role);
+  const canDelete = ['MANAGER', 'COACH', 'PLATFORM_ADMIN'].includes(role);
 
   // Derive team members from sessions (unique assignees + createdBy)
   const members = (() => {
@@ -806,8 +809,20 @@ export default function ReviewSessions() {
     return Array.from(map.entries()).map(([id, name]) => ({ id, name }));
   })();
 
+  // Load teams on mount
   useEffect(() => {
-    if (!teamId) { setLoading(false); return; }
+    apiClient.teams.list('OWN')
+      .then(({ teams }) => {
+        setOwnTeams(teams.map((t) => ({ id: t.id, name: t.name })));
+        if (teams.length > 0) setTeamId(teams[0].id);
+        else setLoading(false);
+      })
+      .catch(() => { toast.error('Error al cargar equipos'); setLoading(false); });
+  }, []);
+
+  useEffect(() => {
+    if (!teamId) return;
+    setLoading(true);
     Promise.all([
       apiClient.reviewSessions.list(teamId),
       apiClient.schedule.list(teamId),
@@ -819,10 +834,10 @@ export default function ReviewSessions() {
     }).finally(() => setLoading(false));
   }, [teamId]);
 
-  if (!teamId) {
+  if (!loading && ownTeams.length === 0) {
     return (
       <div style={{ padding: '2rem' }}>
-        <div style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>Necesitas pertenecer a un equipo para acceder a las sesiones de revisión.</div>
+        <div style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>No hay equipos propios. Crea un equipo para acceder a las sesiones de revisión.</div>
       </div>
     );
   }
@@ -840,11 +855,19 @@ export default function ReviewSessions() {
             Organiza revisiones de partidas con agenda y seguimiento de acciones
           </p>
         </div>
-        {canEdit && (
-          <button onClick={() => setShowCreate(true)} className="btn-primary" style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.85rem' }}>
-            <Plus size={16} /> Nueva sesión
-          </button>
-        )}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          {ownTeams.length > 1 && (
+            <select value={teamId} onChange={(e) => setTeamId(e.target.value)}
+              style={{ fontSize: '0.85rem', background: 'var(--bg-card)', border: '1px solid var(--border-color)', borderRadius: 6, padding: '0.4rem 0.75rem', color: 'var(--text-primary)' }}>
+              {ownTeams.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+            </select>
+          )}
+          {canEdit && (
+            <button onClick={() => setShowCreate(true)} className="btn-primary" style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.85rem' }}>
+              <Plus size={16} /> Nueva sesión
+            </button>
+          )}
+        </div>
       </div>
 
       {loading && (
