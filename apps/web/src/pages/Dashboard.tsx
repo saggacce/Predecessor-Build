@@ -517,11 +517,7 @@ export default function Dashboard() {
                 <PostMatchTasksPanel
                   tasks={postMatchTasks.filter(t => t.reviewPending)}
                   role="COACH"
-                  onDismiss={(id) => {
-                    apiClient.schedule.dismissTask(id, 'review')
-                      .then(() => setPostMatchTasks(prev => prev.map(t => t.id === id ? { ...t, reviewedAt: new Date().toISOString(), reviewPending: false } : t)))
-                      .catch(() => toast.error('Error al marcar tarea'));
-                  }}
+                  onDismissed={(id) => setPostMatchTasks(prev => prev.map(t => t.id === id ? { ...t, reviewedAt: new Date().toISOString(), reviewPending: false } : t))}
                 />
               )}
 
@@ -577,11 +573,7 @@ export default function Dashboard() {
                 <PostMatchTasksPanel
                   tasks={postMatchTasks.filter(t => t.analysisPending)}
                   role="ANALISTA"
-                  onDismiss={(id) => {
-                    apiClient.schedule.dismissTask(id, 'analysis')
-                      .then(() => setPostMatchTasks(prev => prev.map(t => t.id === id ? { ...t, analysedAt: new Date().toISOString(), analysisPending: false } : t)))
-                      .catch(() => toast.error('Error al marcar tarea'));
-                  }}
+                  onDismissed={(id) => setPostMatchTasks(prev => prev.map(t => t.id === id ? { ...t, analysedAt: new Date().toISOString(), analysisPending: false } : t))}
                 />
               )}
 
@@ -1319,10 +1311,10 @@ function WeeklyGoalWidget({ goals, onGoalsChange }: { goals: WeeklyGoalItem[]; o
 }
 
 // ── Post-Match Pending Tasks Panel ───────────────────────────────────────────
-function PostMatchTasksPanel({ tasks, role, onDismiss }: {
+function PostMatchTasksPanel({ tasks, role, onDismissed }: {
   tasks: PostMatchTask[];
   role: 'COACH' | 'ANALISTA';
-  onDismiss: (id: string) => void;
+  onDismissed: (id: string) => void;
 }) {
   const isCoach = role === 'COACH';
   const accent = isCoach ? 'var(--accent-prime)' : 'var(--accent-blue)';
@@ -1332,11 +1324,35 @@ function PostMatchTasksPanel({ tasks, role, onDismiss }: {
     ? 'Partidos que necesitan revisión post-partido'
     : 'Partidos que necesitan análisis de datos';
 
+  const [loadingIds, setLoadingIds] = useState<Set<string>>(new Set());
+  const navigate = useNavigate();
+
   function rivalLabel(t: PostMatchTask) {
     return t.rivalTeam?.name ?? t.rivalName ?? 'Rival desconocido';
   }
   function typeLabel(t: PostMatchTask) {
     return t.type === 'OFFICIAL' ? 'Oficial' : t.type === 'PRACTICE' ? 'Entrenamiento' : 'Scrim';
+  }
+
+  async function handleDismiss(taskId: string, taskType: 'analysis' | 'review') {
+    setLoadingIds((prev) => new Set(prev).add(taskId));
+    try {
+      const { session } = await apiClient.schedule.dismissTask(taskId, taskType);
+      onDismissed(taskId);
+      if (taskType === 'analysis' && session) {
+        toast.success('Sesión de revisión creada', {
+          description: session.title,
+          action: { label: 'Ver sesión', onClick: () => navigate('/tools/review-sessions') },
+          duration: 8000,
+        });
+      } else {
+        toast.success('Tarea marcada como completada');
+      }
+    } catch {
+      toast.error('Error al marcar tarea');
+    } finally {
+      setLoadingIds((prev) => { const s = new Set(prev); s.delete(taskId); return s; });
+    }
   }
 
   return (
@@ -1354,11 +1370,13 @@ function PostMatchTasksPanel({ tasks, role, onDismiss }: {
           const date = new Date(task.scheduledAt);
           const dateStr = date.toLocaleDateString('es-ES', { weekday: 'short', day: 'numeric', month: 'short' });
           const timeStr = date.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
+          const isLoading = loadingIds.has(task.id);
           return (
             <div key={task.id} style={{
               display: 'flex', alignItems: 'center', gap: '0.75rem',
               padding: '0.6rem 0.8rem', borderRadius: 6,
               background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)',
+              opacity: isLoading ? 0.7 : 1,
             }}>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
@@ -1371,11 +1389,16 @@ function PostMatchTasksPanel({ tasks, role, onDismiss }: {
                       {task.result}
                     </span>
                   )}
+                  {isLoading && !isCoach && (
+                    <span style={{ marginLeft: 8, color: 'var(--accent-blue)', fontStyle: 'italic' }}>
+                      Generando sesión de revisión…
+                    </span>
+                  )}
                 </div>
               </div>
               <div style={{ display: 'flex', gap: '0.4rem', flexShrink: 0 }}>
                 {isCoach ? (
-                  <Link to="/tools/review" style={{ textDecoration: 'none' }}>
+                  <Link to="/tools/review-sessions" style={{ textDecoration: 'none' }}>
                     <button className="btn-primary" style={{ fontSize: '0.7rem', padding: '4px 10px', whiteSpace: 'nowrap' }}>
                       Revisar
                     </button>
@@ -1388,11 +1411,12 @@ function PostMatchTasksPanel({ tasks, role, onDismiss }: {
                   </Link>
                 )}
                 <button
-                  onClick={() => onDismiss(task.id)}
-                  title="Marcar como completado"
-                  style={{ fontSize: '0.7rem', padding: '4px 8px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 5, cursor: 'pointer', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}
+                  onClick={() => void handleDismiss(task.id, isCoach ? 'review' : 'analysis')}
+                  disabled={isLoading}
+                  title={isCoach ? 'Marcar revisión como completada' : 'Marcar análisis como completado — genera sesión de revisión automáticamente'}
+                  style={{ fontSize: '0.7rem', padding: '4px 8px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 5, cursor: isLoading ? 'not-allowed' : 'pointer', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}
                 >
-                  ✓ Hecho
+                  {isLoading && !isCoach ? '⏳ Analizando…' : '✓ Hecho'}
                 </button>
               </div>
             </div>

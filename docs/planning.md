@@ -261,13 +261,13 @@ Secciones identificadas con alto valor para sesiones de equipo:
 | **Comparativa de stats en vivo** | Tabla lado a lado: métricas propias vs rival del partido anterior para el briefing pre-partido | Media |
 | **Timer de objetivos** | Temporizadores manuales para Shaper, Seedlings, estructuras — para practicar rotaciones | Media |
 | **Pizarra de notas compartida** | Texto libre sincronizado en tiempo real (WebSockets) — visible en múltiples pantallas del equipo | Baja |
-| ~~Colaboración multiusuario en tiempo real~~ | Promovido a Tarea 20 — ver issue #214 | — |
+| ~~Colaboración multiusuario en tiempo real~~ | Promovido a Tarea 27 — ver issue #214 | — |
 | **VOD Queue** | Playlist de clips seleccionados para revisar en sesión — reproductor integrado sin salir del modo | Baja |
 
 ---
 
-## [ ] Tarea 20 — Tablero Táctico en Vivo (Live Session colaborativa)
-*Prerequisito: PR #213 (Playbook) mergeado. Issue: #214.*
+## [ ] Tarea 27 — Tablero Táctico en Vivo (Live Session colaborativa)
+*Prerequisito: PR #213/#215 (Playbook) mergeado ✅. Issue: #214.*
 
 El coach inicia una sesión táctica en vivo desde Session Mode. Todos los miembros del equipo reciben una notificación en la app y pueden unirse al tablero en modo espectador (read-only, tiempo real). El coach puede dar control de edición a jugadores específicos. Reemplaza el screen sharing de Discord para el dibujo táctico.
 
@@ -320,6 +320,38 @@ El coach inicia una sesión táctica en vivo desde Session Mode. Todos los miemb
 
 ---
 
+## [ ] Tarea 28 — Sistema de Misiones y Logros (onboarding gamificado)
+*Issue: #218. Prerequisito: ProfilePage existente. Relacionado con Tarea 19 (Review Sessions).*
+
+Primera versión del sistema de gamificación: misiones de «primeros pasos» adaptadas al rol de cada usuario. Al completarlas, el usuario gana un logro visible en su perfil. Diseñado para ser extensible a retos semanales, maestría y rangos.
+
+### Roles y misiones
+Cada rol tiene su propio set (8 misiones COACH, 6 MANAGER, 6 ANALISTA, 6 JUGADOR en equipo, 6 JUGADOR solo). Algunas compartidas (completar perfil, vincular pred.gg).
+
+### DB (Prisma)
+- [ ] Modelo `Mission` — catálogo de misiones (id, category, roles[], title, ctaPath, order)
+- [ ] Modelo `UserMissionCompletion` — progreso por usuario
+- [ ] Modelo `UserAchievement` — logros ganados
+- [ ] Campo `onboardingModalSeen Boolean` en `User`
+
+### API
+- [ ] `GET /missions/me` — misiones del rol del usuario con estado completado/pendiente
+- [ ] `POST /missions/complete/:missionId` — marcar completada (frontend-triggered)
+- [ ] `GET /achievements/me` — logros del usuario
+- [ ] Hooks server-side en routes existentes para auto-completar misiones (crear scrim, playbook, weekly-goal, etc.)
+
+### Frontend
+- [ ] Modal de bienvenida (primera entrada) — rol del usuario + lista de primeros pasos
+- [ ] Sección «Primeros pasos» en Dashboard — cards de misiones pendientes + barra de progreso
+- [ ] Confetti + toast + logro al completar todas
+- [ ] Sección «Logros» en ProfilePage — badges con nombre, icono y fecha
+- [ ] Flag `onboardingModalSeen` para no repetir el modal
+
+### Extensibilidad futura
+Sistema preparado para: misiones de exploración/maestría, retos semanales con expiración, XP acumulable, rangos en perfil, recompensas visuales.
+
+---
+
 ## Tarea 18 — Discord Companion Bot
 *Prerequisito: Tarea 8 + Tarea 10 en producción.*
 
@@ -341,15 +373,15 @@ El coach inicia una sesión táctica en vivo desde Session Mode. Todos los miemb
 
 ---
 
-## [x] Tarea 19 — Team Tools: Scrim Planner, Playbook, Review Sessions
-*Parcialmente completada — Playbook y Review Sessions pendientes.*
+## [~] Tarea 19 — Team Tools: Scrim Planner, Playbook, Review Sessions
+*Parcialmente completada — Review Sessions pendiente (issue #217).*
 
 - [x] **Scrim Planner** — `ScrimPlanner.tsx` + backend `ScrimSchedule` + migraciones. CRUD completo: crear scrim, vista lista, filtros por tipo (SCRIM/OFICIAL/ENTRENAMIENTO/TORNEO), estado (PENDIENTE/CONFIRMADO/CANCELADO), notas y resultado. (PR #195)
 - [x] **Post-match tasks** — 3h tras el inicio, ANALISTA ve «Análisis pendientes» y COACH ve «Revisiones pendientes» en Dashboard. Botón ✓ Hecho por tarea. (PR #210 / #211)
 - [x] **Auto-detección de resultado** — worker `detect-results` cruza el roster del equipo con historial de pred.gg. Si ≥3 jugadores comparten un match UUID en ventana [scheduledAt-30min, +3h] → WIN/LOSS automático + enlace a pred.gg en ScrimPlanner. (PR #210 / #211)
 - [x] **Cron detect-results en producción** — `30 * * * *` en Hetzner, log en `/var/log/riftline-detect-results.log`
-- [ ] **Playbook** — biblioteca de estrategias, setups y reglas tácticas del equipo
-- [ ] **Review Sessions** — sesiones organizadas con agenda, boards y action items
+- [x] **Playbook** — biblioteca táctica: entradas por categoría/fase/rol, pin, edición inline, mapa táctico embebido (PR #213 / #215)
+- [ ] **Review Sessions** — sesiones organizadas con agenda, boards y action items (issue #217)
 
 ---
 
@@ -365,7 +397,7 @@ El coach inicia una sesión táctica en vivo desde Session Mode. Todos los miemb
 | POV automático de replay | No hay soporte oficial. Usar VOD Index con links externos. |
 | Pathing continuo de jugadores | No existe tracking de posición. Solo eventos puntuales. |
 | IA generativa avanzada | Reglas primero. LLM solo para resumir evidencias trazables. |
-| ~~Colaboración multiusuario en tiempo real~~ | Promovido a Tarea 20 — ver issue #214 |
+| ~~Colaboración multiusuario en tiempo real~~ | Promovido a Tarea 27 — ver issue #214 |
 | Discord OAuth | Fase 2 de auth — después de validar login interno en producción. |
 
 ---

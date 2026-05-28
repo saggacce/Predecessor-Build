@@ -825,6 +825,51 @@ export interface PlaybookEntry {
   createdBy: { id: string; name: string };
 }
 
+export type ReviewSessionStatus = 'PENDIENTE' | 'EN_CURSO' | 'COMPLETADA';
+export type ActionItemStatus = 'ABIERTO' | 'EN_PROGRESO' | 'COMPLETADO';
+
+export interface AgendaItem {
+  id: string;
+  sessionId: string;
+  order: number;
+  title: string;
+  description: string | null;
+  vodTimestamp: number | null;
+  playerRef: string | null;
+  reviewed: boolean;
+  createdAt: string;
+}
+
+export interface ActionItem {
+  id: string;
+  sessionId: string;
+  title: string;
+  assignedTo: string | null;
+  status: ActionItemStatus;
+  dueDate: string | null;
+  createdAt: string;
+  updatedAt: string;
+  assignee: { id: string; name: string } | null;
+}
+
+export interface ReviewSession {
+  id: string;
+  teamId: string;
+  scrimId: string | null;
+  title: string;
+  notes: string | null;
+  status: ReviewSessionStatus;
+  scheduledAt: string | null;
+  completedAt: string | null;
+  createdById: string;
+  createdAt: string;
+  updatedAt: string;
+  createdBy: { id: string; name: string };
+  scrim: { id: string; scheduledAt: string; type: string; rivalName: string | null; result: string | null } | null;
+  agendaItems: AgendaItem[];
+  actionItems: ActionItem[];
+}
+
 export interface WeeklyGoalItem {
   id: string;
   userId: string;
@@ -1251,7 +1296,7 @@ export const apiClient = {
     pendingTasks: (teamId: string) =>
       fetchApi<{ tasks: PostMatchTask[] }>(`/schedule/pending-tasks?teamId=${encodeURIComponent(teamId)}`),
     dismissTask: (id: string, taskType: 'analysis' | 'review') =>
-      fetchApi<{ item: ScrimScheduleItem }>(`/schedule/${id}/dismiss`, { method: 'PATCH', body: JSON.stringify({ taskType }) }),
+      fetchApi<{ item: ScrimScheduleItem; session: { id: string; title: string } | null }>(`/schedule/${id}/dismiss`, { method: 'PATCH', body: JSON.stringify({ taskType }) }),
   },
 
   weeklyGoals: {
@@ -1284,5 +1329,30 @@ export const apiClient = {
       fetchApi<{ entry: PlaybookEntry }>(`/playbook/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
     delete: (id: string) =>
       fetchApi<{ ok: boolean }>(`/playbook/${id}`, { method: 'DELETE' }),
+  },
+
+  reviewSessions: {
+    list: (teamId: string) =>
+      fetchApi<{ sessions: ReviewSession[] }>(`/review-sessions?teamId=${encodeURIComponent(teamId)}`),
+    get: (id: string) =>
+      fetchApi<{ session: ReviewSession }>(`/review-sessions/${id}`),
+    create: (data: { teamId: string; title: string; notes?: string; scrimId?: string; scheduledAt?: string }) =>
+      fetchApi<{ session: ReviewSession }>('/review-sessions', { method: 'POST', body: JSON.stringify(data) }),
+    update: (id: string, data: { title?: string; notes?: string | null; status?: ReviewSessionStatus; scheduledAt?: string | null; completedAt?: string | null }) =>
+      fetchApi<{ session: ReviewSession }>(`/review-sessions/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+    delete: (id: string) =>
+      fetchApi<{ ok: boolean }>(`/review-sessions/${id}`, { method: 'DELETE' }),
+    createAgendaItem: (sessionId: string, data: { title: string; description?: string; vodTimestamp?: number; playerRef?: string }) =>
+      fetchApi<{ item: AgendaItem }>(`/review-sessions/${sessionId}/agenda`, { method: 'POST', body: JSON.stringify(data) }),
+    updateAgendaItem: (sessionId: string, itemId: string, data: { title?: string; description?: string | null; vodTimestamp?: number | null; playerRef?: string | null; reviewed?: boolean; order?: number }) =>
+      fetchApi<{ item: AgendaItem }>(`/review-sessions/${sessionId}/agenda/${itemId}`, { method: 'PATCH', body: JSON.stringify(data) }),
+    deleteAgendaItem: (sessionId: string, itemId: string) =>
+      fetchApi<{ ok: boolean }>(`/review-sessions/${sessionId}/agenda/${itemId}`, { method: 'DELETE' }),
+    createActionItem: (sessionId: string, data: { title: string; assignedTo?: string; dueDate?: string }) =>
+      fetchApi<{ item: ActionItem }>(`/review-sessions/${sessionId}/actions`, { method: 'POST', body: JSON.stringify(data) }),
+    updateActionItem: (sessionId: string, itemId: string, data: { title?: string; assignedTo?: string | null; status?: ActionItemStatus; dueDate?: string | null }) =>
+      fetchApi<{ item: ActionItem }>(`/review-sessions/${sessionId}/actions/${itemId}`, { method: 'PATCH', body: JSON.stringify(data) }),
+    deleteActionItem: (sessionId: string, itemId: string) =>
+      fetchApi<{ ok: boolean }>(`/review-sessions/${sessionId}/actions/${itemId}`, { method: 'DELETE' }),
   },
 };

@@ -35,6 +35,7 @@ import { scheduleRouter } from './routes/schedule.js';
 import { weeklyGoalsRouter } from './routes/weekly-goals.js';
 import { commsRouter } from './routes/comms.js';
 import { playbookRouter } from './routes/playbook.js';
+import { reviewSessionsRouter } from './routes/review-sessions.js';
 import { errorHandler } from './middleware/error-handler.js';
 import { db, disconnectDb } from './db.js';
 import { logger } from './logger.js';
@@ -95,6 +96,7 @@ app.use('/schedule', scheduleRouter);
 app.use('/weekly-goals', weeklyGoalsRouter);
 app.use('/comms', commsRouter);
 app.use('/playbook', playbookRouter);
+app.use('/review-sessions', reviewSessionsRouter);
 
 app.use(errorHandler);
 

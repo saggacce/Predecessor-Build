@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { Calendar, PlusCircle, Trash2, CheckCircle, Clock, Shield, AlertTriangle, Edit2, Check, X, ExternalLink } from 'lucide-react';
+import { useNavigate } from 'react-router';
+import { Calendar, PlusCircle, Trash2, CheckCircle, Clock, Shield, AlertTriangle, Edit2, Check, X, ExternalLink, ClipboardList } from 'lucide-react';
 import { toast } from 'sonner';
 import { apiClient, ApiErrorResponse, type ScrimScheduleItem, type TeamProfile } from '../api/client';
 import { useAuth } from '../hooks/useAuth';
@@ -18,6 +19,7 @@ const RESULT_COLOR: Record<string, string> = {
 
 export default function ScrimPlanner() {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [ownTeams, setOwnTeams] = useState<TeamProfile[]>([]);
   const [rivalTeams, setRivalTeams] = useState<TeamProfile[]>([]);
   const [teamId, setTeamId] = useState('');
@@ -122,12 +124,21 @@ export default function ScrimPlanner() {
           </div>
         </div>
 
-        {ownTeams.length > 1 && (
-          <select value={teamId} onChange={(e) => setTeamId(e.target.value)}
-            style={{ fontSize: '0.85rem', background: 'var(--bg-card)', border: '1px solid var(--border-color)', borderRadius: 6, padding: '0.4rem 0.75rem', color: 'var(--text-primary)' }}>
-            {ownTeams.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
-          </select>
-        )}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          {ownTeams.length > 1 && (
+            <select value={teamId} onChange={(e) => setTeamId(e.target.value)}
+              style={{ fontSize: '0.85rem', background: 'var(--bg-card)', border: '1px solid var(--border-color)', borderRadius: 6, padding: '0.4rem 0.75rem', color: 'var(--text-primary)' }}>
+              {ownTeams.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+            </select>
+          )}
+          <button
+            onClick={() => navigate('/tools/review-sessions')}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.8rem', background: 'none', border: '1px solid var(--border-color)', borderRadius: 5, cursor: 'pointer', color: 'var(--text-muted)', padding: '0.38rem 0.75rem', fontWeight: 600 }}
+            title="Ver sesiones de revisión"
+          >
+            <ClipboardList size={14} /> Review Sessions
+          </button>
+        </div>
       </header>
 
       {/* New scrim button / form */}

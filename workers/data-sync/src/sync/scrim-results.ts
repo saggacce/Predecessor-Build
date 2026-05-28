@@ -228,6 +228,56 @@ async function detectOneScrim(
       `[detect-results] scrim ${scrim.id}: ${result}` +
       ` (match ${uuid}, started ${matchStart.toISOString()}, ourTeam=${ourTeam}, winner=${matchDetail.winningTeam})`,
     );
+
+    // Notify ANALISTA (urgent) and COACH (normal) via TeamComm
+    try {
+      // Find a sender: prefer MANAGER, then COACH, then any PLATFORM_ADMIN
+      const memberSender = await db.teamMembership.findFirst({
+        where: { teamId: scrim.teamId, role: { in: ['MANAGER', 'COACH'] } },
+        orderBy: { role: 'asc' }, // COACH < MANAGER alphabetically, but both work
+        select: { userId: true },
+      });
+      const fromUserId = memberSender?.userId
+        ?? (await db.user.findFirst({ where: { globalRole: 'PLATFORM_ADMIN' }, select: { id: true } }))?.id;
+
+      if (fromUserId) {
+        // Fetch scrim details for labels
+        const scrimDetail = await db.scrimSchedule.findUnique({
+          where: { id: scrim.id },
+          include: { rivalTeam: { select: { name: true } } },
+        });
+        const rival = scrimDetail?.rivalTeam?.name ?? scrimDetail?.rivalName ?? 'rival';
+        const dateStr = new Date(scrim.scheduledAt).toLocaleDateString('es-ES', { day: 'numeric', month: 'short' });
+        const resultStr = result === 'WIN' ? '✅ WIN' : result === 'LOSS' ? '❌ LOSS' : '➖ DRAW';
+
+        await db.teamComm.createMany({
+          data: [
+            {
+              teamId:     scrim.teamId,
+              fromUserId,
+              toRole:     'ANALISTA',
+              type:       'ANNOUNCEMENT',
+              subject:    `Análisis pendiente — vs ${rival} (${dateStr})`,
+              body:       `Se ha detectado automáticamente el resultado ${resultStr} de la partida vs ${rival} del ${dateStr}. Por favor, accede al análisis para sincronizar los datos y generar los insights del equipo.`,
+              priority:   'urgent',
+            },
+            {
+              teamId:     scrim.teamId,
+              fromUserId,
+              toRole:     'COACH',
+              type:       'ANNOUNCEMENT',
+              subject:    `Resultado detectado: ${resultStr} — vs ${rival} (${dateStr})`,
+              body:       `La partida del ${dateStr} vs ${rival} ha sido registrada automáticamente como ${resultStr}. El análisis de datos está pendiente por parte del analista.`,
+              priority:   'normal',
+            },
+          ],
+        });
+        console.log(`[detect-results] scrim ${scrim.id}: comms created for ANALISTA + COACH`);
+      }
+    } catch (err) {
+      console.error(`[detect-results] scrim ${scrim.id}: failed to create comms:`, err);
+    }
+
     return true;
   }
 

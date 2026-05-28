@@ -38,6 +38,7 @@ import ScrimPlanner from './pages/ScrimPlanner';
 import SessionMode from './pages/SessionMode';
 import TacticalBoard from './pages/TacticalBoard';
 import Playbook from './pages/Playbook';
+import ReviewSessions from './pages/ReviewSessions';
 import { useAuth } from './hooks/useAuth';
 import { ViewAsProvider, useViewAs, type ViewAsRole } from './hooks/useViewAs';
 import { apiClient } from './api/client';
@@ -289,6 +290,7 @@ function useSections(t: (key: string) => string): SidebarSection[] {
         { to: '/tools/board', label: 'Tactical Board' },
         { to: '/tools/scrims', label: 'Scrim Planner' },
         { to: '/tools/playbook', label: 'Playbook' },
+        { to: '/tools/review-sessions', label: 'Review Sessions' },
       ],
     },
     {
@@ -597,6 +599,7 @@ function AppContent() {
             <Route path="/tools/goals" element={<Navigate to="/tools/review" replace />} />
             <Route path="/tools/board" element={<TacticalBoard />} />
             <Route path="/tools/playbook" element={<Playbook />} />
+            <Route path="/tools/review-sessions" element={<ReviewSessions />} />
             <Route path="/tools/vod" element={<VodIndex />} />
             <Route path="/tools/scrims" element={<ScrimPlanner />} />
 
