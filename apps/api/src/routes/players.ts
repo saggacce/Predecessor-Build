@@ -364,6 +364,71 @@ playersRouter.post('/sync', async (req, res, next) => {
   }
 });
 
+const PLAYERS_PAGINATED_QUERY_LOCAL = `
+  query RivalSearch($search: String!) {
+    playersPaginated(filter: { search: $search }, limit: 10, offset: 0) {
+      results {
+        id
+        name
+        ratings {
+          points
+          rank { name }
+        }
+      }
+    }
+  }
+`;
+
+/**
+ * GET /players/search-predgg?q=name
+ * Searches pred.gg playersPaginated using the current user's Bearer token.
+ * Also checks local DB to return internalId when the player is already known.
+ */
+playersRouter.get('/search-predgg', requireAuth, async (req, res, next) => {
+  try {
+    const q = z.string().min(1).max(100).parse(req.query['q']);
+
+    let userToken = await getValidToken(req, res);
+    if (!userToken) {
+      const cred = await db.platformCredential.findUnique({ where: { key: 'predgg_refresh_token' } });
+      if (cred) {
+        const result = await exchangeToken({ grant_type: 'refresh_token', refresh_token: cred.value });
+        if (result.ok && result.data.access_token) userToken = result.data.access_token;
+      }
+    }
+    if (!userToken) throw new AppError(401, 'Se requiere sesión activa en pred.gg para buscar jugadores', 'NO_TOKEN');
+
+    const data = await predggPlayerQuery<{
+      playersPaginated: { results: Array<{ id: string; name: string | null; ratings: Array<{ points: number; rank: { name: string } }> }> };
+    }>(PLAYERS_PAGINATED_QUERY_LOCAL, { search: q }, userToken);
+
+    const results = data.playersPaginated.results;
+    const predggIds = results.map((r) => r.id);
+    const known = await db.player.findMany({
+      where: { predggId: { in: predggIds } },
+      select: { id: true, predggId: true, customName: true },
+    });
+    const knownMap = new Map(known.map((p) => [p.predggId, p]));
+
+    res.json({
+      results: results.map((r) => {
+        const local = knownMap.get(r.id);
+        const latestRating = r.ratings?.[0];
+        return {
+          predggId: r.id,
+          name: r.name ?? 'Unknown',
+          customName: local?.customName ?? null,
+          internalId: local?.id ?? null,
+          rankName: latestRating?.rank?.name ?? null,
+          ratingPoints: latestRating?.points ?? null,
+        };
+      }),
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
 /**
  * GET /players/:id
  * Get full player profile with latest stats and recent matches.
@@ -428,3 +493,4 @@ playersRouter.post('/compare', async (req, res, next) => {
     next(err);
   }
 });
+

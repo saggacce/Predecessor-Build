@@ -1,8 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
-import { Calendar, PlusCircle, Trash2, CheckCircle, Clock, Shield, AlertTriangle, Edit2, Check, X, ExternalLink, ClipboardList } from 'lucide-react';
+import { Calendar, PlusCircle, Trash2, CheckCircle, Clock, Shield, AlertTriangle, Edit2, Check, X, ExternalLink, ClipboardList, Users, Search, UserMinus, ChevronDown, ChevronUp } from 'lucide-react';
 import { toast } from 'sonner';
-import { apiClient, ApiErrorResponse, type ScrimScheduleItem, type TeamProfile } from '../api/client';
+import { apiClient, ApiErrorResponse, type ScrimScheduleItem, type TeamProfile, type RivalRosterEntry, type PredggSearchResult } from '../api/client';
 import { useAuth } from '../hooks/useAuth';
 
 const TYPE_LABEL: Record<string, string> = { SCRIM: 'Scrim', OFFICIAL: 'Oficial', PRACTICE: 'Practice' };
@@ -255,6 +255,165 @@ const STATUS_LABEL: Record<string, string> = {
   CANCELADO:  'Cancelado',
 };
 
+const ROLE_LABELS: Record<string, string> = {
+  carry: 'Carry', jungle: 'Jungle', midlane: 'Mid', offlane: 'Offlane', support: 'Support',
+};
+const ROLE_OPTIONS = ['carry', 'jungle', 'midlane', 'offlane', 'support'] as const;
+
+function RivalLineup({ rivalTeamId, canEdit }: { rivalTeamId: string; canEdit: boolean }) {
+  const [roster, setRoster] = useState<RivalRosterEntry[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [searchQ, setSearchQ] = useState('');
+  const [searchResults, setSearchResults] = useState<PredggSearchResult[]>([]);
+  const [searchLoading, setSearchLoading] = useState(false);
+  const [addingPlayer, setAddingPlayer] = useState<PredggSearchResult | null>(null);
+  const [selectedRole, setSelectedRole] = useState<string>('');
+  const [showDropdown, setShowDropdown] = useState(false);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    apiClient.teams.getRivalRoster(rivalTeamId)
+      .then((d) => setRoster(d.entries))
+      .catch(() => toast.error('No se pudo cargar el lineup rival'))
+      .finally(() => setLoading(false));
+  }, [rivalTeamId]);
+
+  const handleSearch = (q: string) => {
+    setSearchQ(q);
+    setShowDropdown(true);
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    if (!q.trim()) { setSearchResults([]); return; }
+    debounceRef.current = setTimeout(async () => {
+      setSearchLoading(true);
+      try {
+        const data = await apiClient.players.searchPredgg(q.trim());
+        setSearchResults(data.results);
+      } catch {
+        setSearchResults([]);
+      } finally {
+        setSearchLoading(false);
+      }
+    }, 350);
+  };
+
+  const handleAdd = async (player: PredggSearchResult, role: string) => {
+    try {
+      await apiClient.teams.addRivalRosterPlayer(rivalTeamId, player.predggId, role || null);
+      const data = await apiClient.teams.getRivalRoster(rivalTeamId);
+      setRoster(data.entries);
+      setSearchQ('');
+      setSearchResults([]);
+      setAddingPlayer(null);
+      setSelectedRole('');
+      setShowDropdown(false);
+      toast.success(`${player.name} añadido al lineup rival`);
+    } catch (err) {
+      toast.error(err instanceof ApiErrorResponse ? err.error.message : 'Error al añadir jugador');
+    }
+  };
+
+  const handleRemove = async (playerId: string, playerName: string) => {
+    try {
+      await apiClient.teams.removeRivalRosterPlayer(rivalTeamId, playerId);
+      setRoster((r) => r.filter((e) => e.player.id !== playerId));
+      toast.success(`${playerName} eliminado del lineup`);
+    } catch {
+      toast.error('Error al eliminar jugador');
+    }
+  };
+
+  return (
+    <div style={{ marginTop: '0.75rem', paddingTop: '0.75rem', borderTop: '1px solid var(--border-color)' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginBottom: '0.5rem' }}>
+        <Users size={12} style={{ color: 'var(--text-muted)' }} />
+        <span style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+          Rival Lineup
+        </span>
+      </div>
+
+      {loading ? (
+        <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>Cargando...</span>
+      ) : (
+        <>
+          {roster.length === 0 && !canEdit && (
+            <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontStyle: 'italic' }}>Sin jugadores registrados</span>
+          )}
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem', marginBottom: roster.length > 0 ? '0.5rem' : 0 }}>
+            {roster.map((entry) => (
+              <div key={entry.id} style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', background: 'var(--bg-secondary)', borderRadius: 4, padding: '3px 8px', fontSize: '0.72rem' }}>
+                {entry.role && (
+                  <span style={{ fontSize: '0.6rem', fontWeight: 700, color: 'var(--accent-blue)', opacity: 0.8 }}>
+                    {ROLE_LABELS[entry.role] ?? entry.role}
+                  </span>
+                )}
+                <span style={{ color: 'var(--text-primary)' }}>{entry.player.name}</span>
+                {entry.player.rankLabel && (
+                  <span style={{ fontSize: '0.6rem', color: 'var(--text-muted)' }}>{entry.player.rankLabel}</span>
+                )}
+                {canEdit && (
+                  <button onClick={() => handleRemove(entry.player.id, entry.player.name)}
+                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: 0, display: 'flex', alignItems: 'center', marginLeft: '0.1rem' }}>
+                    <UserMinus size={11} />
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+
+          {canEdit && !addingPlayer && (
+            <div style={{ position: 'relative' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', background: 'var(--bg-secondary)', borderRadius: 4, padding: '4px 8px', maxWidth: 260 }}>
+                <Search size={11} style={{ color: 'var(--text-muted)', flexShrink: 0 }} />
+                <input
+                  value={searchQ}
+                  onChange={(e) => handleSearch(e.target.value)}
+                  onBlur={() => setTimeout(() => setShowDropdown(false), 200)}
+                  onFocus={() => searchResults.length > 0 && setShowDropdown(true)}
+                  placeholder="Buscar jugador en pred.gg..."
+                  style={{ background: 'none', border: 'none', outline: 'none', color: 'var(--text-primary)', fontSize: '0.72rem', width: '100%' }}
+                />
+                {searchLoading && <span style={{ fontSize: '0.6rem', color: 'var(--text-muted)' }}>...</span>}
+              </div>
+              {showDropdown && searchResults.length > 0 && (
+                <div style={{ position: 'absolute', top: '100%', left: 0, zIndex: 50, background: 'var(--bg-card)', border: '1px solid var(--border-color)', borderRadius: 6, minWidth: 260, maxHeight: 200, overflowY: 'auto', boxShadow: '0 4px 16px rgba(0,0,0,0.4)', marginTop: 2 }}>
+                  {searchResults.map((r) => (
+                    <button
+                      key={r.predggId}
+                      onMouseDown={() => { setAddingPlayer(r); setSearchQ(''); setShowDropdown(false); }}
+                      style={{ width: '100%', background: 'none', border: 'none', cursor: 'pointer', padding: '7px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.5rem' }}>
+                      <span style={{ fontSize: '0.8rem', color: 'var(--text-primary)' }}>{r.customName ?? r.name}</span>
+                      {r.rankName && <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>{r.rankName}</span>}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {canEdit && addingPlayer && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+              <span style={{ fontSize: '0.78rem', color: 'var(--text-primary)' }}>{addingPlayer.customName ?? addingPlayer.name}</span>
+              <select value={selectedRole} onChange={(e) => setSelectedRole(e.target.value)}
+                style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border-color)', borderRadius: 4, color: 'var(--text-primary)', fontSize: '0.72rem', padding: '2px 6px' }}>
+                <option value="">Sin rol</option>
+                {ROLE_OPTIONS.map((r) => <option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
+              </select>
+              <button onClick={() => handleAdd(addingPlayer, selectedRole)}
+                style={{ fontSize: '0.72rem', padding: '3px 10px', border: '1px solid var(--accent-blue)', borderRadius: 4, background: 'transparent', color: 'var(--accent-blue)', cursor: 'pointer', fontWeight: 700 }}>
+                Añadir
+              </button>
+              <button onClick={() => { setAddingPlayer(null); setSelectedRole(''); }}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: '2px' }}>
+                <X size={13} />
+              </button>
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
 function ScrimCard({ item, canEdit, onDelete, onSetResult, onSetStatus, editingResult, setEditingResult, isPast = false }: {
   item: ScrimScheduleItem;
   canEdit: boolean;
@@ -266,6 +425,7 @@ function ScrimCard({ item, canEdit, onDelete, onSetResult, onSetStatus, editingR
   isPast?: boolean;
 }) {
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [showLineup, setShowLineup] = useState(false);
   const date = new Date(item.scheduledAt);
   const rival = item.rivalTeam?.name ?? item.rivalName ?? 'Rival por confirmar';
   const typeColor = TYPE_COLOR[item.type] ?? 'var(--text-muted)';
@@ -273,7 +433,8 @@ function ScrimCard({ item, canEdit, onDelete, onSetResult, onSetStatus, editingR
   const isCancelled = status === 'CANCELADO';
 
   return (
-    <div className="glass-card" style={{ padding: '1rem 1.25rem', display: 'flex', alignItems: 'center', gap: '1rem', opacity: isCancelled ? 0.45 : isPast && !item.result ? 0.65 : 1 }}>
+    <div className="glass-card" style={{ padding: '1rem 1.25rem', opacity: isCancelled ? 0.45 : isPast && !item.result ? 0.65 : 1 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
       {/* Date block */}
       <div style={{ textAlign: 'center', minWidth: 42, flexShrink: 0 }}>
         <div style={{ fontFamily: 'var(--font-mono)', fontSize: '1.4rem', fontWeight: 800, color: 'var(--text-primary)', lineHeight: 1 }}>{date.getDate()}</div>
@@ -383,6 +544,21 @@ function ScrimCard({ item, canEdit, onDelete, onSetResult, onSetStatus, editingR
               <Trash2 size={14} />
             </button>
           )}
+        </div>
+      )}
+      </div>{/* end flex row */}
+
+      {/* Rival Lineup — only when rival is a known team in DB */}
+      {item.rivalTeamId && (
+        <div>
+          <button
+            onClick={() => setShowLineup((v) => !v)}
+            style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.3rem', color: 'var(--text-muted)', fontSize: '0.7rem', padding: '0.4rem 0 0', marginTop: '0.25rem' }}>
+            <Users size={11} />
+            Rival Lineup
+            {showLineup ? <ChevronUp size={11} /> : <ChevronDown size={11} />}
+          </button>
+          {showLineup && <RivalLineup rivalTeamId={item.rivalTeamId} canEdit={canEdit} />}
         </div>
       )}
     </div>

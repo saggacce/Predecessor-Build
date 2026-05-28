@@ -6,6 +6,7 @@ import { logger } from '../logger.js';
 import { getValidToken } from './auth.js';
 import { requireAuth } from '../middleware/require-auth.js';
 import { requireRole } from '../middleware/require-role.js';
+import { AppError } from '../middleware/error-handler.js';
 import {
   getTeamProfile,
   listTeams,
@@ -277,6 +278,125 @@ teamsRouter.get('/:teamId/rival-scouting', requireAuth, requireRole(staffRoles),
   try {
     const data = await getTeamRivalScouting(req.params.teamId);
     res.json(data);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ─── Rival Roster ─────────────────────────────────────────────────────────────
+
+const rivalRosterAddSchema = z.object({
+  predggId: z.string().min(1),
+  role: z.enum(['carry', 'jungle', 'midlane', 'offlane', 'support']).nullable().optional(),
+});
+
+/**
+ * GET /teams/:teamId/rival-roster
+ * Returns the scouted rival players for a RIVAL team.
+ */
+teamsRouter.get('/:teamId/rival-roster', requireAuth, async (req, res, next) => {
+  try {
+    const teamId = req.params.teamId as string;
+    const entries = await db.rivalRosterEntry.findMany({
+      where: { teamId },
+      orderBy: { addedAt: 'asc' },
+      select: {
+        id: true,
+        role: true,
+        addedAt: true,
+        player: {
+          select: {
+            id: true,
+            predggId: true,
+            displayName: true,
+            customName: true,
+            snapshots: {
+              orderBy: { syncedAt: 'desc' },
+              take: 1,
+              select: { rankLabel: true, ratingPoints: true },
+            },
+          },
+        },
+      },
+    });
+    res.json({
+      entries: entries.map((e) => ({
+        id: e.id,
+        role: e.role,
+        addedAt: e.addedAt,
+        player: {
+          id: e.player.id,
+          predggId: e.player.predggId,
+          name: e.player.customName ?? e.player.displayName,
+          rankLabel: e.player.snapshots[0]?.rankLabel ?? null,
+          ratingPoints: e.player.snapshots[0]?.ratingPoints ?? null,
+        },
+      })),
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * POST /teams/:teamId/rival-roster
+ * Body: { predggId: string, role?: string }
+ * Syncs the player from pred.gg if not in our DB, then adds to rival roster.
+ */
+teamsRouter.post('/:teamId/rival-roster', requireAuth, requireRole(['COACH', 'MANAGER']), async (req, res, next) => {
+  try {
+    const { predggId, role } = rivalRosterAddSchema.parse(req.body);
+    const userId = req.user!.userId;
+
+    // Find or sync the player by predggId
+    let player = await db.player.findUnique({ where: { predggId } });
+    if (!player) {
+      const synced = await syncPlayerByName(db, predggId, await getValidToken(req, res));
+      if (!synced) throw new AppError(404, 'Jugador no encontrado en pred.gg', 'PLAYER_NOT_FOUND');
+      // Re-fetch from DB to get full Player shape
+      const found = await db.player.findUnique({ where: { predggId } });
+      if (!found) throw new AppError(404, 'Error al sincronizar jugador', 'PLAYER_NOT_FOUND');
+      player = found;
+    }
+
+    const teamId = req.params.teamId as string;
+    const entry = await db.rivalRosterEntry.upsert({
+      where: { teamId_playerId: { teamId, playerId: player.id } },
+      create: { teamId, playerId: player.id, role: role ?? null, addedById: userId },
+      update: { role: role ?? null },
+    });
+
+    res.status(201).json({
+      id: entry.id,
+      role: entry.role,
+      addedAt: entry.addedAt,
+      player: {
+        id: player.id,
+        predggId: player.predggId,
+        name: player.customName ?? player.displayName,
+        rankLabel: null,
+        ratingPoints: null,
+      },
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * DELETE /teams/:teamId/rival-roster/:playerId
+ */
+teamsRouter.delete('/:teamId/rival-roster/:playerId', requireAuth, requireRole(['COACH', 'MANAGER']), async (req, res, next) => {
+  try {
+    const teamId = req.params.teamId as string;
+    const playerId = req.params.playerId as string;
+    const player = await db.player.findUnique({ where: { id: playerId }, select: { id: true } });
+    if (!player) throw new AppError(404, 'Jugador no encontrado', 'NOT_FOUND');
+
+    await db.rivalRosterEntry.deleteMany({
+      where: { teamId, playerId },
+    });
+    res.json({ ok: true });
   } catch (err) {
     next(err);
   }

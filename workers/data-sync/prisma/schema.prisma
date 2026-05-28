@@ -54,11 +54,12 @@ model Player {
   /// True for players who play on console. Console players cannot be synced
   /// via the pred.gg player endpoint — their matches appear with isNameConsole=true.
   isConsole      Boolean          @default(false)
-  matchPlayers   MatchPlayer[]
-  snapshots      PlayerSnapshot[]
-  rosterEntries  TeamRoster[]
+  matchPlayers        MatchPlayer[]
+  snapshots           PlayerSnapshot[]
+  rosterEntries       TeamRoster[]
+  rivalRosterEntries  RivalRosterEntry[]
   /// RiftLine user account linked to this player (one-to-one, optional)
-  userAccount    User?
+  userAccount         User?
 }
 
 /// Point-in-time snapshot of a player's aggregate stats fetched from pred.gg.
@@ -116,6 +117,7 @@ model Team {
   playbookEntries   PlaybookEntry[]
   reviewSessions    ReviewSession[]
   comms             TeamComm[]
+  rivalRoster       RivalRosterEntry[]
   parentTeam        Team?            @relation("AcademyTeams", fields: [academyOf], references: [id])
   academyTeams      Team[]           @relation("AcademyTeams")
 }
@@ -458,6 +460,7 @@ model User {
   weeklyGoals         WeeklyGoal[]
   reviewSessions      ReviewSession[]
   actionItems         ActionItem[]
+  addedRivalRosters   RivalRosterEntry[]
 }
 
 /// Maps a User to a Team with a specific role.
@@ -476,6 +479,24 @@ model TeamMembership {
   user     User    @relation(fields: [userId], references: [id])
 
   @@unique([userId, teamId])
+}
+
+/// Scouted rival players linked to a RIVAL team.
+/// Persists across scrims — same rival team roster is reused for every matchup.
+model RivalRosterEntry {
+  id        String   @id @default(cuid())
+  teamId    String
+  playerId  String
+  /// In-game role expected for this player: carry | jungle | midlane | offlane | support
+  role      String?
+  addedAt   DateTime @default(now())
+  addedById String
+
+  team      Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  player    Player   @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  addedBy   User     @relation(fields: [addedById], references: [id])
+
+  @@unique([teamId, playerId])
 }
 
 /// A pending invitation to join a team. Sent via email as a signup link.
