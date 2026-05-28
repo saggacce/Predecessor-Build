@@ -870,6 +870,28 @@ export interface ReviewSession {
   actionItems: ActionItem[];
 }
 
+export interface PredggSearchResult {
+  predggId: string;
+  name: string;
+  customName: string | null;
+  internalId: string | null;
+  rankName: string | null;
+  ratingPoints: number | null;
+}
+
+export interface RivalRosterEntry {
+  id: string;
+  role: string | null;
+  addedAt: string;
+  player: {
+    id: string;
+    predggId: string;
+    name: string;
+    rankLabel: string | null;
+    ratingPoints: number | null;
+  };
+}
+
 export interface WeeklyGoalItem {
   id: string;
   userId: string;
@@ -1034,6 +1056,8 @@ export const apiClient = {
         method: 'PATCH',
         body: JSON.stringify({ customName }),
       }),
+    searchPredgg: (q: string) =>
+      fetchApi<{ results: PredggSearchResult[] }>(`/players/search-predgg?q=${encodeURIComponent(q)}`),
   },
 
   teams: {
@@ -1064,6 +1088,14 @@ export const apiClient = {
       fetchApi<{ synced: number; errors: number; remaining: number }>(`/teams/${id}/sync-matches`, {
         method: 'POST', body: JSON.stringify({ limit }),
       }),
+    getRivalRoster: (teamId: string) =>
+      fetchApi<{ entries: RivalRosterEntry[] }>(`/teams/${teamId}/rival-roster`),
+    addRivalRosterPlayer: (teamId: string, predggId: string, role?: string | null) =>
+      fetchApi<RivalRosterEntry>(`/teams/${teamId}/rival-roster`, {
+        method: 'POST', body: JSON.stringify({ predggId, role: role ?? null }),
+      }),
+    removeRivalRosterPlayer: (teamId: string, playerId: string) =>
+      fetchApi<{ ok: boolean }>(`/teams/${teamId}/rival-roster/${playerId}`, { method: 'DELETE' }),
   },
 
   heroes: {
