@@ -1296,7 +1296,7 @@ export const apiClient = {
     pendingTasks: (teamId: string) =>
       fetchApi<{ tasks: PostMatchTask[] }>(`/schedule/pending-tasks?teamId=${encodeURIComponent(teamId)}`),
     dismissTask: (id: string, taskType: 'analysis' | 'review') =>
-      fetchApi<{ item: ScrimScheduleItem }>(`/schedule/${id}/dismiss`, { method: 'PATCH', body: JSON.stringify({ taskType }) }),
+      fetchApi<{ item: ScrimScheduleItem; session: { id: string; title: string } | null }>(`/schedule/${id}/dismiss`, { method: 'PATCH', body: JSON.stringify({ taskType }) }),
   },
 
   weeklyGoals: {
