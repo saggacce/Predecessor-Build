@@ -35,6 +35,11 @@ export default function ScrimPlanner() {
   const [formNotes, setFormNotes] = useState('');
   const [saving, setSaving] = useState(false);
 
+  // Inline rival team creation
+  const [showNewRival, setShowNewRival] = useState(false);
+  const [newRivalName, setNewRivalName] = useState('');
+  const [creatingRival, setCreatingRival] = useState(false);
+
   // Edit result inline
   const [editingResult, setEditingResult] = useState<string | null>(null);
 
@@ -80,9 +85,28 @@ export default function ScrimPlanner() {
       toast.success('Scrim añadido');
       setShowForm(false);
       setFormDt(''); setFormType('SCRIM'); setFormRivalId(''); setFormRivalName(''); setFormNotes('');
+      setShowNewRival(false); setNewRivalName('');
     } catch (err) {
       toast.error(err instanceof ApiErrorResponse ? err.error.message : 'Error al guardar');
     } finally { setSaving(false); }
+  }
+
+  async function handleCreateRival() {
+    if (!newRivalName.trim()) return;
+    setCreatingRival(true);
+    try {
+      const team = await apiClient.teams.create({ name: newRivalName.trim(), type: 'RIVAL' });
+      setRivalTeams((prev) => [...prev, team]);
+      setFormRivalId(team.id);
+      setFormRivalName('');
+      setNewRivalName('');
+      setShowNewRival(false);
+      toast.success(`Equipo rival "${team.name}" creado`);
+    } catch (err) {
+      toast.error(err instanceof ApiErrorResponse ? err.error.message : 'Error al crear el equipo rival');
+    } finally {
+      setCreatingRival(false);
+    }
   }
 
   async function handleDelete(id: string) {
@@ -171,24 +195,42 @@ export default function ScrimPlanner() {
                   </select>
                 </div>
 
-                {/* Rival — from DB or free text */}
-                <div>
-                  <label style={{ fontSize: '0.7rem', color: 'var(--text-muted)', display: 'block', marginBottom: '0.25rem' }}>Rival</label>
-                  <select value={formRivalId} onChange={(e) => { setFormRivalId(e.target.value); if (e.target.value) setFormRivalName(''); }}
-                    style={{ width: '100%', fontSize: '0.82rem', background: 'var(--bg-card)', border: '1px solid var(--border-color)', borderRadius: 5, padding: '0.4rem 0.6rem', color: 'var(--text-primary)', boxSizing: 'border-box' }}>
-                    <option value="">— Rival libre —</option>
-                    {rivalTeams.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
-                  </select>
-                </div>
-
-                {/* Free text rival name when not in DB */}
-                {!formRivalId && (
-                  <div>
-                    <label style={{ fontSize: '0.7rem', color: 'var(--text-muted)', display: 'block', marginBottom: '0.25rem' }}>Nombre del rival</label>
-                    <input placeholder="ej: Team Alpha" value={formRivalName} onChange={(e) => setFormRivalName(e.target.value)}
-                      style={{ width: '100%', fontSize: '0.82rem', background: 'var(--bg-card)', border: '1px solid var(--border-color)', borderRadius: 5, padding: '0.4rem 0.6rem', color: 'var(--text-primary)', boxSizing: 'border-box' }} />
+                {/* Rival — from DB or create inline */}
+                <div style={{ gridColumn: '1 / -1' }}>
+                  <label style={{ fontSize: '0.7rem', color: 'var(--text-muted)', display: 'block', marginBottom: '0.25rem' }}>Equipo rival</label>
+                  <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                    <select value={formRivalId} onChange={(e) => { setFormRivalId(e.target.value); if (e.target.value) { setFormRivalName(''); setShowNewRival(false); } }}
+                      style={{ flex: 1, fontSize: '0.82rem', background: 'var(--bg-card)', border: '1px solid var(--border-color)', borderRadius: 5, padding: '0.4rem 0.6rem', color: 'var(--text-primary)', boxSizing: 'border-box' }}>
+                      <option value="">— Seleccionar rival —</option>
+                      {rivalTeams.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+                    </select>
+                    <button type="button" onClick={() => { setShowNewRival((v) => !v); setFormRivalId(''); }}
+                      style={{ flexShrink: 0, fontSize: '0.78rem', padding: '0.38rem 0.75rem', background: 'none', border: '1px solid var(--border-color)', borderRadius: 5, color: 'var(--text-muted)', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                      + Nuevo rival
+                    </button>
                   </div>
-                )}
+
+                  {showNewRival && (
+                    <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', marginTop: '0.5rem' }}>
+                      <input
+                        autoFocus
+                        placeholder="Nombre del equipo rival"
+                        value={newRivalName}
+                        onChange={(e) => setNewRivalName(e.target.value)}
+                        onKeyDown={(e) => { if (e.key === 'Enter') void handleCreateRival(); if (e.key === 'Escape') setShowNewRival(false); }}
+                        style={{ flex: 1, fontSize: '0.82rem', background: 'var(--bg-card)', border: '1px solid var(--accent-blue)', borderRadius: 5, padding: '0.4rem 0.6rem', color: 'var(--text-primary)', outline: 'none', boxSizing: 'border-box' }}
+                      />
+                      <button type="button" onClick={() => void handleCreateRival()} disabled={creatingRival || !newRivalName.trim()}
+                        style={{ flexShrink: 0, fontSize: '0.78rem', padding: '0.38rem 0.75rem', background: 'var(--accent-blue)', border: 'none', borderRadius: 5, color: '#fff', cursor: 'pointer', opacity: !newRivalName.trim() ? 0.5 : 1 }}>
+                        {creatingRival ? '…' : 'Crear'}
+                      </button>
+                      <button type="button" onClick={() => setShowNewRival(false)}
+                        style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: '4px' }}>
+                        <X size={14} />
+                      </button>
+                    </div>
+                  )}
+                </div>
               </div>
 
               {/* Notes */}
@@ -202,7 +244,7 @@ export default function ScrimPlanner() {
                 <button onClick={() => void handleCreate()} disabled={saving || !formDt} className="btn-primary" style={{ fontSize: '0.82rem' }}>
                   {saving ? 'Guardando…' : 'Guardar'}
                 </button>
-                <button onClick={() => { setShowForm(false); setFormDt(''); setFormRivalId(''); setFormRivalName(''); setFormNotes(''); }}
+                <button onClick={() => { setShowForm(false); setFormDt(''); setFormRivalId(''); setFormRivalName(''); setFormNotes(''); setShowNewRival(false); setNewRivalName(''); }}
                   className="btn-secondary" style={{ fontSize: '0.82rem' }}>Cancelar</button>
               </div>
             </div>
@@ -375,12 +417,14 @@ function RivalLineup({ rivalTeamId, canEdit }: { rivalTeamId: string; canEdit: b
                 {searchLoading && <span style={{ fontSize: '0.6rem', color: 'var(--text-muted)' }}>...</span>}
               </div>
               {showDropdown && searchResults.length > 0 && (
-                <div style={{ position: 'absolute', top: '100%', left: 0, zIndex: 50, background: 'var(--bg-card)', border: '1px solid var(--border-color)', borderRadius: 6, minWidth: 260, maxHeight: 200, overflowY: 'auto', boxShadow: '0 4px 16px rgba(0,0,0,0.4)', marginTop: 2 }}>
+                <div style={{ position: 'absolute', top: '100%', left: 0, zIndex: 50, background: '#252c3a', border: '1px solid var(--border-color)', borderRadius: 6, minWidth: 260, maxHeight: 200, overflowY: 'auto', boxShadow: '0 8px 24px rgba(0,0,0,0.7)', marginTop: 2 }}>
                   {searchResults.map((r) => (
                     <button
                       key={r.predggId}
                       onMouseDown={() => { setAddingPlayer(r); setSearchQ(''); setShowDropdown(false); }}
-                      style={{ width: '100%', background: 'none', border: 'none', cursor: 'pointer', padding: '7px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.5rem' }}>
+                      style={{ width: '100%', background: 'transparent', border: 'none', cursor: 'pointer', padding: '7px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.5rem' }}
+                      onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.background = '#2e3649'; }}
+                      onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.background = 'transparent'; }}>
                       <span style={{ fontSize: '0.8rem', color: 'var(--text-primary)' }}>{r.customName ?? r.name}</span>
                       {r.rankName && <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>{r.rankName}</span>}
                     </button>
@@ -433,7 +477,7 @@ function ScrimCard({ item, canEdit, onDelete, onSetResult, onSetStatus, editingR
   const isCancelled = status === 'CANCELADO';
 
   return (
-    <div className="glass-card" style={{ padding: '1rem 1.25rem', opacity: isCancelled ? 0.45 : isPast && !item.result ? 0.65 : 1 }}>
+    <div className="glass-card" style={{ padding: '1rem 1.25rem', opacity: isCancelled ? 0.45 : isPast && !item.result ? 0.65 : 1, overflow: 'visible', position: 'relative', zIndex: showLineup ? 10 : undefined }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
       {/* Date block */}
       <div style={{ textAlign: 'center', minWidth: 42, flexShrink: 0 }}>
@@ -548,8 +592,8 @@ function ScrimCard({ item, canEdit, onDelete, onSetResult, onSetStatus, editingR
       )}
       </div>{/* end flex row */}
 
-      {/* Rival Lineup — only when rival is a known team in DB */}
-      {item.rivalTeamId && (
+      {/* Rival Lineup — show for any scrim that has a rival (linked or free-text) */}
+      {(item.rivalTeamId || item.rivalName) && (
         <div>
           <button
             onClick={() => setShowLineup((v) => !v)}
@@ -558,7 +602,13 @@ function ScrimCard({ item, canEdit, onDelete, onSetResult, onSetStatus, editingR
             Rival Lineup
             {showLineup ? <ChevronUp size={11} /> : <ChevronDown size={11} />}
           </button>
-          {showLineup && <RivalLineup rivalTeamId={item.rivalTeamId} canEdit={canEdit} />}
+          {showLineup && (
+            item.rivalTeamId
+              ? <RivalLineup rivalTeamId={item.rivalTeamId} canEdit={canEdit} />
+              : <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontStyle: 'italic', marginTop: '0.5rem', paddingTop: '0.5rem', borderTop: '1px solid var(--border-color)' }}>
+                  Para gestionar el lineup rival, crea primero el equipo <strong style={{ color: 'var(--text-secondary)', fontStyle: 'normal' }}>{item.rivalName}</strong> como equipo RIVAL en la sección Equipos y luego edita este scrim seleccionándolo desde el desplegable.
+                </div>
+          )}
         </div>
       )}
     </div>
