@@ -582,6 +582,78 @@ async function persistRecentMatches(
  * Fetches a player by name from pred.gg and upserts into local DB.
  * Returns the synced player record, or null if not found on pred.gg.
  */
+export async function syncPlayerById(
+  db: PrismaClient,
+  predggId: string,
+  userToken?: string,
+): Promise<SyncedPlayer | null> {
+  const start = Date.now();
+  logger.info({ predggId }, 'syncing player by pred.gg ID');
+
+  const detail = await fetchPlayerDetail(predggId, userToken);
+  if (!detail) {
+    logger.info({ predggId }, 'player not found on pred.gg');
+    return null;
+  }
+
+  const now = new Date();
+  const detailMatches = detail.matchesPaginated?.results ?? [];
+  const inferredRegion = inferRegion(detailMatches);
+  const snapshot = buildPlayerSnapshot(detail);
+
+  const player = await db.player.upsert({
+    where: { predggId },
+    update: {
+      displayName: detail.name,
+      isPrivate: detail.blockSearch ?? false,
+      inferredRegion,
+      lastSynced: now,
+    },
+    create: {
+      predggId,
+      predggUuid: detail.uuid ?? predggId,
+      displayName: detail.name,
+      isPrivate: detail.blockSearch ?? false,
+      inferredRegion,
+      lastSynced: now,
+    },
+  });
+
+  await db.playerSnapshot.create({
+    data: {
+      playerId: player.id,
+      syncedAt: now,
+      generalStats: snapshot.generalStats,
+      heroStats: snapshot.heroStats,
+      roleStats: snapshot.roleStats,
+      rankLabel: snapshot.rankLabel,
+      ratingPoints: snapshot.ratingPoints,
+    },
+  });
+
+  if (detailMatches.length > 0) {
+    await persistRecentMatches(db, player.id, player.displayName, detailMatches, now);
+  }
+
+  await db.syncLog.create({
+    data: { entity: 'player', entityId: predggId, operation: 'upsert', status: 'ok' },
+  });
+
+  logger.info({ predggId, playerId: player.id, elapsed: Date.now() - start }, 'player synced by ID');
+
+  return {
+    id: player.id,
+    predggId,
+    displayName: player.displayName,
+    isPrivate: player.isPrivate,
+    inferredRegion: player.inferredRegion,
+    lastSynced: now,
+  };
+}
+
+/**
+ * Returns the synced player record, or null if not found on pred.gg.
+ */
 export async function syncPlayerByName(
   db: PrismaClient,
   name: string,

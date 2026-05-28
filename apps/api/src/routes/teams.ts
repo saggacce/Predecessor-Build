@@ -1,7 +1,7 @@
 import { Router, type NextFunction, type Request, type Response } from 'express';
 import { z } from 'zod';
 import { db } from '../db.js';
-import { resyncMatch, syncPlayerByName } from '../services/sync-service.js';
+import { resyncMatch, syncPlayerByName, syncPlayerById } from '../services/sync-service.js';
 import { logger } from '../logger.js';
 import { getValidToken } from './auth.js';
 import { requireAuth } from '../middleware/require-auth.js';
@@ -348,16 +348,16 @@ teamsRouter.post('/:teamId/rival-roster', requireAuth, requireRole(['COACH', 'MA
     const { predggId, role } = rivalRosterAddSchema.parse(req.body);
     const userId = req.user!.userId;
 
-    // Find or sync the player by predggId
-    let player = await db.player.findUnique({ where: { predggId } });
-    if (!player) {
-      const synced = await syncPlayerByName(db, predggId, await getValidToken(req, res));
-      if (!synced) throw new AppError(404, 'Jugador no encontrado en pred.gg', 'PLAYER_NOT_FOUND');
-      // Re-fetch from DB to get full Player shape
-      const found = await db.player.findUnique({ where: { predggId } });
-      if (!found) throw new AppError(404, 'Error al sincronizar jugador', 'PLAYER_NOT_FOUND');
-      player = found;
-    }
+    const token = await getValidToken(req, res);
+
+    // Always sync from pred.gg to get fresh rank/stats/matches
+    const synced = await syncPlayerById(db, predggId, token ?? undefined);
+    if (!synced) throw new AppError(404, 'Jugador no encontrado en pred.gg', 'PLAYER_NOT_FOUND');
+
+    const player = await db.player.findUniqueOrThrow({
+      where: { predggId },
+      include: { snapshots: { orderBy: { syncedAt: 'desc' }, take: 1 } },
+    });
 
     const teamId = req.params.teamId as string;
     const entry = await db.rivalRosterEntry.upsert({
@@ -366,6 +366,7 @@ teamsRouter.post('/:teamId/rival-roster', requireAuth, requireRole(['COACH', 'MA
       update: { role: role ?? null },
     });
 
+    const snap = player.snapshots[0];
     res.status(201).json({
       id: entry.id,
       role: entry.role,
@@ -374,8 +375,8 @@ teamsRouter.post('/:teamId/rival-roster', requireAuth, requireRole(['COACH', 'MA
         id: player.id,
         predggId: player.predggId,
         name: player.customName ?? player.displayName,
-        rankLabel: null,
-        ratingPoints: null,
+        rankLabel: snap?.rankLabel ?? null,
+        ratingPoints: snap?.ratingPoints ?? null,
       },
     });
   } catch (err) {
