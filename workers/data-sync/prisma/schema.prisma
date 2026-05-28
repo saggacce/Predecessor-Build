@@ -114,6 +114,7 @@ model Team {
   scrimSchedules    ScrimSchedule[]  @relation("HomeTeam")
   rivalSchedules    ScrimSchedule[]  @relation("RivalTeam")
   playbookEntries   PlaybookEntry[]
+  reviewSessions    ReviewSession[]
   comms             TeamComm[]
   parentTeam        Team?            @relation("AcademyTeams", fields: [academyOf], references: [id])
   academyTeams      Team[]           @relation("AcademyTeams")
@@ -455,6 +456,8 @@ model User {
   scrimSchedules      ScrimSchedule[]
   playbookEntries     PlaybookEntry[]
   weeklyGoals         WeeklyGoal[]
+  reviewSessions      ReviewSession[]
+  actionItems         ActionItem[]
 }
 
 /// Maps a User to a Team with a specific role.
@@ -768,9 +771,68 @@ model ScrimSchedule {
   createdById  String
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
-  team         Team      @relation("HomeTeam", fields: [teamId], references: [id])
-  rivalTeam    Team?     @relation("RivalTeam", fields: [rivalTeamId], references: [id])
-  createdBy    User      @relation(fields: [createdById], references: [id])
+  team           Team            @relation("HomeTeam", fields: [teamId], references: [id])
+  rivalTeam      Team?           @relation("RivalTeam", fields: [rivalTeamId], references: [id])
+  createdBy      User            @relation(fields: [createdById], references: [id])
+  reviewSessions ReviewSession[]
+}
+
+/// Structured review session organized after a scrim or match.
+/// status: "PENDIENTE" | "EN_CURSO" | "COMPLETADA"
+model ReviewSession {
+  id           String       @id @default(cuid())
+  teamId       String
+  /// Optional link to a ScrimSchedule entry
+  scrimId      String?
+  title        String
+  /// General session notes (markdown / free text)
+  notes        String?
+  /// "PENDIENTE" | "EN_CURSO" | "COMPLETADA"
+  status       String       @default("PENDIENTE")
+  scheduledAt  DateTime?
+  completedAt  DateTime?
+  createdById  String
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+  team         Team         @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  scrim        ScrimSchedule? @relation(fields: [scrimId], references: [id], onDelete: SetNull)
+  createdBy    User         @relation(fields: [createdById], references: [id])
+  agendaItems  AgendaItem[]
+  actionItems  ActionItem[]
+}
+
+/// A point on the review session agenda — what to watch/discuss.
+model AgendaItem {
+  id           String        @id @default(cuid())
+  sessionId    String
+  /// Display order within the session
+  order        Int
+  title        String
+  description  String?
+  /// Optional VOD timestamp in seconds (e.g. 342 = 5m 42s)
+  vodTimestamp Int?
+  /// Free-text player or role reference (e.g. "Carry — PlayerX")
+  playerRef    String?
+  reviewed     Boolean       @default(false)
+  createdAt    DateTime      @default(now())
+  session      ReviewSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+}
+
+/// An action item that comes out of a review session.
+/// status: "ABIERTO" | "EN_PROGRESO" | "COMPLETADO"
+model ActionItem {
+  id         String        @id @default(cuid())
+  sessionId  String
+  title      String
+  /// Optionally assigned to a user (player, coach, etc.)
+  assignedTo String?
+  /// "ABIERTO" | "EN_PROGRESO" | "COMPLETADO"
+  status     String        @default("ABIERTO")
+  dueDate    DateTime?
+  createdAt  DateTime      @default(now())
+  updatedAt  DateTime      @updatedAt
+  session    ReviewSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  assignee   User?         @relation(fields: [assignedTo], references: [id], onDelete: SetNull)
 }
 
 /// A tactical entry in the team's playbook — strategies, setups, and rules.
