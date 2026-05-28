@@ -366,6 +366,21 @@ teamsRouter.post('/:teamId/rival-roster', requireAuth, requireRole(['COACH', 'MA
       update: { role: role ?? null },
     });
 
+    // Also ensure the player is in TeamRoster so rival team analysis works
+    const existingRoster = await db.teamRoster.findFirst({
+      where: { teamId, playerId: player.id, activeTo: null },
+    });
+    if (!existingRoster) {
+      await db.teamRoster.create({
+        data: { teamId, playerId: player.id, role: role ?? null, rosterStatus: 'STARTER' },
+      });
+    } else if (role && existingRoster.role !== role) {
+      await db.teamRoster.update({
+        where: { id: existingRoster.id },
+        data: { role },
+      });
+    }
+
     const snap = player.snapshots[0];
     res.status(201).json({
       id: entry.id,
@@ -394,9 +409,14 @@ teamsRouter.delete('/:teamId/rival-roster/:playerId', requireAuth, requireRole([
     const player = await db.player.findUnique({ where: { id: playerId }, select: { id: true } });
     if (!player) throw new AppError(404, 'Jugador no encontrado', 'NOT_FOUND');
 
-    await db.rivalRosterEntry.deleteMany({
-      where: { teamId, playerId },
+    await db.rivalRosterEntry.deleteMany({ where: { teamId, playerId } });
+
+    // Mirror removal in TeamRoster (soft-delete by setting activeTo)
+    await db.teamRoster.updateMany({
+      where: { teamId, playerId, activeTo: null },
+      data: { activeTo: new Date() },
     });
+
     res.json({ ok: true });
   } catch (err) {
     next(err);
