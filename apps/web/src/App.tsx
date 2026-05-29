@@ -24,6 +24,7 @@ import Unauthorized from './pages/Unauthorized';
 import TeamManagement from './pages/TeamManagement';
 import DataQualityPage from './pages/DataQualityPage';
 import AuditLogsPage from './pages/AuditLogsPage';
+import InvitationsAdminPage from './pages/InvitationsAdminPage';
 import UsersPage from './pages/UsersPage';
 import ProfilePage from './pages/ProfilePage';
 import ApiStatusPage from './pages/ApiStatusPage';
@@ -307,6 +308,7 @@ function useSections(t: (key: string) => string): SidebarSection[] {
       icon: <Settings size={17} />,
       items: [
         { to: '/admin/users', label: t('nav.users') },
+        { to: '/admin/invitations', label: t('nav.invitations', 'Invitaciones') },
         { to: '/admin/data-quality', label: t('nav.dataQuality') },
         { to: '/management/roles', label: t('nav.rolesPermissions') },
         { to: '/admin/api-status', label: t('nav.apiStatus') },
@@ -619,6 +621,7 @@ function AppContent() {
             <Route path="/admin/config" element={<ConfigPage />} />
             <Route path="/admin/api-status" element={<ApiStatusPage />} />
             <Route path="/admin/audit-logs" element={<AuditLogsPage />} />
+            <Route path="/admin/invitations" element={<InvitationsAdminPage />} />
             <Route path="/admin/feedback" element={<FeedbackPage />} />
             <Route path="/management/roles" element={<PermissionsPage />} />
 
