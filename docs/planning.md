@@ -320,35 +320,24 @@ El coach inicia una sesión táctica en vivo desde Session Mode. Todos los miemb
 
 ---
 
-## [ ] Tarea 28 — Sistema de Misiones y Logros (onboarding gamificado)
-*Issue: #218. Prerequisito: ProfilePage existente. Relacionado con Tarea 19 (Review Sessions).*
+## [x] Tarea 28 — Sistema de Misiones y Logros (onboarding gamificado)
+*Issue: #218. PRs #226, #227. Desplegado en producción (2026-05-29).*
 
-Primera versión del sistema de gamificación: misiones de «primeros pasos» adaptadas al rol de cada usuario. Al completarlas, el usuario gana un logro visible en su perfil. Diseñado para ser extensible a retos semanales, maestría y rangos.
+Catálogo estático de misiones por rol. Completions y logros en BD (`UserMissionCompletion`, `UserAchievement`). WelcomeModal en primera entrada. Panel «Primeros pasos» en Dashboard. Hooks fire-and-forget en rutas existentes. PLATFORM_ADMIN puede previsualizar misiones por rol con `?role=`.
 
-### Roles y misiones
-Cada rol tiene su propio set (8 misiones COACH, 6 MANAGER, 6 ANALISTA, 6 JUGADOR en equipo, 6 JUGADOR solo). Algunas compartidas (completar perfil, vincular pred.gg).
+**Misiones por rol (final):**
+- **COACH (8):** Completa perfil · Vincula pred.gg · Programa primer scrim · Crea entrada Playbook · Scout rival · Completa sesión de revisión · Usa Tablero Táctico · Revisa insights
+- **MANAGER (6):** Completa perfil · Vincula pred.gg · Crea tu equipo · Invita un miembro · Completa perfil del equipo · Revisa rendimiento del equipo
+- **ANALISTA (6):** Completa perfil · Vincula pred.gg · Analiza un jugador · Crea ítem de revisión · Completa tu primer análisis · Revisa insights
+- **JUGADOR (6):** Completa perfil · Vincula pred.gg · Consulta tu perfil · Objetivo semanal · Revisa hero pool · Consulta rendimiento del equipo
+- **PLAYER (6):** Completa perfil · Vincula pred.gg · Consulta tu perfil · Objetivo semanal · Revisa hero pool · Busca un jugador
 
-### DB (Prisma)
-- [ ] Modelo `Mission` — catálogo de misiones (id, category, roles[], title, ctaPath, order)
-- [ ] Modelo `UserMissionCompletion` — progreso por usuario
-- [ ] Modelo `UserAchievement` — logros ganados
-- [ ] Campo `onboardingModalSeen Boolean` en `User`
+Formulario «Nuevo ítem de revisión» añadido en ReviewQueue para que el analista complete la misión `CREATE_REVIEW_ITEM` de forma natural (PR #227).
 
-### API
-- [ ] `GET /missions/me` — misiones del rol del usuario con estado completado/pendiente
-- [ ] `POST /missions/complete/:missionId` — marcar completada (frontend-triggered)
-- [ ] `GET /achievements/me` — logros del usuario
-- [ ] Hooks server-side en routes existentes para auto-completar misiones (crear scrim, playbook, weekly-goal, etc.)
+## [x] Tarea 29 — Team Hub (gestión unificada de equipos)
+*PRs #226, #227. Desplegado en producción (2026-05-29).*
 
-### Frontend
-- [ ] Modal de bienvenida (primera entrada) — rol del usuario + lista de primeros pasos
-- [ ] Sección «Primeros pasos» en Dashboard — cards de misiones pendientes + barra de progreso
-- [ ] Confetti + toast + logro al completar todas
-- [ ] Sección «Logros» en ProfilePage — badges con nombre, icono y fecha
-- [ ] Flag `onboardingModalSeen` para no repetir el modal
-
-### Extensibilidad futura
-Sistema preparado para: misiones de exploración/maestría, retos semanales con expiración, XP acumulable, rangos en perfil, recompensas visuales.
+`/management/teams` sustituye a TeamRoster + StaffManagement. Lista de equipos con badge de rol; detalle con secciones Staff, Jugadores y Roster pred.gg. Cambio de rol inline para MANAGER. Panel de invitaciones. Creador queda automáticamente como MANAGER. COACH puede gestionar roster. `/management/staff` redirige a `/management/teams`.
 
 ---
 
