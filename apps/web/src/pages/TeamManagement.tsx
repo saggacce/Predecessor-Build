@@ -266,6 +266,15 @@ function TeamDetail({ teamId, onBack }: { teamId: string; onBack: () => void }) 
     }
   }
 
+  async function handleChangeRole(member: TeamStaffMember, role: string) {
+    try {
+      await apiClient.teams.updateMember(teamId, member.userId, role);
+      setProfile((p) => p ? { ...p, staff: p.staff.map((s) => s.userId === member.userId ? { ...s, role } : s) } : p);
+    } catch (err) {
+      toast.error(err instanceof ApiErrorResponse ? err.error.message : 'Failed to update role.');
+    }
+  }
+
   if (loading) return <div style={{ padding: '2rem', color: 'var(--text-muted)' }}>{t('common.loading')}</div>;
   if (!profile) return null;
 
@@ -330,8 +339,9 @@ function TeamDetail({ teamId, onBack }: { teamId: string; onBack: () => void }) 
             <MemberRow
               key={member.userId}
               member={member}
-              canRemove={canManageStaff && !(member.role === 'MANAGER' && !isPlatformAdmin)}
+              canManage={canManageStaff && !(member.role === 'MANAGER' && !isPlatformAdmin)}
               onRemove={() => void handleRemoveMember(member)}
+              onRoleChange={(role) => void handleChangeRole(member, role)}
             />
           ))
         )}
@@ -350,8 +360,9 @@ function TeamDetail({ teamId, onBack }: { teamId: string; onBack: () => void }) 
             <MemberRow
               key={member.userId}
               member={member}
-              canRemove={canManageStaff}
+              canManage={canManageStaff}
               onRemove={() => void handleRemoveMember(member)}
+              onRoleChange={(role) => void handleChangeRole(member, role)}
             />
           ))}
         </section>
@@ -370,7 +381,14 @@ function TeamDetail({ teamId, onBack }: { teamId: string; onBack: () => void }) 
 
 // ── Member Row ────────────────────────────────────────────────────────────────
 
-function MemberRow({ member, canRemove, onRemove }: { member: TeamStaffMember; canRemove: boolean; onRemove: () => void }) {
+const MEMBER_ROLES = ['MANAGER', 'COACH', 'ANALISTA', 'JUGADOR'] as const;
+
+function MemberRow({ member, canManage, onRemove, onRoleChange }: {
+  member: TeamStaffMember;
+  canManage: boolean;
+  onRemove: () => void;
+  onRoleChange: (role: string) => void;
+}) {
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.7rem 1.1rem', borderBottom: '1px solid var(--border-color)' }}>
       <div style={{ width: 32, height: 32, borderRadius: '50%', background: 'var(--bg-dark)', border: '1px solid var(--border-color)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.85rem', fontWeight: 700, color: ROLE_COLORS[member.role] ?? 'var(--text-muted)', flexShrink: 0 }}>
@@ -380,10 +398,20 @@ function MemberRow({ member, canRemove, onRemove }: { member: TeamStaffMember; c
         <p style={{ margin: 0, fontWeight: 600, fontSize: '0.88rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{member.name}</p>
         <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: '0.75rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{member.email}</p>
       </div>
-      <span style={{ fontSize: '0.68rem', fontWeight: 800, color: ROLE_COLORS[member.role] ?? 'var(--text-muted)', border: `1px solid ${ROLE_COLORS[member.role] ?? 'var(--border-color)'}`, borderRadius: '999px', padding: '0.1rem 0.5rem', letterSpacing: '0.04em', flexShrink: 0 }}>
-        {member.role}
-      </span>
-      {canRemove && (
+      {canManage ? (
+        <select
+          value={member.role}
+          onChange={(e) => onRoleChange(e.target.value)}
+          style={{ fontSize: '0.72rem', fontWeight: 800, color: ROLE_COLORS[member.role] ?? 'var(--text-muted)', background: 'var(--bg-dark)', border: `1px solid ${ROLE_COLORS[member.role] ?? 'var(--border-color)'}`, borderRadius: '999px', padding: '0.1rem 0.5rem', cursor: 'pointer', flexShrink: 0, appearance: 'none', textAlign: 'center' }}
+        >
+          {MEMBER_ROLES.map((r) => <option key={r} value={r}>{r}</option>)}
+        </select>
+      ) : (
+        <span style={{ fontSize: '0.68rem', fontWeight: 800, color: ROLE_COLORS[member.role] ?? 'var(--text-muted)', border: `1px solid ${ROLE_COLORS[member.role] ?? 'var(--border-color)'}`, borderRadius: '999px', padding: '0.1rem 0.5rem', letterSpacing: '0.04em', flexShrink: 0 }}>
+          {member.role}
+        </span>
+      )}
+      {canManage && (
         <button onClick={onRemove} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--accent-loss)', display: 'flex', padding: '0.25rem', flexShrink: 0 }}>
           <UserMinus size={15} />
         </button>

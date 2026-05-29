@@ -139,6 +139,25 @@ teamsRouter.delete('/:teamId', requireAuth, requireRole(['MANAGER']), async (req
   }
 });
 
+/** PATCH /teams/:teamId/members/:userId — change a member's role */
+teamsRouter.patch('/:teamId/members/:userId', requireAuth, requireRole(['MANAGER']), async (req, res, next) => {
+  try {
+    const { teamId, userId } = req.params;
+    const { role } = req.body as { role: string };
+    const validRoles = ['MANAGER', 'COACH', 'ANALISTA', 'JUGADOR'];
+    if (!validRoles.includes(role)) throw new AppError(400, 'Invalid role', 'INVALID_ROLE');
+    const membership = await db.teamMembership.findUnique({ where: { userId_teamId: { userId, teamId } } });
+    if (!membership) throw new AppError(404, 'Member not found', 'NOT_FOUND');
+    if (membership.role === 'MANAGER' && req.user?.globalRole !== 'PLATFORM_ADMIN') {
+      throw new AppError(403, 'Only a platform admin can change a manager\'s role', 'FORBIDDEN');
+    }
+    await db.teamMembership.update({ where: { userId_teamId: { userId, teamId } }, data: { role } });
+    res.json({ ok: true });
+  } catch (err) {
+    next(err);
+  }
+});
+
 /** DELETE /teams/:teamId/members/:userId — remove a platform user from this team */
 teamsRouter.delete('/:teamId/members/:userId', requireAuth, requireRole(['MANAGER']), async (req, res, next) => {
   try {

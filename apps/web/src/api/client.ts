@@ -1105,6 +1105,8 @@ export const apiClient = {
       fetchApi<{ id: string }>(`/teams/${teamId}/roster/${rosterId}`, { method: 'PATCH', body: JSON.stringify({ role, rosterStatus }) }),
     removePlayer: (teamId: string, rosterId: string) =>
       fetchApi<{ ok: boolean }>(`/teams/${teamId}/roster/${rosterId}`, { method: 'DELETE' }),
+    updateMember: (teamId: string, userId: string, role: string) =>
+      fetchApi<{ ok: boolean }>(`/teams/${teamId}/members/${userId}`, { method: 'PATCH', body: JSON.stringify({ role }) }),
     removeMember: (teamId: string, userId: string) =>
       fetchApi<{ ok: boolean }>(`/teams/${teamId}/members/${userId}`, { method: 'DELETE' }),
     getAnalysis: (id: string) => fetchApi<TeamAnalysis>(`/teams/${id}/analysis`),
