@@ -4,14 +4,15 @@ import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { apiClient, type PlatformPermissions, type ConfigurableRole, type PermissionKey } from '../api/client';
 
-const ROLES: ConfigurableRole[] = ['PLATFORM_ADMIN', 'MANAGER', 'COACH', 'ANALISTA', 'JUGADOR'];
+const ROLES: ConfigurableRole[] = ['PLATFORM_ADMIN', 'MANAGER', 'COACH', 'ANALISTA', 'JUGADOR', 'PLAYER'];
 
 const ROLE_LABELS: Record<ConfigurableRole, string> = {
   PLATFORM_ADMIN: 'Platform Admin',
   MANAGER: 'Manager',
   COACH: 'Coach',
   ANALISTA: 'Analista',
-  JUGADOR: 'Jugador',
+  JUGADOR: 'Jugador (equipo)',
+  PLAYER: 'Jugador solo',
 };
 
 type PermRow = {

@@ -1,7 +1,7 @@
 import { PrismaClient } from '@prisma/client';
 
 // Roles whose permissions are configurable (SUPER_ADMIN is always full access)
-export const CONFIGURABLE_ROLES = ['PLATFORM_ADMIN', 'MANAGER', 'COACH', 'ANALISTA', 'JUGADOR'] as const;
+export const CONFIGURABLE_ROLES = ['PLATFORM_ADMIN', 'MANAGER', 'COACH', 'ANALISTA', 'JUGADOR', 'PLAYER'] as const;
 export type ConfigurableRole = (typeof CONFIGURABLE_ROLES)[number];
 
 export type PermissionKey =
@@ -122,12 +122,38 @@ export const DEFAULT_PERMISSIONS: PlatformPermissions = {
     'platformAdmin.view': false, 'platformAdmin.dataControls': false, 'platformAdmin.staff': false,
     'platformAdmin.auditLogs': false, 'platformAdmin.feedback': false, 'platformAdmin.permissions': false,
   },
+  // Standalone player (globalRole: PLAYER) — no team, only own stats
+  PLAYER: {
+    'teams.own.view': false, 'teams.own.create': false, 'teams.own.edit': false, 'teams.own.delete': false,
+    'teams.own.addPlayer': false, 'teams.own.removePlayer': false, 'teams.own.editPlayerName': false, 'teams.own.syncMatches': false,
+    'teams.rival.view': false, 'teams.rival.create': false, 'teams.rival.edit': false, 'teams.rival.delete': false,
+    'teams.rival.addPlayer': false, 'teams.rival.removePlayer': false, 'teams.rival.syncMatches': false,
+    'teamAnalysis.view': false, 'teamAnalysis.performance': false, 'teamAnalysis.draft': false,
+    'teamAnalysis.vision': false, 'teamAnalysis.analyst': false,
+    'playerScouting.view': true, 'playerScouting.syncPlayer': false, 'playerScouting.editPlayerName': false,
+    'playerGoals.view': true, 'playerGoals.create': true, 'playerGoals.edit': true, 'playerGoals.delete': true,
+    'matchDetail.view': true, 'matchDetail.syncMatch': false, 'matchDetail.editPlayerName': false,
+    'matchDetail.scoreboard': true, 'matchDetail.statistics': true, 'matchDetail.timeline': false, 'matchDetail.analysis': false,
+    'scrimReport.view': false, 'scrimReport.export': false,
+    'reviewQueue.view': false, 'reviewQueue.createItem': false, 'reviewQueue.editItem': false, 'reviewQueue.deleteItem': false,
+    'teamGoals.view': false, 'teamGoals.create': false, 'teamGoals.edit': false, 'teamGoals.delete': false,
+    'vodIndex.view': false, 'vodIndex.create': false, 'vodIndex.edit': false, 'vodIndex.delete': false,
+    'invitations.view': false, 'invitations.create': false, 'invitations.revoke': false,
+    'platformAdmin.view': false, 'platformAdmin.dataControls': false, 'platformAdmin.staff': false,
+    'platformAdmin.auditLogs': false, 'platformAdmin.feedback': false, 'platformAdmin.permissions': false,
+  },
 };
 
 export async function getPermissions(db: PrismaClient): Promise<PlatformPermissions> {
   const config = await (db as any).permissionsConfig.findUnique({ where: { id: 'global' } });
   if (!config) return DEFAULT_PERMISSIONS;
-  return config.permissions as PlatformPermissions;
+  // Merge stored config with defaults so newly added roles always have permissions
+  const stored = config.permissions as Partial<PlatformPermissions>;
+  const merged = { ...DEFAULT_PERMISSIONS };
+  for (const role of CONFIGURABLE_ROLES) {
+    if (stored[role]) merged[role] = stored[role];
+  }
+  return merged;
 }
 
 export async function savePermissions(

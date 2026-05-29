@@ -1,6 +1,6 @@
 import type { VersionRecord } from '@predecessor/data-model';
 
-export type ConfigurableRole = 'PLATFORM_ADMIN' | 'MANAGER' | 'COACH' | 'ANALISTA' | 'JUGADOR';
+export type ConfigurableRole = 'PLATFORM_ADMIN' | 'MANAGER' | 'COACH' | 'ANALISTA' | 'JUGADOR' | 'PLAYER';
 export type PermissionKey =
   | 'teams.own.view' | 'teams.own.create' | 'teams.own.edit' | 'teams.own.delete'
   | 'teams.own.addPlayer' | 'teams.own.removePlayer' | 'teams.own.editPlayerName' | 'teams.own.syncMatches'
