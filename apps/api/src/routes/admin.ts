@@ -36,6 +36,14 @@ async function getTokenForSync(req: Request, res: Response): Promise<string | nu
     if (!cred) return null;
     const result = await exchangeToken({ grant_type: 'refresh_token', refresh_token: cred.value });
     if (!result.ok || !result.data.access_token) return null;
+    // Persist rotated refresh token
+    if (result.data.refresh_token) {
+      await db.platformCredential.upsert({
+        where: { key: 'predgg_refresh_token' },
+        update: { value: result.data.refresh_token },
+        create: { key: 'predgg_refresh_token', value: result.data.refresh_token },
+      }).catch(() => null);
+    }
     return result.data.access_token;
   } catch {
     return null;
@@ -193,6 +201,44 @@ let cronJob: CronJob = {
   enabled: false, running: false, lastRunAt: null, lastRunResult: null, nextRunAt: null,
 };
 let cronTimer: ReturnType<typeof setInterval> | null = null;
+
+// ── Token keep-alive — refresh every 20 min so the stored token never expires ──
+const TOKEN_REFRESH_INTERVAL_MS = 20 * 60 * 1000;
+let tokenRefreshTimer: ReturnType<typeof setInterval> | null = null;
+
+async function refreshPlatformToken(): Promise<void> {
+  try {
+    const cred = await db.platformCredential.findUnique({ where: { key: 'predgg_refresh_token' } });
+    if (!cred) return;
+    const result = await exchangeToken({ grant_type: 'refresh_token', refresh_token: cred.value });
+    if (!result.ok || !result.data.access_token) {
+      logger.warn({ error: result.data?.error }, 'token keep-alive: refresh failed');
+      return;
+    }
+    if (result.data.refresh_token) {
+      await db.platformCredential.upsert({
+        where: { key: 'predgg_refresh_token' },
+        update: { value: result.data.refresh_token },
+        create: { key: 'predgg_refresh_token', value: result.data.refresh_token },
+      });
+    }
+    logger.info('token keep-alive: refresh token renewed successfully');
+  } catch (err) {
+    logger.warn({ err }, 'token keep-alive: unexpected error');
+  }
+}
+
+export function startTokenKeepAlive(): void {
+  if (tokenRefreshTimer) return;
+  tokenRefreshTimer = setInterval(() => { void refreshPlatformToken(); }, TOKEN_REFRESH_INTERVAL_MS);
+  // Run immediately on start to validate the stored token
+  void refreshPlatformToken();
+  logger.info({ intervalMs: TOKEN_REFRESH_INTERVAL_MS }, 'token keep-alive: started');
+}
+
+export function stopTokenKeepAlive(): void {
+  if (tokenRefreshTimer) { clearInterval(tokenRefreshTimer); tokenRefreshTimer = null; }
+}
 const CRON_INTERVAL_MS = parseInt(process.env.SYNC_CRON_INTERVAL_MS ?? String(2 * 60 * 60 * 1000), 10);
 
 async function runGlobalSync(): Promise<void> {
@@ -217,6 +263,16 @@ async function runGlobalSync(): Promise<void> {
       return;
     }
     const token = tokenResult.data.access_token;
+
+    // pred.gg rotates refresh tokens — persist the new one so the next cron run succeeds
+    if (tokenResult.data.refresh_token) {
+      await db.platformCredential.upsert({
+        where: { key: 'predgg_refresh_token' },
+        update: { value: tokenResult.data.refresh_token },
+        create: { key: 'predgg_refresh_token', value: tokenResult.data.refresh_token },
+      }).catch((err) => logger.warn({ err }, 'global sync cron: failed to persist rotated refresh token'));
+      logger.info('global sync cron: refresh token rotated and persisted');
+    }
 
     const players = await db.player.findMany({
       where: { displayName: { not: 'HIDDEN' }, predggId: { not: '' } },
