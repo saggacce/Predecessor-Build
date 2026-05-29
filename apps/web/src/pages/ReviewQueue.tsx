@@ -68,6 +68,11 @@ export default function ReviewQueue() {
   const [statusFilter, setStatusFilter] = useState('');
   const [priorityFilter, setPriorityFilter] = useState('');
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [showNewItem, setShowNewItem] = useState(false);
+  const [newItemReason, setNewItemReason] = useState('');
+  const [newItemEventType, setNewItemEventType] = useState('teamfight');
+  const [newItemPriority, setNewItemPriority] = useState('medium');
+  const [creatingItem, setCreatingItem] = useState(false);
   const [showNewGoal, setShowNewGoal] = useState(false);
   const [newGoalTitle, setNewGoalTitle] = useState('');
   const [newGoalMetric, setNewGoalMetric] = useState('');
@@ -127,6 +132,27 @@ export default function ReviewQueue() {
       await apiClient.review.delete(id);
       setItems((prev) => prev.filter((i) => i.id !== id));
     } catch { toast.error('Failed to delete item.'); }
+  }
+
+  async function handleCreateItem() {
+    if (!newItemReason.trim() || !selectedTeamId) return;
+    setCreatingItem(true);
+    try {
+      const item = await apiClient.review.create({
+        teamId: selectedTeamId,
+        eventType: newItemEventType,
+        priority: newItemPriority,
+        reason: newItemReason.trim(),
+      });
+      setItems((prev) => [item, ...prev]);
+      setNewItemReason('');
+      setNewItemEventType('teamfight');
+      setNewItemPriority('medium');
+      setShowNewItem(false);
+      toast.success('Ítem creado.');
+      void apiClient.missions.complete('CREATE_REVIEW_ITEM').catch(() => null);
+    } catch { toast.error('Error al crear el ítem.'); }
+    finally { setCreatingItem(false); }
   }
 
   async function handleCreateGoal() {
@@ -218,7 +244,7 @@ export default function ReviewQueue() {
       {/* ── REVIEW QUEUE TAB ─────────────────────────────────────────────── */}
       {!loading && activeTab === 'queue' && (
         <div className="glass-card" style={{ padding: 0, overflow: 'hidden' }}>
-          {/* Filters */}
+          {/* Filters + New item button */}
           <div style={{ display: 'flex', gap: '0.5rem', padding: '0.75rem 1rem', borderBottom: '1px solid var(--border-color)', background: 'rgba(255,255,255,0.02)', flexWrap: 'wrap', alignItems: 'center' }}>
             <span style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Filter:</span>
             <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="input" style={{ fontSize: '0.72rem', padding: '0.25rem 0.5rem', width: 'auto' }}>
@@ -230,13 +256,61 @@ export default function ReviewQueue() {
               {['critical', 'high', 'medium', 'low'].map((p) => <option key={p} value={p}>{p.charAt(0).toUpperCase() + p.slice(1)}</option>)}
             </select>
             <span style={{ marginLeft: 'auto', fontFamily: 'var(--font-mono)', fontSize: '0.65rem', color: 'var(--text-muted)' }}>{items.length} items</span>
+            {selectedTeamId && (
+              <button
+                onClick={() => setShowNewItem((v) => !v)}
+                className="btn-primary"
+                style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.75rem', padding: '0.3rem 0.7rem', flex: 'unset' }}
+              >
+                <Plus size={13} /> Nuevo ítem
+              </button>
+            )}
           </div>
+
+          {/* New item form */}
+          {showNewItem && (
+            <div style={{ padding: '1rem', borderBottom: '1px solid var(--border-color)', background: 'rgba(107,170,248,0.04)', display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
+              <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                <select value={newItemEventType} onChange={(e) => setNewItemEventType(e.target.value)} className="input" style={{ fontSize: '0.78rem', width: 'auto' }}>
+                  {[
+                    ['teamfight', 'Teamfight'],
+                    ['objective', 'Objetivo'],
+                    ['rotation', 'Rotación'],
+                    ['vision', 'Visión'],
+                    ['draft', 'Draft'],
+                    ['laning', 'Laning'],
+                    ['communication', 'Comunicación'],
+                    ['other', 'Otro'],
+                  ].map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                </select>
+                <select value={newItemPriority} onChange={(e) => setNewItemPriority(e.target.value)} className="input" style={{ fontSize: '0.78rem', width: 'auto' }}>
+                  {['critical', 'high', 'medium', 'low'].map((p) => (
+                    <option key={p} value={p} style={{ color: PRIORITY_COLOR[p] }}>{p.charAt(0).toUpperCase() + p.slice(1)}</option>
+                  ))}
+                </select>
+              </div>
+              <textarea
+                className="input"
+                placeholder="Describe qué ocurrió y por qué es relevante revisarlo…"
+                value={newItemReason}
+                onChange={(e) => setNewItemReason(e.target.value)}
+                rows={2}
+                style={{ width: '100%', resize: 'vertical', fontSize: '0.82rem' }}
+              />
+              <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
+                <button onClick={() => setShowNewItem(false)} className="btn-secondary" style={{ flex: 'unset', fontSize: '0.78rem' }}>Cancelar</button>
+                <button onClick={() => void handleCreateItem()} disabled={creatingItem || !newItemReason.trim()} className="btn-primary" style={{ flex: 'unset', fontSize: '0.78rem' }}>
+                  {creatingItem ? 'Creando…' : 'Crear ítem'}
+                </button>
+              </div>
+            </div>
+          )}
 
           {items.length === 0 ? (
             <div style={{ padding: '3rem', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.85rem' }}>
               <CheckCircle size={32} style={{ margin: '0 auto 0.75rem', opacity: 0.4 }} />
-              <div style={{ fontWeight: 600, marginBottom: '0.25rem' }}>No items in queue</div>
-              <div style={{ fontSize: '0.75rem' }}>Items are created automatically from Analyst insights or manually from TeamAnalysis.</div>
+              <div style={{ fontWeight: 600, marginBottom: '0.25rem' }}>No hay ítems en la cola</div>
+              <div style={{ fontSize: '0.75rem' }}>Crea un ítem manualmente con el botón «Nuevo ítem».</div>
             </div>
           ) : (
             items.map((item, i) => (
