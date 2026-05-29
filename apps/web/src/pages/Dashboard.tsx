@@ -1,12 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router';
-import { Server, Zap, RefreshCw, CheckCircle, XCircle, ArrowRight, Users, Sparkles, ThumbsUp, ThumbsDown, Send, Download, Target, BookOpen, Shield, Star, TrendingUp, BarChart2, MessageSquare, PlusCircle, Calendar, Bell, Search, ChevronRight, Trophy, AlertTriangle, Clock } from 'lucide-react';
+import { Server, Zap, RefreshCw, CheckCircle, XCircle, ArrowRight, Users, Sparkles, ThumbsUp, ThumbsDown, Send, Download, Target, BookOpen, Shield, Star, TrendingUp, BarChart2, MessageSquare, PlusCircle, Calendar, Bell, Search, ChevronRight, Trophy, AlertTriangle, Clock, CheckCircle2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useTranslation } from 'react-i18next';
-import { apiClient, ApiErrorResponse, type TeamProfile, type TeamAnalysis, type PlayerProfile, type Insight, type HeroStat, type ScrimScheduleItem, type TeamCommItem, type WeeklyGoalItem, type PlayerAnalysisStat, type PostMatchTask } from '../api/client';
+import { apiClient, ApiErrorResponse, type TeamProfile, type TeamAnalysis, type PlayerProfile, type Insight, type HeroStat, type ScrimScheduleItem, type TeamCommItem, type WeeklyGoalItem, type PlayerAnalysisStat, type PostMatchTask, type MissionItem } from '../api/client';
 import { useAuth } from '../hooks/useAuth';
 import { useViewAs } from '../hooks/useViewAs';
 import { LinkPlayerModal } from '../components/LinkPlayerModal';
+import { WelcomeModal } from '../components/WelcomeModal';
 import type { VersionRecord } from '@predecessor/data-model';
 
 type SyncState =
@@ -79,6 +80,76 @@ function TeamFormStrip({ analysis }: { analysis: TeamAnalysis | null }) {
   );
 }
 
+// ── Onboarding missions panel ─────────────────────────────────────────────────
+function MissionsPanel({ missions, completedCount, progressPct, lang, onMissionComplete }: {
+  missions: MissionItem[];
+  completedCount: number;
+  progressPct: number;
+  lang: 'en' | 'es';
+  onMissionComplete: (id: string) => void;
+}) {
+  const navigate = useNavigate();
+  const [expanded, setExpanded] = useState(true);
+  const pending = missions.filter((m) => !m.completed);
+  const title = lang === 'es' ? 'Primeros pasos' : 'Getting started';
+  const progressLabel = lang === 'es'
+    ? `${completedCount} de ${missions.length} completadas`
+    : `${completedCount} of ${missions.length} completed`;
+
+  function handleAction(m: MissionItem) {
+    if (m.completed) return;
+    onMissionComplete(m.id);
+    navigate(m.ctaPath);
+  }
+
+  return (
+    <div className="glass-card" style={{ padding: '1rem 1.25rem' }}>
+      <div
+        style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', cursor: 'pointer', marginBottom: expanded ? '1rem' : 0 }}
+        onClick={() => setExpanded((v) => !v)}
+      >
+        <Trophy size={14} style={{ color: 'var(--accent-prime)', flexShrink: 0 }} />
+        <span style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', flex: 1 }}>{title}</span>
+        <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>{progressLabel}</span>
+        <div style={{ width: 80, height: 4, background: 'rgba(255,255,255,0.1)', borderRadius: 4, overflow: 'hidden', flexShrink: 0 }}>
+          <div style={{ width: `${progressPct}%`, height: '100%', background: 'linear-gradient(90deg, #6baaf8, #4a85e0)', borderRadius: 4, transition: 'width 0.4s' }} />
+        </div>
+        <ChevronRight size={14} style={{ color: 'var(--text-muted)', transform: expanded ? 'rotate(90deg)' : 'none', transition: 'transform 0.2s', flexShrink: 0 }} />
+      </div>
+
+      {expanded && (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: '0.5rem' }}>
+          {missions.map((m) => (
+            <button
+              key={m.id}
+              onClick={() => handleAction(m)}
+              disabled={m.completed}
+              style={{
+                display: 'flex', alignItems: 'center', gap: '0.65rem',
+                padding: '0.6rem 0.85rem',
+                background: m.completed ? 'rgba(255,255,255,0.03)' : 'rgba(107,170,248,0.06)',
+                border: `1px solid ${m.completed ? 'rgba(255,255,255,0.06)' : 'rgba(107,170,248,0.18)'}`,
+                borderRadius: 7, cursor: m.completed ? 'default' : 'pointer',
+                textAlign: 'left', width: '100%', transition: 'background 0.15s',
+              }}
+              onMouseEnter={(e) => { if (!m.completed) (e.currentTarget as HTMLButtonElement).style.background = 'rgba(107,170,248,0.12)'; }}
+              onMouseLeave={(e) => { if (!m.completed) (e.currentTarget as HTMLButtonElement).style.background = 'rgba(107,170,248,0.06)'; }}
+            >
+              {m.completed
+                ? <CheckCircle2 size={14} style={{ color: 'var(--accent-win)', flexShrink: 0 }} />
+                : <ArrowRight size={14} style={{ color: 'var(--accent-blue)', flexShrink: 0 }} />
+              }
+              <span style={{ fontSize: '0.78rem', fontWeight: m.completed ? 400 : 600, color: m.completed ? 'var(--text-muted)' : 'var(--text-primary)', textDecoration: m.completed ? 'line-through' : 'none' }}>
+                {m.title[lang]}
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Main dashboard ────────────────────────────────────────────────────────────
 export default function Dashboard() {
   const { t, i18n } = useTranslation();
@@ -101,6 +172,10 @@ export default function Dashboard() {
   const [playerStats, setPlayerStats] = useState<PlayerAnalysisStat[]>([]);
   const [postMatchTasks, setPostMatchTasks] = useState<PostMatchTask[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
+  const [missions, setMissions] = useState<MissionItem[]>([]);
+  const [missionsRole, setMissionsRole] = useState<string | null>(null);
+  const [allMissionsComplete, setAllMissionsComplete] = useState(false);
+  const [showWelcomeModal, setShowWelcomeModal] = useState(false);
 
   // Determine role
   // If admin is previewing as a role, use the simulated role
@@ -250,6 +325,28 @@ export default function Dashboard() {
     apiClient.weeklyGoals.mine().then((r) => setWeeklyGoals(r.goals)).catch(() => null);
   }, [isPlatformAdmin, ownTeam?.id, user?.globalRole]);
 
+  // Fetch missions: team members, standalone PLAYER, or admin previewing a role
+  useEffect(() => {
+    if (!internalAuthenticated) return;
+    const hasMembership = (user?.memberships?.length ?? 0) > 0;
+    const isPlayer = user?.globalRole === 'PLAYER';
+    // Use raw globalRole — isPlatformAdmin is false when viewAs is active
+    const isRealAdmin = user?.globalRole === 'PLATFORM_ADMIN';
+    const isAdminPreviewingRole = isRealAdmin && !!viewAs && ['MANAGER','COACH','ANALISTA','JUGADOR','PLAYER'].includes(viewAs);
+    if (!hasMembership && !isPlayer && !isAdminPreviewingRole) return;
+    const roleParam = isAdminPreviewingRole ? viewAs : undefined;
+    apiClient.missions.me(roleParam ?? undefined)
+      .then((r) => {
+        setMissions(r.missions);
+        setMissionsRole(r.role);
+        setAllMissionsComplete(r.allComplete);
+        if (!user?.onboardingModalSeen && r.missions.length > 0) {
+          setShowWelcomeModal(true);
+        }
+      })
+      .catch(() => null);
+  }, [internalAuthenticated, isPlatformAdmin, viewAs, user?.memberships?.length, user?.globalRole, user?.onboardingModalSeen]);
+
   const isSyncing = syncState.tag === 'running';
   const statusColor = healthStatus === 'ok' ? 'var(--accent-win)' : healthStatus === 'error' ? 'var(--accent-loss)' : 'var(--accent-violet)';
 
@@ -291,7 +388,20 @@ export default function Dashboard() {
     );
   }
 
+  const pendingMissions = missions.filter((m) => !m.completed);
+  const completedCount = missions.length - pendingMissions.length;
+  const progressPct = missions.length > 0 ? Math.round((completedCount / missions.length) * 100) : 0;
+
   return (
+    <>
+    {showWelcomeModal && user && (
+      <WelcomeModal
+        userName={user.name}
+        role={missionsRole}
+        missions={missions}
+        onClose={() => setShowWelcomeModal(false)}
+      />
+    )}
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
       <header className="header" style={{ marginBottom: 0 }}>
         <h1 className="header-title">
@@ -308,6 +418,21 @@ export default function Dashboard() {
           )}
         </p>
       </header>
+
+      {/* ── PRIMEROS PASOS / ONBOARDING MISSIONS ────────────────────────── */}
+      {missions.length > 0 && !allMissionsComplete && (
+        <MissionsPanel
+          missions={missions}
+          completedCount={completedCount}
+          progressPct={progressPct}
+          lang={(i18n.language?.startsWith('es') ? 'es' : 'en') as 'en' | 'es'}
+          onMissionComplete={(id) => {
+            void apiClient.missions.complete(id).then(() => {
+              setMissions((prev) => prev.map((m) => m.id === id ? { ...m, completed: true, completedAt: new Date().toISOString() } : m));
+            }).catch(() => null);
+          }}
+        />
+      )}
 
       {/* ── PLATFORM ADMIN VIEW ─────────────────────────────────────────── */}
       {isPlatformAdmin && (
@@ -642,6 +767,7 @@ export default function Dashboard() {
         <PlayerStandaloneView />
       )}
     </div>
+    </>
   );
 }
 

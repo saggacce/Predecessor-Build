@@ -450,6 +450,8 @@ model User {
   epicGamesUsername   String?
   steamId             String?          @unique
   steamUsername       String?
+  /// Whether the user has seen the onboarding welcome modal
+  onboardingModalSeen Boolean          @default(false)
   sentInvitations     Invitation[]     @relation("InvitedBy")
   memberships         TeamMembership[]
   linkedPlayer        Player?          @relation(fields: [linkedPlayerId], references: [id])
@@ -461,6 +463,32 @@ model User {
   reviewSessions      ReviewSession[]
   actionItems         ActionItem[]
   addedRivalRosters   RivalRosterEntry[]
+  missionCompletions  UserMissionCompletion[]
+  achievements        UserAchievement[]
+}
+
+/// Tracks which onboarding missions a user has completed.
+model UserMissionCompletion {
+  id          String   @id @default(cuid())
+  userId      String
+  /// Mission slug from the static catalog (e.g. "CREATE_FIRST_SCRIM")
+  missionId   String
+  completedAt DateTime @default(now())
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, missionId])
+}
+
+/// Achievements awarded to a user upon completing all missions in a category.
+model UserAchievement {
+  id            String   @id @default(cuid())
+  userId        String
+  /// Achievement slug (e.g. "FIRST_STEPS_COACH")
+  achievementId String
+  awardedAt     DateTime @default(now())
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, achievementId])
 }
 
 /// Maps a User to a Team with a specific role.

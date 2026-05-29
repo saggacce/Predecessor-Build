@@ -10,6 +10,13 @@ export interface TeamProfile {
   region: string | null;
   notes: string | null;
   createdAt: Date;
+  staff: Array<{
+    userId: string;
+    role: string;
+    name: string;
+    email: string;
+    avatarUrl: string | null;
+  }>;
   roster: Array<{
     rosterId: string;
     playerId: string;
@@ -35,6 +42,11 @@ export async function getTeamProfile(teamId: string): Promise<TeamProfile> {
   const team = await db.team.findUnique({
     where: { id: teamId },
     include: {
+      memberships: {
+        include: {
+          user: { select: { id: true, name: true, email: true, avatarUrl: true } },
+        },
+      },
       roster: {
         where: { activeTo: null },
         include: {
@@ -94,6 +106,14 @@ export async function getTeamProfile(teamId: string): Promise<TeamProfile> {
     ? Math.round(((totalKills + totalAssists) / totalDeaths) * 100) / 100
     : 0;
 
+  const staff = team.memberships.map((m) => ({
+    userId: m.userId,
+    role: m.role,
+    name: m.user.name,
+    email: m.user.email,
+    avatarUrl: m.user.avatarUrl,
+  }));
+
   return {
     id: team.id,
     name: team.name,
@@ -103,6 +123,7 @@ export async function getTeamProfile(teamId: string): Promise<TeamProfile> {
     region: team.region,
     notes: team.notes,
     createdAt: team.createdAt,
+    staff,
     roster,
     aggregateStats: { totalMatches, averageKDA },
   };
@@ -126,15 +147,18 @@ export async function listTeams(type?: 'OWN' | 'RIVAL') {
   });
 }
 
-export async function createTeam(data: {
-  name: string;
-  abbreviation?: string;
-  logoUrl?: string;
-  type: 'OWN' | 'RIVAL';
-  region?: string;
-  notes?: string;
-}) {
+export async function createTeam(
+  data: { name: string; abbreviation?: string; logoUrl?: string; type: 'OWN' | 'RIVAL'; region?: string; notes?: string },
+  creatorId?: string,
+) {
   const team = await db.team.create({ data });
+  if (creatorId) {
+    await db.teamMembership.upsert({
+      where: { userId_teamId: { userId: creatorId, teamId: team.id } },
+      create: { userId: creatorId, teamId: team.id, role: 'MANAGER' },
+      update: {},
+    });
+  }
   return getTeamProfile(team.id);
 }
 

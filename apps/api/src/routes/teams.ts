@@ -2,6 +2,7 @@ import { Router, type NextFunction, type Request, type Response } from 'express'
 import { z } from 'zod';
 import { db } from '../db.js';
 import { resyncMatch, syncPlayerByName, syncPlayerById } from '../services/sync-service.js';
+import { tryCompleteMission } from '../services/missions-service.js';
 import { logger } from '../logger.js';
 import { getValidToken } from './auth.js';
 import { requireAuth } from '../middleware/require-auth.js';
@@ -94,7 +95,7 @@ teamsRouter.get('/', requireAuth, async (req, res, next) => {
 teamsRouter.post('/', requireAuth, attachManagedTeamForCreate, requireRole(['MANAGER']), async (req, res, next) => {
   try {
     const data = createTeamSchema.parse(req.body);
-    const team = await createTeam(data);
+    const team = await createTeam(data, req.user?.userId);
     res.status(201).json(team);
   } catch (err) {
     next(err);
@@ -138,7 +139,45 @@ teamsRouter.delete('/:teamId', requireAuth, requireRole(['MANAGER']), async (req
   }
 });
 
-teamsRouter.post('/:teamId/roster', requireAuth, requireRole(['MANAGER']), async (req, res, next) => {
+/** PATCH /teams/:teamId/members/:userId — change a member's role */
+teamsRouter.patch('/:teamId/members/:userId', requireAuth, requireRole(['MANAGER']), async (req, res, next) => {
+  try {
+    const { teamId, userId } = req.params;
+    const { role } = req.body as { role: string };
+    const validRoles = ['MANAGER', 'COACH', 'ANALISTA', 'JUGADOR'];
+    if (!validRoles.includes(role)) throw new AppError(400, 'Invalid role', 'INVALID_ROLE');
+    const membership = await db.teamMembership.findUnique({ where: { userId_teamId: { userId, teamId } } });
+    if (!membership) throw new AppError(404, 'Member not found', 'NOT_FOUND');
+    if (membership.role === 'MANAGER' && req.user?.globalRole !== 'PLATFORM_ADMIN') {
+      throw new AppError(403, 'Only a platform admin can change a manager\'s role', 'FORBIDDEN');
+    }
+    await db.teamMembership.update({ where: { userId_teamId: { userId, teamId } }, data: { role } });
+    res.json({ ok: true });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/** DELETE /teams/:teamId/members/:userId — remove a platform user from this team */
+teamsRouter.delete('/:teamId/members/:userId', requireAuth, requireRole(['MANAGER']), async (req, res, next) => {
+  try {
+    const { teamId, userId } = req.params;
+    const membership = await db.teamMembership.findUnique({
+      where: { userId_teamId: { userId, teamId } },
+    });
+    if (!membership) throw new AppError(404, 'Member not found', 'NOT_FOUND');
+    // Managers can only be removed by PLATFORM_ADMIN
+    if (membership.role === 'MANAGER' && req.user?.globalRole !== 'PLATFORM_ADMIN') {
+      throw new AppError(403, 'Only a platform admin can remove a manager', 'FORBIDDEN');
+    }
+    await db.teamMembership.delete({ where: { userId_teamId: { userId, teamId } } });
+    res.json({ ok: true });
+  } catch (err) {
+    next(err);
+  }
+});
+
+teamsRouter.post('/:teamId/roster', requireAuth, requireRole(['MANAGER', 'COACH']), async (req, res, next) => {
   try {
     const { playerId, role, rosterStatus } = addRosterSchema.parse(req.body);
     const entry = await addRosterPlayer(req.params.teamId, playerId, role, rosterStatus);
@@ -148,6 +187,7 @@ teamsRouter.post('/:teamId/roster', requireAuth, requireRole(['MANAGER']), async
     try { userToken = await getValidToken(req, res); } catch { /* no session — sync without auth */ }
 
     res.status(201).json(entry);
+    void tryCompleteMission(db, req.user!.userId, 'ADD_ROSTER_PLAYER');
 
     // Background sync — fire and forget, don't block the response
     db.player.findUnique({ where: { id: playerId }, select: { displayName: true } })
@@ -162,7 +202,7 @@ teamsRouter.post('/:teamId/roster', requireAuth, requireRole(['MANAGER']), async
   }
 });
 
-teamsRouter.patch('/:teamId/roster/:rosterId', requireAuth, requireRole(['MANAGER']), async (req, res, next) => {
+teamsRouter.patch('/:teamId/roster/:rosterId', requireAuth, requireRole(['MANAGER', 'COACH']), async (req, res, next) => {
   try {
     const { role, rosterStatus } = updateRosterSchema.parse(req.body);
     const entry = await updateRosterEntry(req.params.teamId, req.params.rosterId, role, rosterStatus);
@@ -172,7 +212,7 @@ teamsRouter.patch('/:teamId/roster/:rosterId', requireAuth, requireRole(['MANAGE
   }
 });
 
-teamsRouter.delete('/:teamId/roster/:rosterId', requireAuth, requireRole(['MANAGER']), async (req, res, next) => {
+teamsRouter.delete('/:teamId/roster/:rosterId', requireAuth, requireRole(['MANAGER', 'COACH']), async (req, res, next) => {
   try {
     await removeRosterPlayer(req.params.teamId, req.params.rosterId);
     res.json({ ok: true });
@@ -394,6 +434,7 @@ teamsRouter.post('/:teamId/rival-roster', requireAuth, requireRole(['COACH', 'MA
         ratingPoints: snap?.ratingPoints ?? null,
       },
     });
+    void tryCompleteMission(db, userId, 'ADD_RIVAL_PLAYER');
   } catch (err) {
     next(err);
   }

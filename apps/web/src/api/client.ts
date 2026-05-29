@@ -138,6 +138,14 @@ export interface RosterMember {
 
 export type TeamRole = 'carry' | 'jungle' | 'midlane' | 'offlane' | 'support';
 
+export interface TeamStaffMember {
+  userId: string;
+  role: string;
+  name: string;
+  email: string;
+  avatarUrl: string | null;
+}
+
 export interface TeamProfile {
   id: string;
   name: string;
@@ -147,6 +155,7 @@ export interface TeamProfile {
   region: string | null;
   notes: string | null;
   createdAt: string;
+  staff: TeamStaffMember[];
   roster: RosterMember[];
   aggregateStats: { totalMatches: number; averageKDA: number };
 }
@@ -705,7 +714,25 @@ export interface SessionUser {
   linkedPlayerId: string | null;
   avatarUrl?: string | null;
   language?: string;
+  onboardingModalSeen?: boolean;
   memberships: SessionMembership[];
+}
+
+export interface MissionItem {
+  id: string;
+  title: Record<'en' | 'es', string>;
+  description: Record<'en' | 'es', string>;
+  ctaPath: string;
+  order: number;
+  completed: boolean;
+  completedAt: string | null;
+}
+
+export interface UserAchievement {
+  id: string;
+  userId: string;
+  achievementId: string;
+  awardedAt: string;
 }
 
 export interface Invitation {
@@ -1078,6 +1105,10 @@ export const apiClient = {
       fetchApi<{ id: string }>(`/teams/${teamId}/roster/${rosterId}`, { method: 'PATCH', body: JSON.stringify({ role, rosterStatus }) }),
     removePlayer: (teamId: string, rosterId: string) =>
       fetchApi<{ ok: boolean }>(`/teams/${teamId}/roster/${rosterId}`, { method: 'DELETE' }),
+    updateMember: (teamId: string, userId: string, role: string) =>
+      fetchApi<{ ok: boolean }>(`/teams/${teamId}/members/${userId}`, { method: 'PATCH', body: JSON.stringify({ role }) }),
+    removeMember: (teamId: string, userId: string) =>
+      fetchApi<{ ok: boolean }>(`/teams/${teamId}/members/${userId}`, { method: 'DELETE' }),
     getAnalysis: (id: string) => fetchApi<TeamAnalysis>(`/teams/${id}/analysis`),
     getPhaseAnalysis: (id: string) => fetchApi<TeamPhaseAnalysis>(`/teams/${id}/phase-analysis`),
     getVisionAnalysis: (id: string) => fetchApi<TeamVisionAnalysis>(`/teams/${id}/vision-analysis`),
@@ -1386,5 +1417,12 @@ export const apiClient = {
       fetchApi<{ item: ActionItem }>(`/review-sessions/${sessionId}/actions/${itemId}`, { method: 'PATCH', body: JSON.stringify(data) }),
     deleteActionItem: (sessionId: string, itemId: string) =>
       fetchApi<{ ok: boolean }>(`/review-sessions/${sessionId}/actions/${itemId}`, { method: 'DELETE' }),
+  },
+
+  missions: {
+    me: (role?: string) => fetchApi<{ missions: MissionItem[]; role: string | null; allComplete: boolean }>(`/missions/me${role ? `?role=${encodeURIComponent(role)}` : ''}`),
+    complete: (missionId: string) => fetchApi<{ ok: boolean }>(`/missions/complete/${missionId}`, { method: 'POST' }),
+    achievements: () => fetchApi<{ achievements: UserAchievement[] }>('/missions/achievements'),
+    markOnboardingSeen: () => fetchApi<{ ok: boolean }>('/missions/onboarding-seen', { method: 'PATCH' }),
   },
 };

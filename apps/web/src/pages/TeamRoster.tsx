@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { type ChangeEvent, useEffect, useRef, useState } from 'react';
 import { Search, UserMinus, ArrowUpDown, Users, Plus, ChevronDown, X, Check } from 'lucide-react';
 import { toast } from 'sonner';
 import { useTranslation } from 'react-i18next';
@@ -54,6 +54,12 @@ export default function TeamRoster() {
   // Remove state
   const [removing, setRemoving] = useState<string | null>(null);
 
+  // Create team state
+  const [showCreate, setShowCreate] = useState(false);
+  const [createForm, setCreateForm] = useState({ name: '', abbreviation: '', logoUrl: '', region: '', notes: '' });
+  const [creating, setCreating] = useState(false);
+  const createFileRef = useRef<HTMLInputElement>(null);
+
   const isPlatformAdmin = user?.globalRole === 'PLATFORM_ADMIN';
   const isManager = user?.memberships?.some((m) => m.role === 'MANAGER') ?? false;
   const canEdit = isPlatformAdmin || isManager;
@@ -68,6 +74,42 @@ export default function TeamRoster() {
       .catch(() => toast.error(t('teamRoster.addError')))
       .finally(() => setLoading(false));
   }, []);
+
+  async function handleCreateTeam() {
+    if (!createForm.name.trim()) { toast.error('Team name is required.'); return; }
+    setCreating(true);
+    try {
+      const created = await apiClient.teams.create({
+        name: createForm.name.trim(),
+        abbreviation: createForm.abbreviation.trim() || undefined,
+        logoUrl: createForm.logoUrl.trim() || undefined,
+        region: createForm.region.trim() || undefined,
+        notes: createForm.notes.trim() || undefined,
+        type: 'OWN',
+      });
+      toast.success(`Team "${created.name}" created.`);
+      const res = await apiClient.teams.list('OWN');
+      const ownTeams = res.teams ?? [];
+      setTeams(ownTeams);
+      setTeamId(created.id);
+      setShowCreate(false);
+      setCreateForm({ name: '', abbreviation: '', logoUrl: '', region: '', notes: '' });
+    } catch (err) {
+      toast.error(err instanceof ApiErrorResponse ? err.error.message : 'Failed to create team.');
+    } finally {
+      setCreating(false);
+    }
+  }
+
+  function handleCreateFileChange(e: ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith('image/')) { toast.error('Only image files are supported.'); return; }
+    if (file.size > 200 * 1024) { toast.error('Image must be under 200 KB.'); return; }
+    const reader = new FileReader();
+    reader.onload = () => setCreateForm((f) => ({ ...f, logoUrl: reader.result as string }));
+    reader.readAsDataURL(file);
+  }
 
   useEffect(() => {
     if (!teamId) return;
@@ -192,11 +234,86 @@ export default function TeamRoster() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
       <header className="header">
-        <h1 className="header-title">{t('teamRoster.title')}</h1>
-        <p style={{ color: 'var(--text-muted)', fontSize: '0.86rem', marginTop: '0.35rem' }}>
-          {t('teamRoster.title')}
-        </p>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div>
+            <h1 className="header-title">{t('teamRoster.title')}</h1>
+            <p style={{ color: 'var(--text-muted)', fontSize: '0.86rem', marginTop: '0.35rem' }}>
+              {t('teamRoster.subtitle', 'Manage your squad composition and player roles.')}
+            </p>
+          </div>
+          {canEdit && !showCreate && (
+            <button className="btn-primary" onClick={() => setShowCreate(true)} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flex: 'unset' }}>
+              <Plus size={16} /> New Team
+            </button>
+          )}
+        </div>
       </header>
+
+      {/* Create team form */}
+      {showCreate && canEdit && (
+        <div className="glass-card" style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <h3 style={{ margin: 0, fontSize: '1rem' }}>New Team</h3>
+            <button onClick={() => setShowCreate(false)} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-muted)' }}>
+              <X size={16} />
+            </button>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
+            <div style={{ gridColumn: '1 / -1' }}>
+              <label style={labelStyle}>Team name *</label>
+              <input className="input" value={createForm.name} onChange={(e) => setCreateForm((f) => ({ ...f, name: e.target.value }))} placeholder="e.g. Team Liquid" style={{ width: '100%' }} />
+            </div>
+            <div>
+              <label style={labelStyle}>Abbreviation</label>
+              <input className="input" value={createForm.abbreviation} onChange={(e) => setCreateForm((f) => ({ ...f, abbreviation: e.target.value }))} placeholder="e.g. TL" maxLength={10} style={{ width: '100%' }} />
+            </div>
+            <div>
+              <label style={labelStyle}>Region</label>
+              <input className="input" value={createForm.region} onChange={(e) => setCreateForm((f) => ({ ...f, region: e.target.value }))} placeholder="e.g. EU, NA, LATAM" style={{ width: '100%' }} />
+            </div>
+            <div style={{ gridColumn: '1 / -1' }}>
+              <label style={labelStyle}>Logo</label>
+              <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                <input className="input" value={createForm.logoUrl.startsWith('data:') ? '' : createForm.logoUrl} onChange={(e) => setCreateForm((f) => ({ ...f, logoUrl: e.target.value }))} placeholder="https://..." style={{ flex: 1 }} />
+                <button type="button" onClick={() => createFileRef.current?.click()} className="btn-secondary" style={{ flex: 'unset', whiteSpace: 'nowrap', fontSize: '0.8rem', padding: '0.45rem 0.75rem' }}>
+                  Upload image
+                </button>
+                <input ref={createFileRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={handleCreateFileChange} />
+              </div>
+              {createForm.logoUrl && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '0.4rem' }}>
+                  <img src={createForm.logoUrl} alt="Logo preview" style={{ width: 32, height: 32, objectFit: 'contain', borderRadius: 4, background: 'var(--bg-dark)', border: '1px solid var(--border-color)' }} onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                  <button type="button" onClick={() => setCreateForm((f) => ({ ...f, logoUrl: '' }))} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', display: 'flex', padding: 0 }}>
+                    <X size={13} />
+                  </button>
+                </div>
+              )}
+            </div>
+            <div style={{ gridColumn: '1 / -1' }}>
+              <label style={labelStyle}>Notes</label>
+              <textarea className="input" value={createForm.notes} onChange={(e) => setCreateForm((f) => ({ ...f, notes: e.target.value }))} placeholder="Optional notes…" rows={2} style={{ width: '100%', resize: 'vertical' }} />
+            </div>
+          </div>
+          <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
+            <button className="btn-secondary" onClick={() => setShowCreate(false)} disabled={creating} style={{ flex: 'unset' }}>Cancel</button>
+            <button className="btn-primary" onClick={() => void handleCreateTeam()} disabled={creating} style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flex: 'unset' }}>
+              <Check size={14} /> {creating ? 'Creating…' : 'Create Team'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Empty state */}
+      {!loading && teams.length === 0 && !showCreate && (
+        <div className="glass-card" style={{ textAlign: 'center', padding: '2rem' }}>
+          <p style={{ color: 'var(--text-muted)', marginBottom: '0.75rem' }}>No teams yet.</p>
+          {canEdit && (
+            <button className="btn-primary" onClick={() => setShowCreate(true)} style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem', flex: 'unset' }}>
+              <Plus size={14} /> Create your first team
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Team selector */}
       {teams.length > 1 && (
@@ -216,7 +333,7 @@ export default function TeamRoster() {
         </div>
       )}
 
-      {!profile && <div style={{ color: 'var(--text-muted)', fontSize: '0.86rem' }}>{t('common.loading')}</div>}
+      {!loading && teams.length > 0 && !profile && <div style={{ color: 'var(--text-muted)', fontSize: '0.86rem' }}>{t('common.loading')}</div>}
 
       {profile && (
         <>
@@ -353,6 +470,10 @@ export default function TeamRoster() {
     </div>
   );
 }
+
+const labelStyle: import('react').CSSProperties = {
+  display: 'block', fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.25rem',
+};
 
 // ── Swap bar ──────────────────────────────────────────────────────────────────
 function SwapBar({ label, options, selectedId, required, onSelect, onConfirm, onCancel, loading }: {

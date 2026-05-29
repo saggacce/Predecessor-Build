@@ -21,8 +21,7 @@ import RivalScouting from './pages/RivalScouting';
 import Login from './pages/Login';
 import Register from './pages/Register';
 import Unauthorized from './pages/Unauthorized';
-import StaffManagement from './pages/StaffManagement';
-import TeamRoster from './pages/TeamRoster';
+import TeamManagement from './pages/TeamManagement';
 import DataQualityPage from './pages/DataQualityPage';
 import AuditLogsPage from './pages/AuditLogsPage';
 import UsersPage from './pages/UsersPage';
@@ -259,7 +258,6 @@ function useSections(t: (key: string) => string): SidebarSection[] {
       icon: <Users size={17} />,
       items: [
         { to: '/management/teams', label: t('nav.teamsRoster') },
-        { to: '/management/staff', label: t('nav.staffInvitations') },
       ],
     },
     {
@@ -610,8 +608,9 @@ function AppContent() {
             <Route path="/reports/rival" element={<Navigate to="/analysis/rival" replace />} />
 
             {/* Team Management */}
-            <Route path="/management/teams" element={<TeamRoster />} />
-            <Route path="/management/staff" element={<StaffManagement />} />
+            <Route path="/management/teams" element={<TeamManagement />} />
+            <Route path="/management/teams/:id" element={<TeamManagement />} />
+            <Route path="/management/staff" element={<Navigate to="/management/teams" replace />} />
 
             {/* Platform Admin */}
             <Route path="/admin/users" element={<UsersPage />} />

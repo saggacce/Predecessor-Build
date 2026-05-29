@@ -9,6 +9,7 @@ import {
   createTeamGoal, listTeamGoals, updateTeamGoal, deleteTeamGoal,
   createPlayerGoal, listPlayerGoals, updatePlayerGoal, deletePlayerGoal,
 } from '../services/review-service.js';
+import { tryCompleteMission } from '../services/missions-service.js';
 
 export const reviewRouter = Router();
 
@@ -103,6 +104,7 @@ reviewRouter.post('/items', requireAuth, requireRole(staffRoles), async (req, re
     const data = createReviewSchema.parse(req.body);
     const item = await createReviewItem(data);
     res.status(201).json(item);
+    void tryCompleteMission(db, req.user!.userId, 'CREATE_REVIEW_ITEM');
   } catch (err) { next(err); }
 });
 
@@ -156,6 +158,7 @@ reviewRouter.post('/goals/team', requireAuth, requireRole(staffRoles), async (re
     const data = createGoalSchema.parse(req.body);
     const goal = await createTeamGoal(data);
     res.status(201).json(goal);
+    void tryCompleteMission(db, req.user!.userId, 'SET_TEAM_GOAL');
   } catch (err) { next(err); }
 });
 

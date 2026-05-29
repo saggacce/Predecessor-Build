@@ -22,6 +22,12 @@ vi.mock('../db.js', () => ({
       update: vi.fn(),
       deleteMany: vi.fn(),
     },
+    teamMembership: {
+      findUnique: vi.fn().mockResolvedValue(null),
+      upsert: vi.fn().mockResolvedValue({}),
+      update: vi.fn().mockResolvedValue({}),
+      delete: vi.fn().mockResolvedValue({}),
+    },
   },
   disconnectDb: vi.fn().mockResolvedValue(undefined),
 }));
@@ -56,6 +62,7 @@ function teamRecord(overrides = {}) {
     region: 'EU',
     notes: null,
     createdAt: new Date('2026-01-01T00:00:00.000Z'),
+    memberships: [],
     roster: [],
     ...overrides,
   };

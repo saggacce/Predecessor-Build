@@ -8,7 +8,6 @@ import { useConfig } from '../hooks/useConfig';
 import {
   Users,
   Shield,
-  Plus,
   Pencil,
   Trash2,
   X,
@@ -91,7 +90,7 @@ export default function TeamAnalysis() {
   const [draftAnalysis, setDraftAnalysis] = useState<TeamDraftAnalysis | null>(null);
   const [loadingDraftAnalysis, setLoadingDraftAnalysis] = useState(false);
 
-  const [formMode, setFormMode] = useState<'create' | 'edit' | null>(null);
+  const [formMode, setFormMode] = useState<'edit' | null>(null);
   const [form, setForm] = useState<TeamFormData>(emptyForm());
   const [saving, setSaving] = useState(false);
 
@@ -114,7 +113,12 @@ export default function TeamAnalysis() {
     }
   }
 
-  useEffect(() => { void loadTeams(); }, []);
+  useEffect(() => {
+    void loadTeams();
+    // Complete onboarding missions triggered by visiting this page
+    void apiClient.missions.complete('VIEW_TEAM_PERFORMANCE').catch(() => null);
+    void apiClient.missions.complete('VIEW_TEAM_ANALYSIS').catch(() => null);
+  }, []);
 
   async function loadAnalysis(teamId: string) {
     setLoadingAnalysis(true);
@@ -225,12 +229,6 @@ export default function TeamAnalysis() {
     setTeams((prev) => prev.map((t) => t.id === profile.id ? { ...t, ...profile } : t));
   }
 
-  function openCreate() {
-    setForm(emptyForm());
-    setFormMode('create');
-    setSelected(null);
-  }
-
   function openEdit(team: TeamProfile) {
     setForm({
       name: team.name,
@@ -255,12 +253,7 @@ export default function TeamAnalysis() {
         region: form.region.trim() || undefined,
         notes: form.notes.trim() || undefined,
       };
-      if (formMode === 'create') {
-        const created = await apiClient.teams.create(payload);
-        toast.success(`Team "${created.name}" created.`);
-        await loadTeams();
-        await handleSelectTeam(created.id);
-      } else if (formMode === 'edit' && selected) {
+      if (formMode === 'edit' && selected) {
         await apiClient.teams.update(selected.id, {
           name: payload.name,
           abbreviation: payload.abbreviation ?? null,
@@ -359,45 +352,27 @@ export default function TeamAnalysis() {
     }
   }
 
-  const showDetail = selected && formMode !== 'create';
+  const showDetail = !!selected;
 
   return (
     <div>
       <header className="header">
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <div>
-            <h1 className="header-title">Team Analysis</h1>
-            <p style={{ color: 'var(--text-secondary)' }}>Manage rosters and review team stats.</p>
-          </div>
-          <button className="btn-primary" onClick={openCreate} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flex: 'unset' }}>
-            <Plus size={16} /> New Team
-          </button>
-        </div>
+        <h1 className="header-title">Team Analysis</h1>
+        <p style={{ color: 'var(--text-secondary)' }}>Review team stats, rosters and performance.</p>
       </header>
 
       <div style={{ display: 'grid', gridTemplateColumns: showDetail ? '280px 1fr' : '1fr', gap: '1.5rem', alignItems: 'start' }}>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
 
-          {formMode === 'create' && (
-            <TeamForm
-              form={form}
-              onChange={setForm}
-              onSave={() => void handleSaveTeam()}
-              onCancel={() => setFormMode(null)}
-              saving={saving}
-              title="New Team"
-            />
-          )}
-
           {loading && <p style={{ color: 'var(--text-muted)' }}>Loading teams…</p>}
 
-          {!loading && teams.length === 0 && formMode !== 'create' && (
-            <div className="glass-card" style={{ textAlign: 'center' }}>
-              <p style={{ color: 'var(--text-muted)', marginBottom: '0.75rem' }}>No teams yet.</p>
-              <button className="btn-primary" onClick={openCreate} style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem', flex: 'unset' }}>
-                <Plus size={14} /> Create your first team
-              </button>
+          {!loading && teams.length === 0 && (
+            <div className="glass-card" style={{ textAlign: 'center', padding: '1.5rem' }}>
+              <p style={{ color: 'var(--text-muted)', marginBottom: '0.5rem' }}>No teams yet.</p>
+              <p style={{ color: 'var(--text-muted)', fontSize: '0.84rem' }}>
+                Go to <Link to="/management/teams" style={{ color: 'var(--accent-blue)' }}>Management → Team</Link> to create your first team.
+              </p>
             </div>
           )}
 
