@@ -220,13 +220,17 @@ internalAuthRouter.post('/register', registerRateLimit, async (req, res, next) =
 
     const passwordHash = await bcrypt.hash(password, PASSWORD_SALT_ROUNDS);
     const user = await db.$transaction(async (tx) => {
+      const globalRoleForTeamless = invitation.role === 'PLATFORM_ADMIN'
+        ? 'PLATFORM_ADMIN'
+        : invitation.role === 'JUGADOR'
+          ? 'PLAYER'
+          : 'VIEWER';
       const createdUser = await tx.user.create({
         data: {
           email: invitation.email.toLowerCase(),
           name,
           passwordHash,
-          // Standalone JUGADOR invitations (no team) get PLAYER global role
-          ...(invitation.teamId == null ? { globalRole: 'PLAYER' } : {}),
+          ...(invitation.teamId == null ? { globalRole: globalRoleForTeamless } : {}),
         },
       });
       const memberships: Array<{ teamId: string; role: string; playerId: string | null }> = [];

@@ -1,8 +1,8 @@
-import { useEffect, useState } from 'react';
+import { type FormEvent, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Edit2, Shield, CheckCircle, XCircle, UserPlus, X, Save, Star, KeyRound } from 'lucide-react';
+import { Edit2, Shield, CheckCircle, XCircle, UserPlus, X, Save, Star, KeyRound, Copy, ChevronDown } from 'lucide-react';
 import { toast } from 'sonner';
-import { apiClient, ApiErrorResponse } from '../api/client';
+import { apiClient, ApiErrorResponse, type TeamProfile } from '../api/client';
 import { useAuth } from '../hooks/useAuth';
 
 interface PlatformUser {
@@ -51,16 +51,59 @@ export default function UsersPage() {
   const [newPassword, setNewPassword] = useState('');
   const [resetting, setResetting] = useState(false);
 
+  // Invite modal state
+  const [showInvite, setShowInvite] = useState(false);
+  const [inviteEmail, setInviteEmail] = useState('');
+  const [inviteRole, setInviteRole] = useState('COACH');
+  const [inviteTeamId, setInviteTeamId] = useState('');
+  const [inviteTeams, setInviteTeams] = useState<TeamProfile[]>([]);
+  const [inviteCreating, setInviteCreating] = useState(false);
+  const [inviteLink, setInviteLink] = useState<string | null>(null);
+
   const isAdmin = !internalLoading && !!me && me.globalRole === 'PLATFORM_ADMIN';
 
   useEffect(() => {
     if (!isAdmin) return;
     setLoading(true);
-    (apiClient as any).admin.users()
-      .then((res: { users: PlatformUser[] }) => setUsers(res.users))
+    Promise.all([
+      (apiClient as any).admin.users(),
+      apiClient.teams.list('OWN'),
+    ])
+      .then(([usersRes, teamsRes]: [{ users: PlatformUser[] }, { teams: TeamProfile[] }]) => {
+        setUsers(usersRes.users);
+        setInviteTeams(teamsRes.teams ?? []);
+      })
       .catch(() => toast.error('Failed to load users'))
       .finally(() => setLoading(false));
   }, [isAdmin]);
+
+  const INVITE_ROLES = ['PLATFORM_ADMIN', 'MANAGER', 'COACH', 'ANALISTA', 'JUGADOR'] as const;
+  const teamRequired = !['PLATFORM_ADMIN', 'JUGADOR'].includes(inviteRole);
+
+  async function handleInvite(e: FormEvent) {
+    e.preventDefault();
+    if (!inviteEmail.trim()) return;
+    if (teamRequired && !inviteTeamId) { toast.error('Selecciona un equipo para este rol.'); return; }
+    setInviteCreating(true);
+    try {
+      const res = await apiClient.invitations.create({
+        email: inviteEmail.trim(),
+        role: inviteRole,
+        teamId: inviteTeamId || undefined,
+      });
+      const url = `${window.location.origin}/register/${encodeURIComponent(res.invitation.token)}`;
+      setInviteLink(url);
+      await navigator.clipboard?.writeText(url);
+      toast.success('Invitación creada y enlace copiado.');
+      setInviteEmail('');
+      setInviteRole('COACH');
+      setInviteTeamId('');
+    } catch (err) {
+      toast.error(err instanceof ApiErrorResponse ? err.error.message : 'Error al crear la invitación.');
+    } finally {
+      setInviteCreating(false);
+    }
+  }
 
   if (internalLoading) return <div style={{ padding: '2rem', color: 'var(--text-muted)' }}>{t('common.loading')}</div>;
   if (!me || me.globalRole !== 'PLATFORM_ADMIN') {
@@ -122,9 +165,9 @@ export default function UsersPage() {
             {t('users.description')}
           </p>
         </div>
-        <a href="/management/staff" className="btn-secondary" style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', whiteSpace: 'nowrap' }}>
+        <button onClick={() => { setShowInvite(true); setInviteLink(null); }} className="btn-primary" style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', whiteSpace: 'nowrap', flex: 'unset' }}>
           <UserPlus size={14} /> {t('users.inviteButton')}
-        </a>
+        </button>
       </header>
 
       {loading ? (
@@ -308,6 +351,81 @@ export default function UsersPage() {
                 <KeyRound size={13} /> {resetting ? t('users.resetModal.resetting') : t('users.resetModal.submit')}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+      {/* Invite modal */}
+      {showInvite && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem' }}
+          onClick={(e) => { if (e.target === e.currentTarget) { setShowInvite(false); setInviteLink(null); } }}>
+          <div className="glass-card" style={{ width: '100%', maxWidth: 440, padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                <UserPlus size={16} style={{ color: 'var(--accent-teal-bright)' }} />
+                <h3 style={{ margin: 0, fontSize: '0.95rem', fontWeight: 800 }}>Invitar usuario</h3>
+              </div>
+              <button onClick={() => { setShowInvite(false); setInviteLink(null); }} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-muted)' }}>
+                <X size={16} />
+              </button>
+            </div>
+
+            <form onSubmit={(e) => void handleInvite(e)} style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+              <label style={{ display: 'grid', gap: '0.3rem' }}>
+                <span style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Email</span>
+                <input className="input" type="email" value={inviteEmail} onChange={(e) => setInviteEmail(e.target.value)} placeholder="nombre@ejemplo.com" required />
+              </label>
+
+              <label style={{ display: 'grid', gap: '0.3rem' }}>
+                <span style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Rol</span>
+                <div style={{ position: 'relative' }}>
+                  <select className="input" value={inviteRole} onChange={(e) => { setInviteRole(e.target.value); setInviteTeamId(''); }} style={{ width: '100%', paddingRight: '2rem', appearance: 'none' }}>
+                    {INVITE_ROLES.map((r) => <option key={r} value={r}>{r}</option>)}
+                  </select>
+                  <ChevronDown size={13} style={{ position: 'absolute', right: '0.6rem', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none', color: 'var(--text-muted)' }} />
+                </div>
+                {inviteRole === 'PLATFORM_ADMIN' && (
+                  <p style={{ fontSize: '0.72rem', color: 'var(--accent-teal-bright)', margin: 0 }}>El usuario tendrá acceso completo a la plataforma.</p>
+                )}
+                {inviteRole === 'JUGADOR' && (
+                  <p style={{ fontSize: '0.72rem', color: 'var(--text-muted)', margin: 0 }}>El equipo es opcional. Sin equipo se creará como jugador independiente.</p>
+                )}
+              </label>
+
+              {/* Team selector — required for MANAGER/COACH/ANALISTA, optional for JUGADOR */}
+              {inviteRole !== 'PLATFORM_ADMIN' && (
+                <label style={{ display: 'grid', gap: '0.3rem' }}>
+                  <span style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                    Equipo {teamRequired ? '' : <span style={{ fontWeight: 400 }}>(opcional)</span>}
+                  </span>
+                  <div style={{ position: 'relative' }}>
+                    <select className="input" value={inviteTeamId} onChange={(e) => setInviteTeamId(e.target.value)} style={{ width: '100%', paddingRight: '2rem', appearance: 'none' }} required={teamRequired}>
+                      <option value="">— Sin equipo —</option>
+                      {inviteTeams.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+                    </select>
+                    <ChevronDown size={13} style={{ position: 'absolute', right: '0.6rem', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none', color: 'var(--text-muted)' }} />
+                  </div>
+                </label>
+              )}
+
+              <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
+                <button type="button" onClick={() => { setShowInvite(false); setInviteLink(null); }} className="btn-secondary" style={{ flex: 'unset' }}>Cancelar</button>
+                <button type="submit" disabled={inviteCreating} className="btn-primary" style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flex: 'unset' }}>
+                  <UserPlus size={14} /> {inviteCreating ? 'Creando…' : 'Crear invitación'}
+                </button>
+              </div>
+            </form>
+
+            {inviteLink && (
+              <div style={{ background: 'rgba(107,170,248,0.08)', border: '1px solid var(--accent-blue)', borderRadius: 'var(--radius-sm)', padding: '0.75rem 1rem' }}>
+                <p style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginBottom: '0.4rem', fontWeight: 700 }}>Enlace de invitación (ya copiado):</p>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <span className="mono" style={{ fontSize: '0.72rem', color: 'var(--accent-blue)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{inviteLink}</span>
+                  <button onClick={() => { void navigator.clipboard?.writeText(inviteLink); toast.success('Copiado'); }} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--accent-blue)', display: 'flex', padding: '0.25rem' }}>
+                    <Copy size={14} />
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}
