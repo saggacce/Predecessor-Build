@@ -138,6 +138,14 @@ export interface RosterMember {
 
 export type TeamRole = 'carry' | 'jungle' | 'midlane' | 'offlane' | 'support';
 
+export interface TeamStaffMember {
+  userId: string;
+  role: string;
+  name: string;
+  email: string;
+  avatarUrl: string | null;
+}
+
 export interface TeamProfile {
   id: string;
   name: string;
@@ -147,6 +155,7 @@ export interface TeamProfile {
   region: string | null;
   notes: string | null;
   createdAt: string;
+  staff: TeamStaffMember[];
   roster: RosterMember[];
   aggregateStats: { totalMatches: number; averageKDA: number };
 }
@@ -1096,6 +1105,8 @@ export const apiClient = {
       fetchApi<{ id: string }>(`/teams/${teamId}/roster/${rosterId}`, { method: 'PATCH', body: JSON.stringify({ role, rosterStatus }) }),
     removePlayer: (teamId: string, rosterId: string) =>
       fetchApi<{ ok: boolean }>(`/teams/${teamId}/roster/${rosterId}`, { method: 'DELETE' }),
+    removeMember: (teamId: string, userId: string) =>
+      fetchApi<{ ok: boolean }>(`/teams/${teamId}/members/${userId}`, { method: 'DELETE' }),
     getAnalysis: (id: string) => fetchApi<TeamAnalysis>(`/teams/${id}/analysis`),
     getPhaseAnalysis: (id: string) => fetchApi<TeamPhaseAnalysis>(`/teams/${id}/phase-analysis`),
     getVisionAnalysis: (id: string) => fetchApi<TeamVisionAnalysis>(`/teams/${id}/vision-analysis`),

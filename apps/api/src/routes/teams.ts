@@ -139,7 +139,26 @@ teamsRouter.delete('/:teamId', requireAuth, requireRole(['MANAGER']), async (req
   }
 });
 
-teamsRouter.post('/:teamId/roster', requireAuth, requireRole(['MANAGER']), async (req, res, next) => {
+/** DELETE /teams/:teamId/members/:userId — remove a platform user from this team */
+teamsRouter.delete('/:teamId/members/:userId', requireAuth, requireRole(['MANAGER']), async (req, res, next) => {
+  try {
+    const { teamId, userId } = req.params;
+    const membership = await db.teamMembership.findUnique({
+      where: { userId_teamId: { userId, teamId } },
+    });
+    if (!membership) throw new AppError(404, 'Member not found', 'NOT_FOUND');
+    // Managers can only be removed by PLATFORM_ADMIN
+    if (membership.role === 'MANAGER' && req.user?.globalRole !== 'PLATFORM_ADMIN') {
+      throw new AppError(403, 'Only a platform admin can remove a manager', 'FORBIDDEN');
+    }
+    await db.teamMembership.delete({ where: { userId_teamId: { userId, teamId } } });
+    res.json({ ok: true });
+  } catch (err) {
+    next(err);
+  }
+});
+
+teamsRouter.post('/:teamId/roster', requireAuth, requireRole(['MANAGER', 'COACH']), async (req, res, next) => {
   try {
     const { playerId, role, rosterStatus } = addRosterSchema.parse(req.body);
     const entry = await addRosterPlayer(req.params.teamId, playerId, role, rosterStatus);
@@ -164,7 +183,7 @@ teamsRouter.post('/:teamId/roster', requireAuth, requireRole(['MANAGER']), async
   }
 });
 
-teamsRouter.patch('/:teamId/roster/:rosterId', requireAuth, requireRole(['MANAGER']), async (req, res, next) => {
+teamsRouter.patch('/:teamId/roster/:rosterId', requireAuth, requireRole(['MANAGER', 'COACH']), async (req, res, next) => {
   try {
     const { role, rosterStatus } = updateRosterSchema.parse(req.body);
     const entry = await updateRosterEntry(req.params.teamId, req.params.rosterId, role, rosterStatus);
@@ -174,7 +193,7 @@ teamsRouter.patch('/:teamId/roster/:rosterId', requireAuth, requireRole(['MANAGE
   }
 });
 
-teamsRouter.delete('/:teamId/roster/:rosterId', requireAuth, requireRole(['MANAGER']), async (req, res, next) => {
+teamsRouter.delete('/:teamId/roster/:rosterId', requireAuth, requireRole(['MANAGER', 'COACH']), async (req, res, next) => {
   try {
     await removeRosterPlayer(req.params.teamId, req.params.rosterId);
     res.json({ ok: true });

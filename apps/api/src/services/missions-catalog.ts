@@ -89,7 +89,7 @@ export const MISSIONS_CATALOG: Mission[] = [
     roles: ['MANAGER'],
     title: { en: 'Add a player to your roster', es: 'Añade un jugador al roster' },
     description: { en: 'Expand your squad by adding a player.', es: 'Amplía tu plantilla añadiendo un jugador.' },
-    ctaPath: '/analysis/teams',
+    ctaPath: '/management/teams',
     order: 3,
   },
   {
@@ -97,7 +97,7 @@ export const MISSIONS_CATALOG: Mission[] = [
     roles: ['MANAGER'],
     title: { en: 'Invite a team member', es: 'Invita a un miembro del equipo' },
     description: { en: 'Send an invitation to a player, analyst, or coach.', es: 'Envía una invitación a un jugador, analista o coach.' },
-    ctaPath: '/admin/permissions',
+    ctaPath: '/management/teams',
     order: 4,
   },
   {
