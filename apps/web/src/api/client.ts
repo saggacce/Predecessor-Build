@@ -1,22 +1,26 @@
 import type { VersionRecord } from '@predecessor/data-model';
 
-export type ConfigurableRole = 'PLATFORM_ADMIN' | 'MANAGER' | 'COACH' | 'ANALISTA' | 'JUGADOR';
+export type ConfigurableRole = 'PLATFORM_ADMIN' | 'MANAGER' | 'COACH' | 'ANALISTA' | 'JUGADOR' | 'PLAYER';
 export type PermissionKey =
   | 'teams.own.view' | 'teams.own.create' | 'teams.own.edit' | 'teams.own.delete'
   | 'teams.own.addPlayer' | 'teams.own.removePlayer' | 'teams.own.editPlayerName' | 'teams.own.syncMatches'
+  | 'invitations.view' | 'invitations.create' | 'invitations.revoke'
   | 'teams.rival.view' | 'teams.rival.create' | 'teams.rival.edit' | 'teams.rival.delete'
   | 'teams.rival.addPlayer' | 'teams.rival.removePlayer' | 'teams.rival.syncMatches'
   | 'teamAnalysis.view' | 'teamAnalysis.performance' | 'teamAnalysis.draft'
   | 'teamAnalysis.vision' | 'teamAnalysis.analyst'
+  | 'teamGoals.view' | 'teamGoals.create' | 'teamGoals.edit' | 'teamGoals.delete'
   | 'playerScouting.view' | 'playerScouting.syncPlayer' | 'playerScouting.editPlayerName'
   | 'playerGoals.view' | 'playerGoals.create' | 'playerGoals.edit' | 'playerGoals.delete'
   | 'matchDetail.view' | 'matchDetail.syncMatch' | 'matchDetail.editPlayerName'
   | 'matchDetail.scoreboard' | 'matchDetail.statistics' | 'matchDetail.timeline' | 'matchDetail.analysis'
+  | 'scrimPlanner.view' | 'scrimPlanner.create' | 'scrimPlanner.delete'
   | 'scrimReport.view' | 'scrimReport.export'
   | 'reviewQueue.view' | 'reviewQueue.createItem' | 'reviewQueue.editItem' | 'reviewQueue.deleteItem'
-  | 'teamGoals.view' | 'teamGoals.create' | 'teamGoals.edit' | 'teamGoals.delete'
+  | 'reviewSessions.view' | 'reviewSessions.create' | 'reviewSessions.manage'
+  | 'playbook.view' | 'playbook.create' | 'playbook.edit' | 'playbook.delete'
+  | 'tacticalBoard.view' | 'tacticalBoard.save'
   | 'vodIndex.view' | 'vodIndex.create' | 'vodIndex.edit' | 'vodIndex.delete'
-  | 'invitations.view' | 'invitations.create' | 'invitations.revoke'
   | 'platformAdmin.view' | 'platformAdmin.dataControls' | 'platformAdmin.staff'
   | 'platformAdmin.auditLogs' | 'platformAdmin.feedback' | 'platformAdmin.permissions';
 export type RolePermissions = Record<PermissionKey, boolean>;
