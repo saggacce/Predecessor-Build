@@ -97,6 +97,7 @@ teamsRouter.post('/', requireAuth, attachManagedTeamForCreate, requireRole(['MAN
     const data = createTeamSchema.parse(req.body);
     const team = await createTeam(data, req.user?.userId);
     res.status(201).json(team);
+    void tryCompleteMission(db, req.user!.userId, 'CREATE_TEAM');
   } catch (err) {
     next(err);
   }
@@ -125,6 +126,7 @@ teamsRouter.patch('/:teamId', requireAuth, requireRole(['MANAGER']), async (req,
     const data = updateTeamSchema.parse(req.body);
     const team = await updateTeam(req.params.teamId, data);
     res.json(team);
+    void tryCompleteMission(db, req.user!.userId, 'COMPLETE_TEAM_PROFILE');
   } catch (err) {
     next(err);
   }

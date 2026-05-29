@@ -85,10 +85,10 @@ export const MISSIONS_CATALOG: Mission[] = [
 
   // ── MANAGER ───────────────────────────────────────────────────────────────────
   {
-    id: 'ADD_ROSTER_PLAYER',
+    id: 'CREATE_TEAM',
     roles: ['MANAGER'],
-    title: { en: 'Add a player to your roster', es: 'Añade un jugador al roster' },
-    description: { en: 'Expand your squad by adding a player.', es: 'Amplía tu plantilla añadiendo un jugador.' },
+    title: { en: 'Create your team', es: 'Crea tu equipo' },
+    description: { en: 'Set up your team profile in the management section.', es: 'Configura el perfil de tu equipo en la sección de gestión.' },
     ctaPath: '/management/teams',
     order: 3,
   },
@@ -101,11 +101,11 @@ export const MISSIONS_CATALOG: Mission[] = [
     order: 4,
   },
   {
-    id: 'SET_TEAM_GOAL',
+    id: 'COMPLETE_TEAM_PROFILE',
     roles: ['MANAGER'],
-    title: { en: 'Set a team goal', es: 'Establece un objetivo de equipo' },
-    description: { en: 'Define a collective objective for your squad.', es: 'Define un objetivo colectivo para tu equipo.' },
-    ctaPath: '/tools/review',
+    title: { en: 'Complete your team profile', es: 'Completa el perfil del equipo' },
+    description: { en: 'Add a logo, abbreviation or region to your team.', es: 'Añade un logo, abreviatura o región a tu equipo.' },
+    ctaPath: '/management/teams',
     order: 5,
   },
   {
