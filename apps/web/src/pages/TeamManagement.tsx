@@ -72,7 +72,7 @@ function TeamList({ onSelect }: { onSelect: (id: string) => void }) {
   }, []);
 
   function myRoleInTeam(teamId: string): string | undefined {
-    return user?.memberships?.find((m) => m.team.id === teamId)?.role;
+    return user?.memberships?.find((m) => m.teamId === teamId)?.role;
   }
 
   function handleFileChange(e: ChangeEvent<HTMLInputElement>) {
@@ -237,7 +237,7 @@ function TeamDetail({ teamId, onBack }: { teamId: string; onBack: () => void }) 
   const [showAddMember, setShowAddMember] = useState(false);
 
   const isPlatformAdmin = user?.globalRole === 'PLATFORM_ADMIN';
-  const myMembership = user?.memberships?.find((m) => m.team.id === teamId);
+  const myMembership = user?.memberships?.find((m) => m.teamId === teamId);
   const myRole = myMembership?.role ?? null;
   const canManageStaff = isPlatformAdmin || myRole === 'MANAGER';
   const canManageRoster = isPlatformAdmin || myRole === 'MANAGER' || myRole === 'COACH';
