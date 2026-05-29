@@ -24,6 +24,7 @@ import Unauthorized from './pages/Unauthorized';
 import TeamManagement from './pages/TeamManagement';
 import DataQualityPage from './pages/DataQualityPage';
 import AuditLogsPage from './pages/AuditLogsPage';
+import PlayerMatchesPage from './pages/PlayerMatchesPage';
 import UsersPage from './pages/UsersPage';
 import ProfilePage from './pages/ProfilePage';
 import ApiStatusPage from './pages/ApiStatusPage';
@@ -245,6 +246,8 @@ function SidebarSectionEl({ section, isOpen, onToggle, badgeCount = 0 }: Sidebar
 // ── Sidebar ───────────────────────────────────────────────────────────────────
 
 function useSections(t: (key: string) => string): SidebarSection[] {
+  const { user } = useAuth();
+  const isStandalonePlayer = user?.globalRole === 'PLAYER';
   return [
     {
       id: 'dashboard',
@@ -264,7 +267,7 @@ function useSections(t: (key: string) => string): SidebarSection[] {
       id: 'matches',
       label: t('nav.matches'),
       icon: <Film size={17} />,
-      to: '/matches',
+      to: isStandalonePlayer ? '/player/matches' : '/matches',
     },
     {
       id: 'analysis',
@@ -585,6 +588,7 @@ function AppContent() {
             <Route path="/matches" element={<MatchList />} />
             <Route path="/matches/:id" element={<MatchDetail />} />
             <Route path="/matches/live/:predggUuid" element={<MatchDetail liveMode />} />
+            <Route path="/player/matches" element={<PlayerMatchesPage />} />
 
             {/* Analysis */}
             <Route path="/analysis/teams" element={<TeamAnalysis />} />
