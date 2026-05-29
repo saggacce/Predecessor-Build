@@ -95,7 +95,7 @@ teamsRouter.get('/', requireAuth, async (req, res, next) => {
 teamsRouter.post('/', requireAuth, attachManagedTeamForCreate, requireRole(['MANAGER']), async (req, res, next) => {
   try {
     const data = createTeamSchema.parse(req.body);
-    const team = await createTeam(data);
+    const team = await createTeam(data, req.user?.userId);
     res.status(201).json(team);
   } catch (err) {
     next(err);

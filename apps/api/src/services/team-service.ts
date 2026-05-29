@@ -147,15 +147,18 @@ export async function listTeams(type?: 'OWN' | 'RIVAL') {
   });
 }
 
-export async function createTeam(data: {
-  name: string;
-  abbreviation?: string;
-  logoUrl?: string;
-  type: 'OWN' | 'RIVAL';
-  region?: string;
-  notes?: string;
-}) {
+export async function createTeam(
+  data: { name: string; abbreviation?: string; logoUrl?: string; type: 'OWN' | 'RIVAL'; region?: string; notes?: string },
+  creatorId?: string,
+) {
   const team = await db.team.create({ data });
+  if (creatorId) {
+    await db.teamMembership.upsert({
+      where: { userId_teamId: { userId: creatorId, teamId: team.id } },
+      create: { userId: creatorId, teamId: team.id, role: 'MANAGER' },
+      update: {},
+    });
+  }
   return getTeamProfile(team.id);
 }
 
