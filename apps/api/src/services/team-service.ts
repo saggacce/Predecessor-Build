@@ -13,6 +13,7 @@ export interface TeamProfile {
   staff: Array<{
     userId: string;
     role: string;
+    extraRoles: string[];
     name: string;
     email: string;
     avatarUrl: string | null;
@@ -109,6 +110,7 @@ export async function getTeamProfile(teamId: string): Promise<TeamProfile> {
   const staff = team.memberships.map((m) => ({
     userId: m.userId,
     role: m.role,
+    extraRoles: m.extraRoles ?? [],
     name: m.user.name,
     email: m.user.email,
     avatarUrl: m.user.avatarUrl,
@@ -150,12 +152,13 @@ export async function listTeams(type?: 'OWN' | 'RIVAL') {
 export async function createTeam(
   data: { name: string; abbreviation?: string; logoUrl?: string; type: 'OWN' | 'RIVAL'; region?: string; notes?: string },
   creatorId?: string,
+  additionalRoles?: string[],
 ) {
   const team = await db.team.create({ data });
   if (creatorId) {
     await db.teamMembership.upsert({
       where: { userId_teamId: { userId: creatorId, teamId: team.id } },
-      create: { userId: creatorId, teamId: team.id, role: 'MANAGER' },
+      create: { userId: creatorId, teamId: team.id, role: 'MANAGER', extraRoles: additionalRoles ?? [] },
       update: {},
     });
   }

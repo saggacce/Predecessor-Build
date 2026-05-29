@@ -57,6 +57,7 @@ function TeamList({ onSelect }: { onSelect: (id: string) => void }) {
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
   const [form, setForm] = useState({ name: '', abbreviation: '', logoUrl: '', region: '', notes: '' });
+  const [additionalRoles, setAdditionalRoles] = useState<string[]>([]);
   const [creating, setCreating] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -96,10 +97,12 @@ function TeamList({ onSelect }: { onSelect: (id: string) => void }) {
         region: form.region.trim() || undefined,
         notes: form.notes.trim() || undefined,
         type: 'OWN',
+        additionalRoles: additionalRoles.length > 0 ? additionalRoles : undefined,
       });
       toast.success(`Team "${created.name}" created.`);
       setShowCreate(false);
       setForm({ name: '', abbreviation: '', logoUrl: '', region: '', notes: '' });
+      setAdditionalRoles([]);
       onSelect(created.id);
     } catch (err) {
       toast.error(err instanceof ApiErrorResponse ? err.error.message : 'Failed to create team.');
@@ -169,6 +172,25 @@ function TeamList({ onSelect }: { onSelect: (id: string) => void }) {
               )}
             </div>
           </div>
+
+          {/* Additional roles */}
+          <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: '0.75rem' }}>
+            <p style={{ ...labelStyle, marginBottom: '0.5rem' }}>¿Ejerces algún rol adicional en el equipo?</p>
+            <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
+              {(['COACH', 'ANALISTA', 'JUGADOR'] as const).map((r) => (
+                <label key={r} style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', cursor: 'pointer', fontSize: '0.82rem', color: additionalRoles.includes(r) ? ROLE_COLORS[r] : 'var(--text-muted)', fontWeight: additionalRoles.includes(r) ? 700 : 400 }}>
+                  <input
+                    type="checkbox"
+                    checked={additionalRoles.includes(r)}
+                    onChange={(e) => setAdditionalRoles((prev) => e.target.checked ? [...prev, r] : prev.filter((x) => x !== r))}
+                    style={{ accentColor: ROLE_COLORS[r], width: 14, height: 14 }}
+                  />
+                  {r}
+                </label>
+              ))}
+            </div>
+          </div>
+
           <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
             <button className="btn-secondary" onClick={() => setShowCreate(false)} disabled={creating} style={{ flex: 'unset' }}>{t('common.cancel', 'Cancel')}</button>
             <button className="btn-primary" onClick={() => void handleCreate()} disabled={creating} style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flex: 'unset' }}>
@@ -411,6 +433,11 @@ function MemberRow({ member, canManage, onRemove, onRoleChange }: {
           {member.role}
         </span>
       )}
+      {(member.extraRoles ?? []).map((r) => (
+        <span key={r} style={{ fontSize: '0.64rem', fontWeight: 700, color: ROLE_COLORS[r] ?? 'var(--text-muted)', border: `1px solid ${ROLE_COLORS[r] ?? 'var(--border-color)'}`, borderRadius: '999px', padding: '0.1rem 0.45rem', opacity: 0.75, flexShrink: 0 }}>
+          {r}
+        </span>
+      ))}
       {canManage && (
         <button onClick={onRemove} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--accent-loss)', display: 'flex', padding: '0.25rem', flexShrink: 0 }}>
           <UserMinus size={15} />
