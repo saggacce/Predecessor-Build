@@ -4,14 +4,15 @@ import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { apiClient, type PlatformPermissions, type ConfigurableRole, type PermissionKey } from '../api/client';
 
-const ROLES: ConfigurableRole[] = ['PLATFORM_ADMIN', 'MANAGER', 'COACH', 'ANALISTA', 'JUGADOR'];
+const ROLES: ConfigurableRole[] = ['PLATFORM_ADMIN', 'MANAGER', 'COACH', 'ANALISTA', 'JUGADOR', 'PLAYER'];
 
 const ROLE_LABELS: Record<ConfigurableRole, string> = {
   PLATFORM_ADMIN: 'Platform Admin',
   MANAGER: 'Manager',
   COACH: 'Coach',
   ANALISTA: 'Analista',
-  JUGADOR: 'Jugador',
+  JUGADOR: 'Jugador (equipo)',
+  PLAYER: 'Jugador solo',
 };
 
 type PermRow = {
@@ -28,17 +29,20 @@ type PermSection = {
 
 const SECTIONS: PermSection[] = [
   {
-    id: 'teams-own',
-    label: 'Equipo propio',
+    id: 'team-management',
+    label: 'Gestión de equipo',
     rows: [
       { key: 'teams.own.view', label: 'Ver equipo propio' },
       { key: 'teams.own.create', label: 'Crear equipo', indent: true },
       { key: 'teams.own.edit', label: 'Editar equipo', indent: true },
       { key: 'teams.own.delete', label: 'Eliminar equipo', indent: true },
-      { key: 'teams.own.addPlayer', label: 'Añadir jugador', indent: true },
-      { key: 'teams.own.removePlayer', label: 'Eliminar jugador', indent: true },
+      { key: 'teams.own.addPlayer', label: 'Añadir jugador al roster', indent: true },
+      { key: 'teams.own.removePlayer', label: 'Eliminar jugador del roster', indent: true },
       { key: 'teams.own.editPlayerName', label: 'Editar nombre de jugador', indent: true },
       { key: 'teams.own.syncMatches', label: 'Sincronizar partidas', indent: true },
+      { key: 'invitations.view', label: 'Ver invitaciones enviadas', indent: true },
+      { key: 'invitations.create', label: 'Invitar miembros', indent: true },
+      { key: 'invitations.revoke', label: 'Revocar invitación', indent: true },
     ],
   },
   {
@@ -56,46 +60,59 @@ const SECTIONS: PermSection[] = [
   },
   {
     id: 'team-analysis',
-    label: 'Team Analysis',
+    label: 'Análisis de equipo',
     rows: [
       { key: 'teamAnalysis.view', label: 'Ver sección' },
-      { key: 'teamAnalysis.performance', label: 'Tab Performance', indent: true },
+      { key: 'teamAnalysis.performance', label: 'Tab Rendimiento', indent: true },
       { key: 'teamAnalysis.draft', label: 'Tab Draft', indent: true },
-      { key: 'teamAnalysis.vision', label: 'Tab Vision / Objectives', indent: true },
+      { key: 'teamAnalysis.vision', label: 'Tab Visión / Objetivos', indent: true },
       { key: 'teamAnalysis.analyst', label: 'Tab Analyst (IA)', indent: true },
+      { key: 'teamGoals.view', label: 'Ver objetivos de equipo', indent: true },
+      { key: 'teamGoals.create', label: 'Crear objetivo de equipo', indent: true },
+      { key: 'teamGoals.edit', label: 'Editar objetivo de equipo', indent: true },
+      { key: 'teamGoals.delete', label: 'Eliminar objetivo de equipo', indent: true },
     ],
   },
   {
     id: 'player-scouting',
-    label: 'Player Scouting',
+    label: 'Scouting de jugadores',
     rows: [
       { key: 'playerScouting.view', label: 'Ver sección' },
       { key: 'playerScouting.syncPlayer', label: 'Sincronizar jugador', indent: true },
       { key: 'playerScouting.editPlayerName', label: 'Editar nombre de jugador', indent: true },
       { key: 'playerGoals.view', label: 'Ver objetivos de jugador', indent: true },
-      { key: 'playerGoals.create', label: 'Crear objetivo', indent: true },
-      { key: 'playerGoals.edit', label: 'Editar objetivo', indent: true },
-      { key: 'playerGoals.delete', label: 'Eliminar objetivo', indent: true },
+      { key: 'playerGoals.create', label: 'Crear objetivo de jugador', indent: true },
+      { key: 'playerGoals.edit', label: 'Editar objetivo de jugador', indent: true },
+      { key: 'playerGoals.delete', label: 'Eliminar objetivo de jugador', indent: true },
     ],
   },
   {
     id: 'match-detail',
-    label: 'Match Detail',
+    label: 'Partidas',
     rows: [
       { key: 'matchDetail.view', label: 'Ver detalle de partida' },
       { key: 'matchDetail.syncMatch', label: 'Sincronizar partida', indent: true },
       { key: 'matchDetail.editPlayerName', label: 'Editar nombre de jugador', indent: true },
       { key: 'matchDetail.scoreboard', label: 'Tab Scoreboard', indent: true },
-      { key: 'matchDetail.statistics', label: 'Tab Statistics', indent: true },
+      { key: 'matchDetail.statistics', label: 'Tab Estadísticas', indent: true },
       { key: 'matchDetail.timeline', label: 'Tab Timeline', indent: true },
       { key: 'matchDetail.analysis', label: 'Tab Analysis', indent: true },
     ],
   },
   {
-    id: 'scrim-report',
-    label: 'Battle Plan / Scrim Report',
+    id: 'scrim-planner',
+    label: 'Scrim Planner',
     rows: [
-      { key: 'scrimReport.view', label: 'Ver sección' },
+      { key: 'scrimPlanner.view', label: 'Ver scrims y partidas' },
+      { key: 'scrimPlanner.create', label: 'Crear / editar scrim', indent: true },
+      { key: 'scrimPlanner.delete', label: 'Eliminar scrim', indent: true },
+    ],
+  },
+  {
+    id: 'scrim-report',
+    label: 'Battle Plan',
+    rows: [
+      { key: 'scrimReport.view', label: 'Ver Battle Plan / Scrim Report' },
       { key: 'scrimReport.export', label: 'Exportar PDF / portapapeles', indent: true },
     ],
   },
@@ -104,13 +121,36 @@ const SECTIONS: PermSection[] = [
     label: 'Review Queue',
     rows: [
       { key: 'reviewQueue.view', label: 'Ver cola de revisión' },
-      { key: 'reviewQueue.createItem', label: 'Crear review item', indent: true },
+      { key: 'reviewQueue.createItem', label: 'Crear ítem de revisión', indent: true },
       { key: 'reviewQueue.editItem', label: 'Editar estado / nota', indent: true },
-      { key: 'reviewQueue.deleteItem', label: 'Eliminar review item', indent: true },
-      { key: 'teamGoals.view', label: 'Ver objetivos de equipo', indent: true },
-      { key: 'teamGoals.create', label: 'Crear objetivo', indent: true },
-      { key: 'teamGoals.edit', label: 'Editar objetivo', indent: true },
-      { key: 'teamGoals.delete', label: 'Eliminar objetivo', indent: true },
+      { key: 'reviewQueue.deleteItem', label: 'Eliminar ítem', indent: true },
+    ],
+  },
+  {
+    id: 'review-sessions',
+    label: 'Review Sessions',
+    rows: [
+      { key: 'reviewSessions.view', label: 'Ver sesiones de revisión' },
+      { key: 'reviewSessions.create', label: 'Crear sesión', indent: true },
+      { key: 'reviewSessions.manage', label: 'Gestionar sesión (completar, eliminar)', indent: true },
+    ],
+  },
+  {
+    id: 'playbook',
+    label: 'Playbook',
+    rows: [
+      { key: 'playbook.view', label: 'Ver entradas del playbook' },
+      { key: 'playbook.create', label: 'Crear entrada', indent: true },
+      { key: 'playbook.edit', label: 'Editar entrada', indent: true },
+      { key: 'playbook.delete', label: 'Eliminar entrada', indent: true },
+    ],
+  },
+  {
+    id: 'tactical-board',
+    label: 'Tablero Táctico',
+    rows: [
+      { key: 'tacticalBoard.view', label: 'Acceder al tablero' },
+      { key: 'tacticalBoard.save', label: 'Guardar snapshot en Playbook', indent: true },
     ],
   },
   {
@@ -124,21 +164,12 @@ const SECTIONS: PermSection[] = [
     ],
   },
   {
-    id: 'invitations',
-    label: 'Staff & Invitaciones',
-    rows: [
-      { key: 'invitations.view', label: 'Ver gestión de invitaciones' },
-      { key: 'invitations.create', label: 'Crear invitación', indent: true },
-      { key: 'invitations.revoke', label: 'Revocar invitación', indent: true },
-    ],
-  },
-  {
     id: 'platform-admin',
-    label: 'Platform Admin',
+    label: 'Administración',
     rows: [
-      { key: 'platformAdmin.view', label: 'Ver sección Platform Admin' },
+      { key: 'platformAdmin.view', label: 'Ver sección de administración' },
       { key: 'platformAdmin.dataControls', label: 'Data Controls', indent: true },
-      { key: 'platformAdmin.staff', label: 'Staff & Users', indent: true },
+      { key: 'platformAdmin.staff', label: 'Gestión de usuarios', indent: true },
       { key: 'platformAdmin.auditLogs', label: 'Audit Logs', indent: true },
       { key: 'platformAdmin.feedback', label: 'Feedback', indent: true },
       { key: 'platformAdmin.permissions', label: 'Permisos (esta página)', indent: true },
