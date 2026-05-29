@@ -43,6 +43,7 @@ const createTeamSchema = z.object({
   type: z.enum(['OWN', 'RIVAL']),
   region: z.string().max(100).optional(),
   notes: z.string().max(1000).optional(),
+  additionalRoles: z.array(z.enum(['COACH', 'ANALISTA', 'JUGADOR'])).optional(),
 });
 
 const updateTeamSchema = z.object({
@@ -94,8 +95,8 @@ teamsRouter.get('/', requireAuth, async (req, res, next) => {
 
 teamsRouter.post('/', requireAuth, attachManagedTeamForCreate, requireRole(['MANAGER']), async (req, res, next) => {
   try {
-    const data = createTeamSchema.parse(req.body);
-    const team = await createTeam(data, req.user?.userId);
+    const { additionalRoles, ...teamData } = createTeamSchema.parse(req.body);
+    const team = await createTeam(teamData, req.user?.userId, additionalRoles);
     res.status(201).json(team);
     void tryCompleteMission(db, req.user!.userId, 'CREATE_TEAM');
   } catch (err) {

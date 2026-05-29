@@ -141,6 +141,7 @@ export type TeamRole = 'carry' | 'jungle' | 'midlane' | 'offlane' | 'support';
 export interface TeamStaffMember {
   userId: string;
   role: string;
+  extraRoles: string[];
   name: string;
   email: string;
   avatarUrl: string | null;
@@ -1093,7 +1094,7 @@ export const apiClient = {
       return fetchApi<{ teams: TeamProfile[] }>(`/teams${params}`);
     },
     getProfile: (id: string) => fetchApi<TeamProfile>(`/teams/${id}`),
-    create: (data: { name: string; abbreviation?: string; logoUrl?: string; type: 'OWN' | 'RIVAL'; region?: string; notes?: string }) =>
+    create: (data: { name: string; abbreviation?: string; logoUrl?: string; type: 'OWN' | 'RIVAL'; region?: string; notes?: string; additionalRoles?: string[] }) =>
       fetchApi<TeamProfile>('/teams', { method: 'POST', body: JSON.stringify(data) }),
     update: (id: string, data: { name?: string; abbreviation?: string | null; logoUrl?: string | null; region?: string | null; notes?: string | null }) =>
       fetchApi<TeamProfile>(`/teams/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
