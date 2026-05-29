@@ -9,17 +9,14 @@ import { tryCompleteMission } from '../services/missions-service.js';
 
 export const invitationsRouter = Router();
 
-const invitationRoleSchema = z.enum(['MANAGER', 'COACH', 'ANALISTA', 'JUGADOR']);
+const invitationRoleSchema = z.enum(['MANAGER', 'COACH', 'ANALISTA', 'JUGADOR', 'PLATFORM_ADMIN']);
 
 const createInvitationSchema = z.object({
   email: z.string().email().transform((email) => email.toLowerCase()),
   teamId: z.string().min(1).optional(),
   role: invitationRoleSchema,
   playerId: z.string().min(1).optional(),
-}).refine(
-  (data) => data.teamId || data.role === 'JUGADOR',
-  { message: 'teamId is required for non-player roles', path: ['teamId'] }
-);
+});
 
 const listInvitationSchema = z.object({
   teamId: z.string().min(1),
@@ -55,7 +52,11 @@ async function attachInvitationTeamId(req: Request, _res: Response, next: NextFu
 invitationsRouter.post('/', requireAuth, requireRole(['MANAGER']), async (req, res, next) => {
   try {
     const data = createInvitationSchema.parse(req.body);
-    // Non-PLATFORM_ADMIN users must always provide a teamId (enforced by requireRole above)
+    const isPlatformAdmin = req.user?.globalRole === 'PLATFORM_ADMIN';
+    // Non-admin users must provide a teamId for team roles
+    if (!isPlatformAdmin && !data.teamId && data.role !== 'JUGADOR') {
+      throw new AppError(400, 'teamId is required for non-player roles', 'VALIDATION_ERROR');
+    }
     const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
     const invitation = await db.invitation.create({
       data: {
