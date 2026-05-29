@@ -269,8 +269,8 @@ function TeamDetail({ teamId, onBack }: { teamId: string; onBack: () => void }) 
   if (loading) return <div style={{ padding: '2rem', color: 'var(--text-muted)' }}>{t('common.loading')}</div>;
   if (!profile) return null;
 
-  const staffMembers = profile.staff.filter((s) => s.role !== 'JUGADOR');
-  const playerMembers = profile.staff.filter((s) => s.role === 'JUGADOR');
+  const staffMembers = (profile.staff ?? []).filter((s) => s.role !== 'JUGADOR');
+  const playerMembers = (profile.staff ?? []).filter((s) => s.role === 'JUGADOR');
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
