@@ -19,7 +19,7 @@ const createInvitationSchema = z.object({
 });
 
 const listInvitationSchema = z.object({
-  teamId: z.string().min(1),
+  teamId: z.string().min(1).optional(),
 });
 
 function publicInvitation(invitation: { email: string; teamId: string | null; role: string; playerId?: string | null; expiresAt: Date }) {
@@ -91,8 +91,13 @@ invitationsRouter.post('/', requireAuth, requireRole(['MANAGER']), async (req, r
 invitationsRouter.get('/', requireAuth, requireRole(['MANAGER']), async (req, res, next) => {
   try {
     const { teamId } = listInvitationSchema.parse(req.query);
+    const isPlatformAdmin = req.user?.globalRole === 'PLATFORM_ADMIN';
+    // PLATFORM_ADMIN can list all invitations; others must filter by teamId
+    if (!isPlatformAdmin && !teamId) {
+      throw new AppError(400, 'teamId is required', 'VALIDATION_ERROR');
+    }
     const invitations = await db.invitation.findMany({
-      where: { teamId },
+      where: teamId ? { teamId } : undefined,
       orderBy: { createdAt: 'desc' },
       select: {
         id: true,
@@ -104,6 +109,7 @@ invitationsRouter.get('/', requireAuth, requireRole(['MANAGER']), async (req, re
         expiresAt: true,
         usedAt: true,
         createdAt: true,
+        invitedBy: { select: { name: true, email: true } },
       },
     });
     res.json({ invitations });
