@@ -335,9 +335,26 @@ Catálogo estático de misiones por rol. Completions y logros en BD (`UserMissio
 Formulario «Nuevo ítem de revisión» añadido en ReviewQueue para que el analista complete la misión `CREATE_REVIEW_ITEM` de forma natural (PR #227).
 
 ## [x] Tarea 29 — Team Hub (gestión unificada de equipos)
-*PRs #226, #227. Desplegado en producción (2026-05-29).*
+*PRs #226–#235. Desplegado en producción (2026-05-30).*
 
-`/management/teams` sustituye a TeamRoster + StaffManagement. Lista de equipos con badge de rol; detalle con secciones Staff, Jugadores y Roster pred.gg. Cambio de rol inline para MANAGER. Panel de invitaciones. Creador queda automáticamente como MANAGER. COACH puede gestionar roster. `/management/staff` redirige a `/management/teams`.
+`/management/teams` sustituye a TeamRoster + StaffManagement. Lista de equipos con badge de rol; detalle con secciones Staff, Jugadores y Roster pred.gg. Cambio de rol inline para MANAGER. Panel de invitaciones. Creador queda automáticamente como MANAGER. COACH puede gestionar roster.
+
+**Mejoras adicionales (2026-05-30):**
+- Roles adicionales al crear equipo (COACH/ANALISTA/JUGADOR) → guardados en `TeamMembership.extraRoles`
+- Invitar usuario sin equipo desde `/admin/users` — modal con email, rol y equipo opcional; soporte para PLATFORM_ADMIN sin equipo
+- Panel de invitaciones en administración (`/admin/invitations`) — todas las invitaciones de la plataforma con filtro y revocación
+- Panel de Roles y Permisos reorganizado: 13 secciones, 6 roles (PLAYER standalone añadido), nuevas claves para Playbook/Scrim Planner/Review Sessions/Tactical Board
+- Lista de partidas con filtro por equipo rival — `rivalTeamName` cruzando `ScrimSchedule` con UUID de pred.gg
+- Vista de partidas personales para PLAYER (`/player/matches`) — historial desde pred.gg con KDA, héroe, resultado, duración
+- Token keep-alive: renovación automática del refresh token de pred.gg cada 20 min para que los syncs nunca fallen
+
+## [x] Tarea 30 — Infraestructura OAuth pred.gg
+*PRs #235. Desplegado en producción (2026-05-30).*
+
+- Diagnóstico: pred.gg rota refresh tokens en cada exchange pero el cron no los persistía → tokens caducaban silenciosamente
+- El token de plataforma es el OAuth de la cuenta `saggacce` (sub: 1002908), no un token de aplicación
+- Event stream requiere Bearer token de usuario OAuth; X-Api-Key solo da acceso público
+- Keep-alive: `startTokenKeepAlive()` al arrancar el servidor, interval 20 min, persiste el token rotado en `PlatformCredential`
 
 ---
 
