@@ -250,6 +250,7 @@ export interface TeamMatch {
   playerCount: number;
   version: string | null;
   firstTowerWon: boolean | null;
+  rivalTeamName: string | null;
 }
 
 export interface TeamObjectiveControl {
@@ -431,6 +432,25 @@ export async function getTeamAnalysis(teamId: string): Promise<TeamAnalysis> {
     }
   }
 
+  // Build a map from predggMatchId → rival team name using ScrimSchedule
+  const teamMatchPredggUuids = teamMatchRows.map((r) => r.predggUuid).filter(Boolean);
+  const scrimRivalMap = new Map<string, string | null>();
+  if (teamMatchPredggUuids.length > 0) {
+    const scrims = await db.scrimSchedule.findMany({
+      where: { teamId, predggMatchId: { in: teamMatchPredggUuids } },
+      select: {
+        predggMatchId: true,
+        rivalName: true,
+        rivalTeam: { select: { name: true } },
+      },
+    });
+    for (const s of scrims) {
+      if (s.predggMatchId) {
+        scrimRivalMap.set(s.predggMatchId, s.rivalTeam?.name ?? s.rivalName ?? null);
+      }
+    }
+  }
+
   const teamMatches: TeamMatch[] = teamMatchRows.map((r) => {
     const ft = firstTowerByMatch.get(r.matchId);
     return {
@@ -444,6 +464,7 @@ export async function getTeamAnalysis(teamId: string): Promise<TeamAnalysis> {
       playerCount: Number(r.player_count),
       version: r.version ?? null,
       firstTowerWon: ft !== undefined && ft !== null ? ft === r.team : null,
+      rivalTeamName: scrimRivalMap.get(r.predggUuid) ?? null,
     };
   });
 
