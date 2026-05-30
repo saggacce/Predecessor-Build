@@ -421,6 +421,7 @@ export interface TeamMatch {
   playerCount: number;
   version: string | null;
   firstTowerWon: boolean | null;
+  rivalTeamName: string | null;
 }
 
 export interface TeamObjectiveControl {
