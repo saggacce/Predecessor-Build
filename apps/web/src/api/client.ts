@@ -745,11 +745,12 @@ export interface Invitation {
   token: string;
   email: string;
   teamId: string | null;
-  role: 'MANAGER' | 'COACH' | 'ANALISTA' | 'JUGADOR' | string;
+  role: 'MANAGER' | 'COACH' | 'ANALISTA' | 'JUGADOR' | 'PLATFORM_ADMIN' | string;
   playerId?: string | null;
   expiresAt: string;
   usedAt?: string | null;
   createdAt?: string;
+  invitedBy?: { name: string; email: string } | null;
 }
 
 export interface PublicInvitation {
@@ -1282,9 +1283,9 @@ export const apiClient = {
 
   invitations: {
     get: (token: string) => fetchApi<{ invitation: PublicInvitation }>(`/invitations/${encodeURIComponent(token)}`),
-    list: (teamId: string) => {
-      const params = new URLSearchParams({ teamId });
-      return fetchApi<{ invitations: Invitation[] }>(`/invitations?${params}`);
+    list: (teamId?: string) => {
+      const params = new URLSearchParams(teamId ? { teamId } : {});
+      return fetchApi<{ invitations: Invitation[] }>(`/invitations${params.toString() ? `?${params}` : ''}`);
     },
     create: (data: { email: string; teamId?: string; role: string; playerId?: string }) =>
       fetchApi<{ invitation: Invitation }>('/invitations', {
