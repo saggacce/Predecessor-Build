@@ -784,11 +784,18 @@ export interface CronJob {
   nextRunAt: string | null;
 }
 
+export interface PlatformTokenState {
+  status: 'ok' | 'expired' | 'missing' | 'unknown';
+  lastCheckedAt: string | null;
+  lastError: string | null;
+}
+
 export interface SyncStatus {
   players: { total: number; synced: number; stale: number; hidden: number };
   matches: { total: number; complete: number; partial: number; incomplete: number };
   eventStreamJob: EventStreamJob;
   cronJob: CronJob;
+  platformToken: PlatformTokenState;
 }
 
 export interface EventStreamJob {

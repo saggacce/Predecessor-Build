@@ -143,7 +143,7 @@ function SyncStatusTab() {
   );
   if (!status) return <div style={{ padding: '1.5rem', color: 'var(--accent-loss)' }}>{t('dataQuality.loadError')}</div>;
 
-  const { players, matches, eventStreamJob: job, cronJob } = status;
+  const { players, matches, eventStreamJob: job, cronJob, platformToken } = status;
   const isRunning = job.running || optimisticRunning;
   const unsyncable = (players as any).unsyncable ?? (players as any).hidden ?? 0;
   const syncablePlayers = players.total - unsyncable;
@@ -160,6 +160,48 @@ function SyncStatusTab() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+
+      {/* pred.gg platform token status banner */}
+      {platformToken && platformToken.status !== 'ok' && (
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: '0.75rem',
+          padding: '0.85rem 1.25rem',
+          background: platformToken.status === 'expired' || platformToken.status === 'missing'
+            ? 'rgba(248,113,113,0.08)' : 'rgba(240,180,41,0.08)',
+          border: `1px solid ${platformToken.status === 'expired' || platformToken.status === 'missing'
+            ? 'rgba(248,113,113,0.35)' : 'rgba(240,180,41,0.35)'}`,
+          borderRadius: 'var(--radius-sm)',
+        }}>
+          {platformToken.status === 'expired' || platformToken.status === 'missing'
+            ? <XCircle size={16} style={{ color: 'var(--accent-loss)', flexShrink: 0 }} />
+            : <AlertTriangle size={16} style={{ color: '#f0b429', flexShrink: 0 }} />}
+          <div style={{ flex: 1 }}>
+            <p style={{ margin: 0, fontWeight: 700, fontSize: '0.85rem', color: platformToken.status === 'expired' || platformToken.status === 'missing' ? 'var(--accent-loss)' : '#f0b429' }}>
+              {platformToken.status === 'expired' ? 'Token de pred.gg caducado'
+                : platformToken.status === 'missing' ? 'pred.gg no conectado'
+                : 'Estado del token desconocido'}
+            </p>
+            <p style={{ margin: 0, fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.15rem' }}>
+              Los syncs automáticos no funcionarán hasta que reconectes pred.gg.
+              {platformToken.lastCheckedAt && ` Último chequeo: ${new Date(platformToken.lastCheckedAt).toLocaleTimeString()}.`}
+            </p>
+          </div>
+          <a href="/api/auth/predgg" className="btn-primary" style={{ flex: 'unset', fontSize: '0.78rem', padding: '0.35rem 0.8rem', textDecoration: 'none', whiteSpace: 'nowrap' }}>
+            Reconectar pred.gg
+          </a>
+        </div>
+      )}
+      {platformToken?.status === 'ok' && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.6rem 1rem', background: 'rgba(52,211,153,0.06)', border: '1px solid rgba(52,211,153,0.2)', borderRadius: 'var(--radius-sm)' }}>
+          <CheckCircle size={14} style={{ color: 'var(--accent-win)', flexShrink: 0 }} />
+          <span style={{ fontSize: '0.78rem', color: 'var(--accent-win)', fontWeight: 600 }}>pred.gg conectado</span>
+          {platformToken.lastCheckedAt && (
+            <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginLeft: '0.25rem' }}>
+              · renovado {new Date(platformToken.lastCheckedAt).toLocaleTimeString()}
+            </span>
+          )}
+        </div>
+      )}
 
       {/* Players */}
       <div className="glass-card" style={{ padding: 0, overflow: 'clip' }}>
