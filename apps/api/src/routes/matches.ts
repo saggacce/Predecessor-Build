@@ -32,7 +32,7 @@ const LIVE_MATCH_QUERY = `
       startTime
       duration
       gameMode
-      region { name }
+      region
       winningTeam
       version { name }
       matchPlayers {
@@ -122,7 +122,7 @@ type LiveMatchPlayer = {
 type LiveMatchData = {
   match?: {
     id?: string; uuid?: string; startTime?: string; duration?: number; gameMode?: string;
-    region?: { name?: string } | null; winningTeam?: string | null; version?: { name?: string } | null;
+    region?: string | null; winningTeam?: string | null; version?: { name?: string } | null;
     matchPlayers?: LiveMatchPlayer[];
     heroKills?: Array<{ gameTime: number; killerTeam?: string | null; killedTeam?: string | null; killerHero?: { slug?: string } | null; killedHero?: { slug?: string } | null; killerPlayer?: { id?: string } | null; killedPlayer?: { id?: string } | null; location?: { x?: number; y?: number } | null }>;
     objectiveKills?: Array<{ gameTime: number; killedEntityType?: string | null; killerTeam?: string | null; killerPlayer?: { id?: string } | null; location?: { x?: number; y?: number } | null }>;
@@ -209,7 +209,7 @@ function buildLiveDetail(raw: LiveMatchData) {
     startTime: m.startTime ?? new Date().toISOString(),
     duration: m.duration ?? 0,
     gameMode: m.gameMode ?? 'UNKNOWN',
-    region: m.region?.name ?? null,
+    region: typeof m.region === 'string' ? m.region : null,
     winningTeam: m.winningTeam ?? null,
     version: m.version?.name ?? null,
     rosterSynced: true,
