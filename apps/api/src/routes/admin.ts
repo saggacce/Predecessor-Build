@@ -206,13 +206,31 @@ let cronTimer: ReturnType<typeof setInterval> | null = null;
 const TOKEN_REFRESH_INTERVAL_MS = 20 * 60 * 1000;
 let tokenRefreshTimer: ReturnType<typeof setInterval> | null = null;
 
+export type PlatformTokenStatus = 'ok' | 'expired' | 'missing' | 'unknown';
+
+export const platformTokenState: {
+  status: PlatformTokenStatus;
+  lastCheckedAt: string | null;
+  lastError: string | null;
+} = { status: 'unknown', lastCheckedAt: null, lastError: null };
+
 async function refreshPlatformToken(): Promise<void> {
   try {
     const cred = await db.platformCredential.findUnique({ where: { key: 'predgg_refresh_token' } });
-    if (!cred) return;
+    if (!cred) {
+      platformTokenState.status = 'missing';
+      platformTokenState.lastCheckedAt = new Date().toISOString();
+      platformTokenState.lastError = 'No platform credential stored — connect pred.gg from the admin panel';
+      logger.warn('token keep-alive: no platform credential stored');
+      return;
+    }
     const result = await exchangeToken({ grant_type: 'refresh_token', refresh_token: cred.value });
     if (!result.ok || !result.data.access_token) {
-      logger.warn({ error: result.data?.error }, 'token keep-alive: refresh failed');
+      const err = result.data?.error ?? 'unknown error';
+      platformTokenState.status = 'expired';
+      platformTokenState.lastCheckedAt = new Date().toISOString();
+      platformTokenState.lastError = `Token refresh failed (${err}) — reconnect pred.gg from the admin panel header`;
+      logger.warn({ error: err }, 'token keep-alive: refresh failed — platform token expired');
       return;
     }
     if (result.data.refresh_token) {
@@ -222,8 +240,14 @@ async function refreshPlatformToken(): Promise<void> {
         create: { key: 'predgg_refresh_token', value: result.data.refresh_token },
       });
     }
+    platformTokenState.status = 'ok';
+    platformTokenState.lastCheckedAt = new Date().toISOString();
+    platformTokenState.lastError = null;
     logger.info('token keep-alive: refresh token renewed successfully');
   } catch (err) {
+    platformTokenState.status = 'unknown';
+    platformTokenState.lastCheckedAt = new Date().toISOString();
+    platformTokenState.lastError = err instanceof Error ? err.message : String(err);
     logger.warn({ err }, 'token keep-alive: unexpected error');
   }
 }
@@ -231,7 +255,6 @@ async function refreshPlatformToken(): Promise<void> {
 export function startTokenKeepAlive(): void {
   if (tokenRefreshTimer) return;
   tokenRefreshTimer = setInterval(() => { void refreshPlatformToken(); }, TOKEN_REFRESH_INTERVAL_MS);
-  // Run immediately on start to validate the stored token
   void refreshPlatformToken();
   logger.info({ intervalMs: TOKEN_REFRESH_INTERVAL_MS }, 'token keep-alive: started');
 }
@@ -412,7 +435,7 @@ adminRouter.get('/sync-status', async (_req, res, next) => {
         total: totalPlayers,
         synced: totalPlayers - stalePlayers - unsyncablePlayers,
         stale: stalePlayers,
-        unsyncable: unsyncablePlayers, // stale HIDDEN/console — can't be re-synced
+        unsyncable: unsyncablePlayers,
       },
       matches: {
         total: totalMatches,
@@ -421,8 +444,9 @@ adminRouter.get('/sync-status', async (_req, res, next) => {
         failed: matchesFailed,
         incomplete: matchesNoPlayers,
       },
-      eventStreamJob: eventStreamJob,
-      cronJob: cronJob,
+      eventStreamJob,
+      cronJob,
+      platformToken: platformTokenState,
     });
   } catch (err) {
     next(err);
@@ -577,7 +601,12 @@ adminRouter.post('/sync-event-streams/start', async (req, res, next) => {
     }
     const userToken = await getTokenForSync(req, res);
     if (!userToken) {
-      res.status(400).json({ error: { message: 'pred.gg session required — log in via pred.gg first', code: 'PREDGG_AUTH_REQUIRED' } });
+      const msg = platformTokenState.status === 'expired'
+        ? 'El token de pred.gg ha caducado. Reconecta pred.gg desde el header del panel de administración.'
+        : platformTokenState.status === 'missing'
+          ? 'No hay credencial de pred.gg almacenada. Conecta pred.gg desde el header del panel de administración.'
+          : 'pred.gg session required — connect pred.gg from the admin panel header';
+      res.status(400).json({ error: { message: msg, code: 'PREDGG_AUTH_REQUIRED', tokenStatus: platformTokenState.status } });
       return;
     }
     // Capture refresh token so the background job can renew the Bearer token automatically
