@@ -5,7 +5,6 @@ import { toast } from 'sonner';
 import { ChevronRight, Link as LinkIcon } from 'lucide-react';
 import { apiClient, ApiErrorResponse, type PlayerProfile, type RecentMatch } from '../api/client';
 import { useAuth } from '../hooks/useAuth';
-import { useHeroMeta } from '../hooks/useHeroMeta';
 
 function kda(m: RecentMatch) {
   return ((m.kills + m.assists) / Math.max(m.deaths, 1)).toFixed(2);
@@ -21,8 +20,7 @@ export default function PlayerMatchesPage() {
   const { t } = useTranslation();
   const { user } = useAuth();
   const navigate = useNavigate();
-  const { normalizeHeroSlug } = useHeroMeta();
-  const [profile, setProfile] = useState<PlayerProfile | null>(null);
+const [profile, setProfile] = useState<PlayerProfile | null>(null);
   const [loading, setLoading] = useState(true);
 
   const linkedPlayerId = user?.linkedPlayerId;
