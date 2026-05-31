@@ -171,6 +171,18 @@ export async function getTeamInsights(teamId: string, lang: InsightLang = 'es'):
     teamDmgPerMatch.set(key, (teamDmgPerMatch.get(key) ?? 0) + (mp.heroDamage ?? 0));
   }
 
+  const teamWardsPlacedPerMatch = new Map<string, number>();
+  const teamWardsDestroyedPerMatch = new Map<string, number>();
+  const teamObjDmgPerMatch = new Map<string, number>();
+  const teamStrDmgPerMatch = new Map<string, number>();
+  for (const mp of recentMPs) {
+    const key = `${mp.matchId}:${mp.team}`;
+    teamWardsPlacedPerMatch.set(key, (teamWardsPlacedPerMatch.get(key) ?? 0) + (mp.wardsPlaced ?? 0));
+    teamWardsDestroyedPerMatch.set(key, (teamWardsDestroyedPerMatch.get(key) ?? 0) + (mp.wardsDestroyed ?? 0));
+    teamObjDmgPerMatch.set(key, (teamObjDmgPerMatch.get(key) ?? 0) + (mp.totalDamageDealtToObjectives ?? 0));
+    teamStrDmgPerMatch.set(key, (teamStrDmgPerMatch.get(key) ?? 0) + (mp.totalDamageDealtToStructures ?? 0));
+  }
+
   // ── Role lookup from roster ───────────────────────────────────────────────
   const playerRole = new Map(team.roster.map((r) => [r.player.id, r.role?.toLowerCase() ?? '']));
 
@@ -1223,6 +1235,636 @@ export async function getTeamInsights(teamId: string, lang: InsightLang = 'es'):
           });
         }
       }
+    }
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // GROUP I — Individual player rules (non-rival only)
+  // ─────────────────────────────────────────────────────────────────────────
+  if (!isRival) {
+    const ROLE_EXPECTED_WARD_SHARE: Record<string, number> = {
+      support: 0.35, jungle: 0.25, midlane: 0.15, offlane: 0.15, carry: 0.15,
+    };
+    const ROLE_EXPECTED_WARD_CLEAR_SHARE: Record<string, number> = {
+      support: 0.25, jungle: 0.30, midlane: 0.15, offlane: 0.15, carry: 0.10,
+    };
+    const ROLE_EXPECTED_OBJ_DMG_SHARE: Record<string, number> = {
+      carry: 0.25, jungle: 0.25, midlane: 0.20, offlane: 0.20, support: 0.10,
+    };
+    const ROLE_EXPECTED_STR_DMG_SHARE: Record<string, number> = {
+      carry: 0.30, jungle: 0.15, midlane: 0.20, offlane: 0.20, support: 0.05,
+    };
+    const ROLE_EXPECTED_CS: Record<string, number> = {
+      carry: 180, midlane: 140, offlane: 120, jungle: 80, support: 20,
+    };
+
+    // I1 — First death rate per player
+    if (eventMatchIds.length >= MIN_EVENT_MATCHES) {
+      for (const playerId of rosterPlayerIds) {
+        const playerEventMatches = eventMatchIds.filter((mid) =>
+          heroKills.some((k) => k.matchId === mid && (k.killedPlayerId === playerId || k.killerPlayerId === playerId)),
+        );
+        if (playerEventMatches.length < 5) continue;
+        let firstDeathCount = 0;
+        for (const matchId of playerEventMatches) {
+          const matchKills = heroKills.filter((k) => k.matchId === matchId);
+          if (matchKills.length === 0) continue;
+          const firstDeath = matchKills.reduce((a, b) => a.gameTime < b.gameTime ? a : b);
+          if (firstDeath.killedPlayerId === playerId) firstDeathCount++;
+        }
+        const fdPct = pct(firstDeathCount, playerEventMatches.length);
+        if (fdPct >= 40) {
+          const name = playerName.get(playerId) ?? 'Unknown';
+          const txt = insightStrings['rule-first-death-rate'](lang, {
+            name, fdPct, firstDeathCount, totalMatches: playerEventMatches.length,
+          });
+          insights.push({
+            id: `rule-first-death-rate-${playerId}`,
+            severity: 'medium',
+            category: 'performance',
+            ...txt,
+            reviewRequired: false,
+            affectedPlayers: [name],
+          });
+        }
+      }
+    }
+
+    // I2 — Early death rate per player
+    if (eventMatchIds.length >= MIN_EVENT_MATCHES) {
+      for (const playerId of rosterPlayerIds) {
+        const playerDeaths = rosterDeaths.filter((k) => k.killedPlayerId === playerId);
+        const playerMatches = [...new Set(playerDeaths.map((k) => k.matchId))];
+        const playerEventMatches = eventMatchIds.filter((mid) => playerMatches.includes(mid) ||
+          heroKills.some((k) => k.matchId === mid && (k.killedPlayerId === playerId || k.killerPlayerId === playerId)));
+        if (playerEventMatches.length < 5) continue;
+        const earlyDeaths = playerDeaths.filter((k) => k.gameTime < 600);
+        const matchesWithEarlyDeath = new Set(earlyDeaths.map((k) => k.matchId));
+        const earlyPct = pct(matchesWithEarlyDeath.size, playerEventMatches.length);
+        if (earlyPct >= 35) {
+          const name = playerName.get(playerId) ?? 'Unknown';
+          const txt = insightStrings['rule-early-death-rate'](lang, {
+            name, earlyPct, earlyDeathMatches: matchesWithEarlyDeath.size, totalMatches: playerEventMatches.length,
+          });
+          insights.push({
+            id: `rule-early-death-rate-${playerId}`,
+            severity: 'medium',
+            category: 'performance',
+            ...txt,
+            reviewRequired: false,
+            affectedPlayers: [name],
+          });
+        }
+      }
+    }
+
+    // I3 — Death before objective (per player)
+    if (eventMatchIds.length >= MIN_EVENT_MATCHES) {
+      const majorObjs = objKills.filter((o) => MAJOR_OBJECTIVES.includes(o.entityType));
+      for (const playerId of rosterPlayerIds) {
+        const playerDeaths = rosterDeaths.filter((k) => k.killedPlayerId === playerId);
+        const playerObjCount = majorObjs.filter((o) => teamSideMap.has(o.matchId)).length;
+        if (playerObjCount < 5) continue;
+        let deathBeforeObj = 0;
+        for (const obj of majorObjs) {
+          if (!teamSideMap.has(obj.matchId)) continue;
+          const died = playerDeaths.some(
+            (k) => k.matchId === obj.matchId &&
+              k.gameTime >= obj.gameTime - 90 && k.gameTime < obj.gameTime,
+          );
+          if (died) deathBeforeObj++;
+        }
+        const dbo_pct = pct(deathBeforeObj, playerObjCount);
+        if (dbo_pct >= 30) {
+          const name = playerName.get(playerId) ?? 'Unknown';
+          const txt = insightStrings['rule-death-before-obj-player'](lang, {
+            name, dbo_pct, deathBeforeObj, totalObjs: playerObjCount,
+          });
+          insights.push({
+            id: `rule-death-before-obj-player-${playerId}`,
+            severity: 'high',
+            category: 'macro',
+            ...txt,
+            reviewRequired: false,
+            affectedPlayers: [name],
+          });
+        }
+      }
+    }
+
+    // I4 — Low vision share per player
+    for (const [playerId, mps] of mpByPlayer) {
+      const role = playerRole.get(playerId) ?? '';
+      const expected = ROLE_EXPECTED_WARD_SHARE[role];
+      if (!expected) continue;
+      const withWards = mps.filter((m) => m.wardsPlaced !== null && (teamWardsPlacedPerMatch.get(`${m.matchId}:${m.team}`) ?? 0) > 0);
+      if (withWards.length < 10) continue;
+      const avgShare = withWards.reduce((s, m) => {
+        const tw = teamWardsPlacedPerMatch.get(`${m.matchId}:${m.team}`) ?? 1;
+        return s + (m.wardsPlaced! / tw);
+      }, 0) / withWards.length;
+      if (avgShare < expected * 0.6) {
+        const name = playerName.get(playerId) ?? 'Unknown';
+        const txt = insightStrings['rule-low-vision-share'](lang, {
+          name, role, avgSharePct: Math.round(avgShare * 100), expectedPct: Math.round(expected * 100),
+        });
+        insights.push({
+          id: `rule-low-vision-share-${playerId}`,
+          severity: 'medium',
+          category: 'vision',
+          ...txt,
+          reviewRequired: false,
+          affectedPlayers: [name],
+        });
+      }
+    }
+
+    // I5 — Low ward clear share per player
+    for (const [playerId, mps] of mpByPlayer) {
+      const role = playerRole.get(playerId) ?? '';
+      const expected = ROLE_EXPECTED_WARD_CLEAR_SHARE[role];
+      if (!expected) continue;
+      const withClears = mps.filter((m) => m.wardsDestroyed !== null && (teamWardsDestroyedPerMatch.get(`${m.matchId}:${m.team}`) ?? 0) > 0);
+      if (withClears.length < 10) continue;
+      const avgShare = withClears.reduce((s, m) => {
+        const tw = teamWardsDestroyedPerMatch.get(`${m.matchId}:${m.team}`) ?? 1;
+        return s + (m.wardsDestroyed! / tw);
+      }, 0) / withClears.length;
+      if (avgShare < expected * 0.55) {
+        const name = playerName.get(playerId) ?? 'Unknown';
+        const txt = insightStrings['rule-low-ward-clear-share'](lang, {
+          name, role, avgSharePct: Math.round(avgShare * 100), expectedPct: Math.round(expected * 100),
+        });
+        insights.push({
+          id: `rule-low-ward-clear-share-${playerId}`,
+          severity: 'medium',
+          category: 'vision',
+          ...txt,
+          reviewRequired: false,
+          affectedPlayers: [name],
+        });
+      }
+    }
+
+    // I6 — Vision drop (wards/min)
+    for (const [playerId, mps] of mpByPlayer) {
+      const withWards = mps.filter((m) => m.wardsPlaced !== null && m.match.duration > 0);
+      const recent5 = withWards.slice(0, 5);
+      const prev10 = withWards.slice(5, 15);
+      if (recent5.length < 4 || prev10.length < 8) continue;
+      const recentWpm = recent5.reduce((s, m) => s + m.wardsPlaced! / (m.match.duration / 60), 0) / recent5.length;
+      const prevWpm = prev10.reduce((s, m) => s + m.wardsPlaced! / (m.match.duration / 60), 0) / prev10.length;
+      if (prevWpm > 0 && recentWpm < prevWpm * 0.70) {
+        const name = playerName.get(playerId) ?? 'Unknown';
+        const dropPct = Math.round((1 - recentWpm / prevWpm) * 100);
+        const txt = insightStrings['rule-vision-drop'](lang, {
+          name, dropPct, recentWpm: +recentWpm.toFixed(2), prevWpm: +prevWpm.toFixed(2),
+        });
+        insights.push({
+          id: `rule-vision-drop-${playerId}`,
+          severity: 'medium',
+          category: 'vision',
+          ...txt,
+          reviewRequired: false,
+          affectedPlayers: [name],
+        });
+      }
+    }
+
+    // I7 — Positive vision improvement (best improver only)
+    {
+      const improvementCandidates: Array<{ playerId: string; name: string; improvePct: number; recentWpm: number }> = [];
+      for (const [playerId, mps] of mpByPlayer) {
+        const role = playerRole.get(playerId) ?? '';
+        const baseline = WARD_BASELINE[role] ?? 0;
+        const withWards = mps.filter((m) => m.wardsPlaced !== null && m.match.duration > 0);
+        const recent5 = withWards.slice(0, 5);
+        const prev10 = withWards.slice(5, 15);
+        if (recent5.length < 4 || prev10.length < 8) continue;
+        const recentWpm = recent5.reduce((s, m) => s + m.wardsPlaced! / (m.match.duration / 60), 0) / recent5.length;
+        const prevWpm = prev10.reduce((s, m) => s + m.wardsPlaced! / (m.match.duration / 60), 0) / prev10.length;
+        if (prevWpm > 0 && recentWpm >= prevWpm * 1.25 && recentWpm >= baseline) {
+          const improvePct = Math.round((recentWpm / prevWpm - 1) * 100);
+          improvementCandidates.push({ playerId, name: playerName.get(playerId) ?? 'Unknown', improvePct, recentWpm: +recentWpm.toFixed(2) });
+        }
+      }
+      if (improvementCandidates.length > 0) {
+        const best = improvementCandidates.sort((a, b) => b.improvePct - a.improvePct)[0];
+        const txt = insightStrings['rule-positive-vision-improvement'](lang, {
+          name: best.name, improvePct: best.improvePct, recentWpm: best.recentWpm,
+        });
+        insights.push({
+          id: `rule-positive-vision-improvement-${best.playerId}`,
+          severity: 'positive',
+          category: 'vision',
+          ...txt,
+          reviewRequired: false,
+          affectedPlayers: [best.name],
+        });
+      }
+    }
+
+    // I8 — Low objective damage share per player
+    for (const [playerId, mps] of mpByPlayer) {
+      const role = playerRole.get(playerId) ?? '';
+      if (role === 'support') continue;
+      const expected = ROLE_EXPECTED_OBJ_DMG_SHARE[role];
+      if (!expected) continue;
+      const withData = mps.filter((m) => m.totalDamageDealtToObjectives !== null && (teamObjDmgPerMatch.get(`${m.matchId}:${m.team}`) ?? 0) > 0);
+      if (withData.length < 10) continue;
+      const avgShare = withData.reduce((s, m) => {
+        const tw = teamObjDmgPerMatch.get(`${m.matchId}:${m.team}`) ?? 1;
+        return s + (m.totalDamageDealtToObjectives! / tw);
+      }, 0) / withData.length;
+      if (avgShare < expected * 0.50) {
+        const name = playerName.get(playerId) ?? 'Unknown';
+        const txt = insightStrings['rule-low-objective-dmg-share'](lang, {
+          name, role, avgSharePct: Math.round(avgShare * 100), expectedPct: Math.round(expected * 100),
+        });
+        insights.push({
+          id: `rule-low-objective-dmg-share-${playerId}`,
+          severity: 'medium',
+          category: 'macro',
+          ...txt,
+          reviewRequired: false,
+          affectedPlayers: [name],
+        });
+      }
+    }
+
+    // I9 — Low structure damage share per player
+    for (const [playerId, mps] of mpByPlayer) {
+      const role = playerRole.get(playerId) ?? '';
+      if (role === 'support') continue;
+      const expected = ROLE_EXPECTED_STR_DMG_SHARE[role];
+      if (!expected) continue;
+      const withData = mps.filter((m) => m.totalDamageDealtToStructures !== null && (teamStrDmgPerMatch.get(`${m.matchId}:${m.team}`) ?? 0) > 0);
+      if (withData.length < 10) continue;
+      const avgShare = withData.reduce((s, m) => {
+        const tw = teamStrDmgPerMatch.get(`${m.matchId}:${m.team}`) ?? 1;
+        return s + (m.totalDamageDealtToStructures! / tw);
+      }, 0) / withData.length;
+      if (avgShare < expected * 0.50) {
+        const name = playerName.get(playerId) ?? 'Unknown';
+        const txt = insightStrings['rule-low-structure-dmg-share'](lang, {
+          name, role, avgSharePct: Math.round(avgShare * 100), expectedPct: Math.round(expected * 100),
+        });
+        insights.push({
+          id: `rule-low-structure-dmg-share-${playerId}`,
+          severity: 'medium',
+          category: 'macro',
+          ...txt,
+          reviewRequired: false,
+          affectedPlayers: [name],
+        });
+      }
+    }
+
+    // I10 — No objective impact after lead
+    for (const [playerId, mps] of mpByPlayer) {
+      const role = playerRole.get(playerId) ?? '';
+      if (role === 'support') continue;
+      const withData = mps.filter((m) => {
+        const tKey = `${m.matchId}:${m.team}`;
+        return m.gold !== null && m.totalDamageDealtToObjectives !== null &&
+          (teamGoldPerMatch.get(tKey) ?? 0) > 0 && (teamObjDmgPerMatch.get(tKey) ?? 0) >= 0;
+      });
+      if (withData.length < 10) continue;
+      const leadNoImpact = withData.filter((m) => {
+        const tKey = `${m.matchId}:${m.team}`;
+        const goldShare = m.gold! / (teamGoldPerMatch.get(tKey) ?? 1);
+        const objShare = m.totalDamageDealtToObjectives! / Math.max(teamObjDmgPerMatch.get(tKey) ?? 1, 1);
+        return goldShare > 0.22 && objShare < 0.08;
+      });
+      const niPct = pct(leadNoImpact.length, withData.length);
+      if (niPct >= 40) {
+        const name = playerName.get(playerId) ?? 'Unknown';
+        const txt = insightStrings['rule-no-objective-impact-after-lead'](lang, {
+          name, niPct, count: leadNoImpact.length, total: withData.length,
+        });
+        insights.push({
+          id: `rule-no-objective-impact-after-lead-${playerId}`,
+          severity: 'medium',
+          category: 'macro',
+          ...txt,
+          reviewRequired: false,
+          affectedPlayers: [name],
+        });
+      }
+    }
+
+    // I11 — High objective impact (best player only)
+    {
+      const objImpactCandidates: Array<{ playerId: string; name: string; avgShare: number }> = [];
+      for (const [playerId, mps] of mpByPlayer) {
+        const role = playerRole.get(playerId) ?? '';
+        if (role === 'support') continue;
+        const withData = mps.filter((m) => m.totalDamageDealtToObjectives !== null && (teamObjDmgPerMatch.get(`${m.matchId}:${m.team}`) ?? 0) > 0);
+        if (withData.length < 10) continue;
+        const avgShare = withData.reduce((s, m) => {
+          const tw = teamObjDmgPerMatch.get(`${m.matchId}:${m.team}`) ?? 1;
+          return s + (m.totalDamageDealtToObjectives! / tw);
+        }, 0) / withData.length;
+        if (avgShare > 0.30) objImpactCandidates.push({ playerId, name: playerName.get(playerId) ?? 'Unknown', avgShare });
+      }
+      if (objImpactCandidates.length > 0) {
+        const best = objImpactCandidates.sort((a, b) => b.avgShare - a.avgShare)[0];
+        const txt = insightStrings['rule-high-objective-impact'](lang, {
+          name: best.name, avgSharePct: Math.round(best.avgShare * 100),
+        });
+        insights.push({
+          id: `rule-high-objective-impact-${best.playerId}`,
+          severity: 'positive',
+          category: 'macro',
+          ...txt,
+          reviewRequired: false,
+          affectedPlayers: [best.name],
+        });
+      }
+    }
+
+    // I12 — High structure pressure (best player only)
+    {
+      const strPressCandidates: Array<{ playerId: string; name: string; avgShare: number }> = [];
+      for (const [playerId, mps] of mpByPlayer) {
+        const role = playerRole.get(playerId) ?? '';
+        if (role === 'support') continue;
+        const withData = mps.filter((m) => m.totalDamageDealtToStructures !== null && (teamStrDmgPerMatch.get(`${m.matchId}:${m.team}`) ?? 0) > 0);
+        if (withData.length < 10) continue;
+        const avgShare = withData.reduce((s, m) => {
+          const tw = teamStrDmgPerMatch.get(`${m.matchId}:${m.team}`) ?? 1;
+          return s + (m.totalDamageDealtToStructures! / tw);
+        }, 0) / withData.length;
+        if (avgShare > 0.35) strPressCandidates.push({ playerId, name: playerName.get(playerId) ?? 'Unknown', avgShare });
+      }
+      if (strPressCandidates.length > 0) {
+        const best = strPressCandidates.sort((a, b) => b.avgShare - a.avgShare)[0];
+        const txt = insightStrings['rule-high-structure-pressure'](lang, {
+          name: best.name, avgSharePct: Math.round(best.avgShare * 100),
+        });
+        insights.push({
+          id: `rule-high-structure-pressure-${best.playerId}`,
+          severity: 'positive',
+          category: 'macro',
+          ...txt,
+          reviewRequired: false,
+          affectedPlayers: [best.name],
+        });
+      }
+    }
+
+    // I13 — High gold low KP
+    for (const [playerId, mps] of mpByPlayer) {
+      const role = playerRole.get(playerId) ?? '';
+      if (role === 'support') continue;
+      const withData = mps.filter((m) => {
+        const tKey = `${m.matchId}:${m.team}`;
+        return m.gold !== null && (teamGoldPerMatch.get(tKey) ?? 0) > 0 && (teamKillsPerMatch.get(tKey) ?? 0) > 0;
+      });
+      if (withData.length < 10) continue;
+      const avgGoldShare = withData.reduce((s, m) => s + m.gold! / (teamGoldPerMatch.get(`${m.matchId}:${m.team}`) ?? 1), 0) / withData.length;
+      const avgKp = withData.reduce((s, m) => {
+        const tk = teamKillsPerMatch.get(`${m.matchId}:${m.team}`) ?? 1;
+        return s + (m.kills + m.assists) / tk;
+      }, 0) / withData.length;
+      if (avgGoldShare > 0.22 && avgKp < 0.35) {
+        const name = playerName.get(playerId) ?? 'Unknown';
+        const txt = insightStrings['rule-high-gold-low-kp'](lang, {
+          name, avgGoldSharePct: Math.round(avgGoldShare * 100), avgKpPct: Math.round(avgKp * 100),
+        });
+        insights.push({
+          id: `rule-high-gold-low-kp-${playerId}`,
+          severity: 'medium',
+          category: 'performance',
+          ...txt,
+          reviewRequired: false,
+          affectedPlayers: [name],
+        });
+      }
+    }
+
+    // I14 — High gold high death share
+    for (const [playerId, mps] of mpByPlayer) {
+      const role = playerRole.get(playerId) ?? '';
+      if (role === 'support') continue;
+      const withData = mps.filter((m) => {
+        const tKey = `${m.matchId}:${m.team}`;
+        return m.gold !== null && (teamGoldPerMatch.get(tKey) ?? 0) > 0 && (teamDeathsPerMatch.get(tKey) ?? 0) > 0;
+      });
+      if (withData.length < 10) continue;
+      const avgGoldShare = withData.reduce((s, m) => s + m.gold! / (teamGoldPerMatch.get(`${m.matchId}:${m.team}`) ?? 1), 0) / withData.length;
+      const avgDeathShare = withData.reduce((s, m) => s + m.deaths / (teamDeathsPerMatch.get(`${m.matchId}:${m.team}`) ?? 1), 0) / withData.length;
+      if (avgGoldShare > 0.22 && avgDeathShare > 0.28) {
+        const name = playerName.get(playerId) ?? 'Unknown';
+        const txt = insightStrings['rule-high-gold-high-death'](lang, {
+          name, avgGoldSharePct: Math.round(avgGoldShare * 100), avgDeathSharePct: Math.round(avgDeathShare * 100),
+        });
+        insights.push({
+          id: `rule-high-gold-high-death-${playerId}`,
+          severity: 'high',
+          category: 'performance',
+          ...txt,
+          reviewRequired: false,
+          affectedPlayers: [name],
+        });
+      }
+    }
+
+    // I15 — Positive efficiency (best player only)
+    {
+      const efficiencyCandidates: Array<{ playerId: string; name: string; gap: number }> = [];
+      for (const [playerId, mps] of mpByPlayer) {
+        const withData = mps.filter((m) => {
+          const tKey = `${m.matchId}:${m.team}`;
+          return m.gold !== null && m.heroDamage !== null &&
+            (teamGoldPerMatch.get(tKey) ?? 0) > 0 && (teamDmgPerMatch.get(tKey) ?? 0) > 0;
+        });
+        if (withData.length < 10) continue;
+        const avgGoldShare = withData.reduce((s, m) => s + m.gold! / (teamGoldPerMatch.get(`${m.matchId}:${m.team}`) ?? 1), 0) / withData.length;
+        const avgDmgShare = withData.reduce((s, m) => s + m.heroDamage! / (teamDmgPerMatch.get(`${m.matchId}:${m.team}`) ?? 1), 0) / withData.length;
+        const gap = (avgDmgShare - avgGoldShare) * 100;
+        if (gap > 5 && avgGoldShare > 0.15) {
+          efficiencyCandidates.push({ playerId, name: playerName.get(playerId) ?? 'Unknown', gap });
+        }
+      }
+      if (efficiencyCandidates.length > 0) {
+        const best = efficiencyCandidates.sort((a, b) => b.gap - a.gap)[0];
+        const mps = mpByPlayer.get(best.playerId) ?? [];
+        const withData = mps.filter((m) => {
+          const tKey = `${m.matchId}:${m.team}`;
+          return m.gold !== null && m.heroDamage !== null &&
+            (teamGoldPerMatch.get(tKey) ?? 0) > 0 && (teamDmgPerMatch.get(tKey) ?? 0) > 0;
+        });
+        const avgGoldShare = withData.reduce((s, m) => s + m.gold! / (teamGoldPerMatch.get(`${m.matchId}:${m.team}`) ?? 1), 0) / withData.length;
+        const avgDmgShare = withData.reduce((s, m) => s + m.heroDamage! / (teamDmgPerMatch.get(`${m.matchId}:${m.team}`) ?? 1), 0) / withData.length;
+        const txt = insightStrings['rule-positive-efficiency'](lang, {
+          name: best.name,
+          avgGoldSharePct: Math.round(avgGoldShare * 100),
+          avgDmgSharePct: Math.round(avgDmgShare * 100),
+          gapPct: Math.round(best.gap),
+        });
+        insights.push({
+          id: `rule-positive-efficiency-${best.playerId}`,
+          severity: 'positive',
+          category: 'performance',
+          ...txt,
+          reviewRequired: false,
+          affectedPlayers: [best.name],
+        });
+      }
+    }
+
+    // I16 — Low CS for role
+    for (const [playerId, mps] of mpByPlayer) {
+      const role = playerRole.get(playerId) ?? '';
+      if (role === 'support') continue;
+      const expected = ROLE_EXPECTED_CS[role];
+      if (!expected) continue;
+      const withCS = mps.filter((m) => m.laneMinionsKilled !== null && m.laneMinionsKilled > 0);
+      if (withCS.length < 10) continue;
+      const avgCS = withCS.reduce((s, m) => s + m.laneMinionsKilled!, 0) / withCS.length;
+      if (avgCS < expected * 0.65) {
+        const name = playerName.get(playerId) ?? 'Unknown';
+        const txt = insightStrings['rule-low-cs-role'](lang, {
+          name, role, avgCS: Math.round(avgCS), expectedCS: expected,
+        });
+        insights.push({
+          id: `rule-low-cs-role-${playerId}`,
+          severity: 'medium',
+          category: 'performance',
+          ...txt,
+          reviewRequired: false,
+          affectedPlayers: [name],
+        });
+      }
+    }
+
+    // I17 — CS drop
+    for (const [playerId, mps] of mpByPlayer) {
+      const role = playerRole.get(playerId) ?? '';
+      if (role === 'support') continue;
+      const withCS = mps.filter((m) => m.laneMinionsKilled !== null && m.laneMinionsKilled > 0);
+      const recent5 = withCS.slice(0, 5);
+      const prev10 = withCS.slice(5, 15);
+      if (recent5.length < 5 || prev10.length < 5) continue;
+      const recentCS = recent5.reduce((s, m) => s + m.laneMinionsKilled!, 0) / recent5.length;
+      const prevCS = prev10.reduce((s, m) => s + m.laneMinionsKilled!, 0) / prev10.length;
+      if (prevCS > 0 && recentCS < prevCS * 0.75) {
+        const name = playerName.get(playerId) ?? 'Unknown';
+        const dropPct = Math.round((1 - recentCS / prevCS) * 100);
+        const txt = insightStrings['rule-cs-drop'](lang, {
+          name, dropPct, recentCS: Math.round(recentCS), prevCS: Math.round(prevCS),
+        });
+        insights.push({
+          id: `rule-cs-drop-${playerId}`,
+          severity: 'medium',
+          category: 'performance',
+          ...txt,
+          reviewRequired: false,
+          affectedPlayers: [name],
+        });
+      }
+    }
+
+    // I18 — Positive farm consistency (best player only)
+    {
+      const farmConsistCandidates: Array<{ playerId: string; name: string; avgCS: number }> = [];
+      for (const [playerId, mps] of mpByPlayer) {
+        const role = playerRole.get(playerId) ?? '';
+        if (role === 'support') continue;
+        const expected = ROLE_EXPECTED_CS[role];
+        if (!expected) continue;
+        const withCS = mps.filter((m) => m.laneMinionsKilled !== null && m.laneMinionsKilled > 0).slice(0, 10);
+        if (withCS.length < 10) continue;
+        const avgCS = withCS.reduce((s, m) => s + m.laneMinionsKilled!, 0) / withCS.length;
+        if (avgCS < expected * 0.85) continue;
+        const allWithin = withCS.every((m) => Math.abs(m.laneMinionsKilled! - avgCS) / avgCS <= 0.20);
+        if (allWithin) farmConsistCandidates.push({ playerId, name: playerName.get(playerId) ?? 'Unknown', avgCS });
+      }
+      if (farmConsistCandidates.length > 0) {
+        const best = farmConsistCandidates.sort((a, b) => b.avgCS - a.avgCS)[0];
+        const role = playerRole.get(best.playerId) ?? '';
+        const expected = ROLE_EXPECTED_CS[role] ?? 100;
+        const txt = insightStrings['rule-positive-farm-consistency'](lang, {
+          name: best.name, avgCS: Math.round(best.avgCS), expectedCS: expected,
+        });
+        insights.push({
+          id: `rule-positive-farm-consistency-${best.playerId}`,
+          severity: 'positive',
+          category: 'performance',
+          ...txt,
+          reviewRequired: false,
+          affectedPlayers: [best.name],
+        });
+      }
+    }
+
+    // I19 — Low hero pool depth (from snapshots)
+    for (const [playerId] of mpByPlayer) {
+      const snap = snapshots.get(playerId);
+      if (!snap) continue;
+      const heroStats = (snap.heroStats as Record<string, unknown> | null) ?? {};
+      const totalSnapshotMatches = Object.values(heroStats).reduce<number>((s, v) => {
+        const matches = (v as Record<string, unknown>)?.matches as number | undefined;
+        return s + (matches ?? 0);
+      }, 0);
+      if (totalSnapshotMatches < 15) continue;
+      const heroesWithMin3 = Object.values(heroStats).filter((v) => {
+        const matches = (v as Record<string, unknown>)?.matches as number | undefined;
+        return (matches ?? 0) >= 3;
+      }).length;
+      if (heroesWithMin3 < 3) {
+        const name = playerName.get(playerId) ?? 'Unknown';
+        const txt = insightStrings['rule-low-hero-pool-depth'](lang, {
+          name, heroesWithMin3, totalSnapshotMatches,
+        });
+        insights.push({
+          id: `rule-low-hero-pool-depth-${playerId}`,
+          severity: 'medium',
+          category: 'draft',
+          ...txt,
+          reviewRequired: false,
+          affectedPlayers: [name],
+        });
+      }
+    }
+
+    // I20 — Comfort overreliance
+    for (const [playerId, mps] of mpByPlayer) {
+      const snap = snapshots.get(playerId);
+      const last20 = mps.slice(0, 20);
+      if (last20.length < 10) continue;
+      const heroCount = new Map<string, number>();
+      for (const mp of last20) heroCount.set(mp.heroSlug, (heroCount.get(mp.heroSlug) ?? 0) + 1);
+      const sorted = [...heroCount.entries()].sort((a, b) => b[1] - a[1]);
+      const topHero = sorted[0];
+      if (!topHero) continue;
+      const topRate = topHero[1] / last20.length;
+      if (topRate < 0.60) continue;
+      const heroStats = snap ? ((snap.heroStats as Record<string, unknown> | null) ?? {}) : {};
+      const winRates = Object.entries(heroStats)
+        .map(([slug, v]) => {
+          const s = v as Record<string, unknown>;
+          const wins = (s?.wins as number) ?? 0;
+          const matches = (s?.matches as number) ?? 0;
+          return { slug, wr: matches > 0 ? wins / matches : 0 };
+        })
+        .sort((a, b) => b.wr - a.wr)
+        .slice(0, 3)
+        .map((x) => x.slug);
+      if (winRates.includes(topHero[0])) continue;
+      const name = playerName.get(playerId) ?? 'Unknown';
+      const txt = insightStrings['rule-comfort-overreliance'](lang, {
+        name, topHero: topHero[0], topRatePct: Math.round(topRate * 100), totalMatches: last20.length,
+      });
+      insights.push({
+        id: `rule-comfort-overreliance-${playerId}`,
+        severity: 'medium',
+        category: 'draft',
+        ...txt,
+        reviewRequired: false,
+        affectedPlayers: [name],
+      });
     }
   }
 
