@@ -43,7 +43,8 @@
     "config": "Config",
     "feedback": "Feedback",
     "settings": "Settings",
-    "profile": "Profile"
+    "profile": "Profile",
+    "invitations": "Invitations"
   },
   "workspace": {
     "title": "Predecessor competitive workspace",
