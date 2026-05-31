@@ -1270,6 +1270,510 @@ export const insightStrings = {
     };
   },
 
+  // ── GROUP I — Individual player rules ────────────────────────────────────────
+
+  'rule-first-death-rate': (
+    lang: InsightLang,
+    vars: { name: string; fdPct: number; firstDeathCount: number; totalMatches: number },
+  ): InsightText => {
+    if (lang === 'en') {
+      return {
+        title: `${vars.name} dies first ${vars.fdPct}% of games`,
+        body: `${vars.name} is the first player to die in ${vars.fdPct}% of analyzed games. First-blood gifts the opponent a meaningful early advantage.`,
+        evidence: [
+          `First death: ${vars.firstDeathCount} of ${vars.totalMatches} games`,
+        ],
+        recommendation: 'Review laning aggression and early pathing. Prioritize survival in the first 3 minutes over forcing plays.',
+      };
+    }
+    return {
+      title: `${vars.name} muere primero en el ${vars.fdPct}% de partidas`,
+      body: `${vars.name} es el primer jugador en morir en el ${vars.fdPct}% de las partidas analizadas. El first-blood regala al rival una ventaja temprana significativa.`,
+      evidence: [
+        `Primera muerte: ${vars.firstDeathCount} de ${vars.totalMatches} partidas`,
+      ],
+      recommendation: 'Revisar la agresividad en laning y el pathing temprano. Priorizar la supervivencia en los primeros 3 minutos sobre forzar jugadas.',
+    };
+  },
+
+  'rule-early-death-rate': (
+    lang: InsightLang,
+    vars: { name: string; earlyPct: number; earlyDeathMatches: number; totalMatches: number },
+  ): InsightText => {
+    if (lang === 'en') {
+      return {
+        title: `${vars.name} dies before minute 10 in ${vars.earlyPct}% of games`,
+        body: `${vars.name} dies in the first 10 minutes in ${vars.earlyPct}% of games. Early deaths create gold deficits that are hard to recover.`,
+        evidence: [
+          `Early death (<10 min): ${vars.earlyDeathMatches} of ${vars.totalMatches} games`,
+        ],
+        recommendation: 'Work on early-game positioning and trading. Avoid overextending before vision is established.',
+      };
+    }
+    return {
+      title: `${vars.name} muere antes del minuto 10 en el ${vars.earlyPct}% de partidas`,
+      body: `${vars.name} muere en los primeros 10 minutos en el ${vars.earlyPct}% de las partidas. Las muertes tempranas generan déficits de oro difíciles de recuperar.`,
+      evidence: [
+        `Muerte temprana (<10 min): ${vars.earlyDeathMatches} de ${vars.totalMatches} partidas`,
+      ],
+      recommendation: 'Trabajar el posicionamiento y los trades en early game. Evitar sobreextenderse antes de establecer visión.',
+    };
+  },
+
+  'rule-death-before-obj-player': (
+    lang: InsightLang,
+    vars: { name: string; dbo_pct: number; deathBeforeObj: number; totalObjs: number },
+  ): InsightText => {
+    if (lang === 'en') {
+      return {
+        title: `${vars.name} dies before major objectives (${vars.dbo_pct}%)`,
+        body: `${vars.name} dies in the 90s before a major objective in ${vars.dbo_pct}% of the team's opportunities. Their absence forces the team into underdog fights.`,
+        evidence: [
+          `Pre-objective death: ${vars.deathBeforeObj} of ${vars.totalObjs} objectives`,
+        ],
+        recommendation: `${vars.name} must reset and back to base if health is below 60% before any major objective timer. Avoid forced engages near spawn time.`,
+      };
+    }
+    return {
+      title: `${vars.name} muere antes de objetivos mayores (${vars.dbo_pct}%)`,
+      body: `${vars.name} muere en los 90s previos a un objetivo mayor en el ${vars.dbo_pct}% de las oportunidades del equipo. Su ausencia obliga al equipo a pelear en desventaja.`,
+      evidence: [
+        `Muerte pre-objetivo: ${vars.deathBeforeObj} de ${vars.totalObjs} objetivos`,
+      ],
+      recommendation: `${vars.name} debe resetear y volver a base si tiene menos del 60% de vida antes de cualquier timer de objetivo mayor. Evitar engages forzados cerca del spawn.`,
+    };
+  },
+
+  'rule-low-vision-share': (
+    lang: InsightLang,
+    vars: { name: string; role: string; avgSharePct: number; expectedPct: number },
+  ): InsightText => {
+    if (lang === 'en') {
+      return {
+        title: `${vars.name} contributes too little vision (${vars.avgSharePct}% vs ${vars.expectedPct}% expected)`,
+        body: `${vars.name} places only ${vars.avgSharePct}% of the team's wards on average — well below the ${vars.expectedPct}% expected for a ${vars.role}.`,
+        evidence: [
+          `Avg ward share: ${vars.avgSharePct}%`,
+          `Expected for ${vars.role}: ${vars.expectedPct}%`,
+        ],
+        recommendation: `${vars.name} should increase ward purchase and placement habits, especially before objectives and when entering the rival half of the map.`,
+      };
+    }
+    return {
+      title: `${vars.name} contribuye poca visión (${vars.avgSharePct}% vs ${vars.expectedPct}% esperado)`,
+      body: `${vars.name} coloca solo el ${vars.avgSharePct}% de las wards del equipo de media — muy por debajo del ${vars.expectedPct}% esperado para un ${vars.role}.`,
+      evidence: [
+        `Share de wards promedio: ${vars.avgSharePct}%`,
+        `Esperado para ${vars.role}: ${vars.expectedPct}%`,
+      ],
+      recommendation: `${vars.name} debe aumentar la compra y colocación de wards, especialmente antes de objetivos y al entrar en la mitad rival del mapa.`,
+    };
+  },
+
+  'rule-low-ward-clear-share': (
+    lang: InsightLang,
+    vars: { name: string; role: string; avgSharePct: number; expectedPct: number },
+  ): InsightText => {
+    if (lang === 'en') {
+      return {
+        title: `${vars.name} clears too few enemy wards (${vars.avgSharePct}% vs ${vars.expectedPct}% expected)`,
+        body: `${vars.name} accounts for only ${vars.avgSharePct}% of the team's ward clears — below the ${vars.expectedPct}% expected for a ${vars.role}.`,
+        evidence: [
+          `Avg ward clear share: ${vars.avgSharePct}%`,
+          `Expected for ${vars.role}: ${vars.expectedPct}%`,
+        ],
+        recommendation: `${vars.name} should carry sweepers more consistently and actively deny rival vision, particularly near key objective zones.`,
+      };
+    }
+    return {
+      title: `${vars.name} limpia pocas wards rivales (${vars.avgSharePct}% vs ${vars.expectedPct}% esperado)`,
+      body: `${vars.name} aporta solo el ${vars.avgSharePct}% de las limpiezas de wards del equipo — por debajo del ${vars.expectedPct}% esperado para un ${vars.role}.`,
+      evidence: [
+        `Share de limpiezas promedio: ${vars.avgSharePct}%`,
+        `Esperado para ${vars.role}: ${vars.expectedPct}%`,
+      ],
+      recommendation: `${vars.name} debe llevar sweepers de forma más consistente y denegar activamente la visión rival, especialmente cerca de las zonas de objetivos clave.`,
+    };
+  },
+
+  'rule-vision-drop': (
+    lang: InsightLang,
+    vars: { name: string; dropPct: number; recentWpm: number; prevWpm: number },
+  ): InsightText => {
+    if (lang === 'en') {
+      return {
+        title: `${vars.name} — vision output dropped ${vars.dropPct}%`,
+        body: `${vars.name}'s wards-per-minute fell from ${vars.prevWpm} to ${vars.recentWpm} in the last 5 games — a ${vars.dropPct}% drop.`,
+        evidence: [
+          `Recent avg: ${vars.recentWpm} wards/min`,
+          `Previous avg: ${vars.prevWpm} wards/min`,
+        ],
+        recommendation: 'Check if hero changes, role shift, or reduced item investment are behind the drop. Reinforce warding habits in the next training block.',
+      };
+    }
+    return {
+      title: `${vars.name} — visión caída un ${vars.dropPct}%`,
+      body: `Las wards por minuto de ${vars.name} cayeron de ${vars.prevWpm} a ${vars.recentWpm} en las últimas 5 partidas — una caída del ${vars.dropPct}%.`,
+      evidence: [
+        `Promedio reciente: ${vars.recentWpm} wards/min`,
+        `Promedio anterior: ${vars.prevWpm} wards/min`,
+      ],
+      recommendation: 'Verificar si el cambio de héroe, el rol o la inversión en ítems son la causa. Reforzar los hábitos de ward en el próximo bloque de entrenamiento.',
+    };
+  },
+
+  'rule-positive-vision-improvement': (
+    lang: InsightLang,
+    vars: { name: string; improvePct: number; recentWpm: number },
+  ): InsightText => {
+    if (lang === 'en') {
+      return {
+        title: `${vars.name} — vision output improved ${vars.improvePct}%`,
+        body: `${vars.name} increased their wards-per-minute by ${vars.improvePct}% in their last 5 games, now averaging ${vars.recentWpm} wards/min.`,
+        evidence: [
+          `Recent avg: ${vars.recentWpm} wards/min`,
+          `Improvement: +${vars.improvePct}%`,
+        ],
+        recommendation: 'Acknowledge this improvement. Maintain the warding habits and keep investing in vision items.',
+      };
+    }
+    return {
+      title: `${vars.name} — visión mejorada un ${vars.improvePct}%`,
+      body: `${vars.name} aumentó sus wards por minuto un ${vars.improvePct}% en sus últimas 5 partidas, alcanzando ${vars.recentWpm} wards/min de media.`,
+      evidence: [
+        `Promedio reciente: ${vars.recentWpm} wards/min`,
+        `Mejora: +${vars.improvePct}%`,
+      ],
+      recommendation: 'Reconocer esta mejora. Mantener los hábitos de ward y seguir invirtiendo en ítems de visión.',
+    };
+  },
+
+  'rule-low-objective-dmg-share': (
+    lang: InsightLang,
+    vars: { name: string; role: string; avgSharePct: number; expectedPct: number },
+  ): InsightText => {
+    if (lang === 'en') {
+      return {
+        title: `${vars.name} — low objective damage (${vars.avgSharePct}% vs ${vars.expectedPct}% expected)`,
+        body: `${vars.name} contributes only ${vars.avgSharePct}% of the team's objective damage on average — well below the ${vars.expectedPct}% expected for a ${vars.role}.`,
+        evidence: [
+          `Avg objective dmg share: ${vars.avgSharePct}%`,
+          `Expected for ${vars.role}: ${vars.expectedPct}%`,
+        ],
+        recommendation: `${vars.name} should prioritize attacking objectives during teamfights and after winning picks. Build items that enable fast objective taking.`,
+      };
+    }
+    return {
+      title: `${vars.name} — bajo daño a objetivos (${vars.avgSharePct}% vs ${vars.expectedPct}% esperado)`,
+      body: `${vars.name} aporta solo el ${vars.avgSharePct}% del daño a objetivos del equipo de media — muy por debajo del ${vars.expectedPct}% esperado para un ${vars.role}.`,
+      evidence: [
+        `Share de daño a objetivos: ${vars.avgSharePct}%`,
+        `Esperado para ${vars.role}: ${vars.expectedPct}%`,
+      ],
+      recommendation: `${vars.name} debe priorizar atacar objetivos durante los teamfights y tras ganar picks. Construir ítems que permitan hacer secure rápido.`,
+    };
+  },
+
+  'rule-low-structure-dmg-share': (
+    lang: InsightLang,
+    vars: { name: string; role: string; avgSharePct: number; expectedPct: number },
+  ): InsightText => {
+    if (lang === 'en') {
+      return {
+        title: `${vars.name} — low structure damage (${vars.avgSharePct}% vs ${vars.expectedPct}% expected)`,
+        body: `${vars.name} contributes only ${vars.avgSharePct}% of the team's structure damage on average — below the ${vars.expectedPct}% expected for a ${vars.role}.`,
+        evidence: [
+          `Avg structure dmg share: ${vars.avgSharePct}%`,
+          `Expected for ${vars.role}: ${vars.expectedPct}%`,
+        ],
+        recommendation: `${vars.name} should be more proactive pushing structures after winning fights. Identify and target the closest tower or inhibitor after each major objective.`,
+      };
+    }
+    return {
+      title: `${vars.name} — bajo daño a estructuras (${vars.avgSharePct}% vs ${vars.expectedPct}% esperado)`,
+      body: `${vars.name} aporta solo el ${vars.avgSharePct}% del daño a estructuras del equipo de media — por debajo del ${vars.expectedPct}% esperado para un ${vars.role}.`,
+      evidence: [
+        `Share de daño a estructuras: ${vars.avgSharePct}%`,
+        `Esperado para ${vars.role}: ${vars.expectedPct}%`,
+      ],
+      recommendation: `${vars.name} debe ser más proactivo presionando estructuras tras ganar peleas. Identificar y atacar la torre o inhibidor más cercano tras cada objetivo mayor.`,
+    };
+  },
+
+  'rule-no-objective-impact-after-lead': (
+    lang: InsightLang,
+    vars: { name: string; niPct: number; count: number; total: number },
+  ): InsightText => {
+    if (lang === 'en') {
+      return {
+        title: `${vars.name} — gold lead not converted to objective pressure (${vars.niPct}%)`,
+        body: `In ${vars.niPct}% of games where ${vars.name} holds a high gold share (>22%), they contribute very little objective damage (<8% of team total). Resources are not translating into macro impact.`,
+        evidence: [
+          `Pattern found in ${vars.count} of ${vars.total} applicable games`,
+        ],
+        recommendation: `When ${vars.name} is ahead, redirect their advantage toward objectives. Coordinate with the jungler to force objective plays around power spikes.`,
+      };
+    }
+    return {
+      title: `${vars.name} — ventaja de oro sin impacto en objetivos (${vars.niPct}%)`,
+      body: `En el ${vars.niPct}% de las partidas donde ${vars.name} acumula un alto share de oro (>22%), aporta muy poco daño a objetivos (<8% del total del equipo). Los recursos no se están traduciendo en impacto macro.`,
+      evidence: [
+        `Patrón encontrado en ${vars.count} de ${vars.total} partidas aplicables`,
+      ],
+      recommendation: `Cuando ${vars.name} esté adelantado, redirigir la ventaja hacia objetivos. Coordinar con el jungla para forzar jugadas de objetivo en torno a los power spikes.`,
+    };
+  },
+
+  'rule-high-objective-impact': (
+    lang: InsightLang,
+    vars: { name: string; avgSharePct: number },
+  ): InsightText => {
+    if (lang === 'en') {
+      return {
+        title: `${vars.name} — top objective damage dealer (${vars.avgSharePct}% avg share)`,
+        body: `${vars.name} averages ${vars.avgSharePct}% of the team's objective damage — an exceptional contribution to macro control.`,
+        evidence: [`Avg objective dmg share: ${vars.avgSharePct}%`],
+        recommendation: 'Leverage this strength by building plays around objective timers. Ensure this player has peel and resources to stay healthy during objective fights.',
+      };
+    }
+    return {
+      title: `${vars.name} — principal dealer de daño a objetivos (${vars.avgSharePct}% share)`,
+      body: `${vars.name} promedia el ${vars.avgSharePct}% del daño a objetivos del equipo — una contribución excepcional al control macro.`,
+      evidence: [`Share de daño a objetivos: ${vars.avgSharePct}%`],
+      recommendation: 'Aprovechar esta fortaleza construyendo jugadas alrededor de los timers de objetivo. Asegurar que este jugador tenga peel y recursos para mantenerse sano en las peleas de objetivo.',
+    };
+  },
+
+  'rule-high-structure-pressure': (
+    lang: InsightLang,
+    vars: { name: string; avgSharePct: number },
+  ): InsightText => {
+    if (lang === 'en') {
+      return {
+        title: `${vars.name} — high structure pressure (${vars.avgSharePct}% avg share)`,
+        body: `${vars.name} contributes ${vars.avgSharePct}% of the team's structure damage on average — a key driver of the team's closing ability.`,
+        evidence: [`Avg structure dmg share: ${vars.avgSharePct}%`],
+        recommendation: 'Route post-fight rotations through this player. They are a reliable finisher — give them priority access to sieging opportunities.',
+      };
+    }
+    return {
+      title: `${vars.name} — alta presión de estructuras (${vars.avgSharePct}% share)`,
+      body: `${vars.name} contribuye el ${vars.avgSharePct}% del daño a estructuras del equipo de media — un motor clave de la capacidad de cierre del equipo.`,
+      evidence: [`Share de daño a estructuras: ${vars.avgSharePct}%`],
+      recommendation: 'Enrutar las rotaciones post-pelea a través de este jugador. Es un finisher fiable — darle acceso prioritario a las oportunidades de siege.',
+    };
+  },
+
+  'rule-high-gold-low-kp': (
+    lang: InsightLang,
+    vars: { name: string; avgGoldSharePct: number; avgKpPct: number },
+  ): InsightText => {
+    if (lang === 'en') {
+      return {
+        title: `${vars.name} — farming but not fighting (${vars.avgGoldSharePct}% gold, ${vars.avgKpPct}% KP)`,
+        body: `${vars.name} averages ${vars.avgGoldSharePct}% of team gold but only ${vars.avgKpPct}% kill participation. They are accumulating resources without converting them into teamfight presence.`,
+        evidence: [
+          `Avg gold share: ${vars.avgGoldSharePct}%`,
+          `Avg kill participation: ${vars.avgKpPct}%`,
+        ],
+        recommendation: "Ensure this player joins teamfights once farmed. Build more grouping expectations into the team's playbook for mid/late game.",
+      };
+    }
+    return {
+      title: `${vars.name} — farmea pero no pelea (${vars.avgGoldSharePct}% oro, ${vars.avgKpPct}% KP)`,
+      body: `${vars.name} promedia el ${vars.avgGoldSharePct}% del oro del equipo pero solo el ${vars.avgKpPct}% de kill participation. Acumula recursos sin convertirlos en presencia en teamfight.`,
+      evidence: [
+        `Share de oro promedio: ${vars.avgGoldSharePct}%`,
+        `Kill participation promedio: ${vars.avgKpPct}%`,
+      ],
+      recommendation: 'Asegurarse de que este jugador se una a los teamfights una vez farmeado. Establecer expectativas de grouping más claras para el mid/late game.',
+    };
+  },
+
+  'rule-high-gold-high-death': (
+    lang: InsightLang,
+    vars: { name: string; avgGoldSharePct: number; avgDeathSharePct: number },
+  ): InsightText => {
+    if (lang === 'en') {
+      return {
+        title: `${vars.name} — fed but dying too often (${vars.avgGoldSharePct}% gold, ${vars.avgDeathSharePct}% deaths)`,
+        body: `${vars.name} takes ${vars.avgGoldSharePct}% of team gold but accounts for ${vars.avgDeathSharePct}% of team deaths. They are a high-value target being caught repeatedly.`,
+        evidence: [
+          `Avg gold share: ${vars.avgGoldSharePct}%`,
+          `Avg death share: ${vars.avgDeathSharePct}%`,
+        ],
+        recommendation: 'Review positioning in late-game scenarios. This player is a priority target — improve peel coordination and ward depth to prevent assassinations.',
+      };
+    }
+    return {
+      title: `${vars.name} — farmeado pero muere demasiado (${vars.avgGoldSharePct}% oro, ${vars.avgDeathSharePct}% muertes)`,
+      body: `${vars.name} toma el ${vars.avgGoldSharePct}% del oro del equipo pero acumula el ${vars.avgDeathSharePct}% de las muertes del equipo. Es un objetivo de alto valor que es cazado repetidamente.`,
+      evidence: [
+        `Share de oro promedio: ${vars.avgGoldSharePct}%`,
+        `Share de muertes promedio: ${vars.avgDeathSharePct}%`,
+      ],
+      recommendation: 'Revisar el posicionamiento en late game. Este jugador es objetivo prioritario — mejorar la coordinación de peel y la profundidad de visión para prevenir assassinaciones.',
+    };
+  },
+
+  'rule-positive-efficiency': (
+    lang: InsightLang,
+    vars: { name: string; avgGoldSharePct: number; avgDmgSharePct: number; gapPct: number },
+  ): InsightText => {
+    if (lang === 'en') {
+      return {
+        title: `${vars.name} — high damage efficiency (+${vars.gapPct}% over gold share)`,
+        body: `${vars.name} generates ${vars.avgDmgSharePct}% of team damage while only using ${vars.avgGoldSharePct}% of team gold — a positive efficiency gap of ${vars.gapPct} points.`,
+        evidence: [
+          `Avg dmg share: ${vars.avgDmgSharePct}%`,
+          `Avg gold share: ${vars.avgGoldSharePct}%`,
+        ],
+        recommendation: 'This player produces above their resource cost. Consider slightly increasing their resource priority to amplify their output further.',
+      };
+    }
+    return {
+      title: `${vars.name} — alta eficiencia de daño (+${vars.gapPct}% sobre el share de oro)`,
+      body: `${vars.name} genera el ${vars.avgDmgSharePct}% del daño del equipo usando solo el ${vars.avgGoldSharePct}% del oro — una brecha de eficiencia positiva de ${vars.gapPct} puntos.`,
+      evidence: [
+        `Share de daño promedio: ${vars.avgDmgSharePct}%`,
+        `Share de oro promedio: ${vars.avgGoldSharePct}%`,
+      ],
+      recommendation: 'Este jugador produce por encima de su coste en recursos. Considerar aumentar ligeramente su prioridad de recursos para amplificar aún más su output.',
+    };
+  },
+
+  'rule-low-cs-role': (
+    lang: InsightLang,
+    vars: { name: string; role: string; avgCS: number; expectedCS: number },
+  ): InsightText => {
+    if (lang === 'en') {
+      return {
+        title: `${vars.name} — low CS for ${vars.role} (avg ${vars.avgCS}, expected ≥${Math.round(vars.expectedCS * 0.65)})`,
+        body: `${vars.name} averages ${vars.avgCS} minions per game — well below the ${vars.expectedCS} expected for a ${vars.role}. Poor farm leads to slower item spikes.`,
+        evidence: [
+          `Avg CS: ${vars.avgCS}`,
+          `Role benchmark: ${vars.expectedCS}`,
+        ],
+        recommendation: 'Add dedicated CS drills to the practice schedule. Focus on last-hitting under tower and jungle camp clearing efficiency.',
+      };
+    }
+    return {
+      title: `${vars.name} — bajo CS para ${vars.role} (media ${vars.avgCS}, esperado ≥${Math.round(vars.expectedCS * 0.65)})`,
+      body: `${vars.name} promedia ${vars.avgCS} minions por partida — muy por debajo de los ${vars.expectedCS} esperados para un ${vars.role}. El mal farmeo retrasa los spikes de ítems.`,
+      evidence: [
+        `CS promedio: ${vars.avgCS}`,
+        `Referencia de rol: ${vars.expectedCS}`,
+      ],
+      recommendation: 'Añadir ejercicios dedicados de CS al calendario de práctica. Enfocarse en last-hitting bajo torre y eficiencia de limpieza de campamentos de jungla.',
+    };
+  },
+
+  'rule-cs-drop': (
+    lang: InsightLang,
+    vars: { name: string; dropPct: number; recentCS: number; prevCS: number },
+  ): InsightText => {
+    if (lang === 'en') {
+      return {
+        title: `${vars.name} — CS dropped ${vars.dropPct}% recently`,
+        body: `${vars.name}'s average CS fell from ${vars.prevCS} to ${vars.recentCS} per game in the last 5 games — a ${vars.dropPct}% reduction.`,
+        evidence: [
+          `Recent avg CS: ${vars.recentCS}`,
+          `Previous avg CS: ${vars.prevCS}`,
+        ],
+        recommendation: 'Investigate if hero swaps, matchup pressures, or early grouping habits are reducing farm time. Reinforce laning fundamentals.',
+      };
+    }
+    return {
+      title: `${vars.name} — CS caído un ${vars.dropPct}% recientemente`,
+      body: `La media de CS de ${vars.name} cayó de ${vars.prevCS} a ${vars.recentCS} por partida en las últimas 5 partidas — una reducción del ${vars.dropPct}%.`,
+      evidence: [
+        `CS reciente promedio: ${vars.recentCS}`,
+        `CS anterior promedio: ${vars.prevCS}`,
+      ],
+      recommendation: 'Investigar si los cambios de héroe, la presión del matchup o el hábito de agruparse temprano reducen el tiempo de farmeo. Reforzar los fundamentos de laning.',
+    };
+  },
+
+  'rule-positive-farm-consistency': (
+    lang: InsightLang,
+    vars: { name: string; avgCS: number; expectedCS: number },
+  ): InsightText => {
+    if (lang === 'en') {
+      return {
+        title: `${vars.name} — excellent CS consistency (avg ${vars.avgCS})`,
+        body: `${vars.name} averages ${vars.avgCS} CS per game in the last 10 matches — above the role benchmark of ${vars.expectedCS} — with low variance across all games.`,
+        evidence: [
+          `Avg CS: ${vars.avgCS}`,
+          `Role benchmark: ${vars.expectedCS}`,
+          'All 10 games within 20% of average',
+        ],
+        recommendation: 'Excellent laning foundation. This consistency allows reliable power-spike timings — leverage it in mid-game rotations.',
+      };
+    }
+    return {
+      title: `${vars.name} — excelente consistencia de CS (media ${vars.avgCS})`,
+      body: `${vars.name} promedia ${vars.avgCS} CS por partida en las últimas 10 — por encima del referente de rol de ${vars.expectedCS} — con baja varianza en todas las partidas.`,
+      evidence: [
+        `CS promedio: ${vars.avgCS}`,
+        `Referencia de rol: ${vars.expectedCS}`,
+        'Las 10 partidas dentro del 20% de la media',
+      ],
+      recommendation: 'Excelente base de laning. Esta consistencia permite timings de power-spike fiables — aprovecharla en las rotaciones de mid game.',
+    };
+  },
+
+  'rule-low-hero-pool-depth': (
+    lang: InsightLang,
+    vars: { name: string; heroesWithMin3: number; totalSnapshotMatches: number },
+  ): InsightText => {
+    if (lang === 'en') {
+      return {
+        title: `${vars.name} — shallow hero pool (${vars.heroesWithMin3} heroes with ≥3 games)`,
+        body: `${vars.name} has only ${vars.heroesWithMin3} hero(es) with ≥3 games in their history (out of ${vars.totalSnapshotMatches} total). They are vulnerable to targeted bans.`,
+        evidence: [
+          `Heroes with ≥3 games: ${vars.heroesWithMin3}`,
+          `Total snapshot matches: ${vars.totalSnapshotMatches}`,
+        ],
+        recommendation: 'Expand the hero pool by adding at least 2 viable alternatives. Practice them in scrims before deploying in official matches.',
+      };
+    }
+    return {
+      title: `${vars.name} — pool de héroes reducido (${vars.heroesWithMin3} héroes con ≥3 partidas)`,
+      body: `${vars.name} tiene solo ${vars.heroesWithMin3} héroe(s) con ≥3 partidas en su historial (de ${vars.totalSnapshotMatches} totales). Es vulnerable a bans dirigidos.`,
+      evidence: [
+        `Héroes con ≥3 partidas: ${vars.heroesWithMin3}`,
+        `Partidas totales en snapshot: ${vars.totalSnapshotMatches}`,
+      ],
+      recommendation: 'Ampliar el pool de héroes añadiendo al menos 2 alternativas viables. Practicarlas en scrims antes de desplegarlas en partidas oficiales.',
+    };
+  },
+
+  'rule-comfort-overreliance': (
+    lang: InsightLang,
+    vars: { name: string; topHero: string; topRatePct: number; totalMatches: number },
+  ): InsightText => {
+    if (lang === 'en') {
+      return {
+        title: `${vars.name} — overreliance on ${vars.topHero} (${vars.topRatePct}% of recent games)`,
+        body: `${vars.name} has played ${vars.topHero} in ${vars.topRatePct}% of their last ${vars.totalMatches} games, but this hero is not among their top-3 by win rate — suggesting comfort bias rather than optimal pick.`,
+        evidence: [
+          `${vars.topHero}: ${vars.topRatePct}% of last ${vars.totalMatches} games`,
+          'Hero not in top-3 win rate heroes',
+        ],
+        recommendation: `Consider whether ${vars.topHero} is actually the best option in the current meta. Explore higher win-rate alternatives and evaluate matchup fit in each game.`,
+      };
+    }
+    return {
+      title: `${vars.name} — sobredependencia de ${vars.topHero} (${vars.topRatePct}% de partidas recientes)`,
+      body: `${vars.name} ha jugado ${vars.topHero} en el ${vars.topRatePct}% de sus últimas ${vars.totalMatches} partidas, pero este héroe no está entre sus 3 mejores por winrate — lo que sugiere un sesgo de confort más que una elección óptima.`,
+      evidence: [
+        `${vars.topHero}: ${vars.topRatePct}% de las últimas ${vars.totalMatches} partidas`,
+        'Héroe no está en el top-3 de winrate',
+      ],
+      recommendation: `Evaluar si ${vars.topHero} es realmente la mejor opción en el meta actual. Explorar alternativas con mayor winrate y evaluar el matchup en cada partida.`,
+    };
+  },
+
   // ── Data status insight ───────────────────────────────────────────────────────
   'data-status': (
     lang: InsightLang,
