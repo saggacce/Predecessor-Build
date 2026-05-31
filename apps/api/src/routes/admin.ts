@@ -36,7 +36,7 @@ async function getTokenForSync(req: Request, res: Response): Promise<string | nu
     if (!cred) return null;
     const result = await exchangeToken({ grant_type: 'refresh_token', refresh_token: cred.value });
     if (!result.ok || !result.data.access_token) return null;
-    // Persist rotated refresh token
+    // Persist rotated refresh token and update in-memory state
     if (result.data.refresh_token) {
       await db.platformCredential.upsert({
         where: { key: 'predgg_refresh_token' },
@@ -44,6 +44,9 @@ async function getTokenForSync(req: Request, res: Response): Promise<string | nu
         create: { key: 'predgg_refresh_token', value: result.data.refresh_token },
       }).catch(() => null);
     }
+    platformTokenState.status = 'ok';
+    platformTokenState.lastCheckedAt = new Date().toISOString();
+    platformTokenState.lastError = null;
     return result.data.access_token;
   } catch {
     return null;
@@ -620,6 +623,13 @@ adminRouter.post('/sync-event-streams/start', async (req, res, next) => {
         update: { value: predggRefreshToken },
         create: { key: 'predgg_refresh_token', value: predggRefreshToken },
       }).catch((err) => logger.warn({ err }, 'failed to save platform credential'));
+      // Refresh state immediately so the UI reflects the new token without waiting 15 days
+      void refreshPlatformToken();
+    } else {
+      // No cookie but we have a valid token — mark state as ok
+      platformTokenState.status = 'ok';
+      platformTokenState.lastCheckedAt = new Date().toISOString();
+      platformTokenState.lastError = null;
     }
     // Fire and forget — runs in background
     void runEventStreamSync(userToken, predggRefreshToken).catch((err) => {
