@@ -17,7 +17,18 @@
     "copied": "Copiado",
     "revoked": "Revocada.",
     "patch": "Parche v{{name}}",
-    "optional": "opcional"
+    "optional": "opcional",
+    "abbreviation": "Abreviatura",
+    "create": "Crear",
+    "creating": "Creando…",
+    "logo": "Logo",
+    "newTeam": "Nuevo equipo",
+    "noMembers": "Sin miembros todavía.",
+    "players": "Jugadores",
+    "region": "Región",
+    "staff": "Staff",
+    "teamName": "Nombre del equipo",
+    "upload": "Subir imagen"
   },
   "nav": {
     "dashboard": "Dashboard",
@@ -116,7 +127,8 @@
     "removeSuccess": "Jugador eliminado.",
     "removeError": "Error al eliminar el jugador.",
     "addSuccess": "Jugador añadido.",
-    "addError": "Error al añadir el jugador."
+    "addError": "Error al añadir el jugador.",
+    "subtitle": "Gestiona la composición y roles de tu plantilla."
   },
   "staffManagement": {
     "title": "Staff e Invitaciones",

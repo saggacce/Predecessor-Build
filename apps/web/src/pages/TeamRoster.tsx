@@ -238,7 +238,7 @@ export default function TeamRoster() {
           <div>
             <h1 className="header-title">{t('teamRoster.title')}</h1>
             <p style={{ color: 'var(--text-muted)', fontSize: '0.86rem', marginTop: '0.35rem' }}>
-              {t('teamRoster.subtitle', 'Manage your squad composition and player roles.')}
+              {t('teamRoster.subtitle')}
             </p>
           </div>
           {canEdit && !showCreate && (

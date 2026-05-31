@@ -17,7 +17,18 @@
     "copied": "Copied",
     "revoked": "Revoked.",
     "patch": "Patch v{{name}}",
-    "optional": "optional"
+    "optional": "optional",
+    "abbreviation": "Abbreviation",
+    "create": "Create",
+    "creating": "Creating…",
+    "logo": "Logo",
+    "newTeam": "New Team",
+    "noMembers": "No members yet.",
+    "players": "Players",
+    "region": "Region",
+    "staff": "Staff",
+    "teamName": "Team name",
+    "upload": "Upload"
   },
   "nav": {
     "dashboard": "Dashboard",
@@ -116,7 +127,8 @@
     "removeSuccess": "Player removed.",
     "removeError": "Error removing player.",
     "addSuccess": "Player added.",
-    "addError": "Error adding player."
+    "addError": "Error adding player.",
+    "subtitle": "Manage your squad composition and player roles."
   },
   "staffManagement": {
     "title": "Staff & Invitations",
