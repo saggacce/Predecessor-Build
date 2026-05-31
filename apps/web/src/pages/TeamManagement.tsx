@@ -125,7 +125,7 @@ function TeamList({ onSelect }: { onSelect: (id: string) => void }) {
           </div>
           {canCreate && !showCreate && (
             <button className="btn-primary" onClick={() => setShowCreate(true)} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flex: 'unset' }}>
-              <Plus size={16} /> {t('common.newTeam', 'New Team')}
+              <Plus size={16} /> {t('common.newTeam')}
             </button>
           )}
         </div>
@@ -135,30 +135,30 @@ function TeamList({ onSelect }: { onSelect: (id: string) => void }) {
       {showCreate && (
         <div className="glass-card" style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <h3 style={{ margin: 0, fontSize: '1rem' }}>{t('common.newTeam', 'New Team')}</h3>
+            <h3 style={{ margin: 0, fontSize: '1rem' }}>{t('common.newTeam')}</h3>
             <button onClick={() => setShowCreate(false)} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-muted)' }}>
               <X size={16} />
             </button>
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
             <div style={{ gridColumn: '1 / -1' }}>
-              <label style={labelStyle}>{t('common.teamName', 'Team name')} *</label>
+              <label style={labelStyle}>{t('common.teamName')} *</label>
               <input className="input" value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} placeholder="e.g. Team Liquid" style={{ width: '100%' }} />
             </div>
             <div>
-              <label style={labelStyle}>{t('common.abbreviation', 'Abbreviation')}</label>
+              <label style={labelStyle}>{t('common.abbreviation')}</label>
               <input className="input" value={form.abbreviation} onChange={(e) => setForm((f) => ({ ...f, abbreviation: e.target.value }))} placeholder="e.g. TL" maxLength={10} style={{ width: '100%' }} />
             </div>
             <div>
-              <label style={labelStyle}>{t('common.region', 'Region')}</label>
+              <label style={labelStyle}>{t('common.region')}</label>
               <input className="input" value={form.region} onChange={(e) => setForm((f) => ({ ...f, region: e.target.value }))} placeholder="e.g. EU, NA, LATAM" style={{ width: '100%' }} />
             </div>
             <div style={{ gridColumn: '1 / -1' }}>
-              <label style={labelStyle}>{t('common.logo', 'Logo')}</label>
+              <label style={labelStyle}>{t('common.logo')}</label>
               <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
                 <input className="input" value={form.logoUrl.startsWith('data:') ? '' : form.logoUrl} onChange={(e) => setForm((f) => ({ ...f, logoUrl: e.target.value }))} placeholder="https://..." style={{ flex: 1 }} />
                 <button type="button" onClick={() => fileRef.current?.click()} className="btn-secondary" style={{ flex: 'unset', whiteSpace: 'nowrap', fontSize: '0.8rem', padding: '0.45rem 0.75rem' }}>
-                  {t('common.upload', 'Upload')}
+                  {t('common.upload')}
                 </button>
                 <input ref={fileRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={handleFileChange} />
               </div>
@@ -192,9 +192,9 @@ function TeamList({ onSelect }: { onSelect: (id: string) => void }) {
           </div>
 
           <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
-            <button className="btn-secondary" onClick={() => setShowCreate(false)} disabled={creating} style={{ flex: 'unset' }}>{t('common.cancel', 'Cancel')}</button>
+            <button className="btn-secondary" onClick={() => setShowCreate(false)} disabled={creating} style={{ flex: 'unset' }}>{t('common.cancel')}</button>
             <button className="btn-primary" onClick={() => void handleCreate()} disabled={creating} style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flex: 'unset' }}>
-              <Check size={14} /> {creating ? t('common.creating', 'Creating…') : t('common.create', 'Create')}
+              <Check size={14} /> {creating ? t('common.creating') : t('common.create')}
             </button>
           </div>
         </div>
@@ -207,7 +207,7 @@ function TeamList({ onSelect }: { onSelect: (id: string) => void }) {
           <p style={{ color: 'var(--text-muted)', marginBottom: '0.75rem' }}>{t('teamRoster.noTeams')}</p>
           {canCreate && (
             <button className="btn-primary" onClick={() => setShowCreate(true)} style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem', flex: 'unset' }}>
-              <Plus size={14} /> {t('common.newTeam', 'New Team')}
+              <Plus size={14} /> {t('common.newTeam')}
             </button>
           )}
         </div>
@@ -308,7 +308,7 @@ function TeamDetail({ teamId, onBack }: { teamId: string; onBack: () => void }) 
       {/* Header */}
       <header className="header">
         <button onClick={onBack} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.82rem', padding: 0, marginBottom: '0.75rem' }}>
-          <ArrowLeft size={14} /> {t('common.back', 'Back')}
+          <ArrowLeft size={14} /> {t('common.back')}
         </button>
         <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', justifyContent: 'space-between' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
@@ -351,11 +351,11 @@ function TeamDetail({ teamId, onBack }: { teamId: string; onBack: () => void }) 
         <div style={{ padding: '0.8rem 1.1rem', borderBottom: '1px solid var(--border-color)', display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
           <Users size={14} style={{ color: 'var(--accent-teal-bright)' }} />
           <span style={{ fontSize: '0.72rem', fontWeight: 800, color: 'var(--accent-teal-bright)', textTransform: 'uppercase', letterSpacing: '0.07em' }}>
-            {t('common.staff', 'Staff')}
+            {t('common.staff')}
           </span>
         </div>
         {staffMembers.length === 0 ? (
-          <div style={{ padding: '1.25rem 1.1rem', color: 'var(--text-muted)', fontSize: '0.84rem' }}>{t('common.noMembers', 'No staff members yet.')}</div>
+          <div style={{ padding: '1.25rem 1.1rem', color: 'var(--text-muted)', fontSize: '0.84rem' }}>{t('common.noMembers')}</div>
         ) : (
           staffMembers.map((member) => (
             <MemberRow
@@ -375,7 +375,7 @@ function TeamDetail({ teamId, onBack }: { teamId: string; onBack: () => void }) 
           <div style={{ padding: '0.8rem 1.1rem', borderBottom: '1px solid var(--border-color)', display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
             <Users size={14} style={{ color: 'var(--accent-win)' }} />
             <span style={{ fontSize: '0.72rem', fontWeight: 800, color: 'var(--accent-win)', textTransform: 'uppercase', letterSpacing: '0.07em' }}>
-              {t('common.players', 'Jugadores')}
+              {t('common.players')}
             </span>
           </div>
           {playerMembers.map((member) => (
@@ -560,7 +560,7 @@ function AddMemberPanel({ teamId, canInviteManager, onClose }: { teamId: string;
         )}
 
         <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
-          <button type="button" className="btn-secondary" onClick={onClose} style={{ flex: 'unset' }}>{t('common.cancel', 'Cancel')}</button>
+          <button type="button" className="btn-secondary" onClick={onClose} style={{ flex: 'unset' }}>{t('common.cancel')}</button>
           <button type="submit" className="btn-primary" disabled={creating} style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flex: 'unset' }}>
             <UserPlus size={14} /> {creating ? t('staffManagement.creatingButton') : t('staffManagement.createButton')}
           </button>
