@@ -349,12 +349,38 @@ Formulario «Nuevo ítem de revisión» añadido en ReviewQueue para que el anal
 - Token keep-alive: renovación automática del refresh token de pred.gg cada 20 min para que los syncs nunca fallen
 
 ## [x] Tarea 30 — Infraestructura OAuth pred.gg
-*PRs #235. Desplegado en producción (2026-05-30).*
+*PRs #235–#245. Desplegado en producción (2026-05-31).*
 
-- Diagnóstico: pred.gg rota refresh tokens en cada exchange pero el cron no los persistía → tokens caducaban silenciosamente
-- El token de plataforma es el OAuth de la cuenta `saggacce` (sub: 1002908), no un token de aplicación
-- Event stream requiere Bearer token de usuario OAuth; X-Api-Key solo da acceso público
-- Keep-alive: `startTokenKeepAlive()` al arrancar el servidor, interval 20 min, persiste el token rotado en `PlatformCredential`
+- Token keep-alive: interval 15 días (token dura 30d), renueva y persiste el rotado — `startTokenKeepAlive()` al arrancar
+- Banner de estado del token en Data Quality: verde/rojo/amarillo con botón «Reconectar pred.gg»
+- `platformTokenState` actualizado inmediatamente al reconectar OAuth (callback + event stream sync)
+- CI/CD mejorado: build frontend en CI, health check post-deploy (6 reintentos × 5s), rollback automático si falla
+- Fix: `region { name }` → `region` en live match query (pred.gg cambió schema)
+- Fix: `nav.invitations` y 12 claves `common.*` añadidas a locales (bloqueaban el build del frontend desde el 29/mayo)
+
+## [x] Tarea 31 — Analyst Insights Batch 2 — 20 reglas individuales
+*PR #245. Desplegado en producción (2026-05-31).*
+
+20 nuevas reglas de análisis individual (solo para equipos OWN). Pendiente en `docs/primesight_indicators_catalog_batch2.md`.
+
+**Riesgo y muertes (event stream):**
+- `rule-first-death-rate` · `rule-early-death-rate` · `rule-death-before-obj-player`
+
+**Visión individual:**
+- `rule-low-vision-share` · `rule-low-ward-clear-share` · `rule-vision-drop` · `rule-positive-vision-improvement`
+
+**Objetivos y estructuras** (`totalDamageDealtToObjectives/Structures`):
+- `rule-low-objective-dmg-share` · `rule-low-structure-dmg-share` · `rule-no-objective-impact-after-lead`
+- `rule-high-objective-impact` ✅ · `rule-high-structure-pressure` ✅
+
+**Eficiencia y recursos:**
+- `rule-high-gold-low-kp` · `rule-high-gold-high-death` · `rule-positive-efficiency` ✅
+
+**Farm y economía por rol:**
+- `rule-low-cs-role` · `rule-cs-drop` · `rule-positive-farm-consistency` ✅
+
+**Hero pool y draft:**
+- `rule-low-hero-pool-depth` · `rule-comfort-overreliance`
 
 ---
 
