@@ -202,8 +202,8 @@ let cronJob: CronJob = {
 };
 let cronTimer: ReturnType<typeof setInterval> | null = null;
 
-// ── Token keep-alive — refresh every 20 min so the stored token never expires ──
-const TOKEN_REFRESH_INTERVAL_MS = 20 * 60 * 1000;
+// ── Token keep-alive — refresh once a day (refresh token lasts 30 days) ──
+const TOKEN_REFRESH_INTERVAL_MS = 24 * 60 * 60 * 1000;
 let tokenRefreshTimer: ReturnType<typeof setInterval> | null = null;
 
 export type PlatformTokenStatus = 'ok' | 'expired' | 'missing' | 'unknown';
