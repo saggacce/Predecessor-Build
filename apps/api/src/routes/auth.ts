@@ -350,6 +350,26 @@ authRouter.get('/callback', async (req, res) => {
     logger.info({ grantedScope: tokenData.scope, expires_in: tokenData.expires_in }, 'token exchange successful');
     setTokenCookies(res, tokenData);
 
+    // Persist refresh token as platform credential so background syncs work
+    // and update the in-memory token state immediately
+    if (tokenData.refresh_token) {
+      try {
+        const { db } = await import('../db.js');
+        await db.platformCredential.upsert({
+          where: { key: 'predgg_refresh_token' },
+          update: { value: tokenData.refresh_token },
+          create: { key: 'predgg_refresh_token', value: tokenData.refresh_token },
+        });
+        const { platformTokenState } = await import('./admin.js');
+        platformTokenState.status = 'ok';
+        platformTokenState.lastCheckedAt = new Date().toISOString();
+        platformTokenState.lastError = null;
+        logger.info('OAuth callback: platform credential updated, token state set to ok');
+      } catch (err) {
+        logger.warn({ err }, 'OAuth callback: failed to save platform credential');
+      }
+    }
+
     logger.info('OAuth2 login successful — redirecting to players');
     res.redirect(`${FRONTEND_URL}/players`);
   } catch (err) {
