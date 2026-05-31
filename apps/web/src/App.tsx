@@ -311,7 +311,7 @@ function useSections(t: (key: string) => string): SidebarSection[] {
       icon: <Settings size={17} />,
       items: [
         { to: '/admin/users', label: t('nav.users') },
-        { to: '/admin/invitations', label: t('nav.invitations', { defaultValue: 'Invitaciones' }) },
+        { to: '/admin/invitations', label: t('nav.invitations') },
         { to: '/admin/data-quality', label: t('nav.dataQuality') },
         { to: '/management/roles', label: t('nav.rolesPermissions') },
         { to: '/admin/api-status', label: t('nav.apiStatus') },
