@@ -1576,7 +1576,7 @@ export const insightStrings = {
           `Avg gold share: ${vars.avgGoldSharePct}%`,
           `Avg kill participation: ${vars.avgKpPct}%`,
         ],
-        recommendation: 'Ensure this player joins teamfights once farmed. Build more grouping expectations into the team's playbook for mid/late game.',
+        recommendation: "Ensure this player joins teamfights once farmed. Build more grouping expectations into the team's playbook for mid/late game.",
       };
     }
     return {
