@@ -52,7 +52,7 @@ Tablero de tareas generales y subtareas.
 
 ## [x] Tarea 4 — Calidad y operación
 - [x] Logs/errores: Pino, logging JSON estructurado
-- [x] 106 tests en Vitest + Supertest (cobertura: players, teams, admin, auth, map-zones, domain-engine)
+- [x] 114 tests en Vitest + Supertest (cobertura: players, teams, admin, auth, sync personal, reports, map-zones, domain-engine)
 - [x] CI/CD GitHub Actions + branch protection en main
 - [x] Tests de agregación de métricas de jugador (PR #47)
 - [x] Tests de filtros por parche/ventana temporal (PR #47)
@@ -229,12 +229,12 @@ Diferente al Timeline tab de Match Detail — orientado a sesión de review de e
 
 ---
 
-## Tarea 23 — B2C: Player Reports
+## [x] Tarea 23 — B2C: Player Reports
 Para jugadores individuales (PLAYER standalone).
 
-- [ ] `GET /reports/player-weekly/:playerId` — KDA semanal vs histórico, héroe más jugado, WR 7d vs 30d
-- [ ] Página `/reports/weekly` con condicional por rol
-- [ ] Player Development autogenerado desde métricas históricas (slump, hero pool, etc.)
+- [x] `GET /reports/player-weekly/:playerId` — KDA semanal vs histórico, héroe más jugado, WR 7d vs 30d
+- [x] Página `/reports/weekly` exclusiva para PLAYER standalone, con actualización manual de partidas
+- [x] Player Development autogenerado desde métricas históricas (actividad, supervivencia, hero pool, momentum y consistencia)
 
 ---
 
