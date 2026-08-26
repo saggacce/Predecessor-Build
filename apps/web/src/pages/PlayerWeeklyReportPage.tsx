@@ -251,7 +251,7 @@ export default function PlayerWeeklyReportPage() {
                       <span style={{ color: hero.designation === 'main' ? 'var(--accent-violet)' : 'var(--text-muted)', fontSize: '0.61rem', fontWeight: 800 }}>{designation}</span>
                     </div>
                     <p style={{ margin: '0.25rem 0 0', color: 'var(--text-secondary)', fontSize: '0.69rem' }}>
-                      {hero.matches30d} partidas · {hero.winRate30d}% WR · {hero.kda30d.toFixed(2)} KDA
+                      {hero.matches30d} {hero.matches30d === 1 ? 'partida' : 'partidas'} · {hero.winRate30d}% WR · {hero.kda30d.toFixed(2)} KDA
                     </p>
                     <p style={{ margin: '0.18rem 0 0', color: trendColor, fontSize: '0.65rem' }}>
                       {hero.currentPatchMatches} en parche · {trend}

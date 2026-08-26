@@ -399,7 +399,7 @@ function buildChampionPool(rows: MatchRow[], currentPatch: string | null): Playe
   const sorted = [...grouped.entries()].sort((a, b) => {
     const aPatch = currentPatch ? a[1].filter((row) => row.match.version?.name === currentPatch).length : 0;
     const bPatch = currentPatch ? b[1].filter((row) => row.match.version?.name === currentPatch).length : 0;
-    return bPatch - aPatch || b[1].length - a[1].length || heroWinRate(b[1]) - heroWinRate(a[1]);
+    return b[1].length - a[1].length || bPatch - aPatch || heroWinRate(b[1]) - heroWinRate(a[1]);
   });
   const mainHero = sorted[0]?.[0] ?? null;
   const alternativeHero = sorted.slice(1).find(([, heroRows]) => heroRows.length >= 2)?.[0] ?? null;

@@ -133,4 +133,20 @@ describe('generatePlayerWeeklyReport', () => {
     });
     expect(report.championPool.heroes[1]).toMatchObject({ heroSlug: 'muriel', designation: 'alternate' });
   });
+
+  it('keeps the most-played 30-day hero as main when a smaller sample is newer', async () => {
+    mockDb.matchPlayer.findMany.mockResolvedValue([
+      match(1, { heroSlug: 'muriel' }),
+      match(2, { heroSlug: 'muriel' }),
+      match(8, { heroSlug: 'dekker', match: { version: { name: '1.15.0' } } }),
+      match(12, { heroSlug: 'dekker', match: { version: { name: '1.15.0' } } }),
+      match(18, { heroSlug: 'dekker', match: { version: { name: '1.15.0' } } }),
+      match(24, { heroSlug: 'dekker', match: { version: { name: '1.15.0' } } }),
+    ]);
+
+    const report = await generatePlayerWeeklyReport('player-1', NOW);
+
+    expect(report.championPool.mainHero).toBe('dekker');
+    expect(report.championPool.alternativeHero).toBe('muriel');
+  });
 });
