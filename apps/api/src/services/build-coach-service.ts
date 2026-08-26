@@ -98,6 +98,10 @@ export async function getMatchBuildAnalysis(matchId: string, matchPlayerId: stri
       slug: item.slug,
       displayName: data?.displayName ?? item.name,
       aggressionType: data?.aggressionType ?? null,
+      rarity: data?.rarity ?? null,
+      slotType: data?.slotType ?? null,
+      isEvolved: data?.isEvolved ?? false,
+      isHidden: data?.isHidden ?? false,
       stats: jsonArray<{ stat: string; value: number; showPercent: boolean }>(data?.stats),
       effects: jsonArray<{ name: string; text: string; active: boolean; condition: string | null; cooldown: string | null }>(data?.effects),
       blocksIds: jsonArray<string>(data?.blocksIds),
@@ -157,7 +161,8 @@ export async function getMatchBuildAnalysis(matchId: string, matchPlayerId: stri
   }
 
   const selectedIds = new Set(inventory.map((item) => item.predggDataId).filter((id): id is string => Boolean(id)));
-  const conflict = inventory.find((item) => [...item.blocksIds, ...item.blockedByIds].some((id) => selectedIds.has(id)));
+  const conflict = inventory.find((item) => [...item.blocksIds, ...item.blockedByIds]
+    .some((id) => id !== item.predggDataId && selectedIds.has(id)));
   if (conflict) {
     signals.push({
       key: 'item-conflict', severity: 'critical', title: 'La build contiene objetos incompatibles',
@@ -178,7 +183,7 @@ export async function getMatchBuildAnalysis(matchId: string, matchPlayerId: stri
   if (catalogVersionId && desiredTags.length > 0) {
     const candidates = await db.gameItemVersion.findMany({
       where: {
-        versionId: catalogVersionId, isHidden: false, rarity: 'LEGENDARY',
+        versionId: catalogVersionId, isHidden: false, rarity: 'EPIC', slotType: 'PASSIVE',
       },
       include: { item: { select: { slug: true } } },
       orderBy: { totalPrice: 'asc' },

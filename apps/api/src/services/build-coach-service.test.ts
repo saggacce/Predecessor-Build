@@ -34,7 +34,8 @@ describe('contextual build coach', () => {
       },
     });
     mocks.gameItemFindMany.mockResolvedValue([{ predggId: 'item-1', slug: 'offensive-item', name: 'Offense', versions: [{
-      displayName: 'Offense', aggressionType: 'OFFENSE', stats: [], effects: [], blocksIds: [], blockedByIds: [],
+      predggDataId: 'data-1', displayName: 'Offense', aggressionType: 'OFFENSE', rarity: 'EPIC', slotType: 'PASSIVE',
+      isEvolved: false, isHidden: false, stats: [], effects: [], blocksIds: ['data-1'], blockedByIds: ['data-1'],
     }] }]);
     mocks.gameItemVersionFindMany.mockResolvedValue([
       { displayName: 'Physical Guard', aggressionType: 'ARMOR', totalPrice: 3000, item: { slug: 'physical-guard' } },
@@ -51,5 +52,11 @@ describe('contextual build coach', () => {
     ]));
     expect(result.signals.find((signal) => signal.key === 'physical-defense')?.suggestedItems?.[0]).toMatchObject({ slug: 'physical-guard' });
     expect(result.context.damageReceived.physical).toBe(18_000);
+    expect(result.signals).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'item-conflict' }),
+    ]));
+    expect(mocks.gameItemVersionFindMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({ rarity: 'EPIC', slotType: 'PASSIVE' }),
+    }));
   });
 });
