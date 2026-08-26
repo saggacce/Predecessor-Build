@@ -121,6 +121,74 @@ function loadoutSlotLabel(slot: string, index: number): string {
   return slot || `Ranura ${index + 1}`;
 }
 
+function WeeklyBuildLessons({ review }: { review: PlayerBuildReview }) {
+  const adaptationNeeded = review.matches.filter(({ analysis }) => analysis.verdict.grade !== 'correct').length;
+  const signalCounts = new Map<string, { title: string; count: number }>();
+  const loadoutCounts = new Map<string, { label: string; count: number; why: string; verdict: 'correct' | 'conditional' | 'questionable' }>();
+  const changeCounts = new Map<string, { item: string; slug: string; count: number; why: string }>();
+
+  for (const { analysis } of review.matches) {
+    for (const signal of analysis.signals.filter((entry) => entry.key !== 'adaptation-ok')) {
+      const current = signalCounts.get(signal.key);
+      signalCounts.set(signal.key, { title: signal.title, count: (current?.count ?? 0) + 1 });
+    }
+    for (const perk of analysis.eternalLoadout.filter((entry) => entry.verdict !== 'correct')) {
+      const key = `${perk.slot}:${perk.displayName}`;
+      const current = loadoutCounts.get(key);
+      loadoutCounts.set(key, {
+        label: `${loadoutSlotLabel(perk.slot, 0)} · ${perk.displayName}`,
+        count: (current?.count ?? 0) + 1,
+        why: perk.why,
+        verdict: perk.verdict,
+      });
+    }
+    for (const change of analysis.recommendedBuild.changes) {
+      const current = changeCounts.get(change.item.slug);
+      changeCounts.set(change.item.slug, { item: change.item.displayName, slug: change.item.slug, count: (current?.count ?? 0) + 1, why: change.item.reason });
+    }
+  }
+
+  const repeatedSignal = [...signalCounts.values()].sort((a, b) => b.count - a.count)[0];
+  const loadoutLesson = [...loadoutCounts.values()].sort((a, b) => {
+    if (a.verdict !== b.verdict) return a.verdict === 'questionable' ? -1 : 1;
+    return b.count - a.count;
+  })[0];
+  const repeatedChange = [...changeCounts.values()].sort((a, b) => b.count - a.count)[0];
+
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(225px, 1fr))', gap: '0.6rem', marginTop: '0.9rem' }}>
+      <article style={{ padding: '0.75rem', borderRadius: 8, background: 'rgba(240,180,41,0.045)', border: '1px solid rgba(240,180,41,0.18)' }}>
+        <p style={{ margin: 0, color: 'var(--accent-prime)', fontSize: '0.59rem', fontWeight: 800, textTransform: 'uppercase' }}>Patrón de adaptación</p>
+        <strong style={{ display: 'block', marginTop: '0.3rem', fontSize: '0.76rem' }}>{adaptationNeeded} de {review.matches.length} builds necesitaban ajustes</strong>
+        <p style={{ margin: '0.3rem 0 0', color: 'var(--text-muted)', fontSize: '0.64rem', lineHeight: 1.4 }}>
+          {repeatedSignal ? `${repeatedSignal.title} apareció en ${repeatedSignal.count} ${repeatedSignal.count === 1 ? 'partida' : 'partidas'}.` : 'No se repitió ninguna carencia contextual importante.'}
+        </p>
+      </article>
+
+      <article style={{ padding: '0.75rem', borderRadius: 8, background: 'rgba(167,139,250,0.045)', border: '1px solid rgba(167,139,250,0.18)' }}>
+        <p style={{ margin: 0, color: 'var(--accent-violet)', fontSize: '0.59rem', fontWeight: 800, textTransform: 'uppercase' }}>Aprendizaje de loadout</p>
+        <strong style={{ display: 'block', marginTop: '0.3rem', fontSize: '0.76rem' }}>{loadoutLesson?.label ?? 'Loadouts coherentes'}</strong>
+        <p style={{ margin: '0.3rem 0 0', color: 'var(--text-muted)', fontSize: '0.64rem', lineHeight: 1.4 }}>
+          {loadoutLesson ? `${loadoutLesson.why}${loadoutLesson.count > 1 ? ` Se repitió ${loadoutLesson.count} veces.` : ''}` : 'Los Augmentos, Eternals y Bendiciones analizados encajaron con su rol y patrón de juego.'}
+        </p>
+      </article>
+
+      <article style={{ padding: '0.75rem', borderRadius: 8, background: 'rgba(56,212,200,0.04)', border: '1px solid rgba(56,212,200,0.18)' }}>
+        <p style={{ margin: 0, color: 'var(--accent-cyan)', fontSize: '0.59rem', fontWeight: 800, textTransform: 'uppercase' }}>Regla para la próxima partida</p>
+        {repeatedChange ? (
+          <div style={{ display: 'flex', gap: '0.55rem', marginTop: '0.35rem', alignItems: 'flex-start' }}>
+            <img src={`/items/${repeatedChange.slug}.webp`} alt="" style={{ width: 34, height: 34, borderRadius: 5, flexShrink: 0 }} />
+            <div>
+              <strong style={{ display: 'block', fontSize: '0.76rem' }}>Considera {repeatedChange.item}</strong>
+              <p style={{ margin: '0.25rem 0 0', color: 'var(--text-muted)', fontSize: '0.64rem', lineHeight: 1.4 }}>{repeatedChange.why}{repeatedChange.count > 1 ? ` Fue recomendable en ${repeatedChange.count} partidas.` : ''}</p>
+            </div>
+          </div>
+        ) : <p style={{ margin: '0.3rem 0 0', color: 'var(--text-muted)', fontSize: '0.64rem', lineHeight: 1.4 }}>Mantén el núcleo actual, pero vuelve a revisar la composición rival antes de completar la segunda pieza.</p>}
+      </article>
+    </div>
+  );
+}
+
 function BuildReviewCard({ entry, onOpen }: { entry: PlayerBuildReview['matches'][number]; onOpen: () => void }) {
   const { analysis, match } = entry;
   const finalItems = analysis.inventory.filter((item) => item.slotType === 'PASSIVE' && item.rarity === 'EPIC');
@@ -133,6 +201,20 @@ function BuildReviewCard({ entry, onOpen }: { entry: PlayerBuildReview['matches'
     : primarySignal?.severity === 'warning'
       ? 'var(--accent-prime)'
       : 'var(--accent-win)';
+  const assessmentBySlug = new Map(analysis.inventoryAssessments.map((item) => [item.slug, item]));
+  const firstChange = analysis.recommendedBuild.changes[0];
+  const buildVerdictLabel = analysis.verdict.grade === 'correct'
+    ? 'Correcta'
+    : analysis.verdict.grade === 'mostly_correct'
+      ? 'Casi correcta'
+      : analysis.verdict.grade === 'mixed'
+        ? 'Mejorable'
+        : 'Mal adaptada';
+  const buildVerdictColor = analysis.verdict.grade === 'correct'
+    ? 'var(--accent-win)'
+    : analysis.verdict.grade === 'poor'
+      ? 'var(--accent-loss)'
+      : 'var(--accent-prime)';
 
   return (
     <article style={{ padding: '0.9rem', borderRadius: 9, background: 'rgba(15,23,42,0.5)', border: '1px solid var(--border-color)', minWidth: 0 }}>
@@ -144,31 +226,44 @@ function BuildReviewCard({ entry, onOpen }: { entry: PlayerBuildReview['matches'
             <span style={{ color: 'var(--text-muted)', fontSize: '0.62rem' }}>{analysis.role ?? 'Sin rol'} · {new Date(match.startTime).toLocaleDateString()}</span>
           </div>
         </div>
-        <span style={{ color: analysis.result === 'win' ? 'var(--accent-win)' : 'var(--accent-loss)', fontSize: '0.62rem', fontWeight: 800, textTransform: 'uppercase' }}>
-          {analysis.result === 'win' ? 'Victoria' : 'Derrota'}
-        </span>
+        <div style={{ textAlign: 'right' }}>
+          <span style={{ display: 'block', color: analysis.result === 'win' ? 'var(--accent-win)' : 'var(--accent-loss)', fontSize: '0.62rem', fontWeight: 800, textTransform: 'uppercase' }}>{analysis.result === 'win' ? 'Victoria' : 'Derrota'}</span>
+          <span style={{ display: 'block', marginTop: '0.2rem', color: buildVerdictColor, fontSize: '0.58rem', fontWeight: 800 }}>{buildVerdictLabel} · {analysis.verdict.score}/100</span>
+        </div>
       </div>
 
       <div style={{ marginTop: '0.75rem' }}>
         <p style={{ margin: '0 0 0.4rem', color: 'var(--text-muted)', fontSize: '0.58rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Build final</p>
         <div style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap', minHeight: 30 }}>
-          {visibleItems.length > 0 ? visibleItems.map((item) => (
-            <span key={item.slug} title={item.displayName} style={{ width: 30, height: 30, borderRadius: 5, overflow: 'hidden', border: '1px solid rgba(255,255,255,0.12)', background: 'var(--bg-dark)' }}>
+          {visibleItems.length > 0 ? visibleItems.map((item) => {
+            const assessment = assessmentBySlug.get(item.slug);
+            return (
+            <span key={item.slug} title={`${item.displayName}${assessment ? ` — ${assessment.explanation}` : ''}`} style={{ width: 30, height: 30, borderRadius: 5, overflow: 'hidden', border: `1px solid ${assessment?.verdict === 'correct' ? 'rgba(74,222,128,0.42)' : 'rgba(240,180,41,0.34)'}`, background: 'var(--bg-dark)' }}>
               <img src={`/items/${item.slug}.webp`} alt={item.displayName} style={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={(event) => { (event.currentTarget as HTMLImageElement).style.display = 'none'; }} />
             </span>
-          )) : <span style={{ color: 'var(--text-muted)', fontSize: '0.66rem' }}>Build todavía incompleta</span>}
+          );}) : <span style={{ color: 'var(--text-muted)', fontSize: '0.66rem' }}>Build todavía incompleta</span>}
         </div>
       </div>
 
       <div style={{ marginTop: '0.7rem' }}>
         <p style={{ margin: '0 0 0.35rem', color: 'var(--text-muted)', fontSize: '0.58rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Ancestro y bendiciones</p>
         <div style={{ display: 'flex', gap: '0.3rem', flexWrap: 'wrap' }}>
-          {analysis.eternalLoadout.length > 0 ? analysis.eternalLoadout.map((perk, index) => (
-            <span key={`${perk.id}-${index}`} title={perk.displayName} style={{ padding: '0.22rem 0.4rem', borderRadius: 5, background: 'rgba(167,139,250,0.08)', border: '1px solid rgba(167,139,250,0.2)', color: 'var(--text-secondary)', fontSize: '0.59rem' }}>
+          {analysis.eternalLoadout.length > 0 ? analysis.eternalLoadout.map((perk, index) => {
+            const color = perk.verdict === 'correct' ? 'var(--accent-win)' : perk.verdict === 'questionable' ? 'var(--accent-loss)' : 'var(--accent-prime)';
+            return (
+            <span key={`${perk.id}-${index}`} title={`${perk.displayName} — ${perk.why}`} style={{ padding: '0.22rem 0.4rem', borderRadius: 5, background: 'rgba(167,139,250,0.08)', border: `1px solid color-mix(in srgb, ${color} 28%, transparent)`, color: 'var(--text-secondary)', fontSize: '0.59rem' }}>
               <strong style={{ color: 'var(--accent-violet)' }}>{loadoutSlotLabel(perk.slot, index)}:</strong> {perk.displayName}
+              <span style={{ color, marginLeft: '0.25rem' }}>●</span>
             </span>
-          )) : <span style={{ color: 'var(--text-muted)', fontSize: '0.66rem' }}>Sin loadout sincronizado</span>}
+          );}) : <span style={{ color: 'var(--text-muted)', fontSize: '0.66rem' }}>Sin loadout sincronizado</span>}
         </div>
+        {analysis.eternalLoadout.some((perk) => perk.verdict !== 'correct') && (
+          <div style={{ marginTop: '0.45rem', display: 'grid', gap: '0.3rem' }}>
+            {analysis.eternalLoadout.filter((perk) => perk.verdict !== 'correct').slice(0, 2).map((perk) => (
+              <p key={`lesson-${perk.id}`} style={{ margin: 0, color: 'var(--text-muted)', fontSize: '0.61rem', lineHeight: 1.4 }}><strong style={{ color: perk.verdict === 'questionable' ? 'var(--accent-loss)' : 'var(--accent-prime)' }}>{perk.displayName}:</strong> {perk.why}</p>
+            ))}
+          </div>
+        )}
       </div>
 
       {primarySignal ? (
@@ -177,6 +272,18 @@ function BuildReviewCard({ entry, onOpen }: { entry: PlayerBuildReview['matches'
           <span style={{ display: 'block', marginTop: '0.2rem', color: 'var(--text-muted)', fontSize: '0.63rem', lineHeight: 1.35 }}>{primarySignal.recommendation}</span>
         </div>
       ) : null}
+
+      {firstChange && (
+        <div style={{ marginTop: '0.6rem', padding: '0.6rem', borderRadius: 7, background: 'rgba(56,212,200,0.04)', border: '1px solid rgba(56,212,200,0.16)' }}>
+          <strong style={{ display: 'block', color: 'var(--accent-cyan)', fontSize: '0.68rem' }}>Cambio recomendado</strong>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', marginTop: '0.35rem', flexWrap: 'wrap' }}>
+            {firstChange.insteadOf && <><span style={{ color: 'var(--text-muted)', fontSize: '0.64rem', textDecoration: 'line-through' }}>{firstChange.insteadOf.displayName}</span><span style={{ color: 'var(--text-muted)' }}>→</span></>}
+            <img src={`/items/${firstChange.item.slug}.webp`} alt="" style={{ width: 24, height: 24, borderRadius: 4 }} />
+            <strong style={{ fontSize: '0.68rem' }}>{firstChange.item.displayName}</strong>
+          </div>
+          <p style={{ margin: '0.3rem 0 0', color: 'var(--text-muted)', fontSize: '0.61rem', lineHeight: 1.4 }}>{firstChange.timing}</p>
+        </div>
+      )}
 
       <button type="button" className="btn-secondary" onClick={onOpen} style={{ marginTop: '0.75rem', flex: 'unset', width: '100%', justifyContent: 'center', fontSize: '0.68rem' }}>
         Ver análisis completo
@@ -430,8 +537,8 @@ export default function PlayerWeeklyReportPage() {
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', color: 'var(--accent-prime)', fontSize: '0.68rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.07em' }}>
               <Package size={15} /> Decisiones de partida
             </div>
-            <h2 id="build-review-title" style={{ margin: '0.55rem 0 0.2rem', fontSize: '1.15rem' }}>Builds, Ancestros y adaptación</h2>
-            <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: '0.73rem' }}>Qué compraste, qué loadout llevaste y cómo podrías adaptarlo al rival.</p>
+            <h2 id="build-review-title" style={{ margin: '0.55rem 0 0.2rem', fontSize: '1.15rem' }}>Builds, Augmentos, Eternals y Bendiciones</h2>
+            <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: '0.73rem' }}>Qué decisiones repites, cuáles funcionan para tu rol y qué debes adaptar en la próxima partida.</p>
           </div>
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', padding: '0.25rem 0.55rem', borderRadius: 999, background: 'rgba(240,180,41,0.08)', color: 'var(--accent-prime)', fontSize: '0.64rem', fontWeight: 700 }}>
             <Shield size={13} /> Últimos 30 días
@@ -443,11 +550,14 @@ export default function PlayerWeeklyReportPage() {
             Analizando tus builds y Ancestros recientes…
           </div>
         ) : buildReview && buildReview.matches.length > 0 ? (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(265px, 1fr))', gap: '0.7rem', marginTop: '0.9rem' }}>
-            {buildReview.matches.map((entry) => (
-              <BuildReviewCard key={entry.match.id} entry={entry} onOpen={() => navigate(`/matches/${entry.match.id}?tab=statistics`)} />
-            ))}
-          </div>
+          <>
+            <WeeklyBuildLessons review={buildReview} />
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(285px, 1fr))', gap: '0.7rem', marginTop: '0.9rem' }}>
+              {buildReview.matches.map((entry) => (
+                <BuildReviewCard key={entry.match.id} entry={entry} onOpen={() => navigate(`/matches/${entry.match.id}?tab=statistics`)} />
+              ))}
+            </div>
+          </>
         ) : (
           <div style={{ marginTop: '0.85rem', padding: '0.9rem', borderRadius: 8, background: 'rgba(255,255,255,0.025)', color: 'var(--text-muted)', fontSize: '0.75rem' }}>
             Todavía no hay builds analizables. Pulsa «Actualizar historial» para completar las partidas recientes.
