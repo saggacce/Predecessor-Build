@@ -346,12 +346,13 @@ Formulario «Nuevo ítem de revisión» añadido en ReviewQueue para que el anal
 - Panel de Roles y Permisos reorganizado: 13 secciones, 6 roles (PLAYER standalone añadido), nuevas claves para Playbook/Scrim Planner/Review Sessions/Tactical Board
 - Lista de partidas con filtro por equipo rival — `rivalTeamName` cruzando `ScrimSchedule` con UUID de pred.gg
 - Vista de partidas personales para PLAYER (`/player/matches`) — historial desde pred.gg con KDA, héroe, resultado, duración
-- Token keep-alive: renovación automática del refresh token de pred.gg cada 20 min para que los syncs nunca fallen
+- Token central de pred.gg: el servidor comprueba cada 5 min el access token y solo utiliza el refresh token cuando está próximo a caducar
 
 ## [x] Tarea 30 — Infraestructura OAuth pred.gg
 *PRs #235–#245. Desplegado en producción (2026-05-31).*
 
-- Token keep-alive: interval 15 días (token dura 30d), renueva y persiste el rotado — `startTokenKeepAlive()` al arrancar
+- Gestor central de token: una única credencial rotatoria en PostgreSQL, acceso cacheado y persistido, exclusión mutua local + advisory lock entre procesos
+- Keep-alive cada 5 min: `startTokenKeepAlive()` comprueba el acceso, pero solo contacta con pred.gg cuando el access token está próximo a caducar
 - Banner de estado del token en Data Quality: verde/rojo/amarillo con botón «Reconectar pred.gg»
 - `platformTokenState` actualizado inmediatamente al reconectar OAuth (callback + event stream sync)
 - CI/CD mejorado: build frontend en CI, health check post-deploy (6 reintentos × 5s), rollback automático si falla

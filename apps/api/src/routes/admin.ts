@@ -187,8 +187,7 @@ let cronJob: CronJob = {
 };
 let cronTimer: ReturnType<typeof setInterval> | null = null;
 
-// ── Token keep-alive — refresh every 15 days (token lasts 30d, 15 day buffer) ──
-// The sync cron (every 2h) also rotates the token on each run, so this is
+// ── Token keep-alive ────────────────────────────────────────────────────────
 // Check frequently; the central manager only calls pred.gg when the stored
 // access token is near expiry, so this does not rotate refresh tokens needlessly.
 const TOKEN_REFRESH_INTERVAL_MS = 5 * 60 * 1000;

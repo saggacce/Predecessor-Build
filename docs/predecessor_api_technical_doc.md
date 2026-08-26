@@ -83,9 +83,11 @@ LeaderboardRatingType: (valores del sistema de ranking por temporada)
 
 ### Mecanismo
 
-pred.gg usa **OAuth2** con tokens almacenados en `localStorage` del navegador. La aplicación debe implementar el flujo OAuth2 contra pred.gg.
+pred.gg usa **OAuth2**. Su cliente web guarda tokens en `localStorage`, pero RiftLine implementa OAuth2 PKCE con una única credencial de plataforma controlada por el servidor.
 
-### Variables en localStorage (referencia de cómo funciona el cliente web)
+En RiftLine, el refresh token rotatorio se guarda exclusivamente en `PlatformCredential`. El navegador solo recibe un access token HTTP-only de corta duración y una marca de expiración. Todas las sincronizaciones solicitan acceso a `predgg-token-service`, que serializa la renovación y persiste atómicamente cualquier refresh token rotado.
+
+### Variables en localStorage (solo referencia del cliente web de pred.gg)
 
 ```javascript
 localStorage.getItem('oauth_access_token')    // JWT Bearer token (~610 chars)
