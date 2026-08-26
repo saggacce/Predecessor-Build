@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router';
-import { Activity, ArrowDownRight, ArrowUpRight, Crosshair, Link as LinkIcon, Minus, RefreshCw, Target } from 'lucide-react';
+import { Activity, ArrowDownRight, ArrowUpRight, Crosshair, Link as LinkIcon, Minus, RefreshCw, Sparkles, Target } from 'lucide-react';
 import { toast } from 'sonner';
 import { ApiErrorResponse, apiClient, type PlayerMetricTrend, type PlayerWeeklyReport } from '../api/client';
 import { HeroAvatarWithTooltip } from '../components/HeroAvatar';
@@ -221,6 +221,56 @@ export default function PlayerWeeklyReportPage() {
           </div>
         </section>
       ) : null}
+
+      <section className="glass-card" style={{ padding: '1.15rem' }} aria-labelledby="champion-pool-title">
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '0.75rem', flexWrap: 'wrap' }}>
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', color: 'var(--accent-violet)', fontSize: '0.68rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.07em' }}>
+              <Sparkles size={15} /> Champion pool
+            </div>
+            <h2 id="champion-pool-title" style={{ margin: '0.55rem 0 0.2rem', fontSize: '1.15rem' }}>Principal, alternativa y tendencia</h2>
+            <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: '0.73rem' }}>
+              {report.championPool.totalMatches30d} partidas en 30 días
+              {report.championPool.currentPatch ? ` · parche ${report.championPool.currentPatch}` : ''}
+            </p>
+          </div>
+        </div>
+
+        {report.championPool.heroes.length > 0 ? (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(205px, 1fr))', gap: '0.7rem', marginTop: '0.9rem' }}>
+            {report.championPool.heroes.map((hero) => {
+              const designation = hero.designation === 'main' ? 'Principal' : hero.designation === 'alternate' ? 'Alternativa' : 'Experimental';
+              const trend = hero.trend === 'improving' ? 'Mejorando' : hero.trend === 'declining' ? 'Bajando' : hero.trend === 'stable' ? 'Estable' : 'Sin muestra';
+              const trendColor = hero.trend === 'improving' ? 'var(--accent-win)' : hero.trend === 'declining' ? 'var(--accent-loss)' : 'var(--text-muted)';
+              return (
+                <article key={hero.heroSlug} style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', padding: '0.8rem', borderRadius: 9, border: '1px solid var(--border-color)', background: 'rgba(15,23,42,0.48)' }}>
+                  <HeroAvatarWithTooltip slug={hero.heroSlug} name={hero.heroSlug} size={46} rounded={8} />
+                  <div style={{ minWidth: 0, flex: 1 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.4rem' }}>
+                      <strong style={{ textTransform: 'capitalize', fontSize: '0.84rem' }}>{hero.heroSlug}</strong>
+                      <span style={{ color: hero.designation === 'main' ? 'var(--accent-violet)' : 'var(--text-muted)', fontSize: '0.61rem', fontWeight: 800 }}>{designation}</span>
+                    </div>
+                    <p style={{ margin: '0.25rem 0 0', color: 'var(--text-secondary)', fontSize: '0.69rem' }}>
+                      {hero.matches30d} partidas · {hero.winRate30d}% WR · {hero.kda30d.toFixed(2)} KDA
+                    </p>
+                    <p style={{ margin: '0.18rem 0 0', color: trendColor, fontSize: '0.65rem' }}>
+                      {hero.currentPatchMatches} en parche · {trend}
+                    </p>
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+        ) : (
+          <p style={{ color: 'var(--text-muted)', fontSize: '0.78rem' }}>Sin partidas suficientes para construir el champion pool.</p>
+        )}
+
+        <div style={{ marginTop: '0.9rem', padding: '0.85rem', borderRadius: 8, background: 'rgba(167,139,250,0.07)', borderLeft: '3px solid var(--accent-violet)' }}>
+          <strong style={{ fontSize: '0.84rem' }}>{report.championPool.recommendation.title}</strong>
+          <p style={{ margin: '0.35rem 0', color: 'var(--text-secondary)', fontSize: '0.77rem', lineHeight: 1.45 }}>{report.championPool.recommendation.rationale}</p>
+          <p style={{ margin: 0, fontSize: '0.76rem', lineHeight: 1.45 }}><strong>Plan:</strong> {report.championPool.recommendation.action}</p>
+        </div>
+      </section>
 
       <section style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(175px, 1fr))', gap: '0.75rem' }}>
         {report.trends.map((item) => <MetricCard key={item.metric} trend={item} />)}

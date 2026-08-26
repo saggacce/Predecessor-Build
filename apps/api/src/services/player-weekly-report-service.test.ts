@@ -4,6 +4,7 @@ vi.mock('../db.js', () => ({
   db: {
     player: { findUnique: vi.fn() },
     matchPlayer: { findMany: vi.fn() },
+    version: { findFirst: vi.fn() },
   },
 }));
 
@@ -42,6 +43,7 @@ function match(daysAgo: number, overrides: Record<string, unknown> = {}) {
         { team: 'DAWN', kills: 1 },
         { team: 'DAWN', kills: 0 },
       ],
+      version: { name: '1.16.1' },
       ...matchOverride,
     },
   };
@@ -51,6 +53,7 @@ describe('generatePlayerWeeklyReport', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockDb.player.findUnique.mockResolvedValue({ id: 'player-1', displayName: 'Carry', customName: null });
+    mockDb.version.findFirst.mockResolvedValue({ name: '1.16.1' });
   });
 
   it('compares seven days with 30 days and returns a prescriptive focus', async () => {
@@ -106,5 +109,28 @@ describe('generatePlayerWeeklyReport', () => {
     expect(report.roleCoach?.metrics.map((metric) => metric.key)).toEqual(expectedMetrics);
     expect(report.roleCoach?.focus.title).toBeTruthy();
     expect(report.roleCoach?.focus.action).toBeTruthy();
+  });
+
+  it('classifies a patch-aware main, alternate and trend without inventing conclusions from tiny samples', async () => {
+    mockDb.matchPlayer.findMany.mockResolvedValue([
+      match(1, { heroSlug: 'dekker' }),
+      match(2, { heroSlug: 'dekker' }),
+      match(3, { heroSlug: 'dekker' }),
+      match(5, { heroSlug: 'muriel' }),
+      match(6, { heroSlug: 'muriel' }),
+      match(12, { heroSlug: 'dekker', match: { version: { name: '1.15.0' } } }),
+      match(18, { heroSlug: 'dekker', match: { version: { name: '1.15.0' } } }),
+      match(22, { heroSlug: 'dekker', match: { version: { name: '1.15.0' } } }),
+    ]);
+
+    const report = await generatePlayerWeeklyReport('player-1', NOW);
+
+    expect(report.championPool.currentPatch).toBe('1.16.1');
+    expect(report.championPool.mainHero).toBe('dekker');
+    expect(report.championPool.alternativeHero).toBe('muriel');
+    expect(report.championPool.heroes[0]).toMatchObject({
+      heroSlug: 'dekker', designation: 'main', matches30d: 6, currentPatchMatches: 3,
+    });
+    expect(report.championPool.heroes[1]).toMatchObject({ heroSlug: 'muriel', designation: 'alternate' });
   });
 });

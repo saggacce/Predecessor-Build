@@ -23,6 +23,7 @@ type MatchRow = {
     winningTeam: string | null;
     duration: number;
     matchPlayers: Array<{ team: string; kills: number }>;
+    version: { name: string } | null;
   };
 };
 
@@ -55,6 +56,31 @@ export type PlayerRoleCoach = {
     unit: 'ratio' | 'per_match' | 'per_minute' | 'percent';
   }>;
   focus: {
+    title: string;
+    rationale: string;
+    action: string;
+  };
+};
+
+export type PlayerChampionPool = {
+  currentPatch: string | null;
+  totalMatches30d: number;
+  heroes: Array<{
+    heroSlug: string;
+    role: string | null;
+    designation: 'main' | 'alternate' | 'experimental';
+    matches30d: number;
+    wins30d: number;
+    winRate30d: number;
+    kda30d: number;
+    currentPatchMatches: number;
+    currentPatchWinRate: number | null;
+    currentPatchKda: number | null;
+    trend: 'improving' | 'declining' | 'stable' | 'insufficient_data';
+  }>;
+  mainHero: string | null;
+  alternativeHero: string | null;
+  recommendation: {
     title: string;
     rationale: string;
     action: string;
@@ -104,6 +130,7 @@ export type PlayerWeeklyReport = {
     action: string;
   };
   roleCoach: PlayerRoleCoach | null;
+  championPool: PlayerChampionPool;
 };
 
 function rounded(value: number, digits = 2): number {
@@ -331,6 +358,120 @@ function buildRoleCoach(weeklyRows: MatchRow[], baselineRows: MatchRow[]): Playe
   };
 }
 
+function heroKda(rows: MatchRow[]): number {
+  const kills = rows.reduce((sum, row) => sum + row.kills, 0);
+  const deaths = rows.reduce((sum, row) => sum + row.deaths, 0);
+  const assists = rows.reduce((sum, row) => sum + row.assists, 0);
+  return rounded((kills + assists) / Math.max(deaths, 1));
+}
+
+function heroWinRate(rows: MatchRow[]): number {
+  if (rows.length === 0) return 0;
+  const wins = rows.filter((row) => row.match.winningTeam !== null && row.team === row.match.winningTeam).length;
+  return rounded((wins / rows.length) * 100, 1);
+}
+
+function heroPrimaryRole(rows: MatchRow[]): string | null {
+  const counts = new Map<string, number>();
+  for (const row of rows) {
+    if (row.role) counts.set(row.role, (counts.get(row.role) ?? 0) + 1);
+  }
+  return [...counts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? null;
+}
+
+function championTrend(currentRows: MatchRow[], previousRows: MatchRow[]) {
+  if (currentRows.length < 3 || previousRows.length < 3) return 'insufficient_data' as const;
+  const winRateDelta = heroWinRate(currentRows) - heroWinRate(previousRows);
+  const kdaDelta = heroKda(currentRows) - heroKda(previousRows);
+  if (winRateDelta >= 8 || kdaDelta >= 0.4) return 'improving' as const;
+  if (winRateDelta <= -8 || kdaDelta <= -0.4) return 'declining' as const;
+  return 'stable' as const;
+}
+
+function buildChampionPool(rows: MatchRow[], currentPatch: string | null): PlayerChampionPool {
+  const grouped = new Map<string, MatchRow[]>();
+  for (const row of rows) {
+    const heroRows = grouped.get(row.heroSlug) ?? [];
+    heroRows.push(row);
+    grouped.set(row.heroSlug, heroRows);
+  }
+
+  const sorted = [...grouped.entries()].sort((a, b) => {
+    const aPatch = currentPatch ? a[1].filter((row) => row.match.version?.name === currentPatch).length : 0;
+    const bPatch = currentPatch ? b[1].filter((row) => row.match.version?.name === currentPatch).length : 0;
+    return bPatch - aPatch || b[1].length - a[1].length || heroWinRate(b[1]) - heroWinRate(a[1]);
+  });
+  const mainHero = sorted[0]?.[0] ?? null;
+  const alternativeHero = sorted.slice(1).find(([, heroRows]) => heroRows.length >= 2)?.[0] ?? null;
+
+  const heroes = sorted.slice(0, 5).map(([heroSlug, heroRows]) => {
+    const currentRows = currentPatch
+      ? heroRows.filter((row) => row.match.version?.name === currentPatch)
+      : [];
+    const previousRows = currentPatch
+      ? heroRows.filter((row) => row.match.version?.name !== currentPatch)
+      : [];
+    const wins30d = heroRows.filter((row) => row.match.winningTeam !== null && row.team === row.match.winningTeam).length;
+    return {
+      heroSlug,
+      role: heroPrimaryRole(heroRows),
+      designation: (heroSlug === mainHero ? 'main' : heroSlug === alternativeHero ? 'alternate' : 'experimental') as 'main' | 'alternate' | 'experimental',
+      matches30d: heroRows.length,
+      wins30d,
+      winRate30d: heroWinRate(heroRows),
+      kda30d: heroKda(heroRows),
+      currentPatchMatches: currentRows.length,
+      currentPatchWinRate: currentRows.length > 0 ? heroWinRate(currentRows) : null,
+      currentPatchKda: currentRows.length > 0 ? heroKda(currentRows) : null,
+      trend: championTrend(currentRows, previousRows),
+    };
+  });
+
+  const main = heroes.find((hero) => hero.designation === 'main') ?? null;
+  const alternative = heroes.find((hero) => hero.designation === 'alternate') ?? null;
+  let recommendation: PlayerChampionPool['recommendation'];
+  if (rows.length < 5) {
+    recommendation = {
+      title: 'No cambies el pool todavía',
+      rationale: `Solo hay ${rows.length} partidas recientes; la muestra no permite distinguir rendimiento real de varianza.`,
+      action: 'Completa cinco partidas en tu rol principal antes de añadir o retirar un héroe.',
+    };
+  } else if (!alternative) {
+    recommendation = {
+      title: 'Define una alternativa fiable',
+      rationale: main ? `${main.heroSlug} concentra tu muestra y ningún segundo héroe alcanza todavía dos partidas recientes.` : 'Todavía no hay un héroe principal identificable.',
+      action: 'Reserva dos de tus próximas cinco partidas para un segundo héroe del mismo rol que cubra enfrentamientos incómodos de tu principal.',
+    };
+  } else if (main && main.matches30d / rows.length >= 0.7) {
+    recommendation = {
+      title: 'Reduce dependencia del héroe principal',
+      rationale: `${main.heroSlug} representa el ${rounded((main.matches30d / rows.length) * 100, 1)}% de tus partidas; ${alternative.heroSlug} es la alternativa con mejor muestra disponible.`,
+      action: `Usa ${alternative.heroSlug} en dos de las próximas cinco partidas, manteniendo ${main.heroSlug} como elección principal.`,
+    };
+  } else if (main?.trend === 'declining') {
+    recommendation = {
+      title: 'Revalida tu héroe principal en este parche',
+      rationale: `${main.heroSlug} ha empeorado frente a tus partidas anteriores y ya hay muestra suficiente para vigilar la tendencia.`,
+      action: `Compara tus tres próximas partidas con ${main.heroSlug} contra ${alternative.heroSlug}; conserva el que cumpla mejor tu objetivo de rol.`,
+    };
+  } else {
+    recommendation = {
+      title: 'Mantén un pool pequeño y estable',
+      rationale: `${main?.heroSlug ?? 'Tu principal'} y ${alternative?.heroSlug ?? 'tu alternativa'} ya forman una base utilizable sin dispersar la práctica.`,
+      action: 'Aplica una distribución aproximada 60/30/10: principal, alternativa y una partida experimental solo cuando el objetivo semanal esté estable.',
+    };
+  }
+
+  return {
+    currentPatch,
+    totalMatches30d: rows.length,
+    heroes,
+    mainHero,
+    alternativeHero,
+    recommendation,
+  };
+}
+
 function aggregate(rows: MatchRow[]): PlayerPeriodMetrics {
   const wins = rows.filter((row) => row.match.winningTeam !== null && row.team === row.match.winningTeam).length;
   const kills = rows.reduce((sum, row) => sum + row.kills, 0);
@@ -449,7 +590,7 @@ export async function generatePlayerWeeklyReport(playerId: string, now = new Dat
   const baselineFrom = new Date(now.getTime() - 30 * DAY_MS);
   const weeklyFrom = new Date(now.getTime() - 7 * DAY_MS);
 
-  const [player, rows] = await Promise.all([
+  const [player, rows, latestVersion] = await Promise.all([
     db.player.findUnique({
       where: { id: playerId },
       select: { id: true, displayName: true, customName: true },
@@ -477,10 +618,15 @@ export async function generatePlayerWeeklyReport(playerId: string, now = new Dat
             winningTeam: true,
             duration: true,
             matchPlayers: { select: { team: true, kills: true } },
+            version: { select: { name: true } },
           },
         },
       },
       orderBy: { match: { startTime: 'desc' } },
+    }),
+    db.version.findFirst({
+      orderBy: { releaseDate: 'desc' },
+      select: { name: true },
     }),
   ]);
 
@@ -509,5 +655,6 @@ export async function generatePlayerWeeklyReport(playerId: string, now = new Dat
     topHero: hero,
     focusOfWeek: chooseFocus(weekly, baseline30d, hero),
     roleCoach: buildRoleCoach(weeklyRows, typedRows),
+    championPool: buildChampionPool(typedRows, latestVersion?.name ?? null),
   };
 }

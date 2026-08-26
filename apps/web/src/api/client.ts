@@ -166,6 +166,26 @@ export interface PlayerWeeklyReport {
     }>;
     focus: { title: string; rationale: string; action: string };
   } | null;
+  championPool: {
+    currentPatch: string | null;
+    totalMatches30d: number;
+    heroes: Array<{
+      heroSlug: string;
+      role: string | null;
+      designation: 'main' | 'alternate' | 'experimental';
+      matches30d: number;
+      wins30d: number;
+      winRate30d: number;
+      kda30d: number;
+      currentPatchMatches: number;
+      currentPatchWinRate: number | null;
+      currentPatchKda: number | null;
+      trend: 'improving' | 'declining' | 'stable' | 'insufficient_data';
+    }>;
+    mainHero: string | null;
+    alternativeHero: string | null;
+    recommendation: { title: string; rationale: string; action: string };
+  };
 }
 
 export interface PlayerMatchEnrichmentStatus {
