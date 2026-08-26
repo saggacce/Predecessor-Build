@@ -38,7 +38,7 @@ El informe puede filtrarse por ventana temporal, modo, rol y héroe. Sobre las p
 
 Items, perks, Eternals, bendiciones y categorías se guardan por versión del juego. Para cada item se conservan estadísticas, efectos estructurados, precios, árbol de construcción e incompatibilidades. Para cada perk se conservan posición, texto, iconos, héroe, categoría y relaciones con bendiciones menores.
 
-El catálogo se sincroniza al actualizar versiones y también mediante `POST /admin/sync-game-catalog`. Sin indicar versión, esta ruta rellena el parche actual y todos los parches que aparecen en el historial local, evitando mezclar datos actuales con partidas antiguas.
+El catálogo se sincroniza al actualizar versiones y también mediante `POST /admin/sync-game-catalog`. Sin indicar versión, esta ruta rellena el parche actual y hasta 16 parches recientes que aparecen en el último año del historial local, evitando mezclar datos actuales con partidas antiguas sin intentar reconstruir innecesariamente todo el archivo histórico.
 
 ### 6. Análisis contextual de build
 

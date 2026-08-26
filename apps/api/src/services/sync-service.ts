@@ -1110,14 +1110,19 @@ export async function syncGameCatalog(db: PrismaClient, versionPredggId?: string
   return { version: localVersion.name, items: itemCount, perks: perkCount, eternalCategories: categoryCount };
 }
 
-/** Backfills catalogs only for patches represented in the local match history. */
+/** Backfills the current catalog and the most recent patches represented in match history. */
 export async function syncTrackedGameCatalogs(db: PrismaClient): Promise<{
   versions: number;
   catalogs: Array<{ version: string; items: number; perks: number; eternalCategories: number }>;
 }> {
   const tracked = await db.match.findMany({
-    where: { versionId: { not: null } },
+    where: {
+      versionId: { not: null },
+      startTime: { gte: new Date(Date.now() - 365 * 24 * 60 * 60 * 1000) },
+    },
+    orderBy: { startTime: 'desc' },
     distinct: ['versionId'],
+    take: 16,
     select: { version: { select: { predggId: true } } },
   });
   const latest = await db.version.findFirst({ orderBy: { releaseDate: 'desc' }, select: { predggId: true } });
