@@ -99,7 +99,16 @@ export default function MatchDetail({ liveMode = false }: { liveMode?: boolean }
     try {
       const updated = await apiClient.matches.syncPlayers(id);
       setMatch(updated);
-      toast.success('Match data updated', { id: toastId });
+      const updatedPlayers = [...updated.dusk, ...updated.dawn];
+      const hasGoldTimeline = updatedPlayers.some((player) => player.goldEarnedAtInterval?.length);
+      if (hasGoldTimeline) {
+        toast.success('Partida actualizada, incluida la curva de oro', { id: toastId });
+      } else {
+        toast.info('Partida actualizada, pero pred.gg no devolvió la curva de oro', {
+          id: toastId,
+          description: 'Repetir la sincronización no generará esos intervalos con los permisos actuales.',
+        });
+      }
     } catch (err) {
       toast.error(err instanceof ApiErrorResponse ? err.error.message : 'Failed to sync match.', { id: toastId });
     } finally {
@@ -754,9 +763,13 @@ function AnalysisTab({ match, duskWon, dawnWon: _dawnWon, onResync, syncing, pre
           <GoldDiffChart goldDiff={goldDiff} events={events} match={match} duskWon={duskWon} />
         </div>
       ) : match.eventStreamSynced && !hasGold ? (
-        <div className="glass-card" style={{ padding: '1.25rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-          <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Gold timeline not available — re-sync to fetch per-minute gold data.</span>
-          <button onClick={onResync} disabled={syncing} style={{ fontSize: '0.72rem', padding: '0.2rem 0.6rem', borderRadius: '4px', cursor: 'pointer', border: '1px solid var(--accent-blue)', background: 'transparent', color: 'var(--accent-blue)' }}>Re-sync</button>
+        <div className="glass-card" style={{ padding: '1.25rem', display: 'flex', alignItems: 'flex-start', gap: '0.65rem' }}>
+          <div>
+            <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', fontWeight: 700 }}>Curva de oro no disponible</div>
+            <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '0.25rem', lineHeight: 1.5 }}>
+              La partida y sus eventos están actualizados, pero pred.gg no devolvió los intervalos de oro por minuto con los permisos actuales. Repetir la sincronización no puede reconstruirlos.
+            </div>
+          </div>
         </div>
       ) : null}
 
