@@ -5,6 +5,7 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 
 type MatchRow = {
   heroSlug: string;
+  role: string | null;
   team: string;
   kills: number;
   deaths: number;
@@ -12,7 +13,52 @@ type MatchRow = {
   heroDamage: number | null;
   gold: number | null;
   laneMinionsKilled: number | null;
-  match: { startTime: Date; winningTeam: string | null };
+  wardsPlaced: number | null;
+  totalDamageDealtToObjectives: number | null;
+  totalDamageDealtToStructures: number | null;
+  totalDamageTaken: number | null;
+  totalHealingDone: number | null;
+  match: {
+    startTime: Date;
+    winningTeam: string | null;
+    duration: number;
+    matchPlayers: Array<{ team: string; kills: number }>;
+  };
+};
+
+type PlayerRole = 'CARRY' | 'SUPPORT' | 'MIDLANE' | 'JUNGLE' | 'OFFLANE';
+
+type RoleMetricKey =
+  | 'kda'
+  | 'deathsPerMatch'
+  | 'csPerMinute'
+  | 'goldPerMinute'
+  | 'damagePerMinute'
+  | 'killParticipation'
+  | 'wardsPerMinute'
+  | 'objectiveDamagePerMinute'
+  | 'structureDamagePerMinute'
+  | 'damageTakenPerMinute'
+  | 'healingPerMinute';
+
+export type PlayerRoleCoach = {
+  role: PlayerRole;
+  label: string;
+  matches: number;
+  shareOfMatches: number;
+  confidence: 'low' | 'medium' | 'high';
+  metrics: Array<{
+    key: RoleMetricKey;
+    label: string;
+    value: number | null;
+    baseline: number | null;
+    unit: 'ratio' | 'per_match' | 'per_minute' | 'percent';
+  }>;
+  focus: {
+    title: string;
+    rationale: string;
+    action: string;
+  };
 };
 
 export type PlayerPeriodMetrics = {
@@ -57,6 +103,7 @@ export type PlayerWeeklyReport = {
     rationale: string;
     action: string;
   };
+  roleCoach: PlayerRoleCoach | null;
 };
 
 function rounded(value: number, digits = 2): number {
@@ -68,6 +115,220 @@ function average(values: Array<number | null>): number | null {
   const present = values.filter((value): value is number => value !== null);
   if (present.length === 0) return null;
   return rounded(present.reduce((sum, value) => sum + value, 0) / present.length, 1);
+}
+
+function averageRaw(values: number[]): number | null {
+  if (values.length === 0) return null;
+  return rounded(values.reduce((sum, value) => sum + value, 0) / values.length, 2);
+}
+
+function perMinute(row: MatchRow, value: number | null): number | null {
+  if (value === null || row.match.duration <= 0) return null;
+  return value / (row.match.duration / 60);
+}
+
+type RoleMetricValues = Record<RoleMetricKey, number | null>;
+
+function aggregateRole(rows: MatchRow[]): RoleMetricValues {
+  const kills = rows.reduce((sum, row) => sum + row.kills, 0);
+  const deaths = rows.reduce((sum, row) => sum + row.deaths, 0);
+  const assists = rows.reduce((sum, row) => sum + row.assists, 0);
+  const killParticipation = rows.flatMap((row) => {
+    const teamKills = row.match.matchPlayers
+      .filter((player) => player.team === row.team)
+      .reduce((sum, player) => sum + player.kills, 0);
+    return teamKills > 0 ? [Math.min(100, ((row.kills + row.assists) / teamKills) * 100)] : [];
+  });
+  const metricPerMinute = (read: (row: MatchRow) => number | null) =>
+    averageRaw(rows.flatMap((row) => {
+      const value = perMinute(row, read(row));
+      return value === null ? [] : [value];
+    }));
+
+  return {
+    kda: rows.length > 0 ? rounded((kills + assists) / Math.max(deaths, 1)) : null,
+    deathsPerMatch: rows.length > 0 ? rounded(deaths / rows.length, 1) : null,
+    csPerMinute: metricPerMinute((row) => row.laneMinionsKilled),
+    goldPerMinute: metricPerMinute((row) => row.gold),
+    damagePerMinute: metricPerMinute((row) => row.heroDamage),
+    killParticipation: averageRaw(killParticipation),
+    wardsPerMinute: metricPerMinute((row) => row.wardsPlaced),
+    objectiveDamagePerMinute: metricPerMinute((row) => row.totalDamageDealtToObjectives),
+    structureDamagePerMinute: metricPerMinute((row) => row.totalDamageDealtToStructures),
+    damageTakenPerMinute: metricPerMinute((row) => row.totalDamageTaken),
+    healingPerMinute: metricPerMinute((row) => row.totalHealingDone),
+  };
+}
+
+const ROLE_LABELS: Record<PlayerRole, string> = {
+  CARRY: 'Carry',
+  SUPPORT: 'Support',
+  MIDLANE: 'Midlane',
+  JUNGLE: 'Jungle',
+  OFFLANE: 'Offlane',
+};
+
+const METRIC_LABELS: Record<RoleMetricKey, string> = {
+  kda: 'KDA',
+  deathsPerMatch: 'Muertes / partida',
+  csPerMinute: 'CS / min',
+  goldPerMinute: 'Oro / min',
+  damagePerMinute: 'Daño / min',
+  killParticipation: 'Participación',
+  wardsPerMinute: 'Wards / min',
+  objectiveDamagePerMinute: 'Daño a objetivos / min',
+  structureDamagePerMinute: 'Daño a estructuras / min',
+  damageTakenPerMinute: 'Daño recibido / min',
+  healingPerMinute: 'Curación / min',
+};
+
+const ROLE_METRICS: Record<PlayerRole, RoleMetricKey[]> = {
+  CARRY: ['csPerMinute', 'goldPerMinute', 'damagePerMinute', 'deathsPerMatch'],
+  SUPPORT: ['killParticipation', 'wardsPerMinute', 'deathsPerMatch', 'healingPerMinute'],
+  MIDLANE: ['damagePerMinute', 'csPerMinute', 'killParticipation', 'deathsPerMatch'],
+  JUNGLE: ['objectiveDamagePerMinute', 'killParticipation', 'damagePerMinute', 'deathsPerMatch'],
+  OFFLANE: ['damageTakenPerMinute', 'structureDamagePerMinute', 'csPerMinute', 'deathsPerMatch'],
+};
+
+function lowerThanBaseline(current: number | null, baseline: number | null, ratio = 0.9): boolean {
+  return current !== null && baseline !== null && current < baseline * ratio;
+}
+
+function roleFocus(role: PlayerRole, weekly: RoleMetricValues, baseline: RoleMetricValues, matches: number) {
+  if (matches < 2) {
+    return {
+      title: `Construye una muestra como ${ROLE_LABELS[role]}`,
+      rationale: `Solo hay ${matches} ${matches === 1 ? 'partida' : 'partidas'} reciente como ${ROLE_LABELS[role]}; aún no conviene sacar conclusiones específicas del rol.`,
+      action: `Juega al menos tres partidas más como ${ROLE_LABELS[role]} manteniendo un mismo objetivo de proceso.`,
+    };
+  }
+
+  const highDeaths = weekly.deathsPerMatch !== null
+    && weekly.deathsPerMatch >= 5
+    && (baseline.deathsPerMatch === null || weekly.deathsPerMatch > baseline.deathsPerMatch * 1.1);
+
+  if (role === 'CARRY') {
+    if (lowerThanBaseline(weekly.csPerMinute, baseline.csPerMinute)) return {
+      title: 'Protege tu curva de recursos',
+      rationale: `Tu ritmo de farmeo como Carry (${weekly.csPerMinute} CS/min) está por debajo de tu referencia (${baseline.csPerMinute} CS/min).`,
+      action: 'En las próximas cinco partidas, registra tu CS al minuto 10 y evita abandonar dos oleadas seguidas por una rotación sin objetivo claro.',
+    };
+    if (highDeaths) return {
+      title: 'Llega vivo al daño decisivo',
+      rationale: `Promedias ${weekly.deathsPerMatch} muertes como Carry; cada muerte reduce tu tiempo de farmeo y tu presencia en peleas.`,
+      action: 'Revisa tus dos primeras muertes y clasifícalas: posición, falta de visión o uso tardío de recursos defensivos.',
+    };
+    return {
+      title: 'Convierte recursos en daño seguro',
+      rationale: `Tu economía reciente es de ${weekly.goldPerMinute ?? '—'} oro/min y produces ${weekly.damagePerMinute ?? '—'} daño/min.`,
+      action: 'En cinco partidas, prioriza mantener rango seguro y anota si cada muerte ocurrió antes o después de usar tu recurso defensivo.',
+    };
+  }
+
+  if (role === 'SUPPORT') {
+    if (lowerThanBaseline(weekly.wardsPerMinute, baseline.wardsPerMinute)) return {
+      title: 'Recupera control de visión',
+      rationale: `Tu colocación de visión (${weekly.wardsPerMinute} wards/min) está por debajo de tu referencia (${baseline.wardsPerMinute}).`,
+      action: 'Marca dos ventanas por partida para renovar visión: antes del primer Fangtooth y antes de cada rotación al lado fuerte.',
+    };
+    if (highDeaths) return {
+      title: 'Da información sin regalarte',
+      rationale: `Promedias ${weekly.deathsPerMatch} muertes como Support, por encima de tu patrón reciente.`,
+      action: 'Revisa cada muerte fuera de una pelea 5v5 y comprueba si entraste a colocar visión sin información de dos rivales.',
+    };
+    return {
+      title: 'Aumenta tu impacto colectivo',
+      rationale: `Participas en el ${weekly.killParticipation ?? '—'}% de las bajas aliadas mientras sostienes la visión del equipo.`,
+      action: 'Durante cinco partidas, decide antes de cada objetivo si tu prioridad es iniciar, proteger al Carry o negar visión; no mezcles las tres a la vez.',
+    };
+  }
+
+  if (role === 'MIDLANE') {
+    if (lowerThanBaseline(weekly.damagePerMinute, baseline.damagePerMinute)) return {
+      title: 'Recupera presión desde Midlane',
+      rationale: `Tu daño reciente (${weekly.damagePerMinute}/min) está por debajo de tu referencia (${baseline.damagePerMinute}/min).`,
+      action: 'Revisa minuto 8–15: cuenta cuántas oleadas limpias antes de rotar y si llegas a la pelea con recursos disponibles.',
+    };
+    if (lowerThanBaseline(weekly.csPerMinute, baseline.csPerMinute)) return {
+      title: 'Equilibra oleada y rotación',
+      rationale: `Tu farmeo como Midlane ha bajado a ${weekly.csPerMinute} CS/min frente a ${baseline.csPerMinute}.`,
+      action: 'No rotes con una oleada entrando en tu torre salvo que la jugada asegure un objetivo o una ventaja numérica clara.',
+    };
+    return {
+      title: 'Transforma prioridad en ventaja',
+      rationale: `Tu participación es ${weekly.killParticipation ?? '—'}% y tu daño ${weekly.damagePerMinute ?? '—'}/min.`,
+      action: 'En las próximas cinco partidas, anota la primera rotación realizada con prioridad y qué ventaja concreta generó.',
+    };
+  }
+
+  if (role === 'JUNGLE') {
+    if (lowerThanBaseline(weekly.objectiveDamagePerMinute, baseline.objectiveDamagePerMinute)) return {
+      title: 'Convierte presión en objetivos',
+      rationale: `Tu daño a objetivos (${weekly.objectiveDamagePerMinute}/min) está por debajo de tu referencia (${baseline.objectiveDamagePerMinute}/min).`,
+      action: 'Antes de cada gank, define qué objetivo o campamento rival podrás convertir si la jugada sale bien.',
+    };
+    if (highDeaths) return {
+      title: 'Reduce invasiones sin información',
+      rationale: `Promedias ${weekly.deathsPerMatch} muertes como Jungla, lo que cede tempo y control del mapa.`,
+      action: 'Revisa las muertes en jungla rival e identifica qué líneas tenían prioridad y qué visión confirmaba la invasión.',
+    };
+    return {
+      title: 'Haz que cada aparición tenga propósito',
+      rationale: `Participas en el ${weekly.killParticipation ?? '—'}% de las bajas y generas ${weekly.objectiveDamagePerMinute ?? '—'} de daño a objetivos/min.`,
+      action: 'Durante cinco partidas, etiqueta cada gank como objetivo, protección de oleada o castigo; elimina los que no encajen en ninguna categoría.',
+    };
+  }
+
+  if (lowerThanBaseline(weekly.structureDamagePerMinute, baseline.structureDamagePerMinute)) return {
+    title: 'Convierte la presión lateral',
+    rationale: `Tu daño a estructuras (${weekly.structureDamagePerMinute}/min) está por debajo de tu referencia (${baseline.structureDamagePerMinute}/min).`,
+    action: 'Después de ganar un intercambio, decide explícitamente entre placa/torre, oleada profunda o rotación; evita volver a base sin convertir presión.',
+  };
+  if (highDeaths) return {
+    title: 'Absorbe presión con mejores salidas',
+    rationale: `Promedias ${weekly.deathsPerMatch} muertes como Offlane mientras recibes ${weekly.damageTakenPerMinute ?? '—'} de daño/min.`,
+    action: 'Revisa si tus muertes laterales ocurrieron con visión del rival y una ruta de salida; coloca la visión antes de cruzar el río.',
+  };
+  return {
+    title: 'Convierte ventaja de línea en mapa',
+    rationale: `Recibes ${weekly.damageTakenPerMinute ?? '—'} daño/min y aportas ${weekly.structureDamagePerMinute ?? '—'} a estructuras/min.`,
+    action: 'En cinco partidas, mide cuántas veces tu presión lateral obliga a responder a dos rivales sin morir por ello.',
+  };
+}
+
+function buildRoleCoach(weeklyRows: MatchRow[], baselineRows: MatchRow[]): PlayerRoleCoach | null {
+  const roleCounts = new Map<PlayerRole, number>();
+  for (const row of baselineRows) {
+    if (row.role && row.role in ROLE_LABELS) {
+      const role = row.role as PlayerRole;
+      roleCounts.set(role, (roleCounts.get(role) ?? 0) + 1);
+    }
+  }
+  const primaryRole = [...roleCounts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0];
+  if (!primaryRole) return null;
+
+  const weeklyRoleRows = weeklyRows.filter((row) => row.role === primaryRole);
+  const baselineRoleRows = baselineRows.filter((row) => row.role === primaryRole);
+  const weekly = aggregateRole(weeklyRoleRows);
+  const baseline = aggregateRole(baselineRoleRows);
+  const matches = weeklyRoleRows.length;
+  const baselineMatches = baselineRoleRows.length;
+
+  return {
+    role: primaryRole,
+    label: ROLE_LABELS[primaryRole],
+    matches,
+    shareOfMatches: baselineRows.length > 0 ? rounded((baselineMatches / baselineRows.length) * 100, 1) : 0,
+    confidence: baselineMatches >= 10 ? 'high' : baselineMatches >= 5 ? 'medium' : 'low',
+    metrics: ROLE_METRICS[primaryRole].map((key) => ({
+      key,
+      label: METRIC_LABELS[key],
+      value: weekly[key],
+      baseline: baseline[key],
+      unit: key === 'kda' ? 'ratio' : key === 'deathsPerMatch' ? 'per_match' : key === 'killParticipation' ? 'percent' : 'per_minute',
+    })),
+    focus: roleFocus(primaryRole, weekly, baseline, matches),
+  };
 }
 
 function aggregate(rows: MatchRow[]): PlayerPeriodMetrics {
@@ -197,6 +458,7 @@ export async function generatePlayerWeeklyReport(playerId: string, now = new Dat
       where: { playerId, match: { startTime: { gte: baselineFrom, lte: now } } },
       select: {
         heroSlug: true,
+        role: true,
         team: true,
         kills: true,
         deaths: true,
@@ -204,7 +466,19 @@ export async function generatePlayerWeeklyReport(playerId: string, now = new Dat
         heroDamage: true,
         gold: true,
         laneMinionsKilled: true,
-        match: { select: { startTime: true, winningTeam: true } },
+        wardsPlaced: true,
+        totalDamageDealtToObjectives: true,
+        totalDamageDealtToStructures: true,
+        totalDamageTaken: true,
+        totalHealingDone: true,
+        match: {
+          select: {
+            startTime: true,
+            winningTeam: true,
+            duration: true,
+            matchPlayers: { select: { team: true, kills: true } },
+          },
+        },
       },
       orderBy: { match: { startTime: 'desc' } },
     }),
@@ -234,5 +508,6 @@ export async function generatePlayerWeeklyReport(playerId: string, now = new Dat
     ],
     topHero: hero,
     focusOfWeek: chooseFocus(weekly, baseline30d, hero),
+    roleCoach: buildRoleCoach(weeklyRows, typedRows),
   };
 }

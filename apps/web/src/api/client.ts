@@ -151,6 +151,21 @@ export interface PlayerWeeklyReport {
     rationale: string;
     action: string;
   };
+  roleCoach: {
+    role: 'CARRY' | 'SUPPORT' | 'MIDLANE' | 'JUNGLE' | 'OFFLANE';
+    label: string;
+    matches: number;
+    shareOfMatches: number;
+    confidence: 'low' | 'medium' | 'high';
+    metrics: Array<{
+      key: string;
+      label: string;
+      value: number | null;
+      baseline: number | null;
+      unit: 'ratio' | 'per_match' | 'per_minute' | 'percent';
+    }>;
+    focus: { title: string; rationale: string; action: string };
+  } | null;
 }
 
 export interface PlayerMatchEnrichmentStatus {
