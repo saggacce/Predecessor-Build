@@ -88,8 +88,8 @@ export default function PlayerWeeklyReportPage() {
       const result = await apiClient.sync.myMatches();
       await loadReport();
       toast.success(result.newMatches > 0
-        ? `${result.newMatches} partidas nuevas añadidas al informe.`
-        : 'Tu informe ya estaba actualizado.');
+        ? `${result.newMatches} partidas nuevas · ${result.syncedMatches} revisadas para el informe.`
+        : `Informe actualizado con ${result.syncedMatches} partidas revisadas.`);
     } catch (error) {
       toast.error(error instanceof ApiErrorResponse ? error.error.message : 'No se pudieron sincronizar tus partidas.');
     } finally {
@@ -137,7 +137,7 @@ export default function PlayerWeeklyReportPage() {
           style={{ display: 'inline-flex', alignItems: 'center', gap: '0.45rem', flex: 'unset', whiteSpace: 'nowrap' }}
         >
           <RefreshCw size={15} className={syncing ? 'spin' : undefined} />
-          {syncing ? 'Actualizando…' : 'Actualizar partidas'}
+          {syncing ? 'Actualizando historial…' : 'Actualizar historial'}
         </button>
       </header>
 

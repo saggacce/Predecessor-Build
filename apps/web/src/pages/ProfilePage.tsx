@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
-import { Camera, Key, Link2, Link2Off, Save, Shield, Star, User } from 'lucide-react';
+import { Camera, Key, Link2, Link2Off, RefreshCw, Save, Shield, Star, User } from 'lucide-react';
 import { toast } from 'sonner';
 import { useTranslation } from 'react-i18next';
-import { apiClient, type UserProfile } from '../api/client';
+import { ApiErrorResponse, apiClient, type UserProfile } from '../api/client';
 import { useAuth } from '../hooks/useAuth';
 import { LanguageSwitcher } from '../components/LanguageSwitcher';
 import { LinkPlayerModal } from '../components/LinkPlayerModal';
@@ -39,6 +39,7 @@ export default function ProfilePage() {
   const [savingProfile, setSavingProfile] = useState(false);
   const { refreshInternalSession } = useAuth();
   const [showLinkModal, setShowLinkModal] = useState(false);
+  const [syncingMatches, setSyncingMatches] = useState(false);
 
   // Password form
   const [currentPw, setCurrentPw] = useState('');
@@ -122,6 +123,20 @@ export default function ProfilePage() {
       } : p);
       toast.success('Cuenta desconectada');
     } catch { toast.error('Error al desconectar'); }
+  }
+
+  async function syncMatches() {
+    try {
+      setSyncingMatches(true);
+      const result = await apiClient.sync.myMatches();
+      toast.success(result.newMatches > 0
+        ? `${result.newMatches} partidas nuevas · ${result.syncedMatches} revisadas.`
+        : `Historial actualizado: ${result.syncedMatches} partidas revisadas.`);
+    } catch (error) {
+      toast.error(error instanceof ApiErrorResponse ? error.error.message : 'No se pudo actualizar el historial.');
+    } finally {
+      setSyncingMatches(false);
+    }
   }
 
   if (loading) return <div style={{ padding: '2rem', color: 'var(--text-muted)' }}>Cargando perfil…</div>;
@@ -286,17 +301,30 @@ export default function ProfilePage() {
                 </div>
               </div>
               {profile.linkedPlayerId ? (
-                <button
-                  onClick={async () => {
-                    try {
-                      await apiClient.profile.unlinkPlayer();
-                      setProfile((p) => p ? { ...p, linkedPlayerId: null } : p);
-                      toast.success('Perfil desvinculado');
-                    } catch { toast.error('Error al desvincular'); }
-                  }}
-                  style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', padding: '0.35rem 0.75rem', border: '1px solid var(--border-color)', borderRadius: 6, background: 'transparent', color: 'var(--accent-loss)', cursor: 'pointer', fontSize: '0.75rem' }}>
-                  Desvincular
-                </button>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                  <button
+                    type="button"
+                    className="btn-secondary"
+                    disabled={syncingMatches}
+                    onClick={() => void syncMatches()}
+                    title="Importa de Pred.gg todas las partidas disponibles dentro de la ventana de análisis"
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', flex: 'unset', fontSize: '0.75rem', padding: '0.35rem 0.75rem', whiteSpace: 'nowrap' }}>
+                    <RefreshCw size={14} className={syncingMatches ? 'spin' : undefined} />
+                    {syncingMatches ? 'Actualizando…' : 'Actualizar historial'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      try {
+                        await apiClient.profile.unlinkPlayer();
+                        setProfile((p) => p ? { ...p, linkedPlayerId: null } : p);
+                        toast.success('Perfil desvinculado');
+                      } catch { toast.error('Error al desvincular'); }
+                    }}
+                    style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', padding: '0.35rem 0.75rem', border: '1px solid var(--border-color)', borderRadius: 6, background: 'transparent', color: 'var(--accent-loss)', cursor: 'pointer', fontSize: '0.75rem' }}>
+                    Desvincular
+                  </button>
+                </div>
               ) : (
                 <button
                   onClick={() => setShowLinkModal(true)}

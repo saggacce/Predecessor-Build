@@ -18,7 +18,7 @@ vi.mock('../services/predgg-token-service.js', () => ({
 }));
 
 vi.mock('../services/sync-service.js', () => ({
-  syncRecentMatchesForPlayer: vi.fn().mockResolvedValue({ newMatches: 3 }),
+  syncRecentMatchesForPlayer: vi.fn().mockResolvedValue({ newMatches: 3, syncedMatches: 47 }),
 }));
 
 import { db } from '../db.js';
@@ -45,11 +45,12 @@ describe('POST /sync/my-matches', () => {
 
     expect(response.status).toBe(200);
     expect(response.body.newMatches).toBe(3);
+    expect(response.body.syncedMatches).toBe(47);
     expect(syncRecentMatchesForPlayer).toHaveBeenCalledWith(
       mockDb,
       'pred-1',
       'platform-token',
-      20,
+      1000,
     );
   });
 
@@ -68,7 +69,7 @@ describe('POST /sync/my-matches', () => {
       mockDb,
       'pred-2',
       'platform-token',
-      20,
+      1000,
     );
   });
 
