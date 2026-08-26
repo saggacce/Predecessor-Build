@@ -1240,6 +1240,22 @@ export interface MatchBuildAnalysis {
       damageMitigated: number;
     }>;
   };
+  globalAnalysis: {
+    playerIdentity: Array<{ key: string; label: string; description: string; evidence: string[] }>;
+    enemyThreats: Array<{
+      key: string;
+      label: string;
+      description: string;
+      severity: 'warning' | 'critical';
+      evidence: string;
+      response: string;
+      sources: Array<{ heroSlug: string; sourceType: 'ability' | 'item'; name: string; description: string }>;
+    }>;
+    buildProfile: Array<{ key: string; label: string; description: string; items: string[] }>;
+    coherence: { score: number; summary: string };
+    strengths: string[];
+    tradeoffs: string[];
+  };
   inventory: Array<{
     slug: string;
     displayName: string;
@@ -1256,6 +1272,10 @@ export interface MatchBuildAnalysis {
     displayName: string;
     verdict: 'correct' | 'neutral';
     purpose: string[];
+    functions: Array<{ key: string; label: string; description: string }>;
+    roleFit: string;
+    matchupFit: string;
+    tradeoff: string;
     explanation: string;
   }>;
   verdict: {

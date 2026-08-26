@@ -50,7 +50,10 @@ describe('contextual build coach', () => {
     ]);
     mocks.heroMetaFindMany.mockResolvedValue([
       { slug: 'dekker', displayName: 'Dekker', abilities: [] },
-      { slug: 'narbash', displayName: 'Narbash', abilities: [{ display_name: 'Song of My People', game_description: 'Heal nearby allied heroes over time.' }] },
+      { slug: 'narbash', displayName: 'Narbash', abilities: [
+        { display_name: 'Song of My People', game_description: 'Heal nearby allied heroes over time.' },
+        { display_name: 'Thunk', game_description: 'Throw a projectile that stuns the first enemy Hero hit.' },
+      ] },
     ]);
     mocks.gamePerkVersionFindMany.mockResolvedValue([]);
     mocks.transactionFindMany.mockResolvedValue([
@@ -74,6 +77,12 @@ describe('contextual build coach', () => {
       whyItMatters: expect.stringContaining('Heridas Graves'),
       sources: [expect.objectContaining({ heroSlug: 'narbash', name: 'Song of My People' })],
     });
+    expect(result.globalAnalysis.playerIdentity).toEqual(expect.arrayContaining([expect.objectContaining({ key: 'TEAM_UTILITY' })]));
+    expect(result.globalAnalysis.enemyThreats).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'SUSTAIN' }),
+      expect.objectContaining({ key: 'CONTROL', sources: [expect.objectContaining({ name: 'Thunk' })] }),
+    ]));
+    expect(result.inventoryAssessments[0]).toEqual(expect.objectContaining({ roleFit: expect.any(String), matchupFit: expect.any(String), tradeoff: expect.any(String) }));
     expect(result.purchaseTimeline.ownPurchases[0]).toMatchObject({ minute: '12:00', itemName: 'Offense' });
     expect(result.purchaseTimeline.opponentResponses[0]).toMatchObject({ heroSlug: 'narbash', minute: '14:10' });
     expect(result.signals).not.toEqual(expect.arrayContaining([

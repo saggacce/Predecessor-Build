@@ -1714,7 +1714,7 @@ function CoachHover({ children, content, label }: { children: React.ReactNode; c
     });
   };
   return (
-    <span
+    <div
       tabIndex={0}
       aria-label={label}
       onMouseEnter={(event) => show(event.currentTarget)}
@@ -1734,7 +1734,7 @@ function CoachHover({ children, content, label }: { children: React.ReactNode; c
         </div>,
         document.body,
       )}
-    </span>
+    </div>
   );
 }
 
@@ -1814,6 +1814,50 @@ function BuildCoachCard({ matchId, matchPlayerId, liveMode }: { matchId: string;
         </div>
       </div>
 
+      <div style={{ marginTop: '1rem', padding: '0.85rem', borderRadius: 9, background: 'rgba(91,156,246,0.035)', border: '1px solid rgba(91,156,246,0.2)' }}>
+        <p style={{ margin: 0, color: 'var(--accent-blue)', fontSize: '0.62rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Lectura global de la partida</p>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(270px, 1fr))', gap: '0.7rem', marginTop: '0.65rem' }}>
+          <article style={{ padding: '0.7rem', borderRadius: 8, background: 'rgba(15,23,42,0.5)', border: '1px solid var(--border-color)' }}>
+            <strong style={{ color: 'var(--text-primary)', fontSize: '0.72rem' }}>Qué quiere hacer {analysis.heroSlug}</strong>
+            <div style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap', marginTop: '0.45rem' }}>
+              {analysis.globalAnalysis.playerIdentity.map((concept) => <CoachHover key={concept.key} label={`Entender ${concept.label}`} content={<div><strong style={{ display: 'block', color: 'var(--accent-blue)', marginBottom: '0.25rem' }}>{concept.label}</strong>{concept.description}<span style={{ display: 'block', marginTop: '0.35rem', color: 'var(--text-muted)' }}>Evidencia: {concept.evidence.join(', ')}</span></div>}>
+                <span style={{ padding: '0.25rem 0.4rem', borderRadius: 5, background: 'rgba(91,156,246,0.09)', border: '1px solid rgba(91,156,246,0.18)', color: 'var(--accent-blue)', fontSize: '0.6rem', fontWeight: 700 }}>{concept.label}</span>
+              </CoachHover>)}
+            </div>
+          </article>
+          <article style={{ padding: '0.7rem', borderRadius: 8, background: 'rgba(15,23,42,0.5)', border: '1px solid var(--border-color)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.5rem' }}><strong style={{ color: 'var(--text-primary)', fontSize: '0.72rem' }}>Qué priorizó tu build</strong><span style={{ color: 'var(--accent-cyan)', fontSize: '0.64rem', fontWeight: 800 }}>{analysis.globalAnalysis.coherence.score}% coherencia</span></div>
+            <p style={{ margin: '0.35rem 0 0', color: 'var(--text-secondary)', fontSize: '0.64rem', lineHeight: 1.45 }}>{analysis.globalAnalysis.coherence.summary}</p>
+            <div style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap', marginTop: '0.45rem' }}>
+              {analysis.globalAnalysis.buildProfile.slice(0, 6).map((concept) => <CoachHover key={concept.key} label={`Ver objetos de ${concept.label}`} content={<div><strong style={{ display: 'block', color: 'var(--accent-cyan)', marginBottom: '0.25rem' }}>{concept.label}</strong>{concept.description}<span style={{ display: 'block', marginTop: '0.35rem', color: 'var(--text-muted)' }}>Objetos: {concept.items.join(', ')}</span></div>}>
+                <span style={{ padding: '0.25rem 0.4rem', borderRadius: 5, background: 'rgba(56,212,200,0.07)', border: '1px solid rgba(56,212,200,0.16)', color: 'var(--accent-cyan)', fontSize: '0.6rem' }}>{concept.label} · {concept.items.length}</span>
+              </CoachHover>)}
+            </div>
+          </article>
+        </div>
+
+        {analysis.globalAnalysis.enemyThreats.length > 0 && <div style={{ marginTop: '0.75rem' }}>
+          <strong style={{ display: 'block', color: 'var(--text-primary)', fontSize: '0.7rem', marginBottom: '0.45rem' }}>Cómo quería jugar el rival y cómo responder</strong>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(245px, 1fr))', gap: '0.5rem' }}>
+            {analysis.globalAnalysis.enemyThreats.map((threat) => <article key={threat.key} style={{ padding: '0.65rem', borderRadius: 7, background: 'rgba(15,23,42,0.48)', border: `1px solid ${threat.severity === 'critical' ? 'rgba(248,113,113,0.25)' : 'var(--border-color)'}` }}>
+              <strong style={{ color: threat.severity === 'critical' ? 'var(--accent-loss)' : 'var(--accent-prime)', fontSize: '0.69rem' }}>{threat.label}</strong>
+              <p style={{ margin: '0.28rem 0', color: 'var(--text-muted)', fontSize: '0.61rem', lineHeight: 1.4 }}>{threat.description} {threat.evidence}</p>
+              {threat.sources.length > 0 && <div style={{ display: 'flex', gap: '0.25rem', flexWrap: 'wrap', margin: '0.35rem 0' }}>
+                {threat.sources.map((source, index) => <CoachHover key={`${source.heroSlug}-${source.name}-${index}`} label={`Ver ${source.name}`} content={<div><strong style={{ display: 'block', color: 'var(--text-primary)', textTransform: 'capitalize', marginBottom: '0.25rem' }}>{source.heroSlug} · {source.name}</strong>{source.description}</div>}>
+                  <span style={{ padding: '0.18rem 0.32rem', borderRadius: 4, background: 'rgba(255,255,255,0.04)', color: 'var(--text-secondary)', fontSize: '0.56rem', textTransform: 'capitalize' }}>{source.heroSlug} · {source.name}</span>
+                </CoachHover>)}
+              </div>}
+              <p style={{ margin: '0.35rem 0 0', color: 'var(--text-secondary)', fontSize: '0.62rem', lineHeight: 1.42 }}><strong style={{ color: 'var(--text-primary)' }}>Respuesta:</strong> {threat.response}</p>
+            </article>)}
+          </div>
+        </div>}
+
+        {analysis.globalAnalysis.tradeoffs.length > 0 && <div style={{ marginTop: '0.65rem', padding: '0.6rem', borderRadius: 7, background: 'rgba(240,180,41,0.045)', border: '1px solid rgba(240,180,41,0.15)' }}>
+          <strong style={{ display: 'block', color: 'var(--accent-prime)', fontSize: '0.65rem', marginBottom: '0.25rem' }}>Huecos que dejó la build</strong>
+          {analysis.globalAnalysis.tradeoffs.map((tradeoff, index) => <p key={index} style={{ margin: index === 0 ? 0 : '0.25rem 0 0', color: 'var(--text-secondary)', fontSize: '0.62rem', lineHeight: 1.4 }}>• {tradeoff}</p>)}
+        </div>}
+      </div>
+
       <div style={{ marginTop: '0.95rem' }}>
         <p style={{ margin: '0 0 0.45rem', color: 'var(--text-muted)', fontSize: '0.61rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Evaluación de tu build final</p>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '0.55rem' }}>
@@ -1825,7 +1869,11 @@ function BuildCoachCard({ matchId, matchPlayerId, liveMode }: { matchId: string;
               </CoachHover>
               <div>
                 <strong style={{ display: 'block', color: item.verdict === 'correct' ? 'var(--accent-win)' : 'var(--text-primary)', fontSize: '0.72rem' }}>{item.displayName}</strong>
+                {item.functions.length > 0 && <div style={{ display: 'flex', gap: '0.25rem', flexWrap: 'wrap', marginTop: '0.25rem' }}>{item.functions.slice(0, 4).map((concept) => <span key={concept.key} title={concept.description} style={{ color: 'var(--accent-cyan)', fontSize: '0.55rem' }}>{concept.label}</span>)}</div>}
                 <p style={{ margin: '0.22rem 0 0', color: 'var(--text-muted)', fontSize: '0.64rem', lineHeight: 1.4 }}>{item.explanation}</p>
+                <p style={{ margin: '0.24rem 0 0', color: 'var(--text-secondary)', fontSize: '0.6rem', lineHeight: 1.4 }}><strong>Con tu héroe:</strong> {item.roleFit}</p>
+                <p style={{ margin: '0.2rem 0 0', color: 'var(--text-secondary)', fontSize: '0.6rem', lineHeight: 1.4 }}><strong>En esta partida:</strong> {item.matchupFit}</p>
+                <p style={{ margin: '0.2rem 0 0', color: 'var(--text-muted)', fontSize: '0.58rem', lineHeight: 1.4 }}><strong>Coste de oportunidad:</strong> {item.tradeoff}</p>
               </div>
             </article>;
           })}

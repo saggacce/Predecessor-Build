@@ -79,14 +79,53 @@ function semanticTags(item: {
   if (/armor.*shred|shred.*physical.*armor|reduce.*armor|physical penetration/.test(text)) tags.add('PHYSICAL_SHRED');
   if (/magical armor.*reduc|shred.*magical.*armor|magical penetration/.test(text)) tags.add('MAGICAL_SHRED');
   if (/maximum health|bonus health|current health/.test(text)) tags.add('ANTI_TANK');
-  if (/heal|healing|health regeneration|omnivamp|lifesteal/.test(text)) tags.add('SUSTAIN');
-  if (/shield/.test(text)) tags.add('SHIELD');
+  if (/heal|healing|health regeneration|omnivamp|lifesteal/.test(text) && !tags.has('ANTI_HEAL')) tags.add('SUSTAIN');
+  if (/shield/.test(text) && !tags.has('ANTI_SHIELD')) tags.add('SHIELD');
   if (/movement speed|dash|blink|leap/.test(text)) tags.add('MOBILITY');
   if (/crowd control|stun|slow|root|knock/.test(text)) tags.add('CONTROL');
   if (/basic attack|critical strike/.test(text)) tags.add('BASIC_ATTACK');
   if (/ability damage|magical power|ability haste|cooldown/.test(text)) tags.add('ABILITY_DAMAGE');
   if (/deal.*damage|damage.*target/.test(text)) tags.add('DAMAGE');
+  if (/attack speed|on.?hit|damage over time|every basic attack|per second/.test(text)) tags.add('DPS');
+  if (/burst|execute|missing health|below.*health|next ability.*damage/.test(text)) tags.add('BURST');
+  if (/projectile|range|from a distance|above.*health/.test(text)) tags.add('POKE');
+  if (/dash|blink|leap|charge|pull.*toward|teleport/.test(text)) tags.add('ENGAGE');
+  if (/knockback|knock up|slow|stun|root|shield.*all|nearby allies/.test(text)) tags.add('PEEL');
+  if (/area|nearby enemies|all enemies|multiple enemies|radius/.test(text)) tags.add('AOE');
+  if (/tenacity|crowd control duration/.test(text)) tags.add('TENACITY');
+  if (/ability haste|cooldown/.test(text)) tags.add('HASTE');
+  if (/nearby allies|allied heroes|your team|teammates/.test(text)) tags.add('TEAM_UTILITY');
+  if (stats.has('ATTACK_SPEED')) tags.add('DPS');
+  if (stats.has('CRITICAL_STRIKE_CHANCE')) tags.add('BURST');
+  if (stats.has('MAX_HEALTH') || stats.has('PHYSICAL_ARMOR') || stats.has('MAGICAL_ARMOR')) tags.add('DURABILITY');
   return tags;
+}
+
+const CONCEPT_DETAILS: Record<string, { label: string; description: string }> = {
+  CONTROL: { label: 'Control de masas', description: 'Interrumpe, inmoviliza o limita el movimiento para crear ventanas de daño.' },
+  ENGAGE: { label: 'Iniciación', description: 'Permite empezar la pelea o alcanzar un objetivo prioritario.' },
+  PEEL: { label: 'Protección y peel', description: 'Aleja amenazas o protege al aliado que debe seguir haciendo daño.' },
+  DPS: { label: 'Daño sostenido', description: 'Aumenta el daño repetido en peleas largas, normalmente mediante ataques, acumulaciones o efectos por segundo.' },
+  BURST: { label: 'Daño explosivo', description: 'Concentra mucho daño en una ventana corta para eliminar un objetivo antes de que responda.' },
+  POKE: { label: 'Poke', description: 'Desgasta desde una distancia segura antes de comprometer la pelea.' },
+  SUSTAIN: { label: 'Sustain', description: 'Recupera vida o mantiene al héroe activo durante intercambios prolongados.' },
+  SHIELD: { label: 'Escudos', description: 'Añade vida temporal durante la ventana crítica de daño rival.' },
+  MOBILITY: { label: 'Movilidad', description: 'Facilita entrar, reposicionarse o escapar.' },
+  DURABILITY: { label: 'Resistencia', description: 'Aumenta el tiempo que el héroe puede permanecer en combate.' },
+  HASTE: { label: 'Frecuencia de habilidades', description: 'Reduce el tiempo entre rotaciones y permite repetir antes el control, daño o utilidad.' },
+  TEAM_UTILITY: { label: 'Utilidad de equipo', description: 'Convierte una compra individual en valor compartido con los aliados.' },
+  ANTI_HEAL: { label: 'Anti-curación', description: 'Reduce la recuperación de vida rival durante la pelea.' },
+  ANTI_SHIELD: { label: 'Anti-escudo', description: 'Reduce el valor de los escudos rivales.' },
+  ARMOR: { label: 'Defensa física', description: 'Reduce el daño físico recibido.' },
+  ANTI_MAGIC: { label: 'Defensa mágica', description: 'Reduce el daño mágico recibido.' },
+  PHYSICAL_SHRED: { label: 'Shred físico', description: 'Reduce la armadura física del objetivo para aumentar el daño posterior.' },
+  MAGICAL_SHRED: { label: 'Shred mágico', description: 'Reduce la resistencia mágica del objetivo para aumentar el daño posterior.' },
+};
+
+const GLOBAL_CONCEPT_KEYS = new Set(Object.keys(CONCEPT_DETAILS));
+
+function conceptsFor(item: Parameters<typeof semanticTags>[0]): string[] {
+  return [...semanticTags(item)].filter((tag) => GLOBAL_CONCEPT_KEYS.has(tag));
 }
 
 function formatHeroList(players: Array<{ heroSlug: string; value: number }>): string {
@@ -107,7 +146,10 @@ function tagPurpose(tag: string): string {
     MAGICAL_SHRED: 'reduce la resistencia mágica', SHRED: 'reduce las defensas rivales',
     SUSTAIN: 'aporta aguante sostenido', SHIELD: 'aporta protección', MOBILITY: 'mejora la movilidad',
     CONTROL: 'mejora el control', BASIC_ATTACK: 'potencia los ataques básicos', ABILITY_DAMAGE: 'potencia las habilidades',
-    DAMAGE: 'aumenta el daño',
+    DAMAGE: 'aumenta el daño', DPS: 'mejora el daño sostenido', BURST: 'refuerza el daño explosivo',
+    POKE: 'mejora el desgaste a distancia', ENGAGE: 'facilita la iniciación', PEEL: 'protege a los aliados',
+    AOE: 'aumenta el impacto en área', TENACITY: 'reduce el control recibido', HASTE: 'permite repetir antes las habilidades',
+    TEAM_UTILITY: 'aporta utilidad al equipo', DURABILITY: 'aumenta la resistencia',
   };
   return labels[tag] ?? tag.toLowerCase().replaceAll('_', ' ');
 }
@@ -150,6 +192,24 @@ function educationalExplanation(key: string): { whyItMatters: string; appliesAga
     },
   };
   return explanations[key] ?? null;
+}
+
+function conceptResponse(key: string): string {
+  const responses: Record<string, string> = {
+    CONTROL: 'Valora tenacidad, escudo de hechizo, posicionamiento y una pieza de peel; no todo el problema se resuelve comprando daño.',
+    ENGAGE: 'Reserva movilidad o una herramienta defensiva para la entrada rival y evita gastar el peel antes de que inicien.',
+    PEEL: 'No fuerces un engage largo si el rival conserva sus herramientas de protección; provoca primero esos enfriamientos.',
+    DPS: 'Acorta la pelea con control y burst coordinado o construye resistencia sostenida; una defensa de un solo uso puede no ser suficiente.',
+    BURST: 'Prioriza vida efectiva, resistencia apropiada o escudo de hechizo y evita entrar sin visión en su ventana de daño.',
+    POKE: 'Añade sustain o movilidad y llega a los objetivos con tiempo para no empezar la pelea ya desgastado.',
+    SUSTAIN: 'Aplica anti-curación antes de su ventana de recuperación y coordina el foco para que no pueda reiniciar la pelea.',
+    SHIELD: 'Sincroniza el burst después del escudo o incorpora anti-escudo cuando ese valor se repite en cada pelea.',
+    MOBILITY: 'Guarda control fiable para después de su desplazamiento y evita depender solo de habilidades lineales.',
+    DURABILITY: 'La penetración, el shred y el daño porcentual ganan valor; repetir daño plano ofrece cada vez menos rendimiento.',
+    HASTE: 'Espera rotaciones más frecuentes y evita reentrar pensando que sus habilidades clave siguen en enfriamiento.',
+    TEAM_UTILITY: 'Identifica qué aliado recibe el aura o la protección y decide si debes separar la pelea o eliminar primero al facilitador.',
+  };
+  return responses[key] ?? 'Adapta la siguiente compra y la forma de ejecutar la pelea a este patrón, no solo a las estadísticas finales.';
 }
 
 function perkScore(perk: CatalogPerk, role: string | null, enemyMitigation: number, enablesHealingOrShielding: boolean): number {
@@ -325,6 +385,67 @@ export async function getMatchBuildAnalysis(matchId: string, matchPlayerId: stri
   const healingHeroes = formatHeroList(enemies.map((player) => ({ heroSlug: player.heroSlug, value: player.totalHealingDone ?? 0 })));
   const shieldedHeroes = formatHeroList(enemies.map((player) => ({ heroSlug: player.heroSlug, value: player.totalShieldingReceived ?? 0 })));
   const resistantHeroes = formatHeroList(enemies.map((player) => ({ heroSlug: player.heroSlug, value: player.totalDamageMitigated ?? 0 })));
+  const playerAbilityConcepts = new Map<string, string[]>();
+  for (const ability of jsonArray<HeroAbility>(heroMetaBySlug.get(row.heroSlug)?.abilities)) {
+    const description = plainText(ability.game_description ?? ability.menu_description ?? '');
+    if (!description) continue;
+    for (const concept of conceptsFor({ displayName: description, aggressionType: null, stats: [], effects: [] })) {
+      const evidence = playerAbilityConcepts.get(concept) ?? [];
+      evidence.push(ability.display_name ?? ability.key ?? 'Habilidad');
+      playerAbilityConcepts.set(concept, evidence);
+    }
+  }
+  const roleConcepts: Record<string, string[]> = {
+    SUPPORT: ['TEAM_UTILITY', 'PEEL', 'CONTROL'], CARRY: ['DPS', 'BURST'],
+    JUNGLE: ['ENGAGE', 'DPS'], MIDLANE: ['POKE', 'BURST', 'CONTROL'],
+    OFFLANE: ['DURABILITY', 'ENGAGE'],
+  };
+  for (const concept of roleConcepts[row.role ?? ''] ?? []) {
+    if (!playerAbilityConcepts.has(concept)) playerAbilityConcepts.set(concept, [`Responsabilidad de ${row.role?.toLowerCase()}`]);
+  }
+
+  type GlobalSource = { heroSlug: string; sourceType: 'ability' | 'item'; name: string; description: string };
+  const enemyConceptSources = new Map<string, GlobalSource[]>();
+  const addEnemyConcept = (concept: string, source: GlobalSource) => {
+    const values = enemyConceptSources.get(concept) ?? [];
+    if (!values.some((value) => value.heroSlug === source.heroSlug && value.name === source.name)) values.push(source);
+    enemyConceptSources.set(concept, values);
+  };
+  for (const enemy of enemies) {
+    const meta = heroMetaBySlug.get(enemy.heroSlug);
+    for (const ability of jsonArray<HeroAbility>(meta?.abilities)) {
+      const description = plainText(ability.game_description ?? ability.menu_description ?? '');
+      if (!description) continue;
+      for (const concept of conceptsFor({ displayName: description, aggressionType: null, stats: [], effects: [] })) {
+        addEnemyConcept(concept, { heroSlug: enemy.heroSlug, sourceType: 'ability', name: ability.display_name ?? ability.key ?? 'Habilidad', description });
+      }
+    }
+    for (const slug of jsonArray<string>(enemy.inventoryItems)) {
+      const item = catalogItemBySlug.get(slug);
+      if (!item) continue;
+      const description = plainText(item.effects.map((effect) => `${effect.name}: ${effect.text}`).join(' '));
+      for (const concept of conceptsFor(item)) {
+        addEnemyConcept(concept, { heroSlug: enemy.heroSlug, sourceType: 'item', name: item.displayName, description });
+      }
+    }
+  }
+  const threatPriority = ['SUSTAIN', 'SHIELD', 'CONTROL', 'ENGAGE', 'BURST', 'DPS', 'POKE', 'MOBILITY', 'DURABILITY', 'HASTE', 'TEAM_UTILITY'];
+  const enemyThreats = threatPriority.flatMap((key) => {
+    const sources = enemyConceptSources.get(key) ?? [];
+    const telemetryValue = key === 'SUSTAIN' ? enemyHealing : key === 'SHIELD' ? enemyShielding : key === 'DURABILITY' ? enemyMitigation : 0;
+    const visible = sources.length > 0 || telemetryValue > 0;
+    if (!visible) return [];
+    const detail = CONCEPT_DETAILS[key];
+    const critical = (key === 'SUSTAIN' && enemyHealing >= 25_000) || (key === 'SHIELD' && enemyShielding >= 25_000) || (key === 'DURABILITY' && enemyMitigation >= 150_000);
+    const evidence = key === 'SUSTAIN'
+      ? `${enemyHealing.toLocaleString()} de curación rival registrada.`
+      : key === 'SHIELD'
+        ? `${enemyShielding.toLocaleString()} de escudos recibidos por el rival.`
+        : key === 'DURABILITY'
+          ? `${enemyMitigation.toLocaleString()} de daño mitigado por el equipo rival.`
+          : `${sources.length} habilidades u objetos rivales muestran este patrón.`;
+    return [{ key, label: detail.label, description: detail.description, severity: critical ? 'critical' as const : 'warning' as const, evidence, response: conceptResponse(key), sources: sources.slice(0, 5) }];
+  }).slice(0, 8);
   const signals: BuildSignal[] = [];
 
   if (damageTotal > 0 && share(physical, damageTotal) >= 60 && !tags.has('ARMOR') && !tags.has('ANTI_CRIT') && !statNames.has('PHYSICAL_ARMOR')) {
@@ -491,6 +612,15 @@ export async function getMatchBuildAnalysis(matchId: string, matchPlayerId: stri
   if (damageTotal > 0 && share(physical, damageTotal) >= 40) ['ARMOR', 'ANTI_CRIT'].forEach((tag) => contextualNeedTags.add(tag));
   if (damageTotal > 0 && share(magical, damageTotal) >= 40) ['ANTI_MAGIC', 'SPELL_SHIELD'].forEach((tag) => contextualNeedTags.add(tag));
   const finalInventory = inventory.filter((item) => item.rarity === 'EPIC' && item.slotType === 'PASSIVE');
+  const identityConcepts = new Set(playerAbilityConcepts.keys());
+  const buildConceptItems = new Map<string, string[]>();
+  for (const item of finalInventory) {
+    for (const concept of conceptsFor(item)) {
+      const itemNames = buildConceptItems.get(concept) ?? [];
+      itemNames.push(item.displayName);
+      buildConceptItems.set(concept, itemNames);
+    }
+  }
   const aggressionCounts = new Map<string, number>();
   for (const item of finalInventory) {
     if (item.aggressionType) aggressionCounts.set(item.aggressionType, (aggressionCounts.get(item.aggressionType) ?? 0) + 1);
@@ -498,12 +628,28 @@ export async function getMatchBuildAnalysis(matchId: string, matchPlayerId: stri
   const inventoryAssessments = finalInventory.map((item) => {
     const itemTags = semanticTags(item);
     const matched = [...itemTags].filter((tag) => contextualNeedTags.has(tag));
+    const functions = conceptsFor(item).map((concept) => ({ key: concept, ...CONCEPT_DETAILS[concept] }));
+    const identityMatches = functions.filter((concept) => identityConcepts.has(concept.key));
     const repeatsPurpose = item.aggressionType ? (aggressionCounts.get(item.aggressionType) ?? 0) > 1 : false;
     return {
       slug: item.slug,
       displayName: item.displayName,
       verdict: matched.length > 0 ? 'correct' as const : activeSignals.length > 0 ? 'neutral' as const : 'correct' as const,
       purpose: [...itemTags].slice(0, 3).map(tagPurpose),
+      functions,
+      roleFit: identityMatches.length > 0
+        ? `Encaja con ${identityMatches.map((concept) => concept.label.toLowerCase()).join(' y ')}, partes del plan de ${row.heroSlug} ${row.role?.toLowerCase() ?? ''}.`
+        : `Aporta valor genérico, pero no refuerza de forma directa los conceptos principales detectados para ${row.heroSlug} ${row.role?.toLowerCase() ?? ''}.`,
+      matchupFit: matched.length > 0
+        ? `Responde a esta partida porque ${matched.map(tagPurpose).join(' y ')}.`
+        : activeSignals.length > 0
+          ? 'No cubre por sí solo las principales respuestas que exigía la composición rival.'
+          : 'No necesitaba cubrir una carencia contextual grave con los datos disponibles.',
+      tradeoff: repeatsPurpose
+        ? 'Repite una función ya presente en la build; esa redundancia reduce el espacio disponible para adaptación.'
+        : functions.length > 0
+          ? `Al ocupar esta ranura priorizas ${functions.slice(0, 2).map((concept) => concept.label.toLowerCase()).join(' y ')} frente a otra posible respuesta situacional.`
+          : 'El catálogo no describe suficientes efectos para medir con precisión el coste de oportunidad de esta ranura.',
       explanation: matched.length > 0
         ? `Fue una buena adaptación porque ${matched.map(tagPurpose).join(' y ')}.`
         : repeatsPurpose
@@ -513,6 +659,29 @@ export async function getMatchBuildAnalysis(matchId: string, matchPlayerId: stri
           : 'Encajó sin dejar una carencia contextual evidente en la build final.',
     };
   });
+
+  const buildProfile = [...buildConceptItems.entries()]
+    .map(([key, items]) => ({ key, label: CONCEPT_DETAILS[key].label, description: CONCEPT_DETAILS[key].description, items }))
+    .sort((a, b) => b.items.length - a.items.length || a.label.localeCompare(b.label));
+  const responseConcepts: Record<string, string[]> = {
+    SUSTAIN: ['ANTI_HEAL'], SHIELD: ['ANTI_SHIELD'], CONTROL: ['TENACITY', 'DURABILITY', 'MOBILITY', 'PEEL'],
+    ENGAGE: ['PEEL', 'MOBILITY', 'DURABILITY'], BURST: ['DURABILITY', 'ANTI_MAGIC', 'ARMOR', 'SPELL_SHIELD'],
+    DPS: ['DURABILITY', 'CONTROL', 'SUSTAIN'], POKE: ['SUSTAIN', 'MOBILITY'], MOBILITY: ['CONTROL'],
+    DURABILITY: ['PHYSICAL_SHRED', 'MAGICAL_SHRED', 'ANTI_TANK'], HASTE: ['DURABILITY'], TEAM_UTILITY: ['BURST', 'ENGAGE'],
+  };
+  const buildTagSet = new Set(finalInventory.flatMap((item) => [...semanticTags(item)]));
+  const unresolvedConcepts = enemyThreats.filter((threat) => {
+    const responses = responseConcepts[threat.key] ?? [];
+    return responses.length > 0 && !responses.some((response) => buildTagSet.has(response));
+  });
+  const alignedItems = inventoryAssessments.filter((item) => item.functions.some((concept) => identityConcepts.has(concept.key))).length;
+  const buildCoherence = finalInventory.length > 0 ? Math.round((alignedItems / finalInventory.length) * 100) : 0;
+  const playerIdentity = [...playerAbilityConcepts.entries()].map(([key, evidence]) => ({
+    key,
+    label: CONCEPT_DETAILS[key]?.label ?? tagPurpose(key),
+    description: CONCEPT_DETAILS[key]?.description ?? tagPurpose(key),
+    evidence: [...new Set(evidence)].slice(0, 4),
+  })).slice(0, 7);
 
   const alreadyOwned = new Set(inventory.map((item) => item.slug));
   const replaceable = finalInventory
@@ -732,6 +901,21 @@ export async function getMatchBuildAnalysis(matchId: string, matchPlayerId: stri
         healing: enemy.totalHealingDone ?? 0, shieldingReceived: enemy.totalShieldingReceived ?? 0,
         damageMitigated: enemy.totalDamageMitigated ?? 0,
       })),
+    },
+    globalAnalysis: {
+      playerIdentity,
+      enemyThreats,
+      buildProfile,
+      coherence: {
+        score: buildCoherence,
+        summary: buildCoherence >= 70
+          ? `La mayoría de las piezas refuerzan el plan natural de ${row.heroSlug}, aunque todavía deben juzgarse por el rival y el momento de compra.`
+          : buildCoherence >= 40
+            ? `La build mezcla piezas coherentes con ${row.heroSlug} y valor genérico; conviene definir mejor si la partida exigía control, protección, daño o supervivencia.`
+            : `Pocas piezas refuerzan de forma directa el patrón detectado para ${row.heroSlug}; la build parece construida más por valor aislado que por un plan conjunto.`,
+      },
+      strengths: buildProfile.slice(0, 3).map((concept) => `${concept.label}: ${concept.items.join(', ')}.`),
+      tradeoffs: unresolvedConcepts.slice(0, 4).map((threat) => `${threat.label}: la build final no muestra una respuesta directa. ${threat.response}`),
     },
     inventory,
     inventoryAssessments,
