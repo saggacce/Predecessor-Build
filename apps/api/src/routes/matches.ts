@@ -465,22 +465,17 @@ matchesRouter.get('/live/:predggUuid', requireAuth, async (req, res, next) => {
 
 /**
  * POST /matches/:id/sync
- * Re-fetches this match from pred.gg using the user's Bearer token.
- * Reveals player names that appear as HIDDEN without auth.
+ * Re-fetches this match from pred.gg. A user's Bearer token enriches private
+ * player data when available, but the event stream can also be refreshed via
+ * the public/API-key path.
  */
 matchesRouter.post('/:id/sync', async (req, res, next) => {
   try {
     const match = await db.match.findUnique({ where: { id: req.params.id } });
     if (!match) throw new AppError(404, 'Match not found', 'MATCH_NOT_FOUND');
     const userToken = await getValidToken(req, res);
-    // Force full re-sync when user explicitly requests it
+    // Force both roster and event-stream refresh when the user requests it.
     await resyncMatch(db, match.predggUuid, userToken ?? undefined, true);
-    // Also force event stream re-sync to get goldEarnedAtInterval and latest events
-    if (userToken) {
-      await (await import('../services/sync-service.js')).syncMatchEventStream(
-        db, match.id, match.predggUuid, userToken, true
-      );
-    }
     const detail = await getMatchDetail(req.params.id);
     res.json(detail);
   } catch (err) {

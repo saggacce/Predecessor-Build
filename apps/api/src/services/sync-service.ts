@@ -1268,9 +1268,11 @@ export async function resyncMatch(
 ): Promise<void> {
   const existing = await db.match.findUnique({ where: { predggUuid }, select: { id: true, rosterSynced: true, eventStreamSynced: true } });
 
-  // If fully synced and not forced, only run event stream sync if still pending
+  // If fully synced and not forced, only run event stream sync if still pending.
+  // pred.gg currently exposes the event stream without OAuth as well, so a
+  // missing/expired browser token must not leave the gold timeline empty.
   if (existing?.rosterSynced && !forceRoster) {
-    if (!existing.eventStreamSynced && userToken) {
+    if (!existing.eventStreamSynced) {
       await syncMatchEventStream(db, existing.id, predggUuid, userToken);
     }
     logger.info({ predggUuid }, 'match already roster-synced — skipping basic resync');
@@ -1414,13 +1416,14 @@ export async function resyncMatch(
   // Mark roster as synced
   await db.match.update({ where: { id: match.id }, data: { rosterSynced: true } });
 
-  // Sync event stream when Bearer token is available
-  if (userToken) {
-    try {
-      await syncMatchEventStream(db, match.id, predggUuid, userToken);
-    } catch (err) {
-      logger.warn({ matchId: match.id, err }, 'event stream sync failed — basic resync succeeded');
-    }
+  // Event data (including goldEarnedAtInterval) is also available through the
+  // public/API-key request path. OAuth remains an optional enhancement. A
+  // forced roster refresh replaces MatchPlayer rows, so its event refresh must
+  // also be forced or their stored gold timelines would be lost.
+  try {
+    await syncMatchEventStream(db, match.id, predggUuid, userToken, forceRoster);
+  } catch (err) {
+    logger.warn({ matchId: match.id, err }, 'event stream sync failed — basic resync succeeded');
   }
 }
 
@@ -1605,7 +1608,7 @@ export async function syncMatchEventStream(
   db: PrismaClient,
   matchId: string,
   predggUuid: string,
-  userToken: string,
+  userToken?: string,
   force = false,
 ): Promise<void> {
   // Skip if already synced unless forced, to prevent double-insertion

@@ -133,6 +133,23 @@ describe('syncMatchEventStream', () => {
       data: { goldEarnedAtInterval: [100, 200] },
     });
   });
+
+  it('syncs the gold timeline without requiring a user OAuth token', async () => {
+    const mockDb = createMockDb();
+
+    await syncMatchEventStream(mockDb as never, 'match-1', 'predgg-match-1');
+
+    expect(fetch).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({
+        headers: expect.not.objectContaining({ Authorization: expect.any(String) }),
+      }),
+    );
+    expect(mockDb.matchPlayer.updateMany).toHaveBeenCalledWith({
+      where: { matchId: 'match-1', predggPlayerUuid: 'predgg-warder' },
+      data: { goldEarnedAtInterval: [100, 200] },
+    });
+  });
 });
 
 describe('repairEventStreamPlayerIds', () => {
