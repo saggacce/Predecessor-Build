@@ -147,7 +147,7 @@ export default function PlayerMatchesPage() {
                   cursor: 'pointer',
                   transition: 'background 0.15s',
                 }}
-                onClick={() => navigate(`/matches/live/${match.matchUuid}`)}
+                onClick={() => navigate(`/matches/${match.matchId}`)}
                 onMouseEnter={(e) => (e.currentTarget.style.background = isWin ? 'rgba(52,211,153,0.07)' : 'rgba(248,113,113,0.07)')}
                 onMouseLeave={(e) => (e.currentTarget.style.background = isWin ? 'rgba(52,211,153,0.03)' : 'rgba(248,113,113,0.03)')}
               >

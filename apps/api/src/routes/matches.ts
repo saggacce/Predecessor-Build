@@ -430,6 +430,24 @@ matchesRouter.get('/:id/events', async (req, res, next) => {
 matchesRouter.get('/live/:predggUuid', requireAuth, async (req, res, next) => {
   try {
     const { predggUuid } = req.params;
+    res.set('Cache-Control', 'no-store');
+
+    // Player match history is persisted locally. Prefer that enriched copy so
+    // opening a known match never depends on browser OAuth scopes or pred.gg
+    // availability. The live query remains as a fallback for unknown matches.
+    const storedMatch = await db.match.findUnique({
+      where: { predggUuid },
+      select: { id: true },
+    });
+    if (storedMatch) {
+      const [detail, events] = await Promise.all([
+        getMatchDetail(storedMatch.id),
+        getMatchEvents(storedMatch.id),
+      ]);
+      res.json({ detail, events });
+      return;
+    }
+
     const userToken = await getValidToken(req, res);
     logger.info({ predggUuid }, 'live match fetch');
 
