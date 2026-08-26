@@ -18,9 +18,9 @@ describe('player match enrichment', () => {
     const db = {
       match: {
         findMany: vi.fn().mockResolvedValue([
-          { rosterSynced: true, eventStreamSynced: true, eventStreamFailed: false, syncedAt: new Date('2026-08-25T12:00:00Z') },
-          { rosterSynced: true, eventStreamSynced: false, eventStreamFailed: true, syncedAt: new Date('2026-08-24T12:00:00Z') },
-          { rosterSynced: false, eventStreamSynced: false, eventStreamFailed: false, syncedAt: new Date('2026-08-23T12:00:00Z') },
+          { rosterSynced: true, eventStreamSynced: true, eventStreamFailed: false, syncedAt: new Date('2026-08-25T12:00:00Z'), matchPlayers: [{ goldEarnedAtInterval: [500, 900] }] },
+          { rosterSynced: true, eventStreamSynced: false, eventStreamFailed: true, syncedAt: new Date('2026-08-24T12:00:00Z'), matchPlayers: [{ goldEarnedAtInterval: null }] },
+          { rosterSynced: false, eventStreamSynced: false, eventStreamFailed: false, syncedAt: new Date('2026-08-23T12:00:00Z'), matchPlayers: [{ goldEarnedAtInterval: null }] },
         ]),
       },
     };
@@ -52,7 +52,7 @@ describe('player match enrichment', () => {
     const db = {
       match: {
         findMany: vi.fn().mockResolvedValue(candidates),
-        findUnique: vi.fn().mockResolvedValue({ rosterSynced: true, eventStreamSynced: true }),
+        findUnique: vi.fn().mockResolvedValue({ rosterSynced: true, eventStreamSynced: true, matchPlayers: [{ goldEarnedAtInterval: [500] }] }),
       },
       syncLog: { create: vi.fn().mockResolvedValue({}) },
     };
@@ -69,6 +69,26 @@ describe('player match enrichment', () => {
     }));
   });
 
+  it('forces event refresh for a previously synced match whose gold timeline is missing', async () => {
+    const db = {
+      match: {
+        findMany: vi.fn().mockResolvedValue([{
+          id: 'match-1', predggUuid: 'uuid-1', rosterSynced: true, eventStreamSynced: true,
+          eventStreamFailed: false, matchPlayers: [{ physicalDamageTaken: 1200, goldEarnedAtInterval: null }],
+        }]),
+        findUnique: vi.fn().mockResolvedValue({
+          rosterSynced: true, eventStreamSynced: true, matchPlayers: [{ goldEarnedAtInterval: [500, 900] }],
+        }),
+      },
+      syncLog: { create: vi.fn().mockResolvedValue({}) },
+    };
+
+    const result = await enrichPlayerMatches(db as never, 'player-1', 'token');
+
+    expect(result).toEqual({ total: 1, processed: 1, succeeded: 1, errors: 0 });
+    expect(syncMatchEventStream).toHaveBeenCalledWith(db, 'match-1', 'uuid-1', 'token', true);
+  });
+
   it('continues after a partial failure and records it for diagnosis', async () => {
     vi.mocked(syncMatchEventStream)
       .mockRejectedValueOnce(new Error('pred.gg timeout'))
@@ -79,7 +99,7 @@ describe('player match enrichment', () => {
           { id: 'match-1', predggUuid: 'uuid-1', rosterSynced: true, eventStreamSynced: false, eventStreamFailed: false },
           { id: 'match-2', predggUuid: 'uuid-2', rosterSynced: true, eventStreamSynced: false, eventStreamFailed: false },
         ]),
-        findUnique: vi.fn().mockResolvedValue({ rosterSynced: true, eventStreamSynced: true }),
+        findUnique: vi.fn().mockResolvedValue({ rosterSynced: true, eventStreamSynced: true, matchPlayers: [{ goldEarnedAtInterval: [500] }] }),
       },
       syncLog: { create: vi.fn().mockResolvedValue({}) },
     };
