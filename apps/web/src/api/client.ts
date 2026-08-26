@@ -1404,7 +1404,7 @@ export const apiClient = {
 
   sync: {
     myMatches: () =>
-      fetchApi<{ newMatches: number; message: string }>('/sync/my-matches', { method: 'POST' }),
+      fetchApi<{ newMatches: number; syncedMatches: number; message: string }>('/sync/my-matches', { method: 'POST' }),
   },
 
   schedule: {

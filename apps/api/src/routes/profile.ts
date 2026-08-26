@@ -11,6 +11,7 @@ profileRouter.use(requireAuth);
 const SAFE_USER_SELECT = {
   id: true, email: true, name: true, globalRole: true, isActive: true,
   createdAt: true, lastLoginAt: true,
+  linkedPlayerId: true,
   avatarUrl: true, bio: true, timezone: true, language: true,
   playerTier: true, playerTierExpiresAt: true,
   discordId: true, discordUsername: true,

@@ -1,8 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
-import { ChevronRight, Link as LinkIcon } from 'lucide-react';
+import { ChevronRight, Link as LinkIcon, RefreshCw } from 'lucide-react';
 import { apiClient, ApiErrorResponse, type PlayerProfile, type RecentMatch } from '../api/client';
 import { useAuth } from '../hooks/useAuth';
 
@@ -20,18 +20,40 @@ export default function PlayerMatchesPage() {
   const { t } = useTranslation();
   const { user } = useAuth();
   const navigate = useNavigate();
-const [profile, setProfile] = useState<PlayerProfile | null>(null);
+  const [profile, setProfile] = useState<PlayerProfile | null>(null);
   const [loading, setLoading] = useState(true);
+  const [syncing, setSyncing] = useState(false);
 
   const linkedPlayerId = user?.linkedPlayerId;
 
+  const loadProfile = useCallback(async () => {
+    if (!linkedPlayerId) return;
+    try {
+      setProfile(await apiClient.players.getProfile(linkedPlayerId));
+    } catch (error) {
+      toast.error(error instanceof ApiErrorResponse ? error.error.message : 'Error al cargar partidas.');
+    }
+  }, [linkedPlayerId]);
+
   useEffect(() => {
     if (!linkedPlayerId) { setLoading(false); return; }
-    apiClient.players.getProfile(linkedPlayerId)
-      .then(setProfile)
-      .catch((err) => toast.error(err instanceof ApiErrorResponse ? err.error.message : 'Error al cargar partidas.'))
-      .finally(() => setLoading(false));
-  }, [linkedPlayerId]);
+    void loadProfile().finally(() => setLoading(false));
+  }, [linkedPlayerId, loadProfile]);
+
+  async function syncMatches() {
+    try {
+      setSyncing(true);
+      const result = await apiClient.sync.myMatches();
+      await loadProfile();
+      toast.success(result.newMatches > 0
+        ? `${result.newMatches} partidas nuevas · ${result.syncedMatches} revisadas.`
+        : `Historial actualizado: ${result.syncedMatches} partidas revisadas.`);
+    } catch (error) {
+      toast.error(error instanceof ApiErrorResponse ? error.error.message : 'No se pudo actualizar el historial.');
+    } finally {
+      setSyncing(false);
+    }
+  }
 
   if (loading) return <div style={{ padding: '2rem', color: 'var(--text-muted)' }}>{t('common.loading')}</div>;
 
@@ -56,10 +78,23 @@ const [profile, setProfile] = useState<PlayerProfile | null>(null);
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
       <header className="header">
-        <h1 className="header-title">Mis partidas</h1>
-        <p style={{ color: 'var(--text-muted)', fontSize: '0.86rem', marginTop: '0.35rem' }}>
-          {profile ? `${profile.displayName} · ${matches.length} partidas recientes` : ''}
-        </p>
+        <div>
+          <h1 className="header-title">Mis partidas</h1>
+          <p style={{ color: 'var(--text-muted)', fontSize: '0.86rem', marginTop: '0.35rem' }}>
+            {profile ? `${profile.displayName} · ${matches.length} partidas disponibles` : ''}
+          </p>
+        </div>
+        <button
+          type="button"
+          className="btn-secondary"
+          disabled={syncing}
+          onClick={() => void syncMatches()}
+          title="Importa de Pred.gg todas las partidas disponibles dentro de la ventana de análisis"
+          style={{ display: 'inline-flex', alignItems: 'center', gap: '0.45rem', flex: 'unset', whiteSpace: 'nowrap' }}
+        >
+          <RefreshCw size={15} className={syncing ? 'spin' : undefined} />
+          {syncing ? 'Actualizando historial…' : 'Actualizar historial'}
+        </button>
       </header>
 
       {matches.length === 0 ? (

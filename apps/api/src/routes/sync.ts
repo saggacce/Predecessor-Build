@@ -9,6 +9,7 @@ import type { SessionUser } from '../middleware/require-auth.js';
 export const syncRouter = Router();
 
 const RATE_LIMIT_MS = 5 * 60 * 1000;
+const MAX_MATCHES_PER_SYNC = 1000;
 const userLastSync = new Map<string, number>();
 
 /**
@@ -60,9 +61,13 @@ syncRouter.post('/my-matches', requireAuth, async (req, res, next) => {
       return;
     }
 
+    const result = await syncRecentMatchesForPlayer(
+      db,
+      player.predggId,
+      platformToken.accessToken,
+      MAX_MATCHES_PER_SYNC,
+    );
     userLastSync.set(userId, Date.now());
-
-    const result = await syncRecentMatchesForPlayer(db, player.predggId, platformToken.accessToken, 20);
 
     logger.info({ userId, predggId: player.predggId, ...result }, 'user-triggered match sync complete');
     await db.syncLog.create({
@@ -71,6 +76,7 @@ syncRouter.post('/my-matches', requireAuth, async (req, res, next) => {
 
     res.json({
       newMatches: result.newMatches,
+      syncedMatches: result.syncedMatches,
       message: result.newMatches > 0
         ? `${result.newMatches} new match${result.newMatches === 1 ? '' : 'es'} synced`
         : 'Already up to date',

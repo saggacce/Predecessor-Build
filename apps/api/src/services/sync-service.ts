@@ -219,7 +219,7 @@ const PLAYER_SEARCH_QUERY = `
 `;
 
 const PLAYER_DETAIL_QUERY = `
-  query PlayerDetail($playerId: ID!, $matchLimit: Int!) {
+  query PlayerDetail($playerId: ID!, $matchLimit: Int!, $matchOffset: Int!) {
     player(by: { id: $playerId }) {
       id
       uuid
@@ -282,7 +282,7 @@ const PLAYER_DETAIL_QUERY = `
           totalGold
         }
       }
-      matchesPaginated(limit: $matchLimit) {
+      matchesPaginated(limit: $matchLimit, offset: $matchOffset) {
         results {
           id
           role
@@ -473,10 +473,15 @@ function inferRegion(matches: PredggMatchStat[]): string | null {
   return best;
 }
 
-async function fetchPlayerDetail(playerId: string, userToken?: string): Promise<PredggPlayerDetail | null> {
+async function fetchPlayerDetail(
+  playerId: string,
+  userToken?: string,
+  matchLimit = 50,
+  matchOffset = 0,
+): Promise<PredggPlayerDetail | null> {
   const data = await predggQuery<{ player: PredggPlayerDetail | null }>(
     PLAYER_DETAIL_QUERY,
-    { playerId, matchLimit: 50 },
+    { playerId, matchLimit, matchOffset },
     userToken,
   );
   return data?.player ?? null;
@@ -1484,22 +1489,45 @@ export async function syncRecentMatchesForPlayer(
   predggId: string,
   userToken: string,
   matchLimit = 10,
-): Promise<{ newMatches: number; newMatchUuids: string[] }> {
-  let detail: PredggPlayerDetail | null = null;
-  try {
-    detail = await fetchPlayerDetail(predggId, userToken);
-  } catch (err) {
-    logger.warn({ predggId, err }, 'syncRecentMatchesForPlayer: detail fetch failed');
-    return { newMatches: 0, newMatchUuids: [] };
+): Promise<{ newMatches: number; syncedMatches: number; newMatchUuids: string[] }> {
+  const cutoff = getRetentionCutoff();
+  const pageSize = Math.min(50, Math.max(matchLimit, 1));
+  const matches: PredggMatchStat[] = [];
+  const seenUuids = new Set<string>();
+
+  for (let offset = 0; matches.length < matchLimit; offset += pageSize) {
+    let detail: PredggPlayerDetail | null = null;
+    try {
+      detail = await fetchPlayerDetail(predggId, userToken, pageSize, offset);
+    } catch (err) {
+      logger.warn({ predggId, offset, err }, 'syncRecentMatchesForPlayer: match page fetch failed');
+      if (offset === 0) {
+        throw new AppError(502, 'No se pudo obtener el historial de Pred.gg.', 'PREDGG_SYNC_FAILED');
+      }
+      break;
+    }
+
+    const page = detail?.matchesPaginated?.results ?? [];
+    if (page.length === 0) break;
+
+    let reachedRetentionCutoff = false;
+    for (const item of page) {
+      const uuid = safeString(item.match?.id);
+      const startTime = safeString(item.match?.startTime);
+      if (!uuid || !startTime || seenUuids.has(uuid)) continue;
+      if (new Date(startTime) < cutoff) {
+        reachedRetentionCutoff = true;
+        continue;
+      }
+      seenUuids.add(uuid);
+      matches.push(item);
+      if (matches.length >= matchLimit) break;
+    }
+
+    if (page.length < pageSize || reachedRetentionCutoff) break;
   }
 
-  if (!detail) return { newMatches: 0, newMatchUuids: [] };
-
-  const cutoff = getRetentionCutoff();
-  const matches = (detail.matchesPaginated?.results ?? [])
-    .filter((m) => m.match?.startTime && new Date(m.match.startTime) >= cutoff)
-    .slice(0, matchLimit);
-  if (matches.length === 0) return { newMatches: 0, newMatchUuids: [] };
+  if (matches.length === 0) return { newMatches: 0, syncedMatches: 0, newMatchUuids: [] };
 
   // Find which of these matches are new (not in DB yet)
   const uuids = matches.map((m) => m.match?.id).filter(Boolean) as string[];
@@ -1514,11 +1542,13 @@ export async function syncRecentMatchesForPlayer(
   const player = await db.player.findUnique({ where: { predggId }, select: { id: true, displayName: true } });
   if (player) {
     const now = new Date();
-    await persistRecentMatches(db, player.id, player.displayName, matches, now);
+    for (let index = 0; index < matches.length; index += pageSize) {
+      await persistRecentMatches(db, player.id, player.displayName, matches.slice(index, index + pageSize), now);
+    }
     await db.player.update({ where: { predggId }, data: { lastSynced: now } });
   }
 
-  return { newMatches: newMatchUuids.length, newMatchUuids };
+  return { newMatches: newMatchUuids.length, syncedMatches: matches.length, newMatchUuids };
 }
 
 export async function syncIncompleteMatches(db: PrismaClient): Promise<{ synced: number; errors: number; elapsed: number }> {
