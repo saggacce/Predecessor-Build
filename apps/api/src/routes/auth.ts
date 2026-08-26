@@ -1,62 +1,8 @@
 import { Router } from 'express';
 import { createHash, randomBytes } from 'crypto';
 import { logger } from '../logger.js';
-
-const DEFAULT_AUTHORIZE_URL = 'https://pred.gg/oauth2/authorize';
-const DEFAULT_SCOPES = 'offline_access profile player:read:interval hero_leaderboard:read matchup_statistic:read';
-
-function resolveAuthorizeUrl(value: string | undefined): string {
-  if (!value) {
-    return DEFAULT_AUTHORIZE_URL;
-  }
-
-  if (value.includes('/api/oauth2/authorize')) {
-    logger.warn({ configuredUrl: value }, 'ignoring direct OAuth API authorize URL; using pred.gg SPA authorize route');
-    return DEFAULT_AUTHORIZE_URL;
-  }
-
-  return value;
-}
-
-function resolveScopes(value: string | undefined): string {
-  const scopes = (value ?? DEFAULT_SCOPES)
-    .trim()
-    .split(/\s+/)
-    .filter(Boolean);
-
-  return scopes.length > 0 ? scopes.join(' ') : DEFAULT_SCOPES;
-}
-
-const AUTHORIZE_URL = resolveAuthorizeUrl(process.env.PRED_GG_AUTHORIZE_URL);
-const TOKEN_URLS = [
-  process.env.PRED_GG_TOKEN_URL ?? 'https://pred.gg/api/oauth2/token',
-  process.env.PRED_GG_TOKEN_URL_FALLBACK ?? 'https://pred.saibotu.de/api/oauth2/token',
-].filter((url, index, urls) => url && urls.indexOf(url) === index);
-
-const CLIENT_ID = process.env.PRED_GG_CLIENT_ID ?? '';
-const CLIENT_SECRET = process.env.PRED_GG_CLIENT_SECRET;
-const SEND_CLIENT_SECRET = process.env.PRED_GG_SEND_CLIENT_SECRET === 'true';
-const CALLBACK_URL = process.env.PRED_GG_CALLBACK_URL ?? 'http://localhost:3001/auth/callback';
-const FRONTEND_URL = process.env.FRONTEND_URL ?? 'http://localhost:5173';
-
-const SCOPES = resolveScopes(process.env.PRED_GG_OAUTH_SCOPES);
-
-type ClientAuthMethod = 'none' | 'body' | 'basic';
-
-function resolveClientAuthMethod(value: string | undefined): ClientAuthMethod {
-  if (value === 'none' || value === 'public') return 'none';
-  if (value === 'body' || value === 'client_secret_post') return 'body';
-  if (value === 'basic' || value === 'client_secret_basic') return 'basic';
-
-  if (value && value !== 'auto') {
-    logger.warn({ configuredMethod: value }, 'unknown pred.gg token client auth method; using auto');
-  }
-
-  if (SEND_CLIENT_SECRET) return 'body';
-  return CLIENT_SECRET ? 'basic' : 'none';
-}
-
-const CLIENT_AUTH_METHOD = resolveClientAuthMethod(process.env.PRED_GG_CLIENT_AUTH_METHOD);
+import { exchangeToken, predggOAuthConfig, type TokenResponse } from '../services/predgg-oauth.js';
+import { getPlatformAccessToken, savePlatformOAuthTokens } from '../services/predgg-token-service.js';
 
 export const COOKIE_TOKEN = 'predgg_token';
 export const COOKIE_REFRESH = 'predgg_refresh';
@@ -76,11 +22,9 @@ function setTokenCookies(res: Response, data: TokenResponse) {
   const expiresIn = data.expires_in ?? 3600;
   const expiresAt = Date.now() + expiresIn * 1000;
   res.cookie(COOKIE_TOKEN, data.access_token!, { ...COOKIE_OPTS, maxAge: expiresIn * 1000 });
-  // expires_at is NOT httpOnly so the frontend can read it for proactive refresh
+  // This is a browser marker and expiry hint, not a second copy of the rotating refresh token.
   res.cookie(COOKIE_EXPIRES_AT, String(expiresAt), { sameSite: 'lax', maxAge: REFRESH_TTL_MS });
-  if (data.refresh_token) {
-    res.cookie(COOKIE_REFRESH, data.refresh_token, { ...COOKIE_OPTS, maxAge: REFRESH_TTL_MS });
-  }
+  res.clearCookie(COOKIE_REFRESH);
 }
 
 /**
@@ -92,23 +36,23 @@ function setTokenCookies(res: Response, data: TokenResponse) {
 export async function getValidToken(req: Request, res: Response): Promise<string | undefined> {
   const token = (req as any).cookies?.[COOKIE_TOKEN] as string | undefined;
   const expiresAt = parseInt((req as any).cookies?.[COOKIE_EXPIRES_AT] ?? '0', 10);
-  const refreshToken = (req as any).cookies?.[COOKIE_REFRESH] as string | undefined;
 
   // Token is still valid with >2 min buffer — use it directly
   if (token && expiresAt > Date.now() + 2 * 60 * 1000) {
     return token;
   }
 
-  // Token missing or expired — try to refresh silently
-  if (!refreshToken) return token; // no refresh token, return whatever we have
+  // No browser marker means this browser has not connected pred.gg (or explicitly logged out).
+  if (!expiresAt) return token;
 
-  logger.info('access token expired or missing — attempting silent refresh');
-  const result = await exchangeToken({ grant_type: 'refresh_token', refresh_token: refreshToken });
+  logger.info('access token expired or missing — requesting server-owned platform token');
+  const platformToken = await getPlatformAccessToken();
 
-  if (result.ok && result.data.access_token) {
-    setTokenCookies(res, result.data);
+  if (platformToken) {
+    const ttlSeconds = Math.max(1, Math.floor((platformToken.expiresAt - Date.now()) / 1000));
+    setTokenCookies(res, { access_token: platformToken.accessToken, expires_in: ttlSeconds });
     logger.info('silent token refresh successful');
-    return result.data.access_token;
+    return platformToken.accessToken;
   }
 
   logger.warn({ error: result.data.error }, 'silent refresh failed — user must re-login');
@@ -117,136 +61,6 @@ export async function getValidToken(req: Request, res: Response): Promise<string
   res.clearCookie(COOKIE_EXPIRES_AT);
   res.clearCookie(COOKIE_REFRESH);
   return undefined;
-}
-
-type TokenResponse = {
-  access_token?: string;
-  refresh_token?: string;
-  expires_in?: number;
-  token_type?: string;
-  scope?: string;
-  error?: string;
-};
-
-type TokenGrant =
-  | { grant_type: 'authorization_code'; code: string; code_verifier: string }
-  | { grant_type: 'refresh_token'; refresh_token: string };
-
-type TokenAuthAttempt = {
-  label: string;
-  method: ClientAuthMethod;
-  includeClientId: boolean;
-  includeClientSecret: boolean;
-  browserLikeHeaders: boolean;
-};
-
-function tokenAuthAttempts(): TokenAuthAttempt[] {
-  if (CLIENT_AUTH_METHOD === 'none') {
-    return [
-      { label: 'public-browser', method: 'none', includeClientId: true, includeClientSecret: false, browserLikeHeaders: true },
-      { label: 'public-server', method: 'none', includeClientId: true, includeClientSecret: false, browserLikeHeaders: false },
-    ];
-  }
-
-  if (CLIENT_AUTH_METHOD === 'body') {
-    return [
-      { label: 'client-secret-post', method: 'body', includeClientId: true, includeClientSecret: true, browserLikeHeaders: false },
-      { label: 'client-secret-post-browser', method: 'body', includeClientId: true, includeClientSecret: true, browserLikeHeaders: true },
-    ];
-  }
-
-  return [
-    { label: 'client-secret-basic', method: 'basic', includeClientId: false, includeClientSecret: false, browserLikeHeaders: false },
-    { label: 'client-secret-basic-browser', method: 'basic', includeClientId: false, includeClientSecret: false, browserLikeHeaders: true },
-    { label: 'client-secret-basic-with-id', method: 'basic', includeClientId: true, includeClientSecret: false, browserLikeHeaders: true },
-    { label: 'public-browser', method: 'none', includeClientId: true, includeClientSecret: false, browserLikeHeaders: true },
-    { label: 'client-secret-post', method: 'body', includeClientId: true, includeClientSecret: true, browserLikeHeaders: false },
-  ];
-}
-
-function tokenRequestHeaders(attempt: TokenAuthAttempt): Record<string, string> {
-  const headers: Record<string, string> = {
-    Accept: 'application/json',
-    'Content-Type': 'application/x-www-form-urlencoded',
-  };
-
-  if (attempt.browserLikeHeaders) {
-    headers.Origin = FRONTEND_URL;
-    headers.Referer = `${FRONTEND_URL}/`;
-  }
-
-  if (attempt.method === 'basic') {
-    if (CLIENT_SECRET) {
-      headers.Authorization = `Basic ${Buffer.from(`${CLIENT_ID}:${CLIENT_SECRET}`).toString('base64')}`;
-    } else {
-      logger.warn('pred.gg token auth method is basic but PRED_GG_CLIENT_SECRET is not configured');
-    }
-  }
-
-  return headers;
-}
-
-function tokenBody(params: TokenGrant, attempt: TokenAuthAttempt): URLSearchParams {
-  const body = new URLSearchParams();
-  body.set('grant_type', params.grant_type);
-
-  if (params.grant_type === 'authorization_code') {
-    body.set('redirect_uri', CALLBACK_URL);
-    body.set('code', params.code);
-    body.set('code_verifier', params.code_verifier);
-  } else {
-    body.set('refresh_token', params.refresh_token);
-  }
-
-  if (attempt.includeClientId) {
-    body.set('client_id', CLIENT_ID);
-  }
-  if (attempt.includeClientSecret && CLIENT_SECRET) {
-    body.set('client_secret', CLIENT_SECRET);
-  }
-
-  return body;
-}
-
-export async function exchangeToken(params: TokenGrant): Promise<{
-  ok: boolean;
-  status: number;
-  endpoint: string;
-  attempt: string;
-  data: TokenResponse;
-}> {
-  let lastResult: { ok: boolean; status: number; endpoint: string; attempt: string; data: TokenResponse } | undefined;
-
-  for (const endpoint of TOKEN_URLS) {
-    for (const attempt of tokenAuthAttempts()) {
-      const body = tokenBody(params, attempt);
-      const tokenRes = await fetch(endpoint, {
-        method: 'POST',
-        headers: tokenRequestHeaders(attempt),
-        body: body.toString(),
-      });
-      const data = await tokenRes.json().catch(() => ({ error: 'invalid_token_response' })) as TokenResponse;
-      lastResult = { ok: tokenRes.ok && !data.error, status: tokenRes.status, endpoint, attempt: attempt.label, data };
-      logger.info({
-        endpoint,
-        status: tokenRes.status,
-        error: data.error,
-        clientAuthMethod: CLIENT_AUTH_METHOD,
-        tokenAuthAttempt: attempt.label,
-      }, 'token exchange attempt');
-
-      if (lastResult.ok) return lastResult;
-      if (data.error === 'invalid_grant') return lastResult;
-    }
-  }
-
-  return lastResult ?? {
-    ok: false,
-    status: 500,
-    endpoint: 'none',
-    attempt: 'none',
-    data: { error: 'token_endpoint_not_configured' },
-  };
 }
 
 function base64Url(buffer: Buffer): string {
@@ -266,9 +80,9 @@ function createPkcePair(): { verifier: string; challenge: string } {
 // ── Initiate login ────────────────────────────────────────────────────────────
 
 authRouter.get('/predgg', (_req, res) => {
-  if (!CLIENT_ID) {
+  if (!predggOAuthConfig.clientId) {
     logger.error('PRED_GG_CLIENT_ID is not configured');
-    res.redirect(`${FRONTEND_URL}/?auth_error=missing_client_id`);
+    res.redirect(`${predggOAuthConfig.frontendUrl}/?auth_error=missing_client_id`);
     return;
   }
 
@@ -276,20 +90,25 @@ authRouter.get('/predgg', (_req, res) => {
   const pkce = createPkcePair();
 
   res.setHeader('X-Predgg-Auth-Flow', 'oauth2-pkce-v2');
-  res.setHeader('X-Predgg-Token-Client-Auth', CLIENT_AUTH_METHOD);
+  res.setHeader('X-Predgg-Token-Client-Auth', predggOAuthConfig.clientAuthMethod);
   res.cookie(COOKIE_STATE, state, { ...COOKIE_OPTS, maxAge: 5 * 60 * 1000 });
   res.cookie(COOKIE_CODE_VERIFIER, pkce.verifier, { ...COOKIE_OPTS, maxAge: 5 * 60 * 1000 });
 
-  const url = new URL(AUTHORIZE_URL);
-  url.searchParams.set('client_id', CLIENT_ID);
-  url.searchParams.set('redirect_uri', CALLBACK_URL);
+  const url = new URL(predggOAuthConfig.authorizeUrl);
+  url.searchParams.set('client_id', predggOAuthConfig.clientId);
+  url.searchParams.set('redirect_uri', predggOAuthConfig.callbackUrl);
   url.searchParams.set('response_type', 'code');
-  url.searchParams.set('scope', SCOPES);
+  url.searchParams.set('scope', predggOAuthConfig.scopes);
   url.searchParams.set('state', state);
   url.searchParams.set('code_challenge', pkce.challenge);
   url.searchParams.set('code_challenge_method', 'S256');
 
-  logger.info({ authorizeUrl: AUTHORIZE_URL, scopes: SCOPES, pkce: true, clientAuthMethod: CLIENT_AUTH_METHOD }, 'initiating OAuth2 login');
+  logger.info({
+    authorizeUrl: predggOAuthConfig.authorizeUrl,
+    scopes: predggOAuthConfig.scopes,
+    pkce: true,
+    clientAuthMethod: predggOAuthConfig.clientAuthMethod,
+  }, 'initiating OAuth2 login');
   res.redirect(url.toString());
 });
 
@@ -302,7 +121,7 @@ authRouter.get('/callback', async (req, res) => {
     logger.warn({ error }, 'OAuth callback returned error');
     res.clearCookie(COOKIE_STATE);
     res.clearCookie(COOKIE_CODE_VERIFIER);
-    res.redirect(`${FRONTEND_URL}/?auth_error=${encodeURIComponent(error)}`);
+    res.redirect(`${predggOAuthConfig.frontendUrl}/?auth_error=${encodeURIComponent(error)}`);
     return;
   }
 
@@ -311,14 +130,14 @@ authRouter.get('/callback', async (req, res) => {
     logger.warn({ state, expectedState }, 'OAuth state mismatch — possible CSRF');
     res.clearCookie(COOKIE_STATE);
     res.clearCookie(COOKIE_CODE_VERIFIER);
-    res.redirect(`${FRONTEND_URL}/?auth_error=state_mismatch`);
+    res.redirect(`${predggOAuthConfig.frontendUrl}/?auth_error=state_mismatch`);
     return;
   }
   res.clearCookie(COOKIE_STATE);
 
   if (!code) {
     res.clearCookie(COOKIE_CODE_VERIFIER);
-    res.redirect(`${FRONTEND_URL}/?auth_error=no_code`);
+    res.redirect(`${predggOAuthConfig.frontendUrl}/?auth_error=no_code`);
     return;
   }
 
@@ -326,7 +145,7 @@ authRouter.get('/callback', async (req, res) => {
   res.clearCookie(COOKIE_CODE_VERIFIER);
   if (!codeVerifier) {
     logger.warn('OAuth callback missing PKCE code verifier');
-    res.redirect(`${FRONTEND_URL}/?auth_error=missing_code_verifier`);
+    res.redirect(`${predggOAuthConfig.frontendUrl}/?auth_error=missing_code_verifier`);
     return;
   }
 
@@ -343,38 +162,25 @@ authRouter.get('/callback', async (req, res) => {
 
     if (!tokenResult.ok) {
       logger.error({ endpoint: tokenResult.endpoint, attempt: tokenResult.attempt, status: tokenResult.status, tokenData }, 'token exchange failed');
-      res.redirect(`${FRONTEND_URL}/?auth_error=${encodeURIComponent(tokenData.error ?? 'token_failed')}`);
+      res.redirect(`${predggOAuthConfig.frontendUrl}/?auth_error=${encodeURIComponent(tokenData.error ?? 'token_failed')}`);
       return;
     }
 
     logger.info({ grantedScope: tokenData.scope, expires_in: tokenData.expires_in }, 'token exchange successful');
+    // Durability comes before browser success: never advertise a connected
+    // account if the server failed to persist the rotating credentials.
+    await savePlatformOAuthTokens(tokenData);
     setTokenCookies(res, tokenData);
-
-    // Persist refresh token as platform credential so background syncs work
-    // and update the in-memory token state immediately
-    if (tokenData.refresh_token) {
-      try {
-        const { db } = await import('../db.js');
-        await db.platformCredential.upsert({
-          where: { key: 'predgg_refresh_token' },
-          update: { value: tokenData.refresh_token },
-          create: { key: 'predgg_refresh_token', value: tokenData.refresh_token },
-        });
-        const { platformTokenState } = await import('./admin.js');
-        platformTokenState.status = 'ok';
-        platformTokenState.lastCheckedAt = new Date().toISOString();
-        platformTokenState.lastError = null;
-        logger.info('OAuth callback: platform credential updated, token state set to ok');
-      } catch (err) {
-        logger.warn({ err }, 'OAuth callback: failed to save platform credential');
-      }
-    }
+    logger.info('OAuth callback: platform credential updated, token state set to ok');
 
     logger.info('OAuth2 login successful — redirecting to players');
-    res.redirect(`${FRONTEND_URL}/players`);
+    res.redirect(`${predggOAuthConfig.frontendUrl}/players`);
   } catch (err) {
     logger.error({ err }, 'token exchange threw error');
-    res.redirect(`${FRONTEND_URL}/?auth_error=server_error`);
+    res.clearCookie(COOKIE_TOKEN);
+    res.clearCookie(COOKIE_EXPIRES_AT);
+    res.clearCookie(COOKIE_REFRESH);
+    res.redirect(`${predggOAuthConfig.frontendUrl}/?auth_error=server_error`);
   }
 });
 
@@ -391,6 +197,7 @@ authRouter.get('/me', async (req, res) => {
 authRouter.post('/logout', (_req, res) => {
   res.clearCookie(COOKIE_TOKEN);
   res.clearCookie(COOKIE_REFRESH);
+  res.clearCookie(COOKIE_EXPIRES_AT);
   logger.info('user logged out');
   res.json({ ok: true });
 });
@@ -398,28 +205,24 @@ authRouter.post('/logout', (_req, res) => {
 // ── Token refresh ─────────────────────────────────────────────────────────────
 
 authRouter.post('/refresh', async (req, res, next) => {
-  const refreshToken = (req as any).cookies?.[COOKIE_REFRESH];
-  if (!refreshToken) {
+  const browserMarker = (req as any).cookies?.[COOKIE_EXPIRES_AT];
+  if (!browserMarker) {
     res.status(401).json({ error: { message: 'Not authenticated', code: 'NOT_AUTHENTICATED' } });
     return;
   }
 
   try {
-    const tokenResult = await exchangeToken({
-      grant_type: 'refresh_token',
-      refresh_token: refreshToken,
-    });
-
-    const tokenData = tokenResult.data;
-
-    if (!tokenResult.ok) {
+    const platformToken = await getPlatformAccessToken();
+    if (!platformToken) {
       res.clearCookie(COOKIE_TOKEN);
+      res.clearCookie(COOKIE_EXPIRES_AT);
       res.clearCookie(COOKIE_REFRESH);
       res.status(401).json({ error: { message: 'Session expired — please log in again', code: 'SESSION_EXPIRED' } });
       return;
     }
 
-    setTokenCookies(res, tokenData);
+    const ttlSeconds = Math.max(1, Math.floor((platformToken.expiresAt - Date.now()) / 1000));
+    setTokenCookies(res, { access_token: platformToken.accessToken, expires_in: ttlSeconds });
 
     logger.info('token refreshed successfully');
     res.json({ ok: true });

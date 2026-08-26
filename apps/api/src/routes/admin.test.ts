@@ -12,6 +12,11 @@ vi.mock('../db.js', () => ({
   disconnectDb: vi.fn().mockResolvedValue(undefined),
 }));
 
+vi.mock('../services/predgg-token-service.js', () => ({
+  getPlatformAccessToken: vi.fn().mockResolvedValue(null),
+  platformTokenState: { status: 'missing', lastCheckedAt: null, lastError: null },
+}));
+
 // Mock sync-service so no real HTTP calls to pred.gg are made
 vi.mock('../services/sync-service.js', () => ({
   syncVersionsFromPredgg: vi.fn().mockResolvedValue(5),

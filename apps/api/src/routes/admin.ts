@@ -17,7 +17,8 @@ import { syncHeroMeta } from '../services/hero-meta-service.js';
 import { invalidateHeroMetaCache } from './hero-meta.js';
 import { getAllConfig, updateConfigValue, updateConfigText, resetConfigValue } from '../services/config-service.js';
 import { getPermissions, savePermissions, DEFAULT_PERMISSIONS, CONFIGURABLE_ROLES } from '../services/permissions-service.js';
-import { getValidToken, exchangeToken, COOKIE_REFRESH } from './auth.js';
+import { getValidToken } from './auth.js';
+import { getPlatformAccessToken, platformTokenState } from '../services/predgg-token-service.js';
 import { requireAuth } from '../middleware/require-auth.js';
 import { requirePlatformAdmin } from '../middleware/require-platform-admin.js';
 
@@ -31,26 +32,7 @@ async function getTokenForSync(req: Request, res: Response): Promise<string | nu
   const userToken = await getValidToken(req, res);
   if (userToken) return userToken;
 
-  try {
-    const cred = await db.platformCredential.findUnique({ where: { key: 'predgg_refresh_token' } });
-    if (!cred) return null;
-    const result = await exchangeToken({ grant_type: 'refresh_token', refresh_token: cred.value });
-    if (!result.ok || !result.data.access_token) return null;
-    // Persist rotated refresh token and update in-memory state
-    if (result.data.refresh_token) {
-      await db.platformCredential.upsert({
-        where: { key: 'predgg_refresh_token' },
-        update: { value: result.data.refresh_token },
-        create: { key: 'predgg_refresh_token', value: result.data.refresh_token },
-      }).catch(() => null);
-    }
-    platformTokenState.status = 'ok';
-    platformTokenState.lastCheckedAt = new Date().toISOString();
-    platformTokenState.lastError = null;
-    return result.data.access_token;
-  } catch {
-    return null;
-  }
+  return (await getPlatformAccessToken())?.accessToken ?? null;
 }
 
 function requireAdminKey(req: Request, res: Response, next: NextFunction) {
@@ -207,54 +189,13 @@ let cronTimer: ReturnType<typeof setInterval> | null = null;
 
 // ── Token keep-alive — refresh every 15 days (token lasts 30d, 15 day buffer) ──
 // The sync cron (every 2h) also rotates the token on each run, so this is
-// a safety net only for periods with no sync activity.
-const TOKEN_REFRESH_INTERVAL_MS = 15 * 24 * 60 * 60 * 1000;
+// Check frequently; the central manager only calls pred.gg when the stored
+// access token is near expiry, so this does not rotate refresh tokens needlessly.
+const TOKEN_REFRESH_INTERVAL_MS = 5 * 60 * 1000;
 let tokenRefreshTimer: ReturnType<typeof setInterval> | null = null;
 
-export type PlatformTokenStatus = 'ok' | 'expired' | 'missing' | 'unknown';
-
-export const platformTokenState: {
-  status: PlatformTokenStatus;
-  lastCheckedAt: string | null;
-  lastError: string | null;
-} = { status: 'unknown', lastCheckedAt: null, lastError: null };
-
 async function refreshPlatformToken(): Promise<void> {
-  try {
-    const cred = await db.platformCredential.findUnique({ where: { key: 'predgg_refresh_token' } });
-    if (!cred) {
-      platformTokenState.status = 'missing';
-      platformTokenState.lastCheckedAt = new Date().toISOString();
-      platformTokenState.lastError = 'No platform credential stored — connect pred.gg from the admin panel';
-      logger.warn('token keep-alive: no platform credential stored');
-      return;
-    }
-    const result = await exchangeToken({ grant_type: 'refresh_token', refresh_token: cred.value });
-    if (!result.ok || !result.data.access_token) {
-      const err = result.data?.error ?? 'unknown error';
-      platformTokenState.status = 'expired';
-      platformTokenState.lastCheckedAt = new Date().toISOString();
-      platformTokenState.lastError = `Token refresh failed (${err}) — reconnect pred.gg from the admin panel header`;
-      logger.warn({ error: err }, 'token keep-alive: refresh failed — platform token expired');
-      return;
-    }
-    if (result.data.refresh_token) {
-      await db.platformCredential.upsert({
-        where: { key: 'predgg_refresh_token' },
-        update: { value: result.data.refresh_token },
-        create: { key: 'predgg_refresh_token', value: result.data.refresh_token },
-      });
-    }
-    platformTokenState.status = 'ok';
-    platformTokenState.lastCheckedAt = new Date().toISOString();
-    platformTokenState.lastError = null;
-    logger.info('token keep-alive: refresh token renewed successfully');
-  } catch (err) {
-    platformTokenState.status = 'unknown';
-    platformTokenState.lastCheckedAt = new Date().toISOString();
-    platformTokenState.lastError = err instanceof Error ? err.message : String(err);
-    logger.warn({ err }, 'token keep-alive: unexpected error');
-  }
+  await getPlatformAccessToken();
 }
 
 export function startTokenKeepAlive(): void {
@@ -276,31 +217,15 @@ async function runGlobalSync(): Promise<void> {
   logger.info({ intervalMs: CRON_INTERVAL_MS }, 'global sync cron: run started');
 
   try {
-    const cred = await db.platformCredential.findUnique({ where: { key: 'predgg_refresh_token' } });
-    if (!cred) {
-      logger.warn('global sync cron: no platform credential stored — skipping');
-      return;
-    }
-
-    const tokenResult = await exchangeToken({ grant_type: 'refresh_token', refresh_token: cred.value });
-    if (!tokenResult.ok || !tokenResult.data.access_token) {
-      logger.warn({ error: tokenResult.data.error }, 'global sync cron: token refresh failed — skipping');
+    const platformToken = await getPlatformAccessToken();
+    if (!platformToken) {
+      logger.warn({ error: platformTokenState.lastError }, 'global sync cron: token refresh failed — skipping');
       await db.syncLog.create({
         data: { entity: 'sync:cron', entityId: 'global', operation: 'run', status: 'error', error: 'token refresh failed — re-inicia el Event Stream Sync para renovar' },
       }).catch(() => null);
       return;
     }
-    const token = tokenResult.data.access_token;
-
-    // pred.gg rotates refresh tokens — persist the new one so the next cron run succeeds
-    if (tokenResult.data.refresh_token) {
-      await db.platformCredential.upsert({
-        where: { key: 'predgg_refresh_token' },
-        update: { value: tokenResult.data.refresh_token },
-        create: { key: 'predgg_refresh_token', value: tokenResult.data.refresh_token },
-      }).catch((err) => logger.warn({ err }, 'global sync cron: failed to persist rotated refresh token'));
-      logger.info('global sync cron: refresh token rotated and persisted');
-    }
+    const token = platformToken.accessToken;
 
     const players = await db.player.findMany({
       where: { displayName: { not: 'HIDDEN' }, predggId: { not: '' } },
@@ -476,17 +401,17 @@ let eventStreamJob: EventStreamJob = {
   startedAt: null, lastActivity: null, tokenError: false,
 };
 
-async function refreshPredggToken(refreshToken: string): Promise<string | null> {
-  const result = await exchangeToken({ grant_type: 'refresh_token', refresh_token: refreshToken });
-  if (result.ok && result.data.access_token) {
+async function refreshPredggToken(): Promise<string | null> {
+  const result = await getPlatformAccessToken();
+  if (result) {
     logger.info('event stream sync: pred.gg token refreshed successfully');
-    return result.data.access_token;
+    return result.accessToken;
   }
-  logger.warn({ error: result.data.error }, 'event stream sync: token refresh failed');
+  logger.warn({ error: platformTokenState.lastError }, 'event stream sync: token refresh failed');
   return null;
 }
 
-async function runEventStreamSync(userToken: string, predggRefreshToken: string | undefined) {
+async function runEventStreamSync(userToken: string) {
   const BATCH = 20;
   const CONCURRENCY = 3;
   // Refresh token every 50 minutes (pred.gg tokens last ~1h)
@@ -505,8 +430,8 @@ async function runEventStreamSync(userToken: string, predggRefreshToken: string 
 
   while (eventStreamJob.running) {
     // Refresh token proactively every 50 min
-    if (predggRefreshToken && Date.now() - lastTokenRefresh > TOKEN_REFRESH_INTERVAL_MS) {
-      const newToken = await refreshPredggToken(predggRefreshToken);
+    if (Date.now() - lastTokenRefresh > TOKEN_REFRESH_INTERVAL_MS) {
+      const newToken = await refreshPredggToken();
       if (newToken) {
         activeToken = newToken;
         lastTokenRefresh = Date.now();
@@ -566,9 +491,9 @@ async function runEventStreamSync(userToken: string, predggRefreshToken: string 
       consecutiveErrors++;
       if (consecutiveErrors >= 3) {
         // Try emergency token refresh
-        if (predggRefreshToken && tokenRefreshAttempts < MAX_TOKEN_REFRESH_ATTEMPTS) {
+        if (tokenRefreshAttempts < MAX_TOKEN_REFRESH_ATTEMPTS) {
           logger.warn({ tokenRefreshAttempts }, 'event stream sync: 3 consecutive empty batches — refreshing token');
-          const newToken = await refreshPredggToken(predggRefreshToken);
+          const newToken = await refreshPredggToken();
           tokenRefreshAttempts++;
           if (newToken) {
             activeToken = newToken;
@@ -614,25 +539,8 @@ adminRouter.post('/sync-event-streams/start', async (req, res, next) => {
       res.status(400).json({ error: { message: msg, code: 'PREDGG_AUTH_REQUIRED', tokenStatus: platformTokenState.status } });
       return;
     }
-    // Capture refresh token so the background job can renew the Bearer token automatically
-    const predggRefreshToken = (req as any).cookies?.[COOKIE_REFRESH] as string | undefined;
-    // Persist refresh token as platform credential for cron and on-demand sync
-    if (predggRefreshToken) {
-      await db.platformCredential.upsert({
-        where: { key: 'predgg_refresh_token' },
-        update: { value: predggRefreshToken },
-        create: { key: 'predgg_refresh_token', value: predggRefreshToken },
-      }).catch((err) => logger.warn({ err }, 'failed to save platform credential'));
-      // Refresh state immediately so the UI reflects the new token without waiting 15 days
-      void refreshPlatformToken();
-    } else {
-      // No cookie but we have a valid token — mark state as ok
-      platformTokenState.status = 'ok';
-      platformTokenState.lastCheckedAt = new Date().toISOString();
-      platformTokenState.lastError = null;
-    }
     // Fire and forget — runs in background
-    void runEventStreamSync(userToken, predggRefreshToken).catch((err) => {
+    void runEventStreamSync(userToken).catch((err) => {
       logger.error({ err }, 'event stream background sync crashed');
       eventStreamJob.running = false;
     });

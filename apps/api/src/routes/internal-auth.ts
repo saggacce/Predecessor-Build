@@ -104,7 +104,9 @@ async function setSessionCookie(res: Response, user: UserWithMemberships): Promi
     sameSite: 'lax',
     secure: secureCookies,
     maxAge: REFRESH_MAX_AGE_MS,
-    path: '/internal-auth/refresh',
+    // The public production route is /api/internal-auth/refresh and Express
+    // strips /api only after the browser has decided which cookies to send.
+    path: '/',
   });
 }
 
@@ -145,7 +147,7 @@ internalAuthRouter.post('/login', loginRateLimit, async (req, res, next) => {
 
 internalAuthRouter.post('/logout', (_req, res) => {
   res.clearCookie(SESSION_COOKIE);
-  res.clearCookie(REFRESH_COOKIE, { path: '/internal-auth/refresh' });
+  res.clearCookie(REFRESH_COOKIE, { path: '/' });
   res.json({ ok: true });
 });
 

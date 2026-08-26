@@ -3,6 +3,7 @@ import request from 'supertest';
 import express from 'express';
 import cookieParser from 'cookie-parser';
 import { authRouter } from './auth.js';
+import { savePlatformOAuthTokens } from '../services/predgg-token-service.js';
 
 vi.hoisted(() => {
   process.env.PRED_GG_CLIENT_ID = 'test-client-id';
@@ -13,6 +14,11 @@ vi.hoisted(() => {
   delete process.env.PRED_GG_AUTHORIZE_URL;
   delete process.env.PRED_GG_OAUTH_SCOPES;
 });
+
+vi.mock('../services/predgg-token-service.js', () => ({
+  savePlatformOAuthTokens: vi.fn().mockResolvedValue({ accessToken: 'access-token', expiresAt: Date.now() + 1_800_000 }),
+  getPlatformAccessToken: vi.fn().mockResolvedValue({ accessToken: 'access-token', expiresAt: Date.now() + 1_800_000 }),
+}));
 
 const app = express();
 app.use(cookieParser());
@@ -92,6 +98,10 @@ describe('GET /auth/predgg', () => {
     expect(tokenBody).toContain('code_verifier=');
     expect(tokenBody).not.toContain('client_id=');
     expect(tokenBody).not.toContain('client_secret=');
+    expect(savePlatformOAuthTokens).toHaveBeenCalledWith(expect.objectContaining({
+      access_token: 'access-token',
+      refresh_token: 'refresh-token',
+    }));
   });
 
   it('tries alternate token auth shapes when pred.gg rejects the first request as invalid_request', async () => {

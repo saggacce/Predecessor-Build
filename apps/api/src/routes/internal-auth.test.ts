@@ -117,7 +117,7 @@ describe('POST /internal-auth/login', () => {
     expect(cookies.some((cookie) => cookie.startsWith('ps_refresh='))).toBe(true);
     expect(cookies.some((cookie) => cookie.includes('HttpOnly'))).toBe(true);
     expect(cookies.some((cookie) => cookie.includes('SameSite=Lax'))).toBe(true);
-    expect(cookies.some((cookie) => cookie.startsWith('ps_refresh=') && cookie.includes('Path=/internal-auth/refresh'))).toBe(true);
+    expect(cookies.some((cookie) => cookie.startsWith('ps_refresh=') && cookie.includes('Path=/'))).toBe(true);
     expect(mockDb.syncLog.create).toHaveBeenCalledWith({
       data: { entity: 'User', entityId: 'user-1', operation: 'login', status: 'success' },
     });

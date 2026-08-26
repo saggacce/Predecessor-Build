@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { db } from '../db.js';
 import { logger } from '../logger.js';
 import { requireAuth } from '../middleware/require-auth.js';
-import { exchangeToken } from './auth.js';
+import { getPlatformAccessToken } from '../services/predgg-token-service.js';
 import { syncRecentMatchesForPlayer } from '../services/sync-service.js';
 import type { SessionUser } from '../middleware/require-auth.js';
 
@@ -47,21 +47,15 @@ syncRouter.post('/my-matches', requireAuth, async (req, res, next) => {
       return;
     }
 
-    const cred = await db.platformCredential.findUnique({ where: { key: 'predgg_refresh_token' } });
-    if (!cred) {
-      res.status(503).json({ error: { message: 'Platform sync not configured. Contact your admin.', code: 'PLATFORM_CRED_NOT_CONFIGURED' } });
-      return;
-    }
-
-    const tokenResult = await exchangeToken({ grant_type: 'refresh_token', refresh_token: cred.value });
-    if (!tokenResult.ok || !tokenResult.data.access_token) {
+    const platformToken = await getPlatformAccessToken();
+    if (!platformToken) {
       res.status(503).json({ error: { message: 'Could not connect to pred.gg. Contact your admin.', code: 'PREDGG_TOKEN_ERROR' } });
       return;
     }
 
     userLastSync.set(userId, Date.now());
 
-    const result = await syncRecentMatchesForPlayer(db, player.predggId, tokenResult.data.access_token, 20);
+    const result = await syncRecentMatchesForPlayer(db, player.predggId, platformToken.accessToken, 20);
 
     logger.info({ userId, predggId: player.predggId, ...result }, 'user-triggered match sync complete');
     await db.syncLog.create({
