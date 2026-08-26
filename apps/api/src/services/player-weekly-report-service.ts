@@ -60,6 +60,13 @@ export type PlayerRoleCoach = {
     rationale: string;
     action: string;
   };
+  training: {
+    metricKey: 'cs_per_min' | 'dpm' | 'deaths_per_match' | 'wards_per_min' | 'kill_participation' | 'objective_damage_per_min' | 'structure_damage_per_min';
+    metricLabel: string;
+    direction: 'higher' | 'lower';
+    targetValue: number | null;
+    targetMatches: 5;
+  };
 };
 
 export type PlayerChampionPool = {
@@ -340,6 +347,55 @@ function buildRoleCoach(weeklyRows: MatchRow[], baselineRows: MatchRow[]): Playe
   const baseline = aggregateRole(baselineRoleRows);
   const matches = weeklyRoleRows.length;
   const baselineMatches = baselineRoleRows.length;
+  const focus = roleFocus(primaryRole, weekly, baseline, matches);
+
+  const trainingForFocus = () => {
+    const title = focus.title.toLowerCase();
+    let metricKey: PlayerRoleCoach['training']['metricKey'];
+    let metricLabel: string;
+    let direction: PlayerRoleCoach['training']['direction'] = 'higher';
+    let current: number | null;
+    let reference: number | null;
+
+    if (title.includes('muerte') || title.includes('regalarte') || title.includes('salidas')) {
+      metricKey = 'deaths_per_match'; metricLabel = 'Muertes por partida'; direction = 'lower';
+      current = weekly.deathsPerMatch; reference = baseline.deathsPerMatch;
+    } else if (title.includes('visión')) {
+      metricKey = 'wards_per_min'; metricLabel = 'Wards por minuto';
+      current = weekly.wardsPerMinute; reference = baseline.wardsPerMinute;
+    } else if (title.includes('objetivo')) {
+      metricKey = 'objective_damage_per_min'; metricLabel = 'Daño a objetivos por minuto';
+      current = weekly.objectiveDamagePerMinute; reference = baseline.objectiveDamagePerMinute;
+    } else if (title.includes('lateral') || title.includes('estructura')) {
+      metricKey = 'structure_damage_per_min'; metricLabel = 'Daño a estructuras por minuto';
+      current = weekly.structureDamagePerMinute; reference = baseline.structureDamagePerMinute;
+    } else if (title.includes('recursos') || title.includes('farmeo') || title.includes('oleada')) {
+      metricKey = 'cs_per_min'; metricLabel = 'CS por minuto';
+      current = weekly.csPerMinute; reference = baseline.csPerMinute;
+    } else if (primaryRole === 'SUPPORT' || primaryRole === 'JUNGLE') {
+      metricKey = 'kill_participation'; metricLabel = 'Participación en bajas';
+      current = weekly.killParticipation; reference = baseline.killParticipation;
+    } else if (primaryRole === 'OFFLANE') {
+      metricKey = 'structure_damage_per_min'; metricLabel = 'Daño a estructuras por minuto';
+      current = weekly.structureDamagePerMinute; reference = baseline.structureDamagePerMinute;
+    } else {
+      metricKey = 'dpm'; metricLabel = 'Daño por minuto';
+      current = weekly.damagePerMinute; reference = baseline.damagePerMinute;
+    }
+
+    const targetValue = current === null
+      ? reference
+      : direction === 'lower'
+        ? Math.min(current * 0.9, reference ?? current * 0.9)
+        : Math.max(current * 1.05, reference ?? current * 1.05);
+    return {
+      metricKey,
+      metricLabel,
+      direction,
+      targetValue: targetValue === null ? null : rounded(targetValue, 2),
+      targetMatches: 5 as const,
+    };
+  };
 
   return {
     role: primaryRole,
@@ -354,7 +410,8 @@ function buildRoleCoach(weeklyRows: MatchRow[], baselineRows: MatchRow[]): Playe
       baseline: baseline[key],
       unit: key === 'kda' ? 'ratio' : key === 'deathsPerMatch' ? 'per_match' : key === 'killParticipation' ? 'percent' : 'per_minute',
     })),
-    focus: roleFocus(primaryRole, weekly, baseline, matches),
+    focus,
+    training: trainingForFocus(),
   };
 }
 

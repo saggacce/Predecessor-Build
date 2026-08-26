@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router';
-import { Activity, ArrowDownRight, ArrowUpRight, Crosshair, Link as LinkIcon, Minus, RefreshCw, Sparkles, Target } from 'lucide-react';
+import { Activity, ArrowDownRight, ArrowUpRight, Crosshair, Flag, Link as LinkIcon, Minus, RefreshCw, Sparkles, Target } from 'lucide-react';
 import { toast } from 'sonner';
-import { ApiErrorResponse, apiClient, type PlayerMetricTrend, type PlayerWeeklyReport } from '../api/client';
+import { ApiErrorResponse, apiClient, type PlayerMetricTrend, type PlayerWeeklyReport, type WeeklyGoalEvaluation } from '../api/client';
 import { HeroAvatarWithTooltip } from '../components/HeroAvatar';
 import { MatchEnrichmentCard } from '../components/MatchEnrichmentCard';
 import { useAuth } from '../hooks/useAuth';
@@ -71,6 +71,8 @@ export default function PlayerWeeklyReportPage() {
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [coverageRefresh, setCoverageRefresh] = useState(0);
+  const [goalEvaluations, setGoalEvaluations] = useState<WeeklyGoalEvaluation[]>([]);
+  const [savingGoal, setSavingGoal] = useState(false);
   const linkedPlayerId = user?.linkedPlayerId;
 
   const loadReport = useCallback(async () => {
@@ -88,16 +90,26 @@ export default function PlayerWeeklyReportPage() {
     }
   }, [linkedPlayerId]);
 
+  const loadGoalProgress = useCallback(async () => {
+    if (!linkedPlayerId) return;
+    try {
+      const result = await apiClient.weeklyGoals.progress();
+      setGoalEvaluations(result.evaluations);
+    } catch {
+      // The report remains useful even if goal tracking is temporarily unavailable.
+    }
+  }, [linkedPlayerId]);
+
   useEffect(() => {
-    const timer = window.setTimeout(() => void loadReport(), 0);
+    const timer = window.setTimeout(() => void Promise.all([loadReport(), loadGoalProgress()]), 0);
     return () => window.clearTimeout(timer);
-  }, [loadReport]);
+  }, [loadGoalProgress, loadReport]);
 
   async function syncMatches() {
     try {
       setSyncing(true);
       const result = await apiClient.sync.myMatches();
-      await loadReport();
+      await Promise.all([loadReport(), loadGoalProgress()]);
       setCoverageRefresh((current) => current + 1);
       toast.success(result.newMatches > 0
         ? `${result.newMatches} partidas nuevas · ${result.syncedMatches} revisadas para el informe.`
@@ -106,6 +118,26 @@ export default function PlayerWeeklyReportPage() {
       toast.error(error instanceof ApiErrorResponse ? error.error.message : 'No se pudieron sincronizar tus partidas.');
     } finally {
       setSyncing(false);
+    }
+  }
+
+  async function startTrainingPlan() {
+    if (!report?.roleCoach || !linkedPlayerId) return;
+    const training = report.roleCoach.training;
+    try {
+      setSavingGoal(true);
+      await apiClient.weeklyGoals.create({
+        title: `${report.roleCoach.focus.title} · 5 partidas`,
+        metricKey: training.metricKey,
+        targetValue: training.targetValue ?? undefined,
+        playerId: linkedPlayerId,
+      });
+      await loadGoalProgress();
+      toast.success('Plan de cinco partidas iniciado. El progreso se actualizará automáticamente.');
+    } catch (error) {
+      toast.error(error instanceof ApiErrorResponse ? error.error.message : 'No se pudo iniciar el plan de entrenamiento.');
+    } finally {
+      setSavingGoal(false);
     }
   }
 
@@ -130,6 +162,7 @@ export default function PlayerWeeklyReportPage() {
   }
 
   const displayName = report.player.customName ?? report.player.displayName;
+  const activeGoal = goalEvaluations.find((evaluation) => evaluation.goal.status === 'ACTIVE') ?? goalEvaluations[0] ?? null;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
@@ -271,6 +304,58 @@ export default function PlayerWeeklyReportPage() {
           <p style={{ margin: 0, fontSize: '0.76rem', lineHeight: 1.45 }}><strong>Plan:</strong> {report.championPool.recommendation.action}</p>
         </div>
       </section>
+
+      {report.roleCoach ? (
+        <section className="glass-card" style={{ padding: '1.15rem', borderColor: 'rgba(52,211,153,0.28)' }} aria-labelledby="training-loop-title">
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '0.8rem', flexWrap: 'wrap' }}>
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', color: 'var(--accent-win)', fontSize: '0.68rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.07em' }}>
+                <Flag size={15} /> Ciclo de entrenamiento
+              </div>
+              <h2 id="training-loop-title" style={{ margin: '0.55rem 0 0.25rem', fontSize: '1.15rem' }}>
+                {activeGoal ? activeGoal.goal.title : 'Entrena, mide y reevalúa'}
+              </h2>
+              <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: '0.74rem' }}>
+                {activeGoal
+                  ? `${activeGoal.matchesTracked} de ${activeGoal.targetMatches} partidas registradas automáticamente`
+                  : `Objetivo sugerido: ${report.roleCoach.training.metricLabel} durante cinco partidas`}
+              </p>
+            </div>
+            {!activeGoal ? (
+              <button type="button" className="btn-primary" disabled={savingGoal} onClick={() => void startTrainingPlan()} style={{ flex: 'unset', whiteSpace: 'nowrap', fontSize: '0.75rem' }}>
+                {savingGoal ? 'Iniciando…' : 'Iniciar plan de 5 partidas'}
+              </button>
+            ) : null}
+          </div>
+
+          {activeGoal ? (
+            <div style={{ marginTop: '0.85rem' }}>
+              <div role="progressbar" aria-label="Partidas completadas del plan" aria-valuemin={0} aria-valuemax={activeGoal.targetMatches} aria-valuenow={activeGoal.matchesTracked} style={{ height: 7, borderRadius: 999, overflow: 'hidden', background: 'rgba(148,163,184,0.14)' }}>
+                <div style={{ width: `${Math.min(100, (activeGoal.matchesTracked / activeGoal.targetMatches) * 100)}%`, height: '100%', background: 'var(--accent-win)', borderRadius: 999 }} />
+              </div>
+              <div style={{ display: 'flex', gap: '1rem', marginTop: '0.7rem', flexWrap: 'wrap' }}>
+                <span style={{ color: 'var(--text-secondary)', fontSize: '0.73rem' }}>Valor actual: <strong>{activeGoal.metricValue ?? '—'}</strong></span>
+                <span style={{ color: 'var(--text-secondary)', fontSize: '0.73rem' }}>Referencia anterior: <strong>{activeGoal.baselineValue ?? '—'}</strong></span>
+                {activeGoal.goal.targetValue !== null ? <span style={{ color: 'var(--text-secondary)', fontSize: '0.73rem' }}>Objetivo: <strong>{activeGoal.goal.targetValue}</strong></span> : null}
+              </div>
+              <p style={{ margin: '0.65rem 0 0', color: activeGoal.matchesTracked >= activeGoal.targetMatches ? 'var(--accent-win)' : 'var(--text-muted)', fontSize: '0.75rem' }}>
+                {activeGoal.matchesTracked >= activeGoal.targetMatches
+                  ? activeGoal.outcome === 'target_achieved' || activeGoal.outcome === 'improved'
+                    ? 'Ciclo completado con mejora. Revisa el informe y decide si consolidas o subes el objetivo.'
+                    : 'Ciclo completado. Revisa las cinco partidas y ajusta el objetivo antes del siguiente bloque.'
+                  : `Faltan ${activeGoal.targetMatches - activeGoal.matchesTracked} partidas para reevaluar con una muestra cerrada.`}
+              </p>
+            </div>
+          ) : (
+            <div style={{ marginTop: '0.85rem', padding: '0.8rem', borderRadius: 8, background: 'rgba(52,211,153,0.06)' }}>
+              <strong style={{ fontSize: '0.8rem' }}>{report.roleCoach.focus.title}</strong>
+              <p style={{ margin: '0.3rem 0 0', color: 'var(--text-secondary)', fontSize: '0.75rem', lineHeight: 1.45 }}>
+                El sistema guardará una referencia, contará solo las cinco partidas posteriores y comparará el resultado automáticamente.
+              </p>
+            </div>
+          )}
+        </section>
+      ) : null}
 
       <section style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(175px, 1fr))', gap: '0.75rem' }}>
         {report.trends.map((item) => <MetricCard key={item.metric} trend={item} />)}

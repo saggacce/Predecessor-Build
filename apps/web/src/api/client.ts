@@ -165,6 +165,13 @@ export interface PlayerWeeklyReport {
       unit: 'ratio' | 'per_match' | 'per_minute' | 'percent';
     }>;
     focus: { title: string; rationale: string; action: string };
+    training: {
+      metricKey: 'cs_per_min' | 'dpm' | 'deaths_per_match' | 'wards_per_min' | 'kill_participation' | 'objective_damage_per_min' | 'structure_damage_per_min';
+      metricLabel: string;
+      direction: 'higher' | 'lower';
+      targetValue: number | null;
+      targetMatches: 5;
+    };
   } | null;
   championPool: {
     currentPatch: string | null;
@@ -1039,13 +1046,22 @@ export interface WeeklyGoalItem {
   userId: string;
   playerId: string | null;
   title: string;
-  metricKey: 'winrate' | 'kda' | 'cs_per_min' | 'gpm' | 'dpm' | 'custom';
+  metricKey: 'winrate' | 'kda' | 'cs_per_min' | 'gpm' | 'dpm' | 'deaths_per_match' | 'wards_per_min' | 'kill_participation' | 'objective_damage_per_min' | 'structure_damage_per_min' | 'custom';
   targetValue: number | null;
   currentValue: number;
   weekStart: string;
   status: 'ACTIVE' | 'ACHIEVED' | 'FAILED';
   createdAt: string;
   updatedAt: string;
+}
+
+export interface WeeklyGoalEvaluation {
+  goal: WeeklyGoalItem;
+  targetMatches: number;
+  matchesTracked: number;
+  metricValue: number | null;
+  baselineValue: number | null;
+  outcome: 'collecting' | 'target_achieved' | 'improved' | 'declined' | 'stable' | 'ready_for_review' | 'no_player';
 }
 
 export interface TeamCommItem {
@@ -1488,6 +1504,7 @@ export const apiClient = {
 
   weeklyGoals: {
     mine: () => fetchApi<{ goals: WeeklyGoalItem[]; weekStart: string }>('/weekly-goals/me'),
+    progress: () => fetchApi<{ evaluations: WeeklyGoalEvaluation[]; weekStart: string }>('/weekly-goals/me/progress'),
     create: (data: { title: string; metricKey?: WeeklyGoalItem['metricKey']; targetValue?: number; playerId?: string }) =>
       fetchApi<{ goal: WeeklyGoalItem }>('/weekly-goals', { method: 'POST', body: JSON.stringify(data) }),
     update: (id: string, data: { currentValue?: number; status?: WeeklyGoalItem['status']; title?: string; targetValue?: number | null }) =>

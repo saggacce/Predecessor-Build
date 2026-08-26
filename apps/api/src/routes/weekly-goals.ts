@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { db } from '../db.js';
 import { requireAuth } from '../middleware/require-auth.js';
 import { tryCompleteMission } from '../services/missions-service.js';
+import { evaluateWeeklyGoals } from '../services/weekly-goal-evaluation-service.js';
 
 export const weeklyGoalsRouter = Router();
 
@@ -16,7 +17,11 @@ function currentWeekStart(): Date {
 
 const createSchema = z.object({
   title: z.string().min(1).max(200),
-  metricKey: z.enum(['winrate', 'kda', 'cs_per_min', 'gpm', 'dpm', 'custom']).default('custom'),
+  metricKey: z.enum([
+    'winrate', 'kda', 'cs_per_min', 'gpm', 'dpm', 'deaths_per_match',
+    'wards_per_min', 'kill_participation', 'objective_damage_per_min',
+    'structure_damage_per_min', 'custom',
+  ]).default('custom'),
   targetValue: z.number().positive().optional(),
   playerId: z.string().optional(),
 });
@@ -36,6 +41,21 @@ weeklyGoalsRouter.get('/me', requireAuth, async (req, res, next) => {
       orderBy: { createdAt: 'asc' },
     });
     res.json({ goals, weekStart });
+  } catch (err) { next(err); }
+});
+
+weeklyGoalsRouter.get('/me/progress', requireAuth, async (req, res, next) => {
+  try {
+    const weekStart = currentWeekStart();
+    const account = await db.user.findUnique({
+      where: { id: req.user!.userId },
+      select: { linkedPlayerId: true },
+    });
+    const playerId = account?.linkedPlayerId
+      ?? req.user!.memberships.find((membership) => membership.playerId)?.playerId
+      ?? null;
+    const evaluations = await evaluateWeeklyGoals(db, req.user!.userId, playerId, weekStart);
+    res.json({ evaluations, weekStart });
   } catch (err) { next(err); }
 });
 
