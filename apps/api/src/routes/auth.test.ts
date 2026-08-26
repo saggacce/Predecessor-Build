@@ -3,6 +3,7 @@ import request from 'supertest';
 import express from 'express';
 import cookieParser from 'cookie-parser';
 import { authRouter } from './auth.js';
+import { savePlatformOAuthTokens } from '../services/predgg-token-service.js';
 
 vi.hoisted(() => {
   process.env.PRED_GG_CLIENT_ID = 'test-client-id';
@@ -97,6 +98,10 @@ describe('GET /auth/predgg', () => {
     expect(tokenBody).toContain('code_verifier=');
     expect(tokenBody).not.toContain('client_id=');
     expect(tokenBody).not.toContain('client_secret=');
+    expect(savePlatformOAuthTokens).toHaveBeenCalledWith(expect.objectContaining({
+      access_token: 'access-token',
+      refresh_token: 'refresh-token',
+    }));
   });
 
   it('tries alternate token auth shapes when pred.gg rejects the first request as invalid_request', async () => {

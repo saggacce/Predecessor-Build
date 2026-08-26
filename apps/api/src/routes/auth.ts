@@ -167,22 +167,19 @@ authRouter.get('/callback', async (req, res) => {
     }
 
     logger.info({ grantedScope: tokenData.scope, expires_in: tokenData.expires_in }, 'token exchange successful');
+    // Durability comes before browser success: never advertise a connected
+    // account if the server failed to persist the rotating credentials.
+    await savePlatformOAuthTokens(tokenData);
     setTokenCookies(res, tokenData);
-
-    // Persist the complete response in the single server-owned credential store.
-    if (tokenData.refresh_token) {
-      try {
-        await savePlatformOAuthTokens(tokenData);
-        logger.info('OAuth callback: platform credential updated, token state set to ok');
-      } catch (err) {
-        logger.warn({ err }, 'OAuth callback: failed to save platform credential');
-      }
-    }
+    logger.info('OAuth callback: platform credential updated, token state set to ok');
 
     logger.info('OAuth2 login successful — redirecting to players');
     res.redirect(`${predggOAuthConfig.frontendUrl}/players`);
   } catch (err) {
     logger.error({ err }, 'token exchange threw error');
+    res.clearCookie(COOKIE_TOKEN);
+    res.clearCookie(COOKIE_EXPIRES_AT);
+    res.clearCookie(COOKIE_REFRESH);
     res.redirect(`${predggOAuthConfig.frontendUrl}/?auth_error=server_error`);
   }
 });
