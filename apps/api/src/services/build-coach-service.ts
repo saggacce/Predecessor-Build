@@ -57,7 +57,8 @@ function semanticTags(item: {
   if (/movement speed|dash|blink|leap/.test(text)) tags.add('MOBILITY');
   if (/crowd control|stun|slow|root|knock/.test(text)) tags.add('CONTROL');
   if (/basic attack|critical strike/.test(text)) tags.add('BASIC_ATTACK');
-  if (/ability damage|magical power|ability haste/.test(text)) tags.add('ABILITY_DAMAGE');
+  if (/ability damage|magical power|ability haste|cooldown/.test(text)) tags.add('ABILITY_DAMAGE');
+  if (/deal.*damage|damage.*target/.test(text)) tags.add('DAMAGE');
   return tags;
 }
 
@@ -79,6 +80,7 @@ function tagPurpose(tag: string): string {
     MAGICAL_SHRED: 'reduce la resistencia mágica', SHRED: 'reduce las defensas rivales',
     SUSTAIN: 'aporta aguante sostenido', SHIELD: 'aporta protección', MOBILITY: 'mejora la movilidad',
     CONTROL: 'mejora el control', BASIC_ATTACK: 'potencia los ataques básicos', ABILITY_DAMAGE: 'potencia las habilidades',
+    DAMAGE: 'aumenta el daño',
   };
   return labels[tag] ?? tag.toLowerCase().replaceAll('_', ' ');
 }
@@ -95,6 +97,7 @@ function normalizeCatalogKey(value: string): string {
 
 function perkAssessment(perk: LoadoutPerk, player: {
   deaths: number;
+  role: string | null;
   heroDamage: number | null;
   totalHealingDone: number | null;
   totalShieldingReceived: number | null;
@@ -106,7 +109,19 @@ function perkAssessment(perk: LoadoutPerk, player: {
   let verdict: 'correct' | 'conditional' | 'questionable' = 'conditional';
   let why = `Su efecto se orienta a ${[...tags].slice(0, 2).map(tagPurpose).join(' y ') || 'una ventaja situacional'}.`;
 
-  if (matchedNeed) {
+  if (slot.includes('HERO_SPECIFIC') || slot.includes('AUGMENT')) {
+    verdict = 'correct';
+    why = `Es un Augmento propio del héroe y su efecto (${[...tags].slice(0, 2).map(tagPurpose).join(' y ') || 'mejora de habilidad'}) se activa jugando su patrón normal. Es una elección coherente; para llamarla óptima habría que compararla con los otros Augmentos disponibles.`;
+  } else if (player.role === 'SUPPORT' && /units?[^.]{0,30}killed|minions?[^.]{0,30}killed/.test(text.toLowerCase())) {
+    verdict = 'questionable';
+    why = 'Escala consiguiendo súbditos o unidades, pero como Support no deberías apropiarte del farmeo del Carry. Alcanzará su pico tarde y otra opción de utilidad o impacto inmediato suele aprovecharse mejor.';
+  } else if (player.role === 'SUPPORT' && tags.has('BASIC_ATTACK') && tags.has('SUSTAIN')) {
+    verdict = 'conditional';
+    why = 'Da sustain mediante ataques básicos. Puede ayudar en línea, pero un Support con poco daño básico obtiene menos valor que un héroe de Carry; es correcta solo si realmente necesitas aguante temprano.';
+  } else if (player.role === 'SUPPORT' && tags.has('DAMAGE') && /above.*health|health.*above/.test(text.toLowerCase())) {
+    verdict = 'correct';
+    why = 'Encaja con un Support de poke: premia golpear al rival antes de que empiece la pelea y no exige quitar farmeo a tus aliados.';
+  } else if (matchedNeed) {
     verdict = 'correct';
     why = `Encaja con esta partida porque ${tagPurpose(matchedNeed)}, una necesidad visible frente a la composición rival.`;
   } else if (tags.has('SUSTAIN') && (player.totalHealingDone ?? 0) > 2_000) {
@@ -123,10 +138,16 @@ function perkAssessment(perk: LoadoutPerk, player: {
     why = `La idea defensiva era razonable, pero ${player.deaths} muertes indican que no resolvió el principal patrón de riesgo; convenía priorizar una respuesta más específica.`;
   }
 
-  if (slot.includes('HERO_SPECIFIC') || slot.includes('AUGMENT')) {
-    why = `Es un Augmento diseñado para ${perk.name ?? 'tu héroe'}. ${why}`;
-  }
   return { ...perk, verdict, why, effect: perk.simpleDescription ?? perk.description ?? null };
+}
+
+function opponentPurchaseExplanation(heroSlug: string, itemName: string, tags: Set<string>): string {
+  if (tags.has('ARMOR')) return `${heroSlug} compró ${itemName} para reducir el daño físico. Desde ese minuto, el daño físico plano pierde valor y la penetración o el shred ganan prioridad.`;
+  if (tags.has('ANTI_MAGIC') || tags.has('SPELL_SHIELD')) return `${heroSlug} compró ${itemName} para resistir daño mágico. Si es uno de tus objetivos principales, tu siguiente pico ofensivo debe incluir penetración mágica o shred.`;
+  if (tags.has('ANTI_HEAL')) return `${heroSlug} compró ${itemName} para reducir la curación. El rival estaba intentando cortar el sustain de tu equipo; no conviene depender únicamente de curas para sobrevivir.`;
+  if (tags.has('ANTI_TANK')) return `${heroSlug} compró ${itemName} para castigar objetivos con mucha vida. Si tu primera línea estaba acumulando salud, necesitaba combinarla con resistencias en lugar de seguir apilando solo vida.`;
+  if (tags.has('PHYSICAL_SHRED') || tags.has('MAGICAL_SHRED') || tags.has('SHRED')) return `${heroSlug} compró ${itemName} para reducir defensas. A partir de ese minuto, las peleas largas favorecían su daño y era más importante proteger al objetivo que estaba debilitando.`;
+  return `${heroSlug} completó ${itemName} en ese momento; era una señal para revisar la siguiente compra antes de volver a base.`;
 }
 
 export async function getMatchBuildAnalysis(matchId: string, matchPlayerId: string) {
@@ -190,7 +211,7 @@ export async function getMatchBuildAnalysis(matchId: string, matchPlayerId: stri
       blocksIds: jsonArray<string>(data?.blocksIds),
       blockedByIds: jsonArray<string>(data?.blockedByIds),
     };
-  });
+  }).sort((a, b) => inventorySlugs.indexOf(a.slug) - inventorySlugs.indexOf(b.slug));
   const tags = new Set(inventory.flatMap((item) => [...semanticTags(item)]));
   const statNames = new Set(inventory.flatMap((item) => item.stats.map((stat) => stat.stat)));
   const enemies = row.match.matchPlayers.filter((player) => player.team !== row.team);
@@ -237,7 +258,7 @@ export async function getMatchBuildAnalysis(matchId: string, matchPlayerId: stri
       recommendation: 'Valora una respuesta anti-escudo si el valor procede de peleas repetidas y no de daño incidental.', desiredTags: ['ANTI_SHIELD'],
     });
   }
-  if (enemyMitigation >= 80_000 && !tags.has('ANTI_TANK') && !tags.has('SHRED')) {
+  if (enemyMitigation >= 80_000 && !['ANTI_TANK', 'SHRED', 'PHYSICAL_SHRED', 'MAGICAL_SHRED'].some((tag) => tags.has(tag))) {
     signals.push({
       key: 'anti-tank', severity: 'warning', title: 'Faltó penetración contra una primera línea resistente',
       evidence: `El equipo rival mitigó ${enemyMitigation.toLocaleString()} de daño${resistantHeroes ? `; la primera línea más resistente fue ${resistantHeroes}` : ''}.`,
@@ -310,9 +331,21 @@ export async function getMatchBuildAnalysis(matchId: string, matchPlayerId: stri
 
   const activeSignals = signals.filter((signal) => signal.key !== 'adaptation-ok');
   const needTagSet = new Set(desiredTags);
-  const inventoryAssessments = inventory.map((item) => {
+  const contextualNeedTags = new Set(desiredTags);
+  if (enemyHealing >= 12_000) contextualNeedTags.add('ANTI_HEAL');
+  if (enemyShielding >= 15_000) contextualNeedTags.add('ANTI_SHIELD');
+  if (enemyMitigation >= 80_000) ['ANTI_TANK', 'SHRED', 'PHYSICAL_SHRED', 'MAGICAL_SHRED'].forEach((tag) => contextualNeedTags.add(tag));
+  if (damageTotal > 0 && share(physical, damageTotal) >= 40) ['ARMOR', 'ANTI_CRIT'].forEach((tag) => contextualNeedTags.add(tag));
+  if (damageTotal > 0 && share(magical, damageTotal) >= 40) ['ANTI_MAGIC', 'SPELL_SHIELD'].forEach((tag) => contextualNeedTags.add(tag));
+  const finalInventory = inventory.filter((item) => item.rarity === 'EPIC' && item.slotType === 'PASSIVE');
+  const aggressionCounts = new Map<string, number>();
+  for (const item of finalInventory) {
+    if (item.aggressionType) aggressionCounts.set(item.aggressionType, (aggressionCounts.get(item.aggressionType) ?? 0) + 1);
+  }
+  const inventoryAssessments = finalInventory.map((item) => {
     const itemTags = semanticTags(item);
-    const matched = [...itemTags].filter((tag) => needTagSet.has(tag));
+    const matched = [...itemTags].filter((tag) => contextualNeedTags.has(tag));
+    const repeatsPurpose = item.aggressionType ? (aggressionCounts.get(item.aggressionType) ?? 0) > 1 : false;
     return {
       slug: item.slug,
       displayName: item.displayName,
@@ -320,6 +353,8 @@ export async function getMatchBuildAnalysis(matchId: string, matchPlayerId: stri
       purpose: [...itemTags].slice(0, 3).map(tagPurpose),
       explanation: matched.length > 0
         ? `Fue una buena adaptación porque ${matched.map(tagPurpose).join(' y ')}.`
+        : repeatsPurpose
+          ? `Repite el mismo enfoque (${item.aggressionType!.toLowerCase().replaceAll('_', ' ')}) que otra pieza. Esa redundancia era la ranura más fácil de convertir en una respuesta al rival.`
         : activeSignals.length > 0
           ? 'Puede formar parte del núcleo del héroe, pero no respondía a las amenazas que decidieron esta partida.'
           : 'Encajó sin dejar una carencia contextual evidente en la build final.',
@@ -327,14 +362,20 @@ export async function getMatchBuildAnalysis(matchId: string, matchPlayerId: stri
   });
 
   const alreadyOwned = new Set(inventory.map((item) => item.slug));
-  const replaceable = inventory
+  const replaceable = finalInventory
     .filter((item) => ![...semanticTags(item)].some((tag) => needTagSet.has(tag)))
-    .filter((item) => item.rarity === 'EPIC' && item.slotType === 'PASSIVE');
+    .sort((a, b) => {
+      const aDuplicate = a.aggressionType && (aggressionCounts.get(a.aggressionType) ?? 0) > 1 ? 1 : 0;
+      const bDuplicate = b.aggressionType && (aggressionCounts.get(b.aggressionType) ?? 0) > 1 ? 1 : 0;
+      return bDuplicate - aDuplicate;
+    });
   const usedReplacements = new Set<string>();
+  const usedSuggestions = new Set<string>();
   const changes = activeSignals.flatMap((signal) => {
     const suggestion = signal.suggestedItems?.find((item) => !alreadyOwned.has(item.slug));
-    if (!suggestion) return [];
-    const insteadOf = [...replaceable].reverse().find((item) => !usedReplacements.has(item.slug));
+    if (!suggestion || usedSuggestions.has(suggestion.slug)) return [];
+    usedSuggestions.add(suggestion.slug);
+    const insteadOf = replaceable.find((item) => !usedReplacements.has(item.slug));
     if (insteadOf) usedReplacements.add(insteadOf.slug);
     const timing = signal.key === 'anti-heal'
       ? 'Como segunda pieza completa, antes de que la curación domine las peleas grupales.'
@@ -349,7 +390,7 @@ export async function getMatchBuildAnalysis(matchId: string, matchPlayerId: stri
       item: suggestion,
       insteadOf: insteadOf ? { slug: insteadOf.slug, displayName: insteadOf.displayName } : null,
       timing,
-      why: `${signal.evidence} ${suggestion.reason}`,
+      why: `${signal.evidence} ${suggestion.reason}${activeSignals.some((other) => other.key !== signal.key && other.suggestedItems?.some((item) => item.slug === suggestion.slug)) ? ' Además, la misma pieza cubre más de una de las carencias detectadas, por lo que no necesitas sacrificar otra ranura.' : ''}`,
     }];
   });
 
@@ -398,7 +439,7 @@ export async function getMatchBuildAnalysis(matchId: string, matchPlayerId: stri
       playerName: enemy.playerName,
       itemName: item.displayName,
       itemSlug: item.slug,
-      explanation: `${enemy.heroSlug} compró ${item.displayName} para ${relevant.slice(0, 2).map(tagPurpose).join(' y ')}. A partir de ese minuto, repetir daño plano pierde valor y conviene adaptar la siguiente pieza.`,
+      explanation: opponentPurchaseExplanation(enemy.heroSlug, item.displayName, item.tags),
     }];
   }).slice(0, 8);
 
