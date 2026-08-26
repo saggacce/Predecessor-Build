@@ -67,6 +67,7 @@ Para un héroe, rol y modo se comparan win rate, KDA, daño/minuto, oro/minuto, 
 | `GET /players/:id/champion-pool-context` | Pool, matchups y sinergias personales con filtros |
 | `GET /players/:id/benchmarks` | Comparación poblacional y capacidades avanzadas |
 | `GET /matches/:id/build-analysis/:matchPlayerId` | Diagnóstico contextual de la build de una partida |
+| `GET /matches/live/:predggUuid/build-analysis` | El mismo diagnóstico para la partida abierta desde “Mis partidas” |
 
 ## Siguiente evolución recomendada
 

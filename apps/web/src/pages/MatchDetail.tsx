@@ -221,6 +221,7 @@ export default function MatchDetail({ liveMode = false }: { liveMode?: boolean }
         <StatisticsTab
           match={match} duskWon={duskWon} dawnWon={dawnWon} onResync={handleSyncPlayers} syncing={syncing}
           buildCoachPlayerId={!liveMode ? personalMatchPlayer?.id ?? null : null}
+          liveMode={liveMode}
         />
       )}
       {tab === 'timeline' && (
@@ -1692,15 +1693,19 @@ function TlTipItemRow({ itemName }: { itemName: string | null }) {
 
 // ── Statistics Tab ────────────────────────────────────────────────────────────
 
-function BuildCoachCard({ matchId, matchPlayerId }: { matchId: string; matchPlayerId: string }) {
+function BuildCoachCard({ matchId, matchPlayerId, liveMode }: { matchId: string; matchPlayerId: string | null; liveMode: boolean }) {
   const [analysis, setAnalysis] = useState<MatchBuildAnalysis | null>(null);
   useEffect(() => {
+    if (!liveMode && !matchPlayerId) return;
     let cancelled = false;
-    void apiClient.matches.buildAnalysis(matchId, matchPlayerId)
+    const request = liveMode
+      ? apiClient.matches.liveBuildAnalysis(matchId)
+      : apiClient.matches.buildAnalysis(matchId, matchPlayerId!);
+    void request
       .then((result) => { if (!cancelled) setAnalysis(result); })
       .catch(() => { if (!cancelled) setAnalysis(null); });
     return () => { cancelled = true; };
-  }, [matchId, matchPlayerId]);
+  }, [liveMode, matchId, matchPlayerId]);
 
   if (!analysis) return null;
   return (
@@ -1739,10 +1744,11 @@ function BuildCoachCard({ matchId, matchPlayerId }: { matchId: string; matchPlay
   );
 }
 
-function StatisticsTab({ match, duskWon, dawnWon, onResync, syncing, buildCoachPlayerId }: {
+function StatisticsTab({ match, duskWon, dawnWon, onResync, syncing, buildCoachPlayerId, liveMode }: {
   match: MatchDetailData; duskWon: boolean; dawnWon: boolean;
   onResync: () => void; syncing: boolean;
   buildCoachPlayerId: string | null;
+  liveMode: boolean;
 }) {
   const allPlayers = [...match.dusk, ...match.dawn];
   const hasExtendedStats = allPlayers.some((p) => p.physicalDamageDealtToHeroes !== null);
@@ -1781,7 +1787,7 @@ function StatisticsTab({ match, duskWon, dawnWon, onResync, syncing, buildCoachP
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-      {buildCoachPlayerId && <BuildCoachCard matchId={match.id} matchPlayerId={buildCoachPlayerId} />}
+      {(liveMode || buildCoachPlayerId) && <BuildCoachCard matchId={liveMode ? match.predggUuid : match.id} matchPlayerId={buildCoachPlayerId} liveMode={liveMode} />}
       {/* Section 1 — Damage Output */}
       <StatSection title="Damage Output" description="Hero damage breakdown (physical · magic · true) and total dealt">
         {teams.map(({ key, label, players, won }) => (

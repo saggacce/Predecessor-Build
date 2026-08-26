@@ -1425,6 +1425,8 @@ export const apiClient = {
     getLive: (predggUuid: string) => fetchApi<LiveMatchResponse>(`/matches/live/${predggUuid}`),
     buildAnalysis: (matchId: string, matchPlayerId: string) =>
       fetchApi<MatchBuildAnalysis>(`/matches/${matchId}/build-analysis/${matchPlayerId}`),
+    liveBuildAnalysis: (predggUuid: string) =>
+      fetchApi<MatchBuildAnalysis>(`/matches/live/${predggUuid}/build-analysis`),
   },
 
   reports: {
