@@ -109,6 +109,50 @@ export interface RecentMatch {
   totalHealingDone: number | null;
 }
 
+export interface PlayerPeriodMetrics {
+  matches: number;
+  wins: number;
+  winRate: number | null;
+  kills: number;
+  deaths: number;
+  assists: number;
+  kda: number | null;
+  averageHeroDamage: number | null;
+  averageGold: number | null;
+  averageLaneMinions: number | null;
+}
+
+export interface PlayerMetricTrend {
+  metric: 'kda' | 'winRate' | 'averageHeroDamage' | 'averageGold' | 'averageLaneMinions';
+  weekly: number | null;
+  baseline: number | null;
+  delta: number | null;
+  direction: 'up' | 'down' | 'stable' | 'insufficient_data';
+  deltaUnit: 'percent' | 'percentage_points';
+}
+
+export interface PlayerWeeklyReport {
+  generatedAt: string;
+  period: { weeklyFrom: string; baselineFrom: string; to: string };
+  player: { id: string; displayName: string; customName: string | null };
+  weekly: PlayerPeriodMetrics;
+  baseline30d: PlayerPeriodMetrics;
+  trends: PlayerMetricTrend[];
+  topHero: {
+    heroSlug: string;
+    matches: number;
+    wins: number;
+    winRate: number;
+    shareOfWeeklyMatches: number;
+  } | null;
+  focusOfWeek: {
+    category: 'activity' | 'survivability' | 'consistency' | 'hero_pool' | 'momentum';
+    title: string;
+    rationale: string;
+    action: string;
+  };
+}
+
 export interface PlayerProfile {
   id: string;
   displayName: string;
@@ -1194,6 +1238,8 @@ export const apiClient = {
         method: 'POST',
         body: JSON.stringify({ ownTeamId, rivalTeamId }),
       }),
+    playerWeekly: (playerId: string) =>
+      fetchApi<PlayerWeeklyReport>(`/reports/player-weekly/${encodeURIComponent(playerId)}`),
   },
 
   analyst: {

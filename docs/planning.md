@@ -52,7 +52,7 @@ Tablero de tareas generales y subtareas.
 
 ## [x] Tarea 4 — Calidad y operación
 - [x] Logs/errores: Pino, logging JSON estructurado
-- [x] 106 tests en Vitest + Supertest (cobertura: players, teams, admin, auth, map-zones, domain-engine)
+- [x] 114 tests en Vitest + Supertest (cobertura: players, teams, admin, auth, sync personal, reports, map-zones, domain-engine)
 - [x] CI/CD GitHub Actions + branch protection en main
 - [x] Tests de agregación de métricas de jugador (PR #47)
 - [x] Tests de filtros por parche/ventana temporal (PR #47)
@@ -229,12 +229,12 @@ Diferente al Timeline tab de Match Detail — orientado a sesión de review de e
 
 ---
 
-## Tarea 23 — B2C: Player Reports
+## [x] Tarea 23 — B2C: Player Reports
 Para jugadores individuales (PLAYER standalone).
 
-- [ ] `GET /reports/player-weekly/:playerId` — KDA semanal vs histórico, héroe más jugado, WR 7d vs 30d
-- [ ] Página `/reports/weekly` con condicional por rol
-- [ ] Player Development autogenerado desde métricas históricas (slump, hero pool, etc.)
+- [x] `GET /reports/player-weekly/:playerId` — KDA semanal vs histórico, héroe más jugado, WR 7d vs 30d
+- [x] Página `/reports/weekly` exclusiva para PLAYER standalone, con actualización manual de partidas
+- [x] Player Development autogenerado desde métricas históricas (actividad, supervivencia, hero pool, momentum y consistencia)
 
 ---
 
@@ -346,12 +346,13 @@ Formulario «Nuevo ítem de revisión» añadido en ReviewQueue para que el anal
 - Panel de Roles y Permisos reorganizado: 13 secciones, 6 roles (PLAYER standalone añadido), nuevas claves para Playbook/Scrim Planner/Review Sessions/Tactical Board
 - Lista de partidas con filtro por equipo rival — `rivalTeamName` cruzando `ScrimSchedule` con UUID de pred.gg
 - Vista de partidas personales para PLAYER (`/player/matches`) — historial desde pred.gg con KDA, héroe, resultado, duración
-- Token keep-alive: renovación automática del refresh token de pred.gg cada 20 min para que los syncs nunca fallen
+- Token central de pred.gg: el servidor comprueba cada 5 min el access token y solo utiliza el refresh token cuando está próximo a caducar
 
 ## [x] Tarea 30 — Infraestructura OAuth pred.gg
 *PRs #235–#245. Desplegado en producción (2026-05-31).*
 
-- Token keep-alive: interval 15 días (token dura 30d), renueva y persiste el rotado — `startTokenKeepAlive()` al arrancar
+- Gestor central de token: una única credencial rotatoria en PostgreSQL, acceso cacheado y persistido, exclusión mutua local + advisory lock entre procesos
+- Keep-alive cada 5 min: `startTokenKeepAlive()` comprueba el acceso, pero solo contacta con pred.gg cuando el access token está próximo a caducar
 - Banner de estado del token en Data Quality: verde/rojo/amarillo con botón «Reconectar pred.gg»
 - `platformTokenState` actualizado inmediatamente al reconectar OAuth (callback + event stream sync)
 - CI/CD mejorado: build frontend en CI, health check post-deploy (6 reintentos × 5s), rollback automático si falla

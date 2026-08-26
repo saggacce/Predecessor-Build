@@ -37,7 +37,7 @@ tech-stack:
     database: "PostgreSQL"
     logging: "Pino (structured JSON)"
     validation: "Zod"
-    auth-pred-gg: "OAuth2 PKCE — pred.gg provider — cookie: predgg_token (httpOnly)"
+    auth-pred-gg: "OAuth2 PKCE — refresh token único en PlatformCredential; access token corto en cookie httpOnly"
     auth-internal: "JWT (jose) — email + bcrypt — cookie: ps_session (httpOnly, 1h) + ps_refresh (30d)"
     auth-middleware: "requireAuth + requireRole(['ROLE']) — apps/api/src/middleware/"
 
@@ -710,7 +710,7 @@ PrimeSight es un monorepo con cuatro capas:
 **Sync worker** — `workers/data-sync/` — consume la API GraphQL de pred.gg (`https://pred.gg/gql`) y persiste en PostgreSQL. El schema de Prisma vive aquí y es el único schema de toda la app.
 
 **Auth** — dos sistemas coexistentes:
-- pred.gg OAuth2 PKCE — Bearer token para sync de datos. Cookie `predgg_token` (httpOnly).
+- pred.gg OAuth2 PKCE — credencial rotatoria única en PostgreSQL, gestionada y serializada por el servidor; cookie `predgg_token` solo para el access token corto del navegador.
 - Auth interno JWT — email + bcrypt. Cookie `ps_session` (1h) + `ps_refresh` (30d). Roles globales: `PLATFORM_ADMIN | VIEWER`. Roles por equipo: `MANAGER | COACH | ANALISTA | JUGADOR`. Middleware: `requireAuth` + `requireRole(['ROLE'])`.
 
 Al generar código para PrimeSight:

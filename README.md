@@ -13,9 +13,9 @@ Private competitive intelligence platform for the MOBA [Predecessor](https://www
 | Database | PostgreSQL + Prisma ORM |
 | Auth | Internal (bcrypt + JWT + HTTP-only cookies) + OAuth2 PKCE (pred.gg) |
 | Logging | Pino (structured JSON) |
-| Tests | Vitest + Supertest (106 tests) |
+| Tests | Vitest + Supertest (114 tests) |
 | CI/CD | GitHub Actions + branch protection on main |
-| Hosting | Railway.app (single service: API + frontend static build) |
+| Hosting | Hetzner VPS (Nginx + PM2; API + frontend static build) |
 
 ---
 
@@ -81,7 +81,7 @@ npx tsx scripts/seed-config.ts             # seed platform config
 
 ### Tests
 ```bash
-npm test                    # 106 tests across API routes + domain engine
+npm test                    # 114 tests across API routes + domain engine
 npm run typecheck           # TypeScript strict check
 ```
 

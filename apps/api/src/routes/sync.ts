@@ -35,9 +35,16 @@ syncRouter.post('/my-matches', requireAuth, async (req, res, next) => {
       return;
     }
 
-    const playerId = memberships.find((m) => m.playerId)?.playerId;
+    // Standalone players are linked directly from User.linkedPlayerId. Team
+    // members may still use the membership relation, so keep that as a
+    // fallback while the personal-coach experience becomes the primary flow.
+    const account = await db.user.findUnique({
+      where: { id: userId },
+      select: { linkedPlayerId: true },
+    });
+    const playerId = account?.linkedPlayerId ?? memberships.find((m) => m.playerId)?.playerId;
     if (!playerId) {
-      res.status(400).json({ error: { message: 'No player linked to your account. Contact your manager.', code: 'NO_PLAYER_LINKED' } });
+      res.status(400).json({ error: { message: 'No player linked to your account.', code: 'NO_PLAYER_LINKED' } });
       return;
     }
 
