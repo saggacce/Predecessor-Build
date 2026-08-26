@@ -1248,6 +1248,8 @@ export interface MatchBuildAnalysis {
     slotType: string | null;
     isEvolved: boolean;
     isHidden: boolean;
+    stats: Array<{ stat: string; value: number; showPercent?: boolean }>;
+    effects: Array<{ name: string; text: string; condition?: string | null; cooldown?: string | null }>;
   }>;
   inventoryAssessments: Array<{
     slug: string;
@@ -1266,10 +1268,24 @@ export interface MatchBuildAnalysis {
     changes: Array<{
       signalKey: string;
       action: 'add' | 'replace';
-      item: { slug: string; displayName: string; aggressionType: string | null; reason: string };
+      item: {
+        slug: string; displayName: string; aggressionType: string | null; reason: string; totalPrice: number;
+        stats: Array<{ stat: string; value: number; showPercent?: boolean }>;
+        effects: Array<{ name: string; text: string; condition?: string | null; cooldown?: string | null }>;
+      };
       insteadOf: { slug: string; displayName: string } | null;
       timing: string;
       why: string;
+    }>;
+    sequence: Array<{
+      position: number;
+      slug: string;
+      displayName: string;
+      phase: string;
+      reason: string;
+      replaces: { slug: string; displayName: string } | null;
+      stats: Array<{ stat: string; value: number; showPercent?: boolean }>;
+      effects: Array<{ name: string; text: string; condition?: string | null; cooldown?: string | null }>;
     }>;
   };
   purchaseTimeline: {
@@ -1293,7 +1309,23 @@ export interface MatchBuildAnalysis {
     verdict: 'correct' | 'conditional' | 'questionable';
     why: string;
     effect: string | null;
+    icon?: string | null;
   }>;
+  recommendedLoadout: {
+    augment: {
+      id: string; slug: string; displayName: string; slot: string; icon: string | null; effect: string; reason: string;
+      replaces: { id: string; displayName: string } | null;
+    } | null;
+    eternal: {
+      id: string; slug: string; displayName: string; slot: string; icon: string | null; effect: string; reason: string;
+      replaces: { id: string; displayName: string } | null;
+    } | null;
+    blessings: Array<{
+      id: string; slug: string; displayName: string; slot: string; icon: string | null; effect: string; reason: string;
+      replaces: { id: string; displayName: string } | null;
+    }>;
+    explanation: string;
+  };
   abilityOrder: Array<{ ability: string; gameTime: number }>;
   signals: Array<{
     key: string;
@@ -1301,7 +1333,14 @@ export interface MatchBuildAnalysis {
     title: string;
     evidence: string;
     recommendation: string;
-    suggestedItems?: Array<{ slug: string; displayName: string; aggressionType: string | null; reason: string }>;
+    whyItMatters?: string;
+    sources?: Array<{ heroSlug: string; sourceType: 'ability' | 'item'; name: string; description: string }>;
+    appliesAgainst?: string[];
+    suggestedItems?: Array<{
+      slug: string; displayName: string; aggressionType: string | null; reason: string; totalPrice: number;
+      stats: Array<{ stat: string; value: number; showPercent?: boolean }>;
+      effects: Array<{ name: string; text: string; condition?: string | null; cooldown?: string | null }>;
+    }>;
   }>;
 }
 

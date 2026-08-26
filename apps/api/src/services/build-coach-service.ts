@@ -9,8 +9,15 @@ interface BuildSignal {
   title: string;
   evidence: string;
   recommendation: string;
+  whyItMatters?: string;
+  sources?: Array<{ heroSlug: string; sourceType: 'ability' | 'item'; name: string; description: string }>;
+  appliesAgainst?: string[];
   desiredTags: string[];
-  suggestedItems?: Array<{ slug: string; displayName: string; aggressionType: string | null; reason: string }>;
+  suggestedItems?: Array<{
+    slug: string; displayName: string; aggressionType: string | null; reason: string; totalPrice: number;
+    stats: Array<{ stat: string; value: number; showPercent?: boolean }>;
+    effects: Array<{ name: string; text: string; condition?: string | null; cooldown?: string | null }>;
+  }>;
 }
 
 type LoadoutPerk = {
@@ -20,6 +27,26 @@ type LoadoutPerk = {
   slot: string;
   simpleDescription?: string | null;
   description?: string | null;
+  icon?: string | null;
+};
+
+type HeroAbility = {
+  key?: string;
+  display_name?: string;
+  game_description?: string;
+  menu_description?: string;
+};
+
+type CatalogPerk = {
+  predggDataId: string;
+  displayName: string;
+  slot: string;
+  icon: string | null;
+  simpleDescription: string | null;
+  description: string;
+  heroSlug: string | null;
+  minorBlessingPredggIds: unknown;
+  perk: { predggId: string; slug: string };
 };
 
 function jsonArray<T>(value: unknown): T[] {
@@ -49,8 +76,8 @@ function semanticTags(item: {
   if (/shield.*reduc|reduce.*shield|anti.?shield/.test(text)) tags.add('ANTI_SHIELD');
   if (/spell shield|block.*ability/.test(text)) tags.add('SPELL_SHIELD');
   if (/critical.*reduc|reduce.*critical|anti.?crit/.test(text)) tags.add('ANTI_CRIT');
-  if (/armor.*shred|reduce.*armor|physical penetration/.test(text)) tags.add('PHYSICAL_SHRED');
-  if (/magical armor.*reduc|magical penetration/.test(text)) tags.add('MAGICAL_SHRED');
+  if (/armor.*shred|shred.*physical.*armor|reduce.*armor|physical penetration/.test(text)) tags.add('PHYSICAL_SHRED');
+  if (/magical armor.*reduc|shred.*magical.*armor|magical penetration/.test(text)) tags.add('MAGICAL_SHRED');
   if (/maximum health|bonus health|current health/.test(text)) tags.add('ANTI_TANK');
   if (/heal|healing|health regeneration|omnivamp|lifesteal/.test(text)) tags.add('SUSTAIN');
   if (/shield/.test(text)) tags.add('SHIELD');
@@ -93,6 +120,64 @@ function minuteLabel(gameTime: number): string {
 
 function normalizeCatalogKey(value: string): string {
   return value.toLowerCase().replace(/[^a-z0-9]/g, '');
+}
+
+function plainText(value: string): string {
+  return value.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+function educationalExplanation(key: string): { whyItMatters: string; appliesAgainst: string[] } | null {
+  const explanations: Record<string, { whyItMatters: string; appliesAgainst: string[] }> = {
+    'anti-heal': {
+      whyItMatters: 'La curación borra parte del daño que tu equipo ya ha invertido y permite al rival alargar o reiniciar la pelea. Aplicar Heridas Graves antes de su curación reduce la vida que recupera; comprar anti-heal después de que ya se haya curado llega tarde.',
+      appliesAgainst: ['Akeron', 'Countess', 'Narbash', 'Khaimera', 'Phase', 'Rampage'],
+    },
+    'anti-shield': {
+      whyItMatters: 'Un escudo añade vida temporal justo durante la ventana en la que intentas asegurar una eliminación. Una respuesta anti-escudo evita que ese valor defensivo invalide tu control y el burst coordinado del equipo.',
+      appliesAgainst: ['Kwang', 'Muriel', 'Phase'],
+    },
+    'anti-tank': {
+      whyItMatters: 'Contra mucha mitigación, añadir más daño plano ofrece un rendimiento decreciente. La penetración o el shred reducen primero la defensa rival y hacen que el daño posterior de todo el equipo sea más efectivo.',
+      appliesAgainst: ['Steel', 'Riktor', 'Sevarog', 'Rampage', 'Kwang'],
+    },
+    'physical-defense': {
+      whyItMatters: 'La armadura reduce cada instancia de daño físico. Adelantarla cuando ese tipo domina el daño recibido te da más tiempo vivo para lanzar otra rotación de habilidades.',
+      appliesAgainst: ['Murdock', 'Sparrow', 'Drongo', 'Kallari', 'Grux'],
+    },
+    'magical-defense': {
+      whyItMatters: 'La resistencia mágica y los escudos de hechizo amortiguan el burst de habilidades. Son especialmente valiosos si una sola rotación rival te obliga a abandonar la pelea.',
+      appliesAgainst: ['Countess', 'Gideon', 'Morigesh', 'Argus', 'Howitzer'],
+    },
+  };
+  return explanations[key] ?? null;
+}
+
+function perkScore(perk: CatalogPerk, role: string | null, enemyMitigation: number, enablesHealingOrShielding: boolean): number {
+  const text = plainText(`${perk.displayName} ${perk.simpleDescription ?? ''} ${perk.description}`).toLowerCase();
+  let score = 0;
+  if (enemyMitigation >= 80_000 && /(shred|reduce)[^.]{0,50}(armor|defen)|rust/.test(text)) score += 10;
+  if (/stun|immobil|crowd control|movement speed/.test(text)) score += role === 'SUPPORT' ? 4 : 2;
+  if (/ability haste|cooldown|ultimate haste/.test(text)) score += 3;
+  if (/shield allies|allied hero/.test(text)) score += role === 'SUPPORT' ? 4 : 1;
+  if (/heal|shield/.test(text) && enablesHealingOrShielding) score += 3;
+  if (role === 'SUPPORT' && /units? killed|minions? killed/.test(text)) score -= 10;
+  if (role === 'SUPPORT' && /basic attacks?/.test(text) && !/abilities/.test(text)) score -= 2;
+  return score;
+}
+
+function perkRecommendation(perk: CatalogPerk, current: LoadoutPerk | undefined, reason: string) {
+  return {
+    id: perk.perk.predggId,
+    slug: perk.perk.slug,
+    displayName: perk.displayName,
+    slot: perk.slot,
+    icon: perk.icon,
+    effect: perk.simpleDescription ?? perk.description,
+    reason,
+    replaces: current && current.displayName !== perk.displayName
+      ? { id: current.id, displayName: current.displayName }
+      : null,
+  };
 }
 
 function perkAssessment(perk: LoadoutPerk, player: {
@@ -162,6 +247,7 @@ export async function getMatchBuildAnalysis(matchId: string, matchPlayerId: stri
             select: {
               id: true, team: true, role: true, heroSlug: true, totalHealingDone: true,
               totalShieldingReceived: true, totalDamageMitigated: true, playerId: true, playerName: true,
+              inventoryItems: true,
             },
           },
         },
@@ -170,15 +256,18 @@ export async function getMatchBuildAnalysis(matchId: string, matchPlayerId: stri
   });
   if (!row) throw new AppError(404, 'Match player not found', 'MATCH_PLAYER_NOT_FOUND');
 
+  const enemies = row.match.matchPlayers.filter((player) => player.team !== row.team);
   const inventorySlugs = jsonArray<string>(row.inventoryItems).filter(Boolean);
+  const enemyInventorySlugs = enemies.flatMap((enemy) => jsonArray<string>(enemy.inventoryItems)).filter(Boolean);
+  const catalogSlugs = [...new Set([...inventorySlugs, ...enemyInventorySlugs])];
   let catalogVersionId = row.match.versionId;
-  let catalogItems = catalogVersionId && inventorySlugs.length > 0
+  let catalogItems = catalogVersionId && catalogSlugs.length > 0
     ? await db.gameItem.findMany({
-      where: { slug: { in: inventorySlugs } },
+      where: { slug: { in: catalogSlugs } },
       include: { versions: { where: { versionId: catalogVersionId }, take: 1 } },
     })
     : [];
-  if (catalogVersionId && inventorySlugs.length > 0 && catalogItems.every((item) => item.versions.length === 0)) {
+  if (catalogVersionId && catalogSlugs.length > 0 && catalogItems.every((item) => item.versions.length === 0)) {
     const matchVersion = await db.version.findUnique({ where: { id: catalogVersionId }, select: { releaseDate: true } });
     const fallback = matchVersion ? await db.version.findFirst({
       where: { releaseDate: { lte: matchVersion.releaseDate }, itemVersions: { some: {} } },
@@ -188,13 +277,13 @@ export async function getMatchBuildAnalysis(matchId: string, matchPlayerId: stri
     if (fallback) {
       catalogVersionId = fallback.id;
       catalogItems = await db.gameItem.findMany({
-        where: { slug: { in: inventorySlugs } },
+        where: { slug: { in: catalogSlugs } },
         include: { versions: { where: { versionId: catalogVersionId }, take: 1 } },
       });
     }
   }
 
-  const inventory = catalogItems.map((item) => {
+  const allCatalogItems = catalogItems.map((item) => {
     const data = item.versions[0];
     return {
       predggId: item.predggId,
@@ -211,10 +300,20 @@ export async function getMatchBuildAnalysis(matchId: string, matchPlayerId: stri
       blocksIds: jsonArray<string>(data?.blocksIds),
       blockedByIds: jsonArray<string>(data?.blockedByIds),
     };
-  }).sort((a, b) => inventorySlugs.indexOf(a.slug) - inventorySlugs.indexOf(b.slug));
+  });
+  const catalogItemBySlug = new Map(allCatalogItems.map((item) => [item.slug, item]));
+  const inventory = inventorySlugs.flatMap((slug) => {
+    const item = catalogItemBySlug.get(slug);
+    return item ? [item] : [];
+  });
   const tags = new Set(inventory.flatMap((item) => [...semanticTags(item)]));
   const statNames = new Set(inventory.flatMap((item) => item.stats.map((stat) => stat.stat)));
-  const enemies = row.match.matchPlayers.filter((player) => player.team !== row.team);
+
+  const heroMetadata = await db.heroMeta.findMany({
+    where: { slug: { in: [...new Set([row.heroSlug, ...enemies.map((enemy) => enemy.heroSlug)])] } },
+    select: { slug: true, displayName: true, abilities: true },
+  });
+  const heroMetaBySlug = new Map(heroMetadata.map((hero) => [hero.slug, hero]));
 
   const physical = row.physicalDamageTakenFromHeroes ?? row.physicalDamageTaken ?? 0;
   const magical = row.magicalDamageTakenFromHeroes ?? row.magicalDamageTaken ?? 0;
@@ -286,6 +385,45 @@ export async function getMatchBuildAnalysis(matchId: string, matchPlayerId: stri
     });
   }
 
+  for (const signal of signals) {
+    const lesson = educationalExplanation(signal.key);
+    if (lesson) Object.assign(signal, lesson);
+    if (!['anti-heal', 'anti-shield'].includes(signal.key)) continue;
+    const pattern = signal.key === 'anti-heal'
+      ? /heal|healing|restore[^.]{0,30}health|lifesteal|omnivamp/i
+      : /shield/i;
+    const sources: NonNullable<BuildSignal['sources']> = [];
+    for (const enemy of enemies) {
+      const relevantValue = signal.key === 'anti-heal' ? enemy.totalHealingDone : enemy.totalShieldingReceived;
+      if ((relevantValue ?? 0) <= 0) continue;
+      const meta = heroMetaBySlug.get(enemy.heroSlug);
+      for (const ability of jsonArray<HeroAbility>(meta?.abilities)) {
+        const description = plainText(ability.game_description ?? ability.menu_description ?? '');
+        if (!description || !pattern.test(description)) continue;
+        sources.push({
+          heroSlug: enemy.heroSlug,
+          sourceType: 'ability',
+          name: ability.display_name ?? ability.key ?? 'Habilidad',
+          description,
+        });
+      }
+      for (const slug of jsonArray<string>(enemy.inventoryItems)) {
+        const item = catalogItemBySlug.get(slug);
+        if (!item) continue;
+        const matchingEffects = item.effects.filter((effect) => pattern.test(plainText(`${effect.name} ${effect.text}`)));
+        for (const effect of matchingEffects) {
+          sources.push({
+            heroSlug: enemy.heroSlug,
+            sourceType: 'item',
+            name: item.displayName,
+            description: plainText(`${effect.name ? `${effect.name}: ` : ''}${effect.text}`),
+          });
+        }
+      }
+    }
+    signal.sources = sources.slice(0, 8);
+  }
+
   const desiredTags = [...new Set(signals.flatMap((signal) => signal.desiredTags))];
   let candidates: Array<{
     displayName: string; aggressionType: string | null; totalPrice: number;
@@ -323,6 +461,9 @@ export async function getMatchBuildAnalysis(matchId: string, matchPlayerId: stri
             slug: candidate.item.slug,
             displayName: candidate.displayName,
             aggressionType: candidate.aggressionType,
+            totalPrice: candidate.totalPrice,
+            stats: jsonArray<{ stat: string; value: number; showPercent?: boolean }>(candidate.stats),
+            effects: jsonArray<{ name: string; text: string; condition?: string | null; cooldown?: string | null }>(candidate.effects),
             reason: matched ? `${candidate.displayName} ${tagPurpose(matched)}; responde directamente a esta amenaza.` : 'Aporta una respuesta situacional a esta amenaza.',
           };
         });
@@ -444,6 +585,98 @@ export async function getMatchBuildAnalysis(matchId: string, matchPlayerId: stri
   }).slice(0, 8);
 
   const loadout = jsonArray<LoadoutPerk>(row.perks).map((perk) => perkAssessment(perk, row, needTagSet));
+  const currentLoadout = jsonArray<LoadoutPerk>(row.perks);
+  let recommendedLoadout: {
+    augment: ReturnType<typeof perkRecommendation> | null;
+    eternal: ReturnType<typeof perkRecommendation> | null;
+    blessings: Array<ReturnType<typeof perkRecommendation>>;
+    explanation: string;
+  } = {
+    augment: null,
+    eternal: null,
+    blessings: [],
+    explanation: 'No hay catálogo de loadout disponible para comparar alternativas en este parche.',
+  };
+  if (catalogVersionId) {
+    const perkCatalog = await db.gamePerkVersion.findMany({
+      where: {
+        versionId: catalogVersionId,
+        OR: [
+          { slot: 'ETERNAL_1' },
+          { heroSlug: row.heroSlug },
+          { slot: { startsWith: 'BLESSING_MINOR_' } },
+        ],
+      },
+      include: { perk: { select: { predggId: true, slug: true } } },
+    }) as CatalogPerk[];
+    const playerMeta = heroMetaBySlug.get(row.heroSlug);
+    const playerAbilityText = jsonArray<HeroAbility>(playerMeta?.abilities)
+      .map((ability) => `${ability.game_description ?? ''} ${ability.menu_description ?? ''}`)
+      .join(' ');
+    const enablesHealingOrShielding = /heal|shield/i.test(playerAbilityText);
+    const scored = (values: CatalogPerk[]) => values
+      .map((perk) => ({ perk, score: perkScore(perk, row.role, enemyMitigation, enablesHealingOrShielding) }))
+      .sort((a, b) => b.score - a.score || a.perk.displayName.localeCompare(b.perk.displayName));
+    const augment = scored(perkCatalog.filter((perk) => perk.heroSlug === row.heroSlug && perk.slot.includes('HERO_SPECIFIC')))[0]?.perk ?? null;
+    const eternal = scored(perkCatalog.filter((perk) => perk.slot === 'ETERNAL_1'))[0]?.perk ?? null;
+    const blessingIds = new Set(jsonArray<unknown>(eternal?.minorBlessingPredggIds).map(String));
+    const blessingCandidates = perkCatalog.filter((perk) => blessingIds.has(String(perk.perk.predggId)));
+    const blessingOne = scored(blessingCandidates.filter((perk) => perk.slot.endsWith('_1')))[0]?.perk ?? null;
+    const blessingTwo = scored(blessingCandidates.filter((perk) => perk.slot.endsWith('_2')))[0]?.perk ?? null;
+    const currentAugment = currentLoadout.find((perk) => perk.slot.includes('HERO_SPECIFIC'));
+    const currentEternal = currentLoadout.find((perk) => perk.slot === 'ETERNAL_1');
+    const currentBlessings = currentLoadout.filter((perk) => perk.slot.includes('BLESSING'));
+    recommendedLoadout = {
+      augment: augment ? perkRecommendation(
+        augment,
+        currentAugment,
+        enemyMitigation >= 80_000 && /shred|armor/i.test(`${augment.simpleDescription ?? ''} ${augment.description}`)
+          ? 'Prioriza utilidad para todo el equipo: su control aplica reducción de defensas y abre una ventana de daño para tus aliados.'
+          : 'Es el Augmento que mejor refuerza tu función y las necesidades observadas en esta partida.',
+      ) : null,
+      eternal: eternal ? perkRecommendation(
+        eternal,
+        currentEternal,
+        enemyMitigation >= 80_000 && /shred|rust|armor/i.test(`${eternal.simpleDescription ?? ''} ${eternal.description}`)
+          ? 'Supera a una opción de daño genérico porque reduce las defensas del objetivo y convierte tu poke y control en valor compartido por el equipo.'
+          : 'Su condición de activación encaja mejor con tu rol y no depende de apropiarte del farmeo de otra posición.',
+      ) : null,
+      blessings: [blessingOne, blessingTwo].flatMap((perk) => perk ? [perkRecommendation(
+        perk,
+        currentBlessings.find((current) => current.slot === perk.slot),
+        /rust|shred/i.test(`${perk.simpleDescription ?? ''} ${perk.description}`)
+          ? 'Acelera o maximiza la reducción de defensas del Eternal recomendado durante tu ventana de control.'
+          : /haste|cooldown/i.test(`${perk.simpleDescription ?? ''} ${perk.description}`)
+            ? 'Te permite repetir antes tus habilidades de control y mantener activa la utilidad del Eternal.'
+            : 'Es la bendición de su ranura que mejor complementa el patrón de utilidad recomendado.',
+      )] : []),
+      explanation: 'La comparación usa tu rol, las habilidades del héroe, la mitigación rival y las condiciones reales de activación. Una opción que exige matar unidades pierde valor en Support aunque su bonificación final parezca atractiva.',
+    };
+  }
+
+  const replacementsBySlug = new Map(changes.flatMap((change) => change.insteadOf ? [[change.insteadOf.slug, change.item] as const] : []));
+  const addedSuggestions = changes.filter((change) => !change.insteadOf).map((change) => change.item);
+  const retainedCore = finalInventory.flatMap((item) => replacementsBySlug.has(item.slug) ? [] : [item]);
+  const recommendedItems = (retainedCore.length > 0
+    ? [retainedCore[0], ...changes.map((change) => change.item), ...retainedCore.slice(1), ...addedSuggestions]
+    : [...changes.map((change) => change.item), ...addedSuggestions]
+  ).filter((item, index, values) => values.findIndex((other) => other.slug === item.slug) === index).slice(0, 5);
+  const recommendedSequence = recommendedItems.map((item, index) => {
+    const change = changes.find((entry) => entry.item.slug === item.slug);
+    const inventoryItem = item;
+    return {
+      position: index + 1,
+      slug: item.slug,
+      displayName: item.displayName,
+      phase: index === 0 ? 'Núcleo temprano' : index === 1 ? 'Adaptación temprana' : index < 4 ? 'Medio juego' : 'Cierre',
+      reason: change?.timing ?? (index === 0
+        ? 'Conserva esta pieza como base funcional del héroe salvo que la amenaza rival exija una respuesta inmediata.'
+        : 'Completa esta pieza después de cubrir la amenaza prioritaria; aporta valor al núcleo sin retrasar la adaptación.'),
+      replaces: change?.insteadOf ?? null,
+      stats: inventoryItem ? jsonArray<{ stat: string; value: number; showPercent?: boolean }>(inventoryItem.stats) : [],
+      effects: inventoryItem ? jsonArray<{ name: string; text: string; condition?: string | null; cooldown?: string | null }>(inventoryItem.effects) : [],
+    };
+  });
   const criticalCount = activeSignals.filter((signal) => signal.severity === 'critical').length;
   const warningCount = activeSignals.filter((signal) => signal.severity === 'warning').length;
   const grade = criticalCount > 0 ? 'poor' : warningCount > 1 ? 'mixed' : warningCount === 1 ? 'mostly_correct' : 'correct';
@@ -480,6 +713,7 @@ export async function getMatchBuildAnalysis(matchId: string, matchPlayerId: stri
     recommendedBuild: {
       principle: 'Mantén el núcleo que hace funcionar al héroe y reserva al menos una ranura para responder a lo que realmente está comprando y produciendo el rival.',
       changes,
+      sequence: recommendedSequence,
     },
     purchaseTimeline: {
       available: transactions.length > 0,
@@ -490,6 +724,7 @@ export async function getMatchBuildAnalysis(matchId: string, matchPlayerId: stri
         : 'No hay transacciones sincronizadas para evaluar el minuto exacto. La recomendación se basa en la composición y el resultado final.',
     },
     eternalLoadout: loadout,
+    recommendedLoadout,
     abilityOrder: jsonArray<{ ability: string; gameTime: number }>(row.abilityOrder),
     signals,
   };

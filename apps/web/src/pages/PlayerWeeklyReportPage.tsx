@@ -554,7 +554,7 @@ export default function PlayerWeeklyReportPage() {
             <WeeklyBuildLessons review={buildReview} />
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(285px, 1fr))', gap: '0.7rem', marginTop: '0.9rem' }}>
               {buildReview.matches.map((entry) => (
-                <BuildReviewCard key={entry.match.id} entry={entry} onOpen={() => navigate(`/matches/${entry.match.id}?tab=statistics`)} />
+                <BuildReviewCard key={entry.match.id} entry={entry} onOpen={() => navigate(`/matches/${entry.match.id}?tab=analysis`)} />
               ))}
             </div>
           </>

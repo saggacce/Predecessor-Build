@@ -4,6 +4,8 @@ const mocks = vi.hoisted(() => ({
   matchPlayerFindFirst: vi.fn(),
   gameItemFindMany: vi.fn(),
   gameItemVersionFindMany: vi.fn(),
+  gamePerkVersionFindMany: vi.fn(),
+  heroMetaFindMany: vi.fn(),
   transactionFindMany: vi.fn(),
 }));
 
@@ -12,6 +14,8 @@ vi.mock('../db.js', () => ({
     matchPlayer: { findFirst: mocks.matchPlayerFindFirst },
     gameItem: { findMany: mocks.gameItemFindMany },
     gameItemVersion: { findMany: mocks.gameItemVersionFindMany },
+    gamePerkVersion: { findMany: mocks.gamePerkVersionFindMany },
+    heroMeta: { findMany: mocks.heroMetaFindMany },
     transaction: { findMany: mocks.transactionFindMany },
   },
 }));
@@ -44,6 +48,11 @@ describe('contextual build coach', () => {
       { displayName: 'Physical Guard', aggressionType: 'ARMOR', totalPrice: 3000, stats: [], effects: [], item: { slug: 'physical-guard', name: 'PhysicalGuard' } },
       { displayName: 'Tainted Guard', aggressionType: 'ANTI_HEAL', totalPrice: 3100, stats: [], effects: [], item: { slug: 'tainted-guard', name: 'TaintedGuard' } },
     ]);
+    mocks.heroMetaFindMany.mockResolvedValue([
+      { slug: 'dekker', displayName: 'Dekker', abilities: [] },
+      { slug: 'narbash', displayName: 'Narbash', abilities: [{ display_name: 'Song of My People', game_description: 'Heal nearby allied heroes over time.' }] },
+    ]);
+    mocks.gamePerkVersionFindMany.mockResolvedValue([]);
     mocks.transactionFindMany.mockResolvedValue([
       { gameTime: 720, transactionType: 'BUY', itemName: 'Offense', playerId: 'player-1', team: 'DAWN' },
       { gameTime: 850, transactionType: 'BUY', itemName: 'PhysicalGuard', playerId: 'enemy-player-1', team: 'DUSK' },
@@ -61,6 +70,10 @@ describe('contextual build coach', () => {
     expect(result.context.damageReceived.physical).toBe(18_000);
     expect(result.verdict.grade).toBe('poor');
     expect(result.recommendedBuild.changes.find((change) => change.signalKey === 'anti-heal')?.why).toContain('narbash');
+    expect(result.signals.find((signal) => signal.key === 'anti-heal')).toMatchObject({
+      whyItMatters: expect.stringContaining('Heridas Graves'),
+      sources: [expect.objectContaining({ heroSlug: 'narbash', name: 'Song of My People' })],
+    });
     expect(result.purchaseTimeline.ownPurchases[0]).toMatchObject({ minute: '12:00', itemName: 'Offense' });
     expect(result.purchaseTimeline.opponentResponses[0]).toMatchObject({ heroSlug: 'narbash', minute: '14:10' });
     expect(result.signals).not.toEqual(expect.arrayContaining([
@@ -96,6 +109,13 @@ describe('contextual build coach', () => {
       predggDataId: 'data-1', displayName: 'Dynamo', aggressionType: 'MAGICAL_SHRED', rarity: 'EPIC', slotType: 'PASSIVE',
       isEvolved: false, isHidden: false, stats: [], effects: [], blocksIds: [], blockedByIds: [],
     }] }]);
+    mocks.gamePerkVersionFindMany.mockResolvedValueOnce([
+      { predggDataId: 'augment-data', displayName: 'Ionic Surge', slot: 'HERO_SPECIFIC_1', icon: null, simpleDescription: null, description: 'Stunning a Hero shreds their Physical and Magical Armor.', heroSlug: 'dekker', minorBlessingPredggIds: [], perk: { predggId: 'augment-1', slug: 'ionic-surge' } },
+      { predggDataId: 'xyris-data', displayName: 'Xyris', slot: 'ETERNAL_1', icon: null, simpleDescription: null, description: 'Gain damage per 10 Units killed.', heroSlug: null, minorBlessingPredggIds: [], perk: { predggId: '699', slug: 'xyris' } },
+      { predggDataId: 'knell-data', displayName: 'Knell', slot: 'ETERNAL_1', icon: null, simpleDescription: null, description: 'Abilities apply Rust and shred Physical and Magical Armor.', heroSlug: null, minorBlessingPredggIds: ['frequency', 'peal'], perk: { predggId: 'knell', slug: 'knell' } },
+      { predggDataId: 'frequency-data', displayName: 'Frequency', slot: 'BLESSING_MINOR_1', icon: null, simpleDescription: null, description: 'Gain Ability Haste per Rust stack.', heroSlug: null, minorBlessingPredggIds: [], perk: { predggId: 'frequency', slug: 'frequency' } },
+      { predggDataId: 'peal-data', displayName: 'Peal', slot: 'BLESSING_MINOR_2', icon: null, simpleDescription: null, description: 'After your Ultimate apply maximum Rust.', heroSlug: null, minorBlessingPredggIds: [], perk: { predggId: 'peal', slug: 'peal' } },
+    ]);
     mocks.transactionFindMany.mockResolvedValueOnce([]);
 
     const result = await getMatchBuildAnalysis('match-1', 'mp-1');
@@ -103,5 +123,8 @@ describe('contextual build coach', () => {
     expect(result.signals).not.toEqual(expect.arrayContaining([expect.objectContaining({ key: 'anti-tank' })]));
     expect(result.inventoryAssessments[0]).toMatchObject({ slug: 'dynamo', verdict: 'correct' });
     expect(result.eternalLoadout[0]).toMatchObject({ displayName: 'Xyris', verdict: 'questionable' });
+    expect(result.recommendedLoadout.augment).toMatchObject({ displayName: 'Ionic Surge' });
+    expect(result.recommendedLoadout.eternal).toMatchObject({ displayName: 'Knell', replaces: { displayName: 'Xyris' } });
+    expect(result.recommendedLoadout.blessings.map((perk) => perk.displayName)).toEqual(['Frequency', 'Peal']);
   });
 });
