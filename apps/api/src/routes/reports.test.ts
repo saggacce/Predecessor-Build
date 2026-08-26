@@ -13,9 +13,13 @@ vi.mock('../services/report-service.js', () => ({ generateScrimReport: vi.fn() }
 vi.mock('../services/player-weekly-report-service.js', () => ({
   generatePlayerWeeklyReport: vi.fn().mockResolvedValue({ player: { id: 'player-1' }, weekly: { matches: 4 } }),
 }));
+vi.mock('../services/player-coach-chat-service.js', () => ({
+  answerPlayerCoachQuestion: vi.fn().mockResolvedValue({ answer: 'Respuesta [E2]', evidence: [{ id: 'E2' }] }),
+}));
 
 import { db } from '../db.js';
 import { generatePlayerWeeklyReport } from '../services/player-weekly-report-service.js';
+import { answerPlayerCoachQuestion } from '../services/player-coach-chat-service.js';
 import { reportsRouter } from './reports.js';
 
 const app = express();
@@ -47,5 +51,36 @@ describe('GET /reports/player-weekly/:playerId', () => {
 
     expect(response.status).toBe(403);
     expect(generatePlayerWeeklyReport).not.toHaveBeenCalled();
+  });
+});
+
+describe('POST /reports/player-coach/:playerId/chat', () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it('answers only for the account linked player', async () => {
+    mockDb.user.findUnique.mockResolvedValue({ linkedPlayerId: 'player-1' });
+    const cookie = await authCookie({ userId: 'chat-user', globalRole: 'PLAYER', memberships: [] });
+
+    const response = await request(app)
+      .post('/reports/player-coach/player-1/chat')
+      .send({ question: '¿Qué debo mejorar?', history: [] })
+      .set('Cookie', cookie);
+
+    expect(response.status).toBe(200);
+    expect(response.body.answer).toContain('[E2]');
+    expect(answerPlayerCoachQuestion).toHaveBeenCalledWith('player-1', 'chat-user', '¿Qué debo mejorar?', []);
+  });
+
+  it('rejects chat access to another player', async () => {
+    mockDb.user.findUnique.mockResolvedValue({ linkedPlayerId: 'player-1' });
+    const cookie = await authCookie({ userId: 'chat-denied-user', globalRole: 'PLAYER', memberships: [] });
+
+    const response = await request(app)
+      .post('/reports/player-coach/player-2/chat')
+      .send({ question: '¿Qué debo mejorar?' })
+      .set('Cookie', cookie);
+
+    expect(response.status).toBe(403);
+    expect(answerPlayerCoachQuestion).not.toHaveBeenCalled();
   });
 });

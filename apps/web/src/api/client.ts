@@ -151,6 +151,77 @@ export interface PlayerWeeklyReport {
     rationale: string;
     action: string;
   };
+  roleCoach: {
+    role: 'CARRY' | 'SUPPORT' | 'MIDLANE' | 'JUNGLE' | 'OFFLANE';
+    label: string;
+    matches: number;
+    shareOfMatches: number;
+    confidence: 'low' | 'medium' | 'high';
+    metrics: Array<{
+      key: string;
+      label: string;
+      value: number | null;
+      baseline: number | null;
+      unit: 'ratio' | 'per_match' | 'per_minute' | 'percent';
+    }>;
+    focus: { title: string; rationale: string; action: string };
+    training: {
+      metricKey: 'cs_per_min' | 'dpm' | 'deaths_per_match' | 'wards_per_min' | 'kill_participation' | 'objective_damage_per_min' | 'structure_damage_per_min';
+      metricLabel: string;
+      direction: 'higher' | 'lower';
+      targetValue: number | null;
+      targetMatches: 5;
+    };
+  } | null;
+  championPool: {
+    currentPatch: string | null;
+    totalMatches30d: number;
+    heroes: Array<{
+      heroSlug: string;
+      role: string | null;
+      designation: 'main' | 'alternate' | 'experimental';
+      matches30d: number;
+      wins30d: number;
+      winRate30d: number;
+      kda30d: number;
+      currentPatchMatches: number;
+      currentPatchWinRate: number | null;
+      currentPatchKda: number | null;
+      trend: 'improving' | 'declining' | 'stable' | 'insufficient_data';
+    }>;
+    mainHero: string | null;
+    alternativeHero: string | null;
+    recommendation: { title: string; rationale: string; action: string };
+  };
+}
+
+export interface PlayerMatchEnrichmentStatus {
+  playerId: string;
+  windowDays: number;
+  totalMatches: number;
+  rosterSynced: number;
+  eventStreamSynced: number;
+  fullyEnriched: number;
+  failed: number;
+  pending: number;
+  coveragePercent: number;
+  lastMatchSyncedAt: string | null;
+  job: {
+    running: boolean;
+    total: number;
+    processed: number;
+    succeeded: number;
+    errors: number;
+    startedAt: string;
+    finishedAt: string | null;
+  } | null;
+}
+
+export interface PlayerCoachChatResponse {
+  answer: string;
+  evidence: Array<{ id: string; label: string; value: string; scope: string }>;
+  coverage: { complete: number; total: number; percent: number };
+  model: string;
 }
 
 export interface PlayerProfile {
@@ -982,13 +1053,22 @@ export interface WeeklyGoalItem {
   userId: string;
   playerId: string | null;
   title: string;
-  metricKey: 'winrate' | 'kda' | 'cs_per_min' | 'gpm' | 'dpm' | 'custom';
+  metricKey: 'winrate' | 'kda' | 'cs_per_min' | 'gpm' | 'dpm' | 'deaths_per_match' | 'wards_per_min' | 'kill_participation' | 'objective_damage_per_min' | 'structure_damage_per_min' | 'custom';
   targetValue: number | null;
   currentValue: number;
   weekStart: string;
   status: 'ACTIVE' | 'ACHIEVED' | 'FAILED';
   createdAt: string;
   updatedAt: string;
+}
+
+export interface WeeklyGoalEvaluation {
+  goal: WeeklyGoalItem;
+  targetMatches: number;
+  matchesTracked: number;
+  metricValue: number | null;
+  baselineValue: number | null;
+  outcome: 'collecting' | 'target_achieved' | 'improved' | 'declined' | 'stable' | 'ready_for_review' | 'no_player';
 }
 
 export interface TeamCommItem {
@@ -1240,6 +1320,11 @@ export const apiClient = {
       }),
     playerWeekly: (playerId: string) =>
       fetchApi<PlayerWeeklyReport>(`/reports/player-weekly/${encodeURIComponent(playerId)}`),
+    playerCoachChat: (playerId: string, question: string, history: Array<{ role: 'user' | 'assistant'; content: string }>) =>
+      fetchApi<PlayerCoachChatResponse>(`/reports/player-coach/${encodeURIComponent(playerId)}/chat`, {
+        method: 'POST',
+        body: JSON.stringify({ question, history }),
+      }),
   },
 
   analyst: {
@@ -1404,7 +1489,14 @@ export const apiClient = {
 
   sync: {
     myMatches: () =>
-      fetchApi<{ newMatches: number; syncedMatches: number; message: string }>('/sync/my-matches', { method: 'POST' }),
+      fetchApi<{ newMatches: number; syncedMatches: number; message: string; enrichment: PlayerMatchEnrichmentStatus }>('/sync/my-matches', { method: 'POST' }),
+    matchCoverage: () =>
+      fetchApi<PlayerMatchEnrichmentStatus>('/sync/my-matches/coverage'),
+    enrichMyMatches: (retryFailed = false) =>
+      fetchApi<PlayerMatchEnrichmentStatus>('/sync/my-matches/enrich', {
+        method: 'POST',
+        body: JSON.stringify({ retryFailed }),
+      }),
   },
 
   schedule: {
@@ -1424,6 +1516,7 @@ export const apiClient = {
 
   weeklyGoals: {
     mine: () => fetchApi<{ goals: WeeklyGoalItem[]; weekStart: string }>('/weekly-goals/me'),
+    progress: () => fetchApi<{ evaluations: WeeklyGoalEvaluation[]; weekStart: string }>('/weekly-goals/me/progress'),
     create: (data: { title: string; metricKey?: WeeklyGoalItem['metricKey']; targetValue?: number; playerId?: string }) =>
       fetchApi<{ goal: WeeklyGoalItem }>('/weekly-goals', { method: 'POST', body: JSON.stringify(data) }),
     update: (id: string, data: { currentValue?: number; status?: WeeklyGoalItem['status']; title?: string; targetValue?: number | null }) =>

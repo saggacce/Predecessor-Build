@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { ChevronRight, Link as LinkIcon, RefreshCw } from 'lucide-react';
 import { apiClient, ApiErrorResponse, type PlayerProfile, type RecentMatch } from '../api/client';
+import { MatchEnrichmentCard } from '../components/MatchEnrichmentCard';
 import { useAuth } from '../hooks/useAuth';
 
 function kda(m: RecentMatch) {
@@ -23,6 +24,7 @@ export default function PlayerMatchesPage() {
   const [profile, setProfile] = useState<PlayerProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
+  const [coverageRefresh, setCoverageRefresh] = useState(0);
 
   const linkedPlayerId = user?.linkedPlayerId;
 
@@ -36,8 +38,11 @@ export default function PlayerMatchesPage() {
   }, [linkedPlayerId]);
 
   useEffect(() => {
-    if (!linkedPlayerId) { setLoading(false); return; }
-    void loadProfile().finally(() => setLoading(false));
+    const timer = window.setTimeout(() => {
+      if (!linkedPlayerId) { setLoading(false); return; }
+      void loadProfile().finally(() => setLoading(false));
+    }, 0);
+    return () => window.clearTimeout(timer);
   }, [linkedPlayerId, loadProfile]);
 
   async function syncMatches() {
@@ -45,6 +50,7 @@ export default function PlayerMatchesPage() {
       setSyncing(true);
       const result = await apiClient.sync.myMatches();
       await loadProfile();
+      setCoverageRefresh((current) => current + 1);
       toast.success(result.newMatches > 0
         ? `${result.newMatches} partidas nuevas · ${result.syncedMatches} revisadas.`
         : `Historial actualizado: ${result.syncedMatches} partidas revisadas.`);
@@ -96,6 +102,12 @@ export default function PlayerMatchesPage() {
           {syncing ? 'Actualizando historial…' : 'Actualizar historial'}
         </button>
       </header>
+
+      <MatchEnrichmentCard
+        enabled={Boolean(linkedPlayerId)}
+        refreshToken={coverageRefresh}
+        onCompleted={loadProfile}
+      />
 
       {matches.length === 0 ? (
         <div className="glass-card" style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>

@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router';
-import { Activity, ArrowDownRight, ArrowUpRight, Link as LinkIcon, Minus, RefreshCw, Target } from 'lucide-react';
+import { Activity, ArrowDownRight, ArrowUpRight, Crosshair, Flag, Link as LinkIcon, Minus, RefreshCw, Sparkles, Target } from 'lucide-react';
 import { toast } from 'sonner';
-import { ApiErrorResponse, apiClient, type PlayerMetricTrend, type PlayerWeeklyReport } from '../api/client';
+import { ApiErrorResponse, apiClient, type PlayerMetricTrend, type PlayerWeeklyReport, type WeeklyGoalEvaluation } from '../api/client';
 import { HeroAvatarWithTooltip } from '../components/HeroAvatar';
+import { MatchEnrichmentCard } from '../components/MatchEnrichmentCard';
+import { PlayerCoachChat } from '../components/PlayerCoachChat';
 import { useAuth } from '../hooks/useAuth';
 
 const METRIC_LABELS: Record<PlayerMetricTrend['metric'], string> = {
@@ -55,12 +57,23 @@ function MetricCard({ trend }: { trend: PlayerMetricTrend }) {
   );
 }
 
+function roleMetricValue(value: number | null, unit: 'ratio' | 'per_match' | 'per_minute' | 'percent'): string {
+  if (value === null || !Number.isFinite(value)) return '—';
+  if (unit === 'percent') return `${value.toFixed(1)}%`;
+  if (unit === 'ratio') return value.toFixed(2);
+  if (unit === 'per_match') return value.toFixed(1);
+  return value < 10 ? value.toFixed(2) : Math.round(value).toLocaleString();
+}
+
 export default function PlayerWeeklyReportPage() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const [report, setReport] = useState<PlayerWeeklyReport | null>(null);
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
+  const [coverageRefresh, setCoverageRefresh] = useState(0);
+  const [goalEvaluations, setGoalEvaluations] = useState<WeeklyGoalEvaluation[]>([]);
+  const [savingGoal, setSavingGoal] = useState(false);
   const linkedPlayerId = user?.linkedPlayerId;
 
   const loadReport = useCallback(async () => {
@@ -78,15 +91,27 @@ export default function PlayerWeeklyReportPage() {
     }
   }, [linkedPlayerId]);
 
+  const loadGoalProgress = useCallback(async () => {
+    if (!linkedPlayerId) return;
+    try {
+      const result = await apiClient.weeklyGoals.progress();
+      setGoalEvaluations(result.evaluations);
+    } catch {
+      // The report remains useful even if goal tracking is temporarily unavailable.
+    }
+  }, [linkedPlayerId]);
+
   useEffect(() => {
-    void loadReport();
-  }, [loadReport]);
+    const timer = window.setTimeout(() => void Promise.all([loadReport(), loadGoalProgress()]), 0);
+    return () => window.clearTimeout(timer);
+  }, [loadGoalProgress, loadReport]);
 
   async function syncMatches() {
     try {
       setSyncing(true);
       const result = await apiClient.sync.myMatches();
-      await loadReport();
+      await Promise.all([loadReport(), loadGoalProgress()]);
+      setCoverageRefresh((current) => current + 1);
       toast.success(result.newMatches > 0
         ? `${result.newMatches} partidas nuevas · ${result.syncedMatches} revisadas para el informe.`
         : `Informe actualizado con ${result.syncedMatches} partidas revisadas.`);
@@ -94,6 +119,26 @@ export default function PlayerWeeklyReportPage() {
       toast.error(error instanceof ApiErrorResponse ? error.error.message : 'No se pudieron sincronizar tus partidas.');
     } finally {
       setSyncing(false);
+    }
+  }
+
+  async function startTrainingPlan() {
+    if (!report?.roleCoach || !linkedPlayerId) return;
+    const training = report.roleCoach.training;
+    try {
+      setSavingGoal(true);
+      await apiClient.weeklyGoals.create({
+        title: `${report.roleCoach.focus.title} · 5 partidas`,
+        metricKey: training.metricKey,
+        targetValue: training.targetValue ?? undefined,
+        playerId: linkedPlayerId,
+      });
+      await loadGoalProgress();
+      toast.success('Plan de cinco partidas iniciado. El progreso se actualizará automáticamente.');
+    } catch (error) {
+      toast.error(error instanceof ApiErrorResponse ? error.error.message : 'No se pudo iniciar el plan de entrenamiento.');
+    } finally {
+      setSavingGoal(false);
     }
   }
 
@@ -118,6 +163,7 @@ export default function PlayerWeeklyReportPage() {
   }
 
   const displayName = report.player.customName ?? report.player.displayName;
+  const activeGoal = goalEvaluations.find((evaluation) => evaluation.goal.status === 'ACTIVE') ?? goalEvaluations[0] ?? null;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
@@ -140,6 +186,12 @@ export default function PlayerWeeklyReportPage() {
           {syncing ? 'Actualizando historial…' : 'Actualizar historial'}
         </button>
       </header>
+
+      <MatchEnrichmentCard
+        enabled={Boolean(linkedPlayerId)}
+        refreshToken={coverageRefresh}
+        onCompleted={loadReport}
+      />
 
       <section
         className="glass-card"
@@ -168,6 +220,145 @@ export default function PlayerWeeklyReportPage() {
           </div>
         </div>
       </section>
+
+      {report.roleCoach ? (
+        <section className="glass-card" style={{ padding: '1.15rem', borderColor: 'rgba(34,211,238,0.28)' }} aria-labelledby="role-coach-title">
+          <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.75rem', alignItems: 'flex-start', flexWrap: 'wrap' }}>
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', color: 'var(--accent-cyan)', fontSize: '0.68rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.07em' }}>
+                <Crosshair size={15} /> Lectura por rol
+              </div>
+              <h2 id="role-coach-title" style={{ margin: '0.55rem 0 0.2rem', fontSize: '1.15rem' }}>Coach de {report.roleCoach.label}</h2>
+              <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: '0.73rem' }}>
+                {report.roleCoach.matches} partidas esta semana · {report.roleCoach.shareOfMatches}% de tu muestra de 30 días
+              </p>
+            </div>
+            <span style={{ padding: '0.25rem 0.55rem', borderRadius: 999, background: 'rgba(34,211,238,0.1)', color: 'var(--accent-cyan)', fontSize: '0.66rem', fontWeight: 700 }}>
+              Confianza {report.roleCoach.confidence === 'high' ? 'alta' : report.roleCoach.confidence === 'medium' ? 'media' : 'inicial'}
+            </span>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(145px, 1fr))', gap: '0.65rem', marginTop: '0.9rem' }}>
+            {report.roleCoach.metrics.map((metric) => (
+              <article key={metric.key} style={{ padding: '0.75rem', borderRadius: 8, background: 'rgba(15,23,42,0.48)', border: '1px solid var(--border-color)' }}>
+                <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: '0.62rem', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 700 }}>{metric.label}</p>
+                <strong className="mono" style={{ display: 'block', marginTop: '0.35rem', fontSize: '1rem' }}>{roleMetricValue(metric.value, metric.unit)}</strong>
+                <span style={{ color: 'var(--text-muted)', fontSize: '0.64rem' }}>30d: {roleMetricValue(metric.baseline, metric.unit)}</span>
+              </article>
+            ))}
+          </div>
+
+          <div style={{ marginTop: '0.9rem', padding: '0.85rem', borderRadius: 8, background: 'rgba(34,211,238,0.06)' }}>
+            <strong style={{ fontSize: '0.84rem' }}>{report.roleCoach.focus.title}</strong>
+            <p style={{ margin: '0.35rem 0', color: 'var(--text-secondary)', fontSize: '0.77rem', lineHeight: 1.45 }}>{report.roleCoach.focus.rationale}</p>
+            <p style={{ margin: 0, color: 'var(--text-primary)', fontSize: '0.76rem', lineHeight: 1.45 }}><strong>Próximas partidas:</strong> {report.roleCoach.focus.action}</p>
+          </div>
+        </section>
+      ) : null}
+
+      <section className="glass-card" style={{ padding: '1.15rem' }} aria-labelledby="champion-pool-title">
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '0.75rem', flexWrap: 'wrap' }}>
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', color: 'var(--accent-violet)', fontSize: '0.68rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.07em' }}>
+              <Sparkles size={15} /> Champion pool
+            </div>
+            <h2 id="champion-pool-title" style={{ margin: '0.55rem 0 0.2rem', fontSize: '1.15rem' }}>Principal, alternativa y tendencia</h2>
+            <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: '0.73rem' }}>
+              {report.championPool.totalMatches30d} partidas en 30 días
+              {report.championPool.currentPatch ? ` · parche ${report.championPool.currentPatch}` : ''}
+            </p>
+          </div>
+        </div>
+
+        {report.championPool.heroes.length > 0 ? (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(205px, 1fr))', gap: '0.7rem', marginTop: '0.9rem' }}>
+            {report.championPool.heroes.map((hero) => {
+              const designation = hero.designation === 'main' ? 'Principal' : hero.designation === 'alternate' ? 'Alternativa' : 'Experimental';
+              const trend = hero.trend === 'improving' ? 'Mejorando' : hero.trend === 'declining' ? 'Bajando' : hero.trend === 'stable' ? 'Estable' : 'Sin muestra';
+              const trendColor = hero.trend === 'improving' ? 'var(--accent-win)' : hero.trend === 'declining' ? 'var(--accent-loss)' : 'var(--text-muted)';
+              return (
+                <article key={hero.heroSlug} style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', padding: '0.8rem', borderRadius: 9, border: '1px solid var(--border-color)', background: 'rgba(15,23,42,0.48)' }}>
+                  <HeroAvatarWithTooltip slug={hero.heroSlug} name={hero.heroSlug} size={46} rounded={8} />
+                  <div style={{ minWidth: 0, flex: 1 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.4rem' }}>
+                      <strong style={{ textTransform: 'capitalize', fontSize: '0.84rem' }}>{hero.heroSlug}</strong>
+                      <span style={{ color: hero.designation === 'main' ? 'var(--accent-violet)' : 'var(--text-muted)', fontSize: '0.61rem', fontWeight: 800 }}>{designation}</span>
+                    </div>
+                    <p style={{ margin: '0.25rem 0 0', color: 'var(--text-secondary)', fontSize: '0.69rem' }}>
+                      {hero.matches30d} {hero.matches30d === 1 ? 'partida' : 'partidas'} · {hero.winRate30d}% WR · {hero.kda30d.toFixed(2)} KDA
+                    </p>
+                    <p style={{ margin: '0.18rem 0 0', color: trendColor, fontSize: '0.65rem' }}>
+                      {hero.currentPatchMatches} en parche · {trend}
+                    </p>
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+        ) : (
+          <p style={{ color: 'var(--text-muted)', fontSize: '0.78rem' }}>Sin partidas suficientes para construir el champion pool.</p>
+        )}
+
+        <div style={{ marginTop: '0.9rem', padding: '0.85rem', borderRadius: 8, background: 'rgba(167,139,250,0.07)', borderLeft: '3px solid var(--accent-violet)' }}>
+          <strong style={{ fontSize: '0.84rem' }}>{report.championPool.recommendation.title}</strong>
+          <p style={{ margin: '0.35rem 0', color: 'var(--text-secondary)', fontSize: '0.77rem', lineHeight: 1.45 }}>{report.championPool.recommendation.rationale}</p>
+          <p style={{ margin: 0, fontSize: '0.76rem', lineHeight: 1.45 }}><strong>Plan:</strong> {report.championPool.recommendation.action}</p>
+        </div>
+      </section>
+
+      {report.roleCoach ? (
+        <section className="glass-card" style={{ padding: '1.15rem', borderColor: 'rgba(52,211,153,0.28)' }} aria-labelledby="training-loop-title">
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '0.8rem', flexWrap: 'wrap' }}>
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', color: 'var(--accent-win)', fontSize: '0.68rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.07em' }}>
+                <Flag size={15} /> Ciclo de entrenamiento
+              </div>
+              <h2 id="training-loop-title" style={{ margin: '0.55rem 0 0.25rem', fontSize: '1.15rem' }}>
+                {activeGoal ? activeGoal.goal.title : 'Entrena, mide y reevalúa'}
+              </h2>
+              <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: '0.74rem' }}>
+                {activeGoal
+                  ? `${activeGoal.matchesTracked} de ${activeGoal.targetMatches} partidas registradas automáticamente`
+                  : `Objetivo sugerido: ${report.roleCoach.training.metricLabel} durante cinco partidas`}
+              </p>
+            </div>
+            {!activeGoal ? (
+              <button type="button" className="btn-primary" disabled={savingGoal} onClick={() => void startTrainingPlan()} style={{ flex: 'unset', whiteSpace: 'nowrap', fontSize: '0.75rem' }}>
+                {savingGoal ? 'Iniciando…' : 'Iniciar plan de 5 partidas'}
+              </button>
+            ) : null}
+          </div>
+
+          {activeGoal ? (
+            <div style={{ marginTop: '0.85rem' }}>
+              <div role="progressbar" aria-label="Partidas completadas del plan" aria-valuemin={0} aria-valuemax={activeGoal.targetMatches} aria-valuenow={activeGoal.matchesTracked} style={{ height: 7, borderRadius: 999, overflow: 'hidden', background: 'rgba(148,163,184,0.14)' }}>
+                <div style={{ width: `${Math.min(100, (activeGoal.matchesTracked / activeGoal.targetMatches) * 100)}%`, height: '100%', background: 'var(--accent-win)', borderRadius: 999 }} />
+              </div>
+              <div style={{ display: 'flex', gap: '1rem', marginTop: '0.7rem', flexWrap: 'wrap' }}>
+                <span style={{ color: 'var(--text-secondary)', fontSize: '0.73rem' }}>Valor actual: <strong>{activeGoal.metricValue ?? '—'}</strong></span>
+                <span style={{ color: 'var(--text-secondary)', fontSize: '0.73rem' }}>Referencia anterior: <strong>{activeGoal.baselineValue ?? '—'}</strong></span>
+                {activeGoal.goal.targetValue !== null ? <span style={{ color: 'var(--text-secondary)', fontSize: '0.73rem' }}>Objetivo: <strong>{activeGoal.goal.targetValue}</strong></span> : null}
+              </div>
+              <p style={{ margin: '0.65rem 0 0', color: activeGoal.matchesTracked >= activeGoal.targetMatches ? 'var(--accent-win)' : 'var(--text-muted)', fontSize: '0.75rem' }}>
+                {activeGoal.matchesTracked >= activeGoal.targetMatches
+                  ? activeGoal.outcome === 'target_achieved' || activeGoal.outcome === 'improved'
+                    ? 'Ciclo completado con mejora. Revisa el informe y decide si consolidas o subes el objetivo.'
+                    : 'Ciclo completado. Revisa las cinco partidas y ajusta el objetivo antes del siguiente bloque.'
+                  : `Faltan ${activeGoal.targetMatches - activeGoal.matchesTracked} partidas para reevaluar con una muestra cerrada.`}
+              </p>
+            </div>
+          ) : (
+            <div style={{ marginTop: '0.85rem', padding: '0.8rem', borderRadius: 8, background: 'rgba(52,211,153,0.06)' }}>
+              <strong style={{ fontSize: '0.8rem' }}>{report.roleCoach.focus.title}</strong>
+              <p style={{ margin: '0.3rem 0 0', color: 'var(--text-secondary)', fontSize: '0.75rem', lineHeight: 1.45 }}>
+                El sistema guardará una referencia, contará solo las cinco partidas posteriores y comparará el resultado automáticamente.
+              </p>
+            </div>
+          )}
+        </section>
+      ) : null}
+
+      <PlayerCoachChat playerId={linkedPlayerId} />
 
       <section style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(175px, 1fr))', gap: '0.75rem' }}>
         {report.trends.map((item) => <MetricCard key={item.metric} trend={item} />)}

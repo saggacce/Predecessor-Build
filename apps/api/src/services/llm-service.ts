@@ -31,7 +31,7 @@ FORMATO DE RESPUESTA (sin numeración, solo texto):
 • [Recomendación 2]
 • [Recomendación 3]`;
 
-async function getLlmConfig(): Promise<{ enabled: boolean; model: string; baseUrl: string; apiKey: string; maxTokens: number }> {
+export async function getLlmConfig(): Promise<{ enabled: boolean; model: string; baseUrl: string; apiKey: string; maxTokens: number }> {
   const [numMap, textMap] = await Promise.all([getConfigMap(db), getTextConfigMap(db)]);
   return {
     enabled: (numMap.get('llm_enabled') ?? 0) === 1,

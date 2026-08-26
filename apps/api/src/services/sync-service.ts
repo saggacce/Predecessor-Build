@@ -1464,7 +1464,7 @@ export async function syncMatchEventStream(
   // Mark match as event stream synced
   await db.match.update({
     where: { id: matchId },
-    data: { eventStreamSynced: true },
+    data: { eventStreamSynced: true, eventStreamFailed: false },
   });
 
   logger.info({ matchId, predggUuid }, 'event stream synced');
@@ -1566,7 +1566,7 @@ export async function syncIncompleteMatches(db: PrismaClient): Promise<{ synced:
   let errors = 0;
   for (const row of rows) {
     try {
-      await resyncMatch(db, row.matchId, row.predggUuid, true);
+      await resyncMatch(db, row.predggUuid, undefined, true);
       synced++;
     } catch (err) {
       logger.warn({ matchId: row.matchId, err }, 'syncIncompleteMatches: failed to resync match');
