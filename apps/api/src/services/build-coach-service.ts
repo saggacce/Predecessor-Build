@@ -609,10 +609,11 @@ export async function getMatchBuildAnalysis(matchId: string, matchPlayerId: stri
     blessings: [],
     explanation: 'No hay catálogo de loadout disponible para comparar alternativas en este parche.',
   };
-  if (catalogVersionId) {
-    const perkCatalog = await db.gamePerkVersion.findMany({
+  const perkCatalogVersionId = row.match.versionId ?? catalogVersionId;
+  if (perkCatalogVersionId) {
+    let perkCatalog = await db.gamePerkVersion.findMany({
       where: {
-        versionId: catalogVersionId,
+        versionId: perkCatalogVersionId,
         OR: [
           { slot: 'ETERNAL_1' },
           { heroSlug: row.heroSlug },
@@ -621,6 +622,19 @@ export async function getMatchBuildAnalysis(matchId: string, matchPlayerId: stri
       },
       include: { perk: { select: { predggId: true, slug: true } } },
     }) as CatalogPerk[];
+    if (perkCatalog.length === 0 && catalogVersionId && catalogVersionId !== perkCatalogVersionId) {
+      perkCatalog = await db.gamePerkVersion.findMany({
+        where: {
+          versionId: catalogVersionId,
+          OR: [
+            { slot: 'ETERNAL_1' },
+            { heroSlug: row.heroSlug },
+            { slot: { startsWith: 'BLESSING_MINOR_' } },
+          ],
+        },
+        include: { perk: { select: { predggId: true, slug: true } } },
+      }) as CatalogPerk[];
+    }
     const playerMeta = heroMetaBySlug.get(row.heroSlug);
     const playerAbilityText = jsonArray<HeroAbility>(playerMeta?.abilities)
       .map((ability) => `${ability.game_description ?? ''} ${ability.menu_description ?? ''}`)
