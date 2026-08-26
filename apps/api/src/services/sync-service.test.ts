@@ -102,6 +102,7 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  vi.unstubAllEnvs();
 });
 
 describe('syncMatchEventStream', () => {
@@ -149,6 +150,41 @@ describe('syncMatchEventStream', () => {
       where: { matchId: 'match-1', predggPlayerUuid: 'predgg-warder' },
       data: { goldEarnedAtInterval: [100, 200] },
     });
+  });
+
+  it('retries public event data without the API key when pred.gg rejects it', async () => {
+    vi.stubEnv('PRED_GG_CLIENT_SECRET', 'stale-api-key');
+    vi.mocked(fetch)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ errors: [{ message: 'Forbidden' }] }),
+      } as Response)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          data: {
+            match: {
+              heroKills: [], objectiveKills: [], structureDestructions: [], heroBans: [],
+              matchPlayers: [{
+                player: { id: 'predgg-warder' }, team: 'BLUE', goldEarnedAtInterval: [100, 200],
+                wardPlacements: [], wardDestructions: [], transactions: [],
+              }],
+            },
+          },
+        }),
+      } as Response);
+    const mockDb = createMockDb();
+
+    await syncMatchEventStream(mockDb as never, 'match-1', 'predgg-match-1');
+
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(vi.mocked(fetch).mock.calls[0][1]).toEqual(expect.objectContaining({
+      headers: expect.objectContaining({ 'X-Api-Key': 'stale-api-key' }),
+    }));
+    expect(vi.mocked(fetch).mock.calls[1][1]).toEqual(expect.objectContaining({
+      headers: { 'Content-Type': 'application/json' },
+    }));
+    expect(mockDb.matchPlayer.updateMany).toHaveBeenCalled();
   });
 });
 

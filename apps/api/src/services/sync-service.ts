@@ -8,7 +8,6 @@ import { logger } from '../logger.js';
 import { syncHeroMeta } from './hero-meta-service.js';
 
 const GQL_URL = process.env.PRED_GG_GQL_URL ?? 'https://pred.gg/gql';
-const API_KEY = process.env.PRED_GG_CLIENT_SECRET;
 const STALE_THRESHOLD_MS = 24 * 60 * 60 * 1000; // 24 hours — active players
 const STALE_THRESHOLD_INACTIVE_MS = 7 * 24 * 60 * 60 * 1000; // 7 days — inactive players
 const ACTIVE_WINDOW_MS = 7 * 24 * 60 * 60 * 1000; // player with match in last 7 days = active
@@ -28,23 +27,39 @@ async function predggQuery<T>(
   query: string,
   variables?: Record<string, unknown>,
   userToken?: string,
+  options: { publicFallback?: boolean } = {},
 ): Promise<T> {
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  const apiKey = process.env.PRED_GG_CLIENT_SECRET;
   // User OAuth token takes priority — unlocks player data
   if (userToken) headers['Authorization'] = `Bearer ${userToken}`;
-  else if (API_KEY) headers['X-Api-Key'] = API_KEY;
+  else if (apiKey) headers['X-Api-Key'] = apiKey;
 
-  const res = await fetch(GQL_URL, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify({ query, variables }),
-  });
+  const execute = async (requestHeaders: Record<string, string>): Promise<T> => {
+    const res = await fetch(GQL_URL, {
+      method: 'POST',
+      headers: requestHeaders,
+      body: JSON.stringify({ query, variables }),
+    });
 
-  if (!res.ok) throw new Error(`pred.gg HTTP ${res.status}: ${await res.text()}`);
+    if (!res.ok) throw new Error(`pred.gg HTTP ${res.status}: ${await res.text()}`);
 
-  const json = (await res.json()) as { data?: T; errors?: { message: string }[] };
-  if (json.errors?.length) throw new Error(json.errors.map((e) => e.message).join(', '));
-  return json.data as T;
+    const json = (await res.json()) as { data?: T; errors?: { message: string }[] };
+    if (json.errors?.length) throw new Error(json.errors.map((e) => e.message).join(', '));
+    return json.data as T;
+  };
+
+  try {
+    return await execute(headers);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    const apiKeyRejected = !userToken && Boolean(headers['X-Api-Key'])
+      && /401|403|unauthorized|forbidden/i.test(message);
+    if (!options.publicFallback || !apiKeyRejected) throw error;
+
+    logger.warn('pred.gg API key rejected for public event data — retrying without credentials');
+    return execute({ 'Content-Type': 'application/json' });
+  }
 }
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -1626,6 +1641,7 @@ export async function syncMatchEventStream(
       MATCH_EVENT_STREAM_QUERY,
       { uuid: predggUuid },
       userToken,
+      { publicFallback: true },
     );
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
