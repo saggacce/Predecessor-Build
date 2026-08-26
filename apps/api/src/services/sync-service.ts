@@ -1134,8 +1134,11 @@ export async function syncTrackedGameCatalogs(db: PrismaClient): Promise<{
   for (const predggId of versionIds) {
     const version = await db.version.findUnique({ where: { predggId }, select: { id: true } });
     if (!version) continue;
-    const alreadySynced = await db.gameItemVersion.count({ where: { versionId: version.id } });
-    if (alreadySynced > 0) continue;
+    const [itemsAlreadySynced, perksAlreadySynced] = await Promise.all([
+      db.gameItemVersion.count({ where: { versionId: version.id } }),
+      db.gamePerkVersion.count({ where: { versionId: version.id } }),
+    ]);
+    if (itemsAlreadySynced > 0 || perksAlreadySynced > 0) continue;
     catalogs.push(await syncGameCatalog(db, predggId));
   }
   return { versions: catalogs.length, catalogs };

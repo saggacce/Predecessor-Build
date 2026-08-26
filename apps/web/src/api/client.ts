@@ -1225,6 +1225,7 @@ export interface MatchBuildAnalysis {
   role: string | null;
   result: 'win' | 'loss';
   context: {
+    catalogVersionId: string | null;
     deaths: number;
     damageReceived: { physical: number; magical: number; true: number; total: number };
     enemyHealing: number;

@@ -44,7 +44,7 @@ El catálogo se sincroniza al actualizar versiones y también mediante `POST /ad
 
 El análisis de una partida cruza la build usada con la composición real de daño recibida, curación, escudos y mitigación del rival. Puede detectar falta de defensa física o mágica, anti-curación, anti-escudo, penetración contra tanques e items incompatibles. Las sugerencias se limitan a items legendarios visibles del parche de la partida.
 
-Este módulo explica evidencia y recomendación; no afirma que exista una única build correcta ni sustituye el contexto de ejecución de la partida.
+Este módulo explica evidencia y recomendación; no afirma que exista una única build correcta ni sustituye el contexto de ejecución de la partida. Si una partida referencia una compilación interna sin items, se usa el catálogo de contenido más cercano y anterior, manteniendo la coherencia del parche.
 
 ### 7. Benchmarks y especialistas
 

@@ -67,12 +67,28 @@ export async function getMatchBuildAnalysis(matchId: string, matchPlayerId: stri
   if (!row) throw new AppError(404, 'Match player not found', 'MATCH_PLAYER_NOT_FOUND');
 
   const inventorySlugs = jsonArray<string>(row.inventoryItems).filter(Boolean);
-  const catalogItems = row.match.versionId && inventorySlugs.length > 0
+  let catalogVersionId = row.match.versionId;
+  let catalogItems = catalogVersionId && inventorySlugs.length > 0
     ? await db.gameItem.findMany({
       where: { slug: { in: inventorySlugs } },
-      include: { versions: { where: { versionId: row.match.versionId }, take: 1 } },
+      include: { versions: { where: { versionId: catalogVersionId }, take: 1 } },
     })
     : [];
+  if (catalogVersionId && inventorySlugs.length > 0 && catalogItems.every((item) => item.versions.length === 0)) {
+    const matchVersion = await db.version.findUnique({ where: { id: catalogVersionId }, select: { releaseDate: true } });
+    const fallback = matchVersion ? await db.version.findFirst({
+      where: { releaseDate: { lte: matchVersion.releaseDate }, itemVersions: { some: {} } },
+      orderBy: { releaseDate: 'desc' },
+      select: { id: true },
+    }) : null;
+    if (fallback) {
+      catalogVersionId = fallback.id;
+      catalogItems = await db.gameItem.findMany({
+        where: { slug: { in: inventorySlugs } },
+        include: { versions: { where: { versionId: catalogVersionId }, take: 1 } },
+      });
+    }
+  }
 
   const inventory = catalogItems.map((item) => {
     const data = item.versions[0];
@@ -159,10 +175,10 @@ export async function getMatchBuildAnalysis(matchId: string, matchPlayerId: stri
   }
 
   const desiredTags = [...new Set(signals.flatMap((signal) => signal.desiredTags))];
-  if (row.match.versionId && desiredTags.length > 0) {
+  if (catalogVersionId && desiredTags.length > 0) {
     const candidates = await db.gameItemVersion.findMany({
       where: {
-        versionId: row.match.versionId, isHidden: false, rarity: 'LEGENDARY',
+        versionId: catalogVersionId, isHidden: false, rarity: 'LEGENDARY',
       },
       include: { item: { select: { slug: true } } },
       orderBy: { totalPrice: 'asc' },
@@ -190,6 +206,7 @@ export async function getMatchBuildAnalysis(matchId: string, matchPlayerId: stri
     role: row.role,
     result: row.match.winningTeam === row.team ? 'win' : 'loss',
     context: {
+      catalogVersionId,
       deaths: row.deaths,
       damageReceived: { physical, magical, true: trueDamage, total: damageTotal },
       enemyHealing,
