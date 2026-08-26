@@ -47,6 +47,7 @@ describe('player match enrichment', () => {
     const candidates = [
       { id: 'match-1', predggUuid: 'uuid-1', rosterSynced: false, eventStreamSynced: false, eventStreamFailed: false },
       { id: 'match-2', predggUuid: 'uuid-2', rosterSynced: true, eventStreamSynced: false, eventStreamFailed: false },
+      { id: 'match-3', predggUuid: 'uuid-3', rosterSynced: true, eventStreamSynced: true, eventStreamFailed: false, matchPlayers: [{ physicalDamageTaken: null }] },
     ];
     const db = {
       match: {
@@ -58,8 +59,9 @@ describe('player match enrichment', () => {
 
     const result = await enrichPlayerMatches(db as never, 'player-1', 'token', { concurrency: 2 });
 
-    expect(result).toEqual({ total: 2, processed: 2, succeeded: 2, errors: 0 });
+    expect(result).toEqual({ total: 3, processed: 3, succeeded: 3, errors: 0 });
     expect(resyncMatch).toHaveBeenCalledWith(db, 'uuid-1', 'token', true);
+    expect(resyncMatch).toHaveBeenCalledWith(db, 'uuid-3', 'token', true);
     expect(syncMatchEventStream).toHaveBeenCalledWith(db, 'match-2', 'uuid-2', 'token', false);
     expect(db.match.findMany).toHaveBeenCalledWith(expect.objectContaining({
       where: expect.objectContaining({ matchPlayers: { some: { playerId: 'player-1' } } }),

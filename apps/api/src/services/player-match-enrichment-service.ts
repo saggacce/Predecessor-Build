@@ -40,6 +40,7 @@ interface EnrichmentCandidate {
   rosterSynced: boolean;
   eventStreamSynced: boolean;
   eventStreamFailed: boolean;
+  needsRosterRefresh?: boolean;
 }
 
 interface EnrichmentOptions {
@@ -119,6 +120,7 @@ async function loadCandidates(
       matchPlayers: { some: { playerId } },
       OR: [
         { rosterSynced: false },
+        { matchPlayers: { some: { playerId, physicalDamageTaken: null } } },
         {
           eventStreamSynced: false,
           ...(retryFailed ? {} : { eventStreamFailed: false }),
@@ -133,10 +135,22 @@ async function loadCandidates(
       rosterSynced: true,
       eventStreamSynced: true,
       eventStreamFailed: true,
+      matchPlayers: {
+        where: { playerId },
+        take: 1,
+        select: { physicalDamageTaken: true },
+      },
     },
   });
 
-  return matches;
+  return matches.map((match) => ({
+    id: match.id,
+    predggUuid: match.predggUuid,
+    rosterSynced: match.rosterSynced,
+    eventStreamSynced: match.eventStreamSynced,
+    eventStreamFailed: match.eventStreamFailed,
+    needsRosterRefresh: match.matchPlayers?.[0]?.physicalDamageTaken === null,
+  }));
 }
 
 export async function enrichPlayerMatches(
@@ -155,7 +169,7 @@ export async function enrichPlayerMatches(
   const processCandidate = async (match: EnrichmentCandidate) => {
     let success = false;
     try {
-      if (!match.rosterSynced) {
+      if (!match.rosterSynced || match.needsRosterRefresh) {
         await resyncMatch(db, match.predggUuid, accessToken, true);
       } else if (!match.eventStreamSynced) {
         await syncMatchEventStream(db, match.id, match.predggUuid, accessToken, options.retryFailed ?? false);
