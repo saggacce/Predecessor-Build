@@ -16,6 +16,7 @@ export default function MatchDetail({ liveMode = false }: { liveMode?: boolean }
   const [match, setMatch] = useState<MatchDetailData | null>(null);
   const [preloadedEvents, setPreloadedEvents] = useState<MatchEvents | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [tab, setTab] = useState<'scoreboard' | 'statistics' | 'timeline' | 'analysis'>('scoreboard');
   const [syncing, setSyncing] = useState(false);
   const [editingPlayerId, setEditingPlayerId] = useState<string | null>(null);
@@ -24,13 +25,17 @@ export default function MatchDetail({ liveMode = false }: { liveMode?: boolean }
   // Live mode: fetch ephemeral match directly from pred.gg, no DB
   useEffect(() => {
     if (!liveMode || !predggUuid) return;
+    setLoading(true);
+    setLoadError(null);
     void (async () => {
       try {
         const { detail, events } = await apiClient.matches.getLive(predggUuid);
         setMatch(detail);
         setPreloadedEvents(events);
       } catch (err) {
-        toast.error(err instanceof ApiErrorResponse ? err.error.message : 'Failed to load match.');
+        const message = err instanceof ApiErrorResponse ? err.error.message : 'No se pudo cargar la partida.';
+        setLoadError(message);
+        toast.error(message);
       } finally {
         setLoading(false);
       }
@@ -40,6 +45,8 @@ export default function MatchDetail({ liveMode = false }: { liveMode?: boolean }
   // Normal mode: load from DB with optional auto-sync
   useEffect(() => {
     if (liveMode || !id) return;
+    setLoading(true);
+    setLoadError(null);
     void (async () => {
       try {
         const data = await apiClient.matches.getDetail(id);
@@ -60,7 +67,9 @@ export default function MatchDetail({ liveMode = false }: { liveMode?: boolean }
           }
         }
       } catch (err) {
-        toast.error(err instanceof ApiErrorResponse ? err.error.message : 'Failed to load match.');
+        const message = err instanceof ApiErrorResponse ? err.error.message : 'No se pudo cargar la partida.';
+        setLoadError(message);
+        toast.error(message);
       } finally {
         setLoading(false);
       }
@@ -99,7 +108,15 @@ export default function MatchDetail({ liveMode = false }: { liveMode?: boolean }
       {liveMode ? 'Preparando informe…' : 'Loading match…'}
     </div>
   );
-  if (!match) return <div style={{ padding: '2rem', color: 'var(--accent-loss)' }}>Match not found.</div>;
+  if (!match) return (
+    <div style={{ padding: '2rem' }}>
+      <h2 style={{ marginBottom: '0.5rem', color: 'var(--accent-loss)' }}>No se pudo cargar la partida</h2>
+      <p style={{ color: 'var(--text-secondary)', marginBottom: '1rem' }}>{loadError ?? 'Partida no encontrada.'}</p>
+      <button className="btn-secondary" onClick={() => navigate(-1)}>
+        <ArrowLeft size={16} /> Volver a mis partidas
+      </button>
+    </div>
+  );
 
   const isAram = match.gameMode === 'ARAM' || match.gameMode === 'BRAWL';
   const duskWon = match.winningTeam === 'DUSK';
