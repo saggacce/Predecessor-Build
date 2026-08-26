@@ -79,17 +79,17 @@ function semanticTags(item: {
   if (/armor.*shred|shred.*physical.*armor|reduce.*armor|physical penetration/.test(text)) tags.add('PHYSICAL_SHRED');
   if (/magical armor.*reduc|shred.*magical.*armor|magical penetration/.test(text)) tags.add('MAGICAL_SHRED');
   if (/maximum health|bonus health|current health/.test(text)) tags.add('ANTI_TANK');
-  if (/heal|healing|health regeneration|omnivamp|lifesteal/.test(text) && !tags.has('ANTI_HEAL')) tags.add('SUSTAIN');
+  if (/\bheal(?:s|ed|ing)?\b|health regeneration|\bomnivamp\b|\blifesteal\b/.test(text) && !tags.has('ANTI_HEAL')) tags.add('SUSTAIN');
   if (/shield/.test(text) && !tags.has('ANTI_SHIELD')) tags.add('SHIELD');
   if (/movement speed|dash|blink|leap/.test(text)) tags.add('MOBILITY');
   if (/crowd control|stun|slow|root|knock/.test(text)) tags.add('CONTROL');
   if (/basic attack|critical strike/.test(text)) tags.add('BASIC_ATTACK');
   if (/ability damage|magical power|ability haste|cooldown/.test(text)) tags.add('ABILITY_DAMAGE');
   if (/deal.*damage|damage.*target/.test(text)) tags.add('DAMAGE');
-  if (/attack speed|on.?hit|damage over time|every basic attack|per second/.test(text)) tags.add('DPS');
+  if (/attack speed|on.?hit|damage over time|every basic attack|basic attacks.*stack/.test(text)) tags.add('DPS');
   if (/burst|execute|missing health|below.*health|next ability.*damage/.test(text)) tags.add('BURST');
   if (/projectile|range|from a distance|above.*health/.test(text)) tags.add('POKE');
-  if (/dash|blink|leap|charge|pull.*toward|teleport/.test(text)) tags.add('ENGAGE');
+  if (/\bdash(?:es|ed)?\b|\bblink\b|\bleap(?:s|ed)?\b|\bcharge(?:s|d)?\s+(?:forward|toward|to)\b|\bpull.*toward|\bteleport/.test(text)) tags.add('ENGAGE');
   if (/knockback|knock up|slow|stun|root|shield.*all|nearby allies/.test(text)) tags.add('PEEL');
   if (/area|nearby enemies|all enemies|multiple enemies|radius/.test(text)) tags.add('AOE');
   if (/tenacity|crowd control duration/.test(text)) tags.add('TENACITY');
@@ -430,8 +430,15 @@ export async function getMatchBuildAnalysis(matchId: string, matchPlayerId: stri
     }
   }
   const threatPriority = ['SUSTAIN', 'SHIELD', 'CONTROL', 'ENGAGE', 'BURST', 'DPS', 'POKE', 'MOBILITY', 'DURABILITY', 'HASTE', 'TEAM_UTILITY'];
+  const enemyBySlug = new Map(enemies.map((enemy) => [enemy.heroSlug, enemy]));
   const enemyThreats = threatPriority.flatMap((key) => {
-    const sources = enemyConceptSources.get(key) ?? [];
+    const sources = [...(enemyConceptSources.get(key) ?? [])].sort((a, b) => {
+      const aEnemy = enemyBySlug.get(a.heroSlug);
+      const bEnemy = enemyBySlug.get(b.heroSlug);
+      const aImpact = key === 'SUSTAIN' ? aEnemy?.totalHealingDone ?? 0 : key === 'SHIELD' ? aEnemy?.totalShieldingReceived ?? 0 : 0;
+      const bImpact = key === 'SUSTAIN' ? bEnemy?.totalHealingDone ?? 0 : key === 'SHIELD' ? bEnemy?.totalShieldingReceived ?? 0 : 0;
+      return bImpact - aImpact || (a.sourceType === 'ability' ? -1 : 1);
+    });
     const telemetryValue = key === 'SUSTAIN' ? enemyHealing : key === 'SHIELD' ? enemyShielding : key === 'DURABILITY' ? enemyMitigation : 0;
     const visible = sources.length > 0 || telemetryValue > 0;
     if (!visible) return [];
@@ -670,9 +677,10 @@ export async function getMatchBuildAnalysis(matchId: string, matchPlayerId: stri
     DURABILITY: ['PHYSICAL_SHRED', 'MAGICAL_SHRED', 'ANTI_TANK'], HASTE: ['DURABILITY'], TEAM_UTILITY: ['BURST', 'ENGAGE'],
   };
   const buildTagSet = new Set(finalInventory.flatMap((item) => [...semanticTags(item)]));
+  const availableResponseSet = new Set([...buildTagSet, ...identityConcepts]);
   const unresolvedConcepts = enemyThreats.filter((threat) => {
     const responses = responseConcepts[threat.key] ?? [];
-    return responses.length > 0 && !responses.some((response) => buildTagSet.has(response));
+    return responses.length > 0 && !responses.some((response) => availableResponseSet.has(response));
   });
   const alignedItems = inventoryAssessments.filter((item) => item.functions.some((concept) => identityConcepts.has(concept.key))).length;
   const buildCoherence = finalInventory.length > 0 ? Math.round((alignedItems / finalInventory.length) * 100) : 0;
