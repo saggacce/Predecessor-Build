@@ -52,6 +52,6 @@ describe('pred.gg player benchmarks', () => {
     expect('comparison' in result.benchmark && result.benchmark.comparison.find((metric) => metric.key === 'winRate')).toMatchObject({ player: 60, population: 50, delta: 10 });
     expect(result.specialists).toMatchObject({ available: false, reason: 'Falta el permiso hero_leaderboard:read.' });
     expect(result.matchups).toMatchObject({ available: false, reason: 'Falta el permiso matchup_statistic:read.' });
-    expect(result.ratingDistribution).toMatchObject({ available: false, reason: 'Forbidden' });
+    expect(result.ratingDistribution).toMatchObject({ available: false, reason: 'Pred.gg no ha concedido acceso a la distribución de rango.' });
   });
 });

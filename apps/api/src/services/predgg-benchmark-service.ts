@@ -154,14 +154,17 @@ export async function getPlayerPredggBenchmarks(playerId: string, options: { her
   let ratingDistribution: { available: boolean; reason: string | null; results: unknown[] } = unavailable('Pred.gg no ha concedido acceso a la distribución de rating.');
   if (currentRating) {
     try {
-      const result = await gql<{ ratingDistribution: { results: Array<{ bucket: number; count: number; rank: { name: string; tierName: string } | null }> } | null }>(token.accessToken, `
+      const result = await gql<{ ratingDistribution: { results: Array<{ bucket: number; count: number; rank: string | null }> } | null }>(token.accessToken, `
         query RiftlineRatingDistribution($ratingId: ID!) {
-          ratingDistribution(ratingId: $ratingId, bucketSize: RANK) { results { bucket count rank { name tierName } } }
+          ratingDistribution(ratingId: $ratingId, bucketSize: RANK) { results { bucket count rank } }
         }
       `, { ratingId: currentRating.rating.id });
       ratingDistribution = { available: true, reason: null, results: result.ratingDistribution?.results ?? [] };
     } catch (error) {
-      ratingDistribution = unavailable(error instanceof Error ? error.message : 'No disponible');
+      const reason = error instanceof Error ? error.message : 'No disponible';
+      ratingDistribution = unavailable(reason.includes('Forbidden')
+        ? 'Pred.gg no ha concedido acceso a la distribución de rango.'
+        : reason);
     }
   }
 
