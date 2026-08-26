@@ -5,6 +5,7 @@ import { toast } from 'sonner';
 import { ApiErrorResponse, apiClient, type PlayerMetricTrend, type PlayerWeeklyReport, type WeeklyGoalEvaluation } from '../api/client';
 import { HeroAvatarWithTooltip } from '../components/HeroAvatar';
 import { MatchEnrichmentCard } from '../components/MatchEnrichmentCard';
+import { PlayerCoachChat } from '../components/PlayerCoachChat';
 import { useAuth } from '../hooks/useAuth';
 
 const METRIC_LABELS: Record<PlayerMetricTrend['metric'], string> = {
@@ -356,6 +357,8 @@ export default function PlayerWeeklyReportPage() {
           )}
         </section>
       ) : null}
+
+      <PlayerCoachChat playerId={linkedPlayerId} />
 
       <section style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(175px, 1fr))', gap: '0.75rem' }}>
         {report.trends.map((item) => <MetricCard key={item.metric} trend={item} />)}

@@ -217,6 +217,13 @@ export interface PlayerMatchEnrichmentStatus {
   } | null;
 }
 
+export interface PlayerCoachChatResponse {
+  answer: string;
+  evidence: Array<{ id: string; label: string; value: string; scope: string }>;
+  coverage: { complete: number; total: number; percent: number };
+  model: string;
+}
+
 export interface PlayerProfile {
   id: string;
   displayName: string;
@@ -1313,6 +1320,11 @@ export const apiClient = {
       }),
     playerWeekly: (playerId: string) =>
       fetchApi<PlayerWeeklyReport>(`/reports/player-weekly/${encodeURIComponent(playerId)}`),
+    playerCoachChat: (playerId: string, question: string, history: Array<{ role: 'user' | 'assistant'; content: string }>) =>
+      fetchApi<PlayerCoachChatResponse>(`/reports/player-coach/${encodeURIComponent(playerId)}/chat`, {
+        method: 'POST',
+        body: JSON.stringify({ question, history }),
+      }),
   },
 
   analyst: {
