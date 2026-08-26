@@ -115,9 +115,9 @@ function roleMetricValue(value: number | null, unit: 'ratio' | 'per_match' | 'pe
 
 function loadoutSlotLabel(slot: string, index: number): string {
   const normalized = slot.toUpperCase();
-  if (normalized.includes('AUGMENT')) return 'Augmento';
+  if (normalized.includes('AUGMENT') || normalized.includes('HERO_SPECIFIC')) return 'Augmento';
   if (normalized.includes('ETERNAL')) return 'Eternal';
-  if (normalized.includes('BLESSING')) return `Bendición ${index > 1 ? index - 1 : index + 1}`;
+  if (normalized.includes('BLESSING')) return normalized.endsWith('_2') ? 'Bendición II' : 'Bendición I';
   return slot || `Ranura ${index + 1}`;
 }
 
