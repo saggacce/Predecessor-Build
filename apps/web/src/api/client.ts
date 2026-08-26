@@ -1232,7 +1232,15 @@ export interface MatchBuildAnalysis {
     enemyShielding: number;
     enemyMitigation: number;
   };
-  inventory: Array<{ slug: string; displayName: string; aggressionType: string | null }>;
+  inventory: Array<{
+    slug: string;
+    displayName: string;
+    aggressionType: string | null;
+    rarity: string | null;
+    slotType: string | null;
+    isEvolved: boolean;
+    isHidden: boolean;
+  }>;
   eternalLoadout: Array<{ id: string; displayName: string; slot: string }>;
   abilityOrder: Array<{ ability: string; gameTime: number }>;
   signals: Array<{
@@ -1242,6 +1250,22 @@ export interface MatchBuildAnalysis {
     evidence: string;
     recommendation: string;
     suggestedItems?: Array<{ slug: string; displayName: string; aggressionType: string | null }>;
+  }>;
+}
+
+export interface PlayerBuildReview {
+  playerId: string;
+  period: { days: number; from: string; to: string };
+  matches: Array<{
+    match: {
+      id: string;
+      predggUuid: string;
+      startTime: string;
+      duration: number;
+      gameMode: string;
+      version: string | null;
+    };
+    analysis: MatchBuildAnalysis;
   }>;
 }
 
@@ -1437,6 +1461,12 @@ export const apiClient = {
       }),
     playerWeekly: (playerId: string) =>
       fetchApi<PlayerWeeklyReport>(`/reports/player-weekly/${encodeURIComponent(playerId)}`),
+    playerBuilds: (playerId: string, options: { days?: number; limit?: number } = {}) => {
+      const params = new URLSearchParams();
+      if (options.days) params.set('days', String(options.days));
+      if (options.limit) params.set('limit', String(options.limit));
+      return fetchApi<PlayerBuildReview>(`/reports/player-builds/${encodeURIComponent(playerId)}${params.size ? `?${params}` : ''}`);
+    },
     playerCoachChat: (playerId: string, question: string, history: Array<{ role: 'user' | 'assistant'; content: string }>) =>
       fetchApi<PlayerCoachChatResponse>(`/reports/player-coach/${encodeURIComponent(playerId)}/chat`, {
         method: 'POST',

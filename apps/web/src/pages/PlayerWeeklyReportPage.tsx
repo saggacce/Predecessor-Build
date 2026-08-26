@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router';
-import { Activity, ArrowDownRight, ArrowUpRight, Crosshair, Flag, Link as LinkIcon, Minus, RefreshCw, Sparkles, Target } from 'lucide-react';
+import { Activity, ArrowDownRight, ArrowUpRight, Crosshair, Flag, Link as LinkIcon, Minus, Package, RefreshCw, Shield, Sparkles, Target } from 'lucide-react';
 import { toast } from 'sonner';
-import { ApiErrorResponse, apiClient, type ChampionPoolContext, type PlayerBenchmarkResponse, type PlayerMetricTrend, type PlayerWeeklyReport, type WeeklyGoalEvaluation } from '../api/client';
+import { ApiErrorResponse, apiClient, type ChampionPoolContext, type PlayerBenchmarkResponse, type PlayerBuildReview, type PlayerMetricTrend, type PlayerWeeklyReport, type WeeklyGoalEvaluation } from '../api/client';
 import { HeroAvatarWithTooltip } from '../components/HeroAvatar';
 import { MatchEnrichmentCard } from '../components/MatchEnrichmentCard';
 import { PlayerCoachChat } from '../components/PlayerCoachChat';
@@ -113,6 +113,78 @@ function roleMetricValue(value: number | null, unit: 'ratio' | 'per_match' | 'pe
   return value < 10 ? value.toFixed(2) : Math.round(value).toLocaleString();
 }
 
+function loadoutSlotLabel(slot: string, index: number): string {
+  const normalized = slot.toUpperCase();
+  if (normalized.includes('AUGMENT')) return 'Augmento';
+  if (normalized.includes('ETERNAL')) return 'Eternal';
+  if (normalized.includes('BLESSING')) return `Bendición ${index > 1 ? index - 1 : index + 1}`;
+  return slot || `Ranura ${index + 1}`;
+}
+
+function BuildReviewCard({ entry, onOpen }: { entry: PlayerBuildReview['matches'][number]; onOpen: () => void }) {
+  const { analysis, match } = entry;
+  const finalItems = analysis.inventory.filter((item) => item.slotType === 'PASSIVE' && item.rarity === 'EPIC');
+  const visibleItems = finalItems.length > 0 ? finalItems : analysis.inventory.filter((item) => item.slotType === 'PASSIVE').slice(0, 6);
+  const primarySignal = analysis.signals.find((signal) => signal.severity === 'critical')
+    ?? analysis.signals.find((signal) => signal.severity === 'warning')
+    ?? analysis.signals[0];
+  const signalColor = primarySignal?.severity === 'critical'
+    ? 'var(--accent-loss)'
+    : primarySignal?.severity === 'warning'
+      ? 'var(--accent-prime)'
+      : 'var(--accent-win)';
+
+  return (
+    <article style={{ padding: '0.9rem', borderRadius: 9, background: 'rgba(15,23,42,0.5)', border: '1px solid var(--border-color)', minWidth: 0 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.65rem', alignItems: 'flex-start' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.55rem', minWidth: 0 }}>
+          <HeroAvatarWithTooltip slug={analysis.heroSlug} name={analysis.heroSlug} size={38} rounded={7} />
+          <div style={{ minWidth: 0 }}>
+            <strong style={{ display: 'block', textTransform: 'capitalize', fontSize: '0.82rem' }}>{analysis.heroSlug}</strong>
+            <span style={{ color: 'var(--text-muted)', fontSize: '0.62rem' }}>{analysis.role ?? 'Sin rol'} · {new Date(match.startTime).toLocaleDateString()}</span>
+          </div>
+        </div>
+        <span style={{ color: analysis.result === 'win' ? 'var(--accent-win)' : 'var(--accent-loss)', fontSize: '0.62rem', fontWeight: 800, textTransform: 'uppercase' }}>
+          {analysis.result === 'win' ? 'Victoria' : 'Derrota'}
+        </span>
+      </div>
+
+      <div style={{ marginTop: '0.75rem' }}>
+        <p style={{ margin: '0 0 0.4rem', color: 'var(--text-muted)', fontSize: '0.58rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Build final</p>
+        <div style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap', minHeight: 30 }}>
+          {visibleItems.length > 0 ? visibleItems.map((item) => (
+            <span key={item.slug} title={item.displayName} style={{ width: 30, height: 30, borderRadius: 5, overflow: 'hidden', border: '1px solid rgba(255,255,255,0.12)', background: 'var(--bg-dark)' }}>
+              <img src={`/items/${item.slug}.webp`} alt={item.displayName} style={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={(event) => { (event.currentTarget as HTMLImageElement).style.display = 'none'; }} />
+            </span>
+          )) : <span style={{ color: 'var(--text-muted)', fontSize: '0.66rem' }}>Build todavía incompleta</span>}
+        </div>
+      </div>
+
+      <div style={{ marginTop: '0.7rem' }}>
+        <p style={{ margin: '0 0 0.35rem', color: 'var(--text-muted)', fontSize: '0.58rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Ancestro y bendiciones</p>
+        <div style={{ display: 'flex', gap: '0.3rem', flexWrap: 'wrap' }}>
+          {analysis.eternalLoadout.length > 0 ? analysis.eternalLoadout.map((perk, index) => (
+            <span key={`${perk.id}-${index}`} title={perk.displayName} style={{ padding: '0.22rem 0.4rem', borderRadius: 5, background: 'rgba(167,139,250,0.08)', border: '1px solid rgba(167,139,250,0.2)', color: 'var(--text-secondary)', fontSize: '0.59rem' }}>
+              <strong style={{ color: 'var(--accent-violet)' }}>{loadoutSlotLabel(perk.slot, index)}:</strong> {perk.displayName}
+            </span>
+          )) : <span style={{ color: 'var(--text-muted)', fontSize: '0.66rem' }}>Sin loadout sincronizado</span>}
+        </div>
+      </div>
+
+      {primarySignal ? (
+        <div style={{ marginTop: '0.75rem', padding: '0.6rem', borderRadius: 7, borderLeft: `3px solid ${signalColor}`, background: 'rgba(255,255,255,0.025)' }}>
+          <strong style={{ display: 'block', color: signalColor, fontSize: '0.7rem' }}>{primarySignal.title}</strong>
+          <span style={{ display: 'block', marginTop: '0.2rem', color: 'var(--text-muted)', fontSize: '0.63rem', lineHeight: 1.35 }}>{primarySignal.recommendation}</span>
+        </div>
+      ) : null}
+
+      <button type="button" className="btn-secondary" onClick={onOpen} style={{ marginTop: '0.75rem', flex: 'unset', width: '100%', justifyContent: 'center', fontSize: '0.68rem' }}>
+        Ver análisis completo
+      </button>
+    </article>
+  );
+}
+
 export default function PlayerWeeklyReportPage() {
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -124,6 +196,8 @@ export default function PlayerWeeklyReportPage() {
   const [savingGoal, setSavingGoal] = useState(false);
   const [poolContext, setPoolContext] = useState<ChampionPoolContext | null>(null);
   const [benchmark, setBenchmark] = useState<PlayerBenchmarkResponse | null>(null);
+  const [buildReview, setBuildReview] = useState<PlayerBuildReview | null>(null);
+  const [buildReviewLoading, setBuildReviewLoading] = useState(true);
   const [poolFilters, setPoolFilters] = useState({ days: 90, role: '', gameMode: 'RANKED', heroSlug: '' });
   const [poolFiltersReady, setPoolFiltersReady] = useState(false);
   const linkedPlayerId = user?.linkedPlayerId;
@@ -153,10 +227,22 @@ export default function PlayerWeeklyReportPage() {
     }
   }, [linkedPlayerId]);
 
+  const loadBuildReview = useCallback(async () => {
+    if (!linkedPlayerId) return;
+    try {
+      setBuildReviewLoading(true);
+      setBuildReview(await apiClient.reports.playerBuilds(linkedPlayerId, { days: 30, limit: 5 }));
+    } catch {
+      setBuildReview(null);
+    } finally {
+      setBuildReviewLoading(false);
+    }
+  }, [linkedPlayerId]);
+
   useEffect(() => {
-    const timer = window.setTimeout(() => void Promise.all([loadReport(), loadGoalProgress()]), 0);
+    const timer = window.setTimeout(() => void Promise.all([loadReport(), loadGoalProgress(), loadBuildReview()]), 0);
     return () => window.clearTimeout(timer);
-  }, [loadGoalProgress, loadReport]);
+  }, [loadBuildReview, loadGoalProgress, loadReport]);
 
   useEffect(() => {
     if (!report || poolFiltersReady) return;
@@ -192,7 +278,7 @@ export default function PlayerWeeklyReportPage() {
     try {
       setSyncing(true);
       const result = await apiClient.sync.myMatches();
-      await Promise.all([loadReport(), loadGoalProgress()]);
+      await Promise.all([loadReport(), loadGoalProgress(), loadBuildReview()]);
       setCoverageRefresh((current) => current + 1);
       toast.success(result.newMatches > 0
         ? `${result.newMatches} partidas nuevas · ${result.syncedMatches} revisadas para el informe.`
@@ -337,6 +423,37 @@ export default function PlayerWeeklyReportPage() {
           </div>
         </section>
       ) : null}
+
+      <section className="glass-card" style={{ padding: '1.15rem', borderColor: 'rgba(240,180,41,0.3)' }} aria-labelledby="build-review-title">
+        <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.8rem', alignItems: 'flex-start', flexWrap: 'wrap' }}>
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', color: 'var(--accent-prime)', fontSize: '0.68rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.07em' }}>
+              <Package size={15} /> Decisiones de partida
+            </div>
+            <h2 id="build-review-title" style={{ margin: '0.55rem 0 0.2rem', fontSize: '1.15rem' }}>Builds, Ancestros y adaptación</h2>
+            <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: '0.73rem' }}>Qué compraste, qué loadout llevaste y cómo podrías adaptarlo al rival.</p>
+          </div>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', padding: '0.25rem 0.55rem', borderRadius: 999, background: 'rgba(240,180,41,0.08)', color: 'var(--accent-prime)', fontSize: '0.64rem', fontWeight: 700 }}>
+            <Shield size={13} /> Últimos 30 días
+          </span>
+        </div>
+
+        {buildReviewLoading ? (
+          <div style={{ marginTop: '0.85rem', padding: '0.9rem', borderRadius: 8, background: 'rgba(255,255,255,0.025)', color: 'var(--text-muted)', fontSize: '0.75rem' }}>
+            Analizando tus builds y Ancestros recientes…
+          </div>
+        ) : buildReview && buildReview.matches.length > 0 ? (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(265px, 1fr))', gap: '0.7rem', marginTop: '0.9rem' }}>
+            {buildReview.matches.map((entry) => (
+              <BuildReviewCard key={entry.match.id} entry={entry} onOpen={() => navigate(`/matches/${entry.match.id}?tab=statistics`)} />
+            ))}
+          </div>
+        ) : (
+          <div style={{ marginTop: '0.85rem', padding: '0.9rem', borderRadius: 8, background: 'rgba(255,255,255,0.025)', color: 'var(--text-muted)', fontSize: '0.75rem' }}>
+            Todavía no hay builds analizables. Pulsa «Actualizar historial» para completar las partidas recientes.
+          </div>
+        )}
+      </section>
 
       <section className="glass-card" style={{ padding: '1.15rem' }} aria-labelledby="champion-pool-title">
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '0.75rem', flexWrap: 'wrap' }}>

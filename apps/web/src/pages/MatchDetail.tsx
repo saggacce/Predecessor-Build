@@ -19,7 +19,10 @@ export default function MatchDetail({ liveMode = false }: { liveMode?: boolean }
   const [preloadedEvents, setPreloadedEvents] = useState<MatchEvents | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [tab, setTab] = useState<'scoreboard' | 'statistics' | 'timeline' | 'analysis'>('scoreboard');
+  const requestedTab = new URLSearchParams(location.search).get('tab');
+  const [tab, setTab] = useState<'scoreboard' | 'statistics' | 'timeline' | 'analysis'>(
+    requestedTab === 'statistics' || requestedTab === 'timeline' || requestedTab === 'analysis' ? requestedTab : 'scoreboard',
+  );
   const [syncing, setSyncing] = useState(false);
   const [editingPlayerId, setEditingPlayerId] = useState<string | null>(null);
   const [editingValue, setEditingValue] = useState('');
