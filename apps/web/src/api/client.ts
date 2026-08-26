@@ -153,6 +153,28 @@ export interface PlayerWeeklyReport {
   };
 }
 
+export interface PlayerMatchEnrichmentStatus {
+  playerId: string;
+  windowDays: number;
+  totalMatches: number;
+  rosterSynced: number;
+  eventStreamSynced: number;
+  fullyEnriched: number;
+  failed: number;
+  pending: number;
+  coveragePercent: number;
+  lastMatchSyncedAt: string | null;
+  job: {
+    running: boolean;
+    total: number;
+    processed: number;
+    succeeded: number;
+    errors: number;
+    startedAt: string;
+    finishedAt: string | null;
+  } | null;
+}
+
 export interface PlayerProfile {
   id: string;
   displayName: string;
@@ -1404,7 +1426,14 @@ export const apiClient = {
 
   sync: {
     myMatches: () =>
-      fetchApi<{ newMatches: number; syncedMatches: number; message: string }>('/sync/my-matches', { method: 'POST' }),
+      fetchApi<{ newMatches: number; syncedMatches: number; message: string; enrichment: PlayerMatchEnrichmentStatus }>('/sync/my-matches', { method: 'POST' }),
+    matchCoverage: () =>
+      fetchApi<PlayerMatchEnrichmentStatus>('/sync/my-matches/coverage'),
+    enrichMyMatches: (retryFailed = false) =>
+      fetchApi<PlayerMatchEnrichmentStatus>('/sync/my-matches/enrich', {
+        method: 'POST',
+        body: JSON.stringify({ retryFailed }),
+      }),
   },
 
   schedule: {

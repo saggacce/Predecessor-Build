@@ -4,6 +4,7 @@ import { Activity, ArrowDownRight, ArrowUpRight, Link as LinkIcon, Minus, Refres
 import { toast } from 'sonner';
 import { ApiErrorResponse, apiClient, type PlayerMetricTrend, type PlayerWeeklyReport } from '../api/client';
 import { HeroAvatarWithTooltip } from '../components/HeroAvatar';
+import { MatchEnrichmentCard } from '../components/MatchEnrichmentCard';
 import { useAuth } from '../hooks/useAuth';
 
 const METRIC_LABELS: Record<PlayerMetricTrend['metric'], string> = {
@@ -61,6 +62,7 @@ export default function PlayerWeeklyReportPage() {
   const [report, setReport] = useState<PlayerWeeklyReport | null>(null);
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
+  const [coverageRefresh, setCoverageRefresh] = useState(0);
   const linkedPlayerId = user?.linkedPlayerId;
 
   const loadReport = useCallback(async () => {
@@ -79,7 +81,8 @@ export default function PlayerWeeklyReportPage() {
   }, [linkedPlayerId]);
 
   useEffect(() => {
-    void loadReport();
+    const timer = window.setTimeout(() => void loadReport(), 0);
+    return () => window.clearTimeout(timer);
   }, [loadReport]);
 
   async function syncMatches() {
@@ -87,6 +90,7 @@ export default function PlayerWeeklyReportPage() {
       setSyncing(true);
       const result = await apiClient.sync.myMatches();
       await loadReport();
+      setCoverageRefresh((current) => current + 1);
       toast.success(result.newMatches > 0
         ? `${result.newMatches} partidas nuevas · ${result.syncedMatches} revisadas para el informe.`
         : `Informe actualizado con ${result.syncedMatches} partidas revisadas.`);
@@ -140,6 +144,12 @@ export default function PlayerWeeklyReportPage() {
           {syncing ? 'Actualizando historial…' : 'Actualizar historial'}
         </button>
       </header>
+
+      <MatchEnrichmentCard
+        enabled={Boolean(linkedPlayerId)}
+        refreshToken={coverageRefresh}
+        onCompleted={loadReport}
+      />
 
       <section
         className="glass-card"
