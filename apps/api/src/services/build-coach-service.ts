@@ -159,7 +159,7 @@ function perkScore(perk: CatalogPerk, role: string | null, enemyMitigation: numb
   if (/stun|immobil|crowd control|movement speed/.test(text)) score += role === 'SUPPORT' ? 4 : 2;
   if (/ability haste|cooldown|ultimate haste/.test(text)) score += 3;
   if (/shield allies|allied hero/.test(text)) score += role === 'SUPPORT' ? 4 : 1;
-  if (/heal|shield/.test(text) && enablesHealingOrShielding) score += 3;
+  if (/\bheal(?:s|ed|ing)?\b|\bshield(?:s|ed|ing)?\b/.test(text) && enablesHealingOrShielding) score += 3;
   if (role === 'SUPPORT' && /units? killed|minions? killed/.test(text)) score -= 10;
   if (role === 'SUPPORT' && /basic attacks?/.test(text) && !/abilities/.test(text)) score -= 2;
   return score;
@@ -390,16 +390,21 @@ export async function getMatchBuildAnalysis(matchId: string, matchPlayerId: stri
     if (lesson) Object.assign(signal, lesson);
     if (!['anti-heal', 'anti-shield'].includes(signal.key)) continue;
     const pattern = signal.key === 'anti-heal'
-      ? /heal|healing|restore[^.]{0,30}health|lifesteal|omnivamp/i
+      ? /\bheal(?:s|ed|ing)?\b|\brestore[^.]{0,30}\bhealth\b|\blifesteal\b|\bomnivamp\b/i
       : /shield/i;
     const sources: NonNullable<BuildSignal['sources']> = [];
-    for (const enemy of enemies) {
+    const relevantEnemies = [...enemies].sort((a, b) => {
+      const aValue = signal.key === 'anti-heal' ? a.totalHealingDone : a.totalShieldingReceived;
+      const bValue = signal.key === 'anti-heal' ? b.totalHealingDone : b.totalShieldingReceived;
+      return (bValue ?? 0) - (aValue ?? 0);
+    });
+    for (const enemy of relevantEnemies) {
       const relevantValue = signal.key === 'anti-heal' ? enemy.totalHealingDone : enemy.totalShieldingReceived;
       if ((relevantValue ?? 0) <= 0) continue;
       const meta = heroMetaBySlug.get(enemy.heroSlug);
       for (const ability of jsonArray<HeroAbility>(meta?.abilities)) {
         const description = plainText(ability.game_description ?? ability.menu_description ?? '');
-        if (!description || !pattern.test(description)) continue;
+        if (!description || !pattern.test(description) || /reduc[^.]{0,30}heal|heal[^.]{0,30}reduc/i.test(description)) continue;
         sources.push({
           heroSlug: enemy.heroSlug,
           sourceType: 'ability',
@@ -407,10 +412,17 @@ export async function getMatchBuildAnalysis(matchId: string, matchPlayerId: stri
           description,
         });
       }
+    }
+    for (const enemy of relevantEnemies) {
+      const relevantValue = signal.key === 'anti-heal' ? enemy.totalHealingDone : enemy.totalShieldingReceived;
+      if ((relevantValue ?? 0) <= 0) continue;
       for (const slug of jsonArray<string>(enemy.inventoryItems)) {
         const item = catalogItemBySlug.get(slug);
         if (!item) continue;
-        const matchingEffects = item.effects.filter((effect) => pattern.test(plainText(`${effect.name} ${effect.text}`)));
+        const matchingEffects = item.effects.filter((effect) => {
+          const description = plainText(`${effect.name} ${effect.text}`);
+          return pattern.test(description) && !/reduc[^.]{0,30}heal|heal[^.]{0,30}reduc/i.test(description);
+        });
         for (const effect of matchingEffects) {
           sources.push({
             heroSlug: enemy.heroSlug,
