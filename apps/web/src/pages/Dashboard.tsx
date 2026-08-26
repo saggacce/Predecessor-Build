@@ -189,13 +189,15 @@ export default function Dashboard() {
   const isCoach = teamRole === 'COACH';
   const isAnalista = teamRole === 'ANALISTA';
   const isJugador = teamRole === 'JUGADOR';
-  const isStandalonePlayerView = viewAs === 'PLAYER' || (!ownTeam && user?.globalRole === 'PLAYER');
 
   // Manager who has registered but not yet created/joined a team
   const isManagerWithNoTeam = !isPlatformAdmin && teamsLoaded && !ownTeam && (
     user?.globalRole === 'MANAGER' ||
     (user?.memberships?.some((m) => m.role === 'MANAGER') ?? false)
   );
+  const isStandalonePlayerView = viewAs === 'PLAYER'
+    || user?.globalRole === 'PLAYER'
+    || (teamsLoaded && !ownTeam && user?.globalRole !== 'PLATFORM_ADMIN' && user?.globalRole !== 'MANAGER');
 
   useEffect(() => {
     if (!internalAuthenticated) return;
@@ -764,7 +766,7 @@ export default function Dashboard() {
       {isManagerWithNoTeam && <ManagerNoTeamPrompt />}
 
       {/* ── Standalone PLAYER (no team) ──────────────────────────────────── */}
-      {!isManagerWithNoTeam && !isPlatformAdmin && (!ownTeam || viewAs === 'PLAYER') && (
+      {isStandalonePlayerView && (
         <PlayerStandaloneView />
       )}
     </div>

@@ -250,7 +250,14 @@ function SidebarSectionEl({ section, isOpen, onToggle, badgeCount = 0 }: Sidebar
 function useSections(t: (key: string) => string): SidebarSection[] {
   const { user } = useAuth();
   const { viewAs } = useViewAs();
-  const isStandalonePlayer = (viewAs ?? user?.globalRole) === 'PLAYER';
+  const effectiveRole = viewAs ?? user?.globalRole;
+  const hasTeam = viewAs
+    ? ['MANAGER', 'COACH', 'ANALISTA', 'JUGADOR'].includes(viewAs)
+    : (user?.memberships?.length ?? 0) > 0;
+  const isStandalonePlayer = !!user && (
+    effectiveRole === 'PLAYER'
+    || (!hasTeam && effectiveRole !== 'PLATFORM_ADMIN' && effectiveRole !== 'MANAGER')
+  );
 
   if (isStandalonePlayer) {
     return [
