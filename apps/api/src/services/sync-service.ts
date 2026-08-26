@@ -27,13 +27,15 @@ async function predggQuery<T>(
   query: string,
   variables?: Record<string, unknown>,
   userToken?: string,
-  options: { publicFallback?: boolean } = {},
+  options: { publicOnly?: boolean } = {},
 ): Promise<T> {
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
   const apiKey = process.env.PRED_GG_CLIENT_SECRET;
   // User OAuth token takes priority — unlocks player data
-  if (userToken) headers['Authorization'] = `Bearer ${userToken}`;
-  else if (apiKey) headers['X-Api-Key'] = apiKey;
+  if (!options.publicOnly) {
+    if (userToken) headers['Authorization'] = `Bearer ${userToken}`;
+    else if (apiKey) headers['X-Api-Key'] = apiKey;
+  }
 
   const execute = async (requestHeaders: Record<string, string>): Promise<T> => {
     const res = await fetch(GQL_URL, {
@@ -49,17 +51,7 @@ async function predggQuery<T>(
     return json.data as T;
   };
 
-  try {
-    return await execute(headers);
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    const apiKeyRejected = !userToken && Boolean(headers['X-Api-Key'])
-      && /401|403|unauthorized|forbidden/i.test(message);
-    if (!options.publicFallback || !apiKeyRejected) throw error;
-
-    logger.warn('pred.gg API key rejected for public event data — retrying without credentials');
-    return execute({ 'Content-Type': 'application/json' });
-  }
+  return execute(headers);
 }
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -1498,6 +1490,20 @@ const MATCH_EVENT_STREAM_QUERY = `
   }
 `;
 
+// Gold intervals are currently public on pred.gg even when other event-stream
+// fields require OAuth. Keeping this query separate prevents one protected
+// field from making the whole economic timeline unavailable.
+const MATCH_GOLD_TIMELINE_QUERY = `
+  query GetMatchGoldTimeline($uuid: String!) {
+    match(by: { id: $uuid }) {
+      matchPlayers {
+        player { id }
+        goldEarnedAtInterval
+      }
+    }
+  }
+`;
+
 interface EventStreamLocation {
   x?: number | null;
   y?: number | null;
@@ -1641,12 +1647,30 @@ export async function syncMatchEventStream(
       MATCH_EVENT_STREAM_QUERY,
       { uuid: predggUuid },
       userToken,
-      { publicFallback: true },
     );
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     if (msg.includes('401') || msg.includes('403') || msg.includes('Unauthorized') || msg.includes('Forbidden')) {
-      throw err; // Auth error — let caller handle token refresh
+      const publicData = await predggQuery<{
+        match: { matchPlayers: Array<{ player?: { id?: string | null } | null; goldEarnedAtInterval?: number[] | null }> } | null;
+      }>(MATCH_GOLD_TIMELINE_QUERY, { uuid: predggUuid }, undefined, { publicOnly: true });
+
+      let timelinesUpdated = 0;
+      for (const player of publicData.match?.matchPlayers ?? []) {
+        const predggPlayerId = player.player?.id;
+        if (!predggPlayerId || !player.goldEarnedAtInterval?.length) continue;
+        const result = await db.matchPlayer.updateMany({
+          where: { matchId, predggPlayerUuid: predggPlayerId },
+          data: { goldEarnedAtInterval: player.goldEarnedAtInterval },
+        });
+        timelinesUpdated += result.count;
+      }
+
+      if (timelinesUpdated > 0) {
+        logger.warn({ matchId, predggUuid, timelinesUpdated }, 'protected event stream unavailable — public gold timeline synced');
+        return;
+      }
+      throw err; // No useful public fallback — let caller handle token refresh
     }
     // API error that won't be fixed by retrying — mark as failed to skip in future runs
     await db.match.update({ where: { id: matchId }, data: { eventStreamFailed: true } }).catch(() => null);

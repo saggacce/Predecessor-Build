@@ -152,7 +152,7 @@ describe('syncMatchEventStream', () => {
     });
   });
 
-  it('retries public event data without the API key when pred.gg rejects it', async () => {
+  it('falls back to the public gold-only query when protected event data is rejected', async () => {
     vi.stubEnv('PRED_GG_CLIENT_SECRET', 'stale-api-key');
     vi.mocked(fetch)
       .mockResolvedValueOnce({
@@ -164,10 +164,8 @@ describe('syncMatchEventStream', () => {
         json: async () => ({
           data: {
             match: {
-              heroKills: [], objectiveKills: [], structureDestructions: [], heroBans: [],
               matchPlayers: [{
-                player: { id: 'predgg-warder' }, team: 'BLUE', goldEarnedAtInterval: [100, 200],
-                wardPlacements: [], wardDestructions: [], transactions: [],
+                player: { id: 'predgg-warder' }, goldEarnedAtInterval: [100, 200],
               }],
             },
           },
@@ -185,6 +183,7 @@ describe('syncMatchEventStream', () => {
       headers: { 'Content-Type': 'application/json' },
     }));
     expect(mockDb.matchPlayer.updateMany).toHaveBeenCalled();
+    expect(mockDb.heroKill.deleteMany).not.toHaveBeenCalled();
   });
 });
 
