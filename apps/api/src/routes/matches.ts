@@ -113,7 +113,7 @@ type LiveMatchPlayer = {
   level?: number; largestCriticalStrike?: number; largestKillingSpree?: number; multiKill?: number;
   goldEarnedAtInterval?: number[] | null;
   hero?: { slug?: string; data?: { displayName?: string; icon?: string; promoIcon?: string; defaultSkin?: { icon?: string; portrait?: string; smallPortrait?: string } | null } | null } | null;
-  inventoryItemData?: Array<{ item?: { slug?: string } | null }> | null;
+  inventoryItemData?: Array<{ item?: { slug?: string } | null } | null> | null;
   wardPlacements?: Array<{ gameTime: number; type?: string | null; location?: { x?: number; y?: number } | null }> | null;
   wardDestructions?: Array<{ gameTime: number; type?: string | null; location?: { x?: number; y?: number } | null }> | null;
   transactions?: Array<{ gameTime: number; transactionType?: string | null; itemData?: { name?: string | null } | null }> | null;
@@ -137,7 +137,7 @@ function pickHeroImage(data?: { displayName?: string; icon?: string; promoIcon?:
 
 function safeN(v: unknown): number { return typeof v === 'number' && isFinite(v) ? v : 0; }
 
-function buildLiveDetail(raw: LiveMatchData) {
+export function buildLiveDetail(raw: LiveMatchData) {
   const m = raw.match;
   if (!m) throw new AppError(404, 'Match not found on pred.gg', 'MATCH_NOT_FOUND');
 
@@ -147,7 +147,7 @@ function buildLiveDetail(raw: LiveMatchData) {
     const heroName = mp.hero?.data?.displayName ?? heroSlug;
     const heroImageUrl = pickHeroImage(mp.hero?.data);
     const inventoryItems = (mp.inventoryItemData ?? [])
-      .map((d) => d.item?.slug)
+      .map((d) => d?.item?.slug)
       .filter((s): s is string => typeof s === 'string' && s.length > 0);
 
     return {
