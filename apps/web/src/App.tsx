@@ -26,6 +26,7 @@ import DataQualityPage from './pages/DataQualityPage';
 import AuditLogsPage from './pages/AuditLogsPage';
 import InvitationsAdminPage from './pages/InvitationsAdminPage';
 import PlayerMatchesPage from './pages/PlayerMatchesPage';
+import PlayerWeeklyReportPage from './pages/PlayerWeeklyReportPage';
 import UsersPage from './pages/UsersPage';
 import ProfilePage from './pages/ProfilePage';
 import ApiStatusPage from './pages/ApiStatusPage';
@@ -450,12 +451,7 @@ function WeeklyReportsPage() {
   const isStandalonePlayer = user?.globalRole === 'PLAYER' || (!hasTeam && user?.globalRole !== 'PLATFORM_ADMIN');
 
   if (isStandalonePlayer) {
-    return (
-      <ComingSoon
-        section="Weekly Reports"
-        description="Aggregated weekly performance summary."
-      />
-    );
+    return <PlayerWeeklyReportPage />;
   }
 
   return (
