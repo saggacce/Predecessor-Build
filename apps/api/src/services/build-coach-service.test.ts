@@ -70,4 +70,38 @@ describe('contextual build coach', () => {
       where: expect.objectContaining({ rarity: 'EPIC', slotType: 'PASSIVE' }),
     }));
   });
+
+  it('credits an existing shred item and flags a farm-scaling Eternal for Support', async () => {
+    mocks.matchPlayerFindFirst.mockResolvedValueOnce({
+      id: 'mp-1', matchId: 'match-1', playerId: 'player-1', heroSlug: 'dekker', role: 'SUPPORT', team: 'DAWN',
+      kills: 0, deaths: 5, assists: 8, heroDamage: 10_000,
+      totalHealingDone: 2_500, totalShieldingReceived: 1_000,
+      inventoryItems: ['dynamo'], abilityOrder: [],
+      perks: [{
+        id: '699', name: 'Eternal_Xyris', displayName: 'Xyris', slot: 'ETERNAL_1',
+        description: 'Deal +3% Damage. Gain more per 10 Units killed.',
+      }],
+      physicalDamageTakenFromHeroes: 10_000, physicalDamageTaken: 10_000,
+      magicalDamageTakenFromHeroes: 10_000, magicalDamageTaken: 10_000,
+      trueDamageTakenFromHeroes: 0, trueDamageTaken: 0,
+      match: {
+        versionId: 'version-1', winningTeam: 'DUSK',
+        matchPlayers: [
+          { id: 'mp-1', playerId: 'player-1', playerName: 'Coach', team: 'DAWN', role: 'SUPPORT', heroSlug: 'dekker', totalHealingDone: 2_500, totalShieldingReceived: 1_000, totalDamageMitigated: 8_000 },
+          { id: 'enemy-1', playerId: 'enemy-player-1', playerName: 'Enemy', team: 'DUSK', role: 'OFFLANE', heroSlug: 'akeron', totalHealingDone: 0, totalShieldingReceived: 0, totalDamageMitigated: 100_000 },
+        ],
+      },
+    });
+    mocks.gameItemFindMany.mockResolvedValueOnce([{ predggId: 'item-1', slug: 'dynamo', name: 'Dynamo', versions: [{
+      predggDataId: 'data-1', displayName: 'Dynamo', aggressionType: 'MAGICAL_SHRED', rarity: 'EPIC', slotType: 'PASSIVE',
+      isEvolved: false, isHidden: false, stats: [], effects: [], blocksIds: [], blockedByIds: [],
+    }] }]);
+    mocks.transactionFindMany.mockResolvedValueOnce([]);
+
+    const result = await getMatchBuildAnalysis('match-1', 'mp-1');
+
+    expect(result.signals).not.toEqual(expect.arrayContaining([expect.objectContaining({ key: 'anti-tank' })]));
+    expect(result.inventoryAssessments[0]).toMatchObject({ slug: 'dynamo', verdict: 'correct' });
+    expect(result.eternalLoadout[0]).toMatchObject({ displayName: 'Xyris', verdict: 'questionable' });
+  });
 });
