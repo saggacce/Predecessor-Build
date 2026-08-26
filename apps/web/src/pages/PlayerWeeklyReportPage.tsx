@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router';
-import { Activity, ArrowDownRight, ArrowUpRight, Link as LinkIcon, Minus, Target } from 'lucide-react';
+import { Activity, ArrowDownRight, ArrowUpRight, Link as LinkIcon, Minus, RefreshCw, Target } from 'lucide-react';
 import { toast } from 'sonner';
 import { ApiErrorResponse, apiClient, type PlayerMetricTrend, type PlayerWeeklyReport } from '../api/client';
 import { HeroAvatarWithTooltip } from '../components/HeroAvatar';
@@ -60,19 +60,42 @@ export default function PlayerWeeklyReportPage() {
   const navigate = useNavigate();
   const [report, setReport] = useState<PlayerWeeklyReport | null>(null);
   const [loading, setLoading] = useState(true);
+  const [syncing, setSyncing] = useState(false);
   const linkedPlayerId = user?.linkedPlayerId;
 
-  useEffect(() => {
+  const loadReport = useCallback(async () => {
     if (!linkedPlayerId) {
       setLoading(false);
       return;
     }
 
-    apiClient.reports.playerWeekly(linkedPlayerId)
-      .then(setReport)
-      .catch((error) => toast.error(error instanceof ApiErrorResponse ? error.error.message : 'No se pudo cargar el informe semanal.'))
-      .finally(() => setLoading(false));
+    try {
+      setReport(await apiClient.reports.playerWeekly(linkedPlayerId));
+    } catch (error) {
+      toast.error(error instanceof ApiErrorResponse ? error.error.message : 'No se pudo cargar el informe semanal.');
+    } finally {
+      setLoading(false);
+    }
   }, [linkedPlayerId]);
+
+  useEffect(() => {
+    void loadReport();
+  }, [loadReport]);
+
+  async function syncMatches() {
+    try {
+      setSyncing(true);
+      const result = await apiClient.sync.myMatches();
+      await loadReport();
+      toast.success(result.newMatches > 0
+        ? `${result.newMatches} partidas nuevas añadidas al informe.`
+        : 'Tu informe ya estaba actualizado.');
+    } catch (error) {
+      toast.error(error instanceof ApiErrorResponse ? error.error.message : 'No se pudieron sincronizar tus partidas.');
+    } finally {
+      setSyncing(false);
+    }
+  }
 
   if (loading) return <div style={{ padding: '2rem', color: 'var(--text-muted)' }}>Cargando informe semanal…</div>;
 
@@ -106,6 +129,16 @@ export default function PlayerWeeklyReportPage() {
             Últimos 7 días comparados con tu referencia móvil de 30 días.
           </p>
         </div>
+        <button
+          type="button"
+          className="btn-secondary"
+          disabled={syncing}
+          onClick={() => void syncMatches()}
+          style={{ display: 'inline-flex', alignItems: 'center', gap: '0.45rem', flex: 'unset', whiteSpace: 'nowrap' }}
+        >
+          <RefreshCw size={15} className={syncing ? 'spin' : undefined} />
+          {syncing ? 'Actualizando…' : 'Actualizar partidas'}
+        </button>
       </header>
 
       <section
@@ -163,7 +196,12 @@ export default function PlayerWeeklyReportPage() {
               </div>
             </div>
           ) : (
-            <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>Sin partidas esta semana.</p>
+            <div>
+              <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>Sin partidas esta semana.</p>
+              <button type="button" className="btn-secondary" disabled={syncing} onClick={() => void syncMatches()} style={{ flex: 'unset', marginTop: '0.35rem', fontSize: '0.75rem' }}>
+                Sincronizar ahora
+              </button>
+            </div>
           )}
         </article>
       </section>

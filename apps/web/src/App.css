@@ -415,6 +415,9 @@
 @keyframes spin {
   100% { transform: rotate(360deg); }
 }
+.spin {
+  animation: spin 0.9s linear infinite;
+}
 
 /* ── LED pulse (dashboard status dot) ───────────────────────────────── */
 @keyframes ledPulse {
