@@ -89,10 +89,10 @@ describe('generatePlayerWeeklyReport', () => {
 
   it.each([
     ['CARRY', ['csPerMinute', 'goldPerMinute', 'damagePerMinute', 'deathsPerMatch']],
-    ['SUPPORT', ['killParticipation', 'wardsPerMinute', 'deathsPerMatch', 'healingPerMinute']],
+    ['SUPPORT', ['killParticipation', 'wardsPerMinute', 'healingPerMinute', 'shieldingPerMinute']],
     ['MIDLANE', ['damagePerMinute', 'csPerMinute', 'killParticipation', 'deathsPerMatch']],
     ['JUNGLE', ['objectiveDamagePerMinute', 'killParticipation', 'damagePerMinute', 'deathsPerMatch']],
-    ['OFFLANE', ['damageTakenPerMinute', 'structureDamagePerMinute', 'csPerMinute', 'deathsPerMatch']],
+    ['OFFLANE', ['damageTakenPerMinute', 'mitigationPerMinute', 'structureDamagePerMinute', 'deathsPerMatch']],
   ])('uses role-specific evidence and actions for %s', async (role, expectedMetrics) => {
     mockDb.matchPlayer.findMany.mockResolvedValue([
       match(1, { role }),

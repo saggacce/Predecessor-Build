@@ -5,7 +5,8 @@ import { HeroAvatarWithTooltip } from '../components/HeroAvatar';
 import { useHeroMeta } from '../hooks/useHeroMeta';
 import { ArrowLeft, Trophy, Skull, Clock, RefreshCw, Pencil, Check, X, Monitor, Gamepad2, Swords } from 'lucide-react';
 import { toast } from 'sonner';
-import { apiClient, type MatchDetail as MatchDetailData, type MatchPlayerDetail, type MatchEvents, ApiErrorResponse } from '../api/client';
+import { apiClient, type MatchBuildAnalysis, type MatchDetail as MatchDetailData, type MatchPlayerDetail, type MatchEvents, ApiErrorResponse } from '../api/client';
+import { useAuth } from '../hooks/useAuth';
 
 export default function MatchDetail({ liveMode = false }: { liveMode?: boolean }) {
   const { id, predggUuid } = useParams<{ id?: string; predggUuid?: string }>();
@@ -13,6 +14,7 @@ export default function MatchDetail({ liveMode = false }: { liveMode?: boolean }
   const location = useLocation();
   const fromState = location.state as { fromPlayerId?: string; fromPlayerName?: string } | null;
   const heroMeta = useHeroMeta();
+  const { user } = useAuth();
   const [match, setMatch] = useState<MatchDetailData | null>(null);
   const [preloadedEvents, setPreloadedEvents] = useState<MatchEvents | null>(null);
   const [loading, setLoading] = useState(true);
@@ -124,6 +126,7 @@ export default function MatchDetail({ liveMode = false }: { liveMode?: boolean }
   const hasHidden = [...match.dusk, ...match.dawn].some((p) => p.playerName === 'HIDDEN');
   const fullySynced = match.rosterSynced && match.eventStreamSynced;
   const showSyncButton = !liveMode && (!fullySynced || hasHidden);
+  const personalMatchPlayer = [...match.dusk, ...match.dawn].find((player) => player.playerId === user?.linkedPlayerId) ?? null;
 
   const tabs: { key: typeof tab; label: string; disabled?: boolean }[] = [
     { key: 'scoreboard', label: 'Scoreboard' },
@@ -215,7 +218,10 @@ export default function MatchDetail({ liveMode = false }: { liveMode?: boolean }
         />
       )}
       {tab === 'statistics' && (
-        <StatisticsTab match={match} duskWon={duskWon} dawnWon={dawnWon} onResync={handleSyncPlayers} syncing={syncing} />
+        <StatisticsTab
+          match={match} duskWon={duskWon} dawnWon={dawnWon} onResync={handleSyncPlayers} syncing={syncing}
+          buildCoachPlayerId={!liveMode ? personalMatchPlayer?.id ?? null : null}
+        />
       )}
       {tab === 'timeline' && (
         <TimelineTab match={match} onResync={handleSyncPlayers} syncing={syncing} preloadedEvents={preloadedEvents ?? undefined} />
@@ -360,7 +366,7 @@ function ScoreboardTab({ match, duskWon, dawnWon, isAram, heroMeta, liveMode, ed
               <HeaderTooltip label="Gold total" tip="Oro total acumulado al final de la partida" style={{ flex: '0 0 76px', display: 'flex', justifyContent: 'center' }} />
               {!isAram && <span className="hide-mobile" style={{ flex: '0 0 80px', display: 'flex', justifyContent: 'center' }}><HeaderTooltip label="Wards" tip="Guardianes colocados / destruidos durante la partida" /></span>}
               <span className="hide-mobile" style={{ flex: '0 0 196px', display: 'flex', justifyContent: 'center' }}><HeaderTooltip label="Items" tip="Inventario final del jugador" /></span>
-              <span className="hide-mobile" style={{ flex: '0 0 160px', display: 'flex', justifyContent: 'center' }}><HeaderTooltip label="Augments" tip="Mejoras pre-partida seleccionadas por el jugador" /></span>
+              <span className="hide-mobile" style={{ flex: '0 0 210px', display: 'flex', justifyContent: 'center' }}><HeaderTooltip label="Loadout" tip="Augmento de héroe, Eternal y bendiciones seleccionadas" /></span>
             </div>
 
             {/* Player rows */}
@@ -386,6 +392,18 @@ function ScoreboardTab({ match, duskWon, dawnWon, isAram, heroMeta, liveMode, ed
       })}
     </div>
   );
+}
+
+function perkSlotLabel(slot: string | null): string {
+  if (slot === 'HERO_SPECIFIC_1') return 'Augmento';
+  if (slot === 'ETERNAL_1') return 'Eternal';
+  if (slot === 'BLESSING_MINOR_1') return 'Bendición I';
+  if (slot === 'BLESSING_MINOR_2') return 'Bendición II';
+  return 'Mejora';
+}
+
+function stripPredggMarkup(value: string): string {
+  return value.replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim();
 }
 
 function PlayerRow({ player, isAram, teamColor, maxDamage, teamKills, matchDuration, heroMeta, liveMode, isEditing, editingValue, onStartEdit, onSaveEdit, onCancelEdit, onEditValueChange }: {
@@ -556,22 +574,26 @@ function PlayerRow({ player, isAram, teamColor, maxDamage, teamKills, matchDurat
         ))}
       </div>
 
-      {/* Augments */}
-      <div className="hide-mobile" style={{ flex: '0 0 160px', display: 'flex', flexDirection: 'column', gap: '3px', justifyContent: 'center', padding: '0 4px' }}>
+      {/* Hero augment + Eternal loadout */}
+      <div className="hide-mobile" style={{ flex: '0 0 210px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '3px', alignContent: 'center', padding: '0 4px' }}>
         {player.perks && player.perks.length > 0 ? player.perks.map((perk) => (
-          <div key={perk.id} title={perk.displayName} style={{
-            fontSize: '0.6rem',
-            fontFamily: 'var(--font-mono)',
-            padding: '1px 5px',
+          <div key={perk.id} title={[perk.displayName, perk.eternalCategory?.name, stripPredggMarkup(perk.simpleDescription ?? perk.description ?? '')].filter(Boolean).join(' — ')} style={{
+            fontSize: '0.58rem',
+            padding: '2px 4px',
             borderRadius: '3px',
             whiteSpace: 'nowrap',
             overflow: 'hidden',
             textOverflow: 'ellipsis',
-            background: perk.slot === 'HERO_SPECIFIC_1' ? 'rgba(167,139,250,0.15)' : 'rgba(255,255,255,0.05)',
-            color: perk.slot === 'HERO_SPECIFIC_1' ? 'var(--accent-violet)' : 'var(--text-muted)',
-            border: perk.slot === 'HERO_SPECIFIC_1' ? '1px solid rgba(167,139,250,0.3)' : '1px solid rgba(255,255,255,0.06)',
+            display: 'flex', alignItems: 'center', gap: '4px',
+            background: perk.slot === 'ETERNAL_1' ? 'rgba(240,180,41,0.12)' : perk.slot === 'HERO_SPECIFIC_1' ? 'rgba(167,139,250,0.15)' : 'rgba(56,212,200,0.06)',
+            color: perk.slot === 'ETERNAL_1' ? 'var(--accent-prime)' : perk.slot === 'HERO_SPECIFIC_1' ? 'var(--accent-violet)' : 'var(--text-muted)',
+            border: perk.slot === 'ETERNAL_1' ? '1px solid rgba(240,180,41,0.28)' : perk.slot === 'HERO_SPECIFIC_1' ? '1px solid rgba(167,139,250,0.3)' : '1px solid rgba(56,212,200,0.14)',
           }}>
-            {perk.displayName}
+            {perk.icon && <img src={perk.icon} alt="" style={{ width: 17, height: 17, objectFit: 'contain', borderRadius: 2, flexShrink: 0 }} />}
+            <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              <span style={{ display: 'block', fontSize: '0.5rem', opacity: 0.7, textTransform: 'uppercase', letterSpacing: '0.04em' }}>{perkSlotLabel(perk.slot)}</span>
+              <span style={{ display: 'block', overflow: 'hidden', textOverflow: 'ellipsis' }}>{perk.displayName}</span>
+            </span>
           </div>
         )) : (
           <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)', opacity: 0.4 }}>—</span>
@@ -586,9 +608,9 @@ function PlayerRow({ player, isAram, teamColor, maxDamage, teamKills, matchDurat
 const OBJ_GROUPS = [
   { key: 'fangtooth', label: 'Fangtooth',  types: ['FANGTOOTH', 'PRIMAL_FANGTOOTH'], color: '#ef4444' },
   { key: 'prime',     label: 'Prime',      types: ['ORB_PRIME', 'MINI_PRIME'],        color: '#a78bfa' },
-  { key: 'shaper',    label: 'Shaper',     types: ['SHAPER'],                         color: '#c084fc' },
+  { key: 'shaper',    label: 'Shaper',     types: ['SHAPER', 'GENESIS_CORE'],         color: '#c084fc' },
   { key: 'buffs',     label: 'Buffs',      types: ['RED_BUFF','BLUE_BUFF','CYAN_BUFF','GOLD_BUFF'], color: '#f0b429' },
-  { key: 'river',     label: 'River',      types: ['RIVER','SEEDLING'],               color: '#38d4c8' },
+  { key: 'river',     label: 'River',      types: ['RIVER','SEEDLING','LANE_SEEDLING'], color: '#38d4c8' },
 ] as const;
 
 function AnalysisTab({ match, duskWon, dawnWon: _dawnWon, onResync, syncing, preloadedEvents }: {
@@ -1670,9 +1692,57 @@ function TlTipItemRow({ itemName }: { itemName: string | null }) {
 
 // ── Statistics Tab ────────────────────────────────────────────────────────────
 
-function StatisticsTab({ match, duskWon, dawnWon, onResync, syncing }: {
+function BuildCoachCard({ matchId, matchPlayerId }: { matchId: string; matchPlayerId: string }) {
+  const [analysis, setAnalysis] = useState<MatchBuildAnalysis | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    void apiClient.matches.buildAnalysis(matchId, matchPlayerId)
+      .then((result) => { if (!cancelled) setAnalysis(result); })
+      .catch(() => { if (!cancelled) setAnalysis(null); });
+    return () => { cancelled = true; };
+  }, [matchId, matchPlayerId]);
+
+  if (!analysis) return null;
+  return (
+    <section className="glass-card" style={{ padding: '1rem', borderColor: 'rgba(240,180,41,0.3)' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.75rem', flexWrap: 'wrap' }}>
+        <div>
+          <p style={{ margin: 0, color: 'var(--accent-prime)', fontSize: '0.64rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Coach de build</p>
+          <strong style={{ display: 'block', marginTop: '0.3rem', fontSize: '0.92rem', textTransform: 'capitalize' }}>{analysis.heroSlug} · {analysis.role?.toLowerCase() ?? 'sin rol'}</strong>
+        </div>
+        <div style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-muted)', fontSize: '0.67rem', textAlign: 'right' }}>
+          Daño recibido: {analysis.context.damageReceived.physical.toLocaleString()} físico · {analysis.context.damageReceived.magical.toLocaleString()} mágico
+        </div>
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))', gap: '0.65rem', marginTop: '0.8rem' }}>
+        {analysis.signals.map((signal) => {
+          const color = signal.severity === 'critical' ? 'var(--accent-loss)' : signal.severity === 'warning' ? 'var(--accent-prime)' : 'var(--accent-win)';
+          return (
+            <article key={signal.key} style={{ padding: '0.75rem', borderRadius: 8, background: 'rgba(15,23,42,0.52)', border: `1px solid color-mix(in srgb, ${color} 28%, transparent)` }}>
+              <strong style={{ color, fontSize: '0.78rem' }}>{signal.title}</strong>
+              <p style={{ margin: '0.35rem 0', color: 'var(--text-secondary)', fontSize: '0.7rem', lineHeight: 1.4 }}>{signal.evidence}</p>
+              <p style={{ margin: 0, color: 'var(--text-primary)', fontSize: '0.7rem', lineHeight: 1.4 }}>{signal.recommendation}</p>
+              {signal.suggestedItems && signal.suggestedItems.length > 0 && (
+                <div style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap', marginTop: '0.55rem' }}>
+                  {signal.suggestedItems.map((item) => (
+                    <span key={item.slug} style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem', padding: '0.2rem 0.4rem', borderRadius: 5, background: 'rgba(255,255,255,0.04)', fontSize: '0.62rem', color: 'var(--text-secondary)' }}>
+                      <img src={`/items/${item.slug}.webp`} alt="" style={{ width: 18, height: 18, borderRadius: 3 }} /> {item.displayName}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </article>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
+function StatisticsTab({ match, duskWon, dawnWon, onResync, syncing, buildCoachPlayerId }: {
   match: MatchDetailData; duskWon: boolean; dawnWon: boolean;
   onResync: () => void; syncing: boolean;
+  buildCoachPlayerId: string | null;
 }) {
   const allPlayers = [...match.dusk, ...match.dawn];
   const hasExtendedStats = allPlayers.some((p) => p.physicalDamageDealtToHeroes !== null);
@@ -1711,6 +1781,7 @@ function StatisticsTab({ match, duskWon, dawnWon, onResync, syncing }: {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+      {buildCoachPlayerId && <BuildCoachCard matchId={match.id} matchPlayerId={buildCoachPlayerId} />}
       {/* Section 1 — Damage Output */}
       <StatSection title="Damage Output" description="Hero damage breakdown (physical · magic · true) and total dealt">
         {teams.map(({ key, label, players, won }) => (

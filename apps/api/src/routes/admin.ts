@@ -12,13 +12,15 @@ import {
   syncMatchEventStream,
   resyncMatch,
   cleanupOldData,
+  syncGameCatalog,
+  syncTrackedGameCatalogs,
 } from '../services/sync-service.js';
 import { syncHeroMeta } from '../services/hero-meta-service.js';
 import { invalidateHeroMetaCache } from './hero-meta.js';
 import { getAllConfig, updateConfigValue, updateConfigText, resetConfigValue } from '../services/config-service.js';
 import { getPermissions, savePermissions, DEFAULT_PERMISSIONS, CONFIGURABLE_ROLES } from '../services/permissions-service.js';
 import { getValidToken } from './auth.js';
-import { getPlatformAccessToken, platformTokenState } from '../services/predgg-token-service.js';
+import { getPlatformAccessToken, inspectPlatformOAuthStatus, platformTokenState, readPlatformOAuthStatus } from '../services/predgg-token-service.js';
 import { requireAuth } from '../middleware/require-auth.js';
 import { requirePlatformAdmin } from '../middleware/require-platform-admin.js';
 
@@ -676,6 +678,11 @@ adminRouter.get('/api-status', async (_req, res, next) => {
     }
 
     const dayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const platformToken = await getPlatformAccessToken();
+    const oauth = platformToken
+      ? await inspectPlatformOAuthStatus(platformToken.accessToken)
+      : await readPlatformOAuthStatus();
+
     const [totalErrors, recentErrors, lastSuccess, recentBySource] = await Promise.all([
       db.syncLog.count({ where: { status: 'error' } }),
       db.syncLog.count({ where: { status: 'error', syncedAt: { gte: dayAgo } } }),
@@ -684,7 +691,7 @@ adminRouter.get('/api-status', async (_req, res, next) => {
     ]);
 
     res.json({
-      predgg: { status: predggStatus, responseMs: predggMs, error: predggError, endpoint: GQL_URL },
+      predgg: { status: predggStatus, responseMs: predggMs, error: predggError, endpoint: GQL_URL, oauth },
       syncErrors: { total: totalErrors, last24h: recentErrors, bySource: recentBySource },
       lastSuccessfulSync: lastSuccess,
     });
@@ -699,6 +706,19 @@ adminRouter.post('/sync-heroes', requireAuth, requirePlatformAdmin, async (_req,
   try {
     const result = await syncHeroMeta(db);
     invalidateHeroMetaCache();
+    res.json({ ok: true, ...result });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/** POST /admin/sync-game-catalog — current or selected patch catalog. */
+adminRouter.post('/sync-game-catalog', requireAuth, requirePlatformAdmin, async (req, res, next) => {
+  try {
+    const { versionId } = z.object({ versionId: z.string().optional() }).parse(req.body ?? {});
+    const result = versionId
+      ? await syncGameCatalog(db, versionId)
+      : await syncTrackedGameCatalogs(db);
     res.json({ ok: true, ...result });
   } catch (err) {
     next(err);

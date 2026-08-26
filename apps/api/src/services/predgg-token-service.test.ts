@@ -33,9 +33,12 @@ vi.mock('../db.js', () => ({
 
 vi.mock('./predgg-oauth.js', () => ({
   exchangeToken: mocks.exchangeToken,
+  predggOAuthConfig: {
+    scopes: 'offline_access profile player:read:interval hero_leaderboard:read matchup_statistic:read',
+  },
 }));
 
-import { getPlatformAccessToken } from './predgg-token-service.js';
+import { getPlatformAccessToken, inspectPlatformOAuthStatus, savePlatformOAuthTokens } from './predgg-token-service.js';
 
 describe('pred.gg platform token manager', () => {
   beforeEach(() => {
@@ -70,5 +73,31 @@ describe('pred.gg platform token manager', () => {
     const cached = await getPlatformAccessToken();
     expect(cached?.accessToken).toBe('new-access-token');
     expect(mocks.exchangeToken).toHaveBeenCalledTimes(1);
+  });
+
+  it('persists granted scopes and reports missing capabilities without exposing tokens', async () => {
+    await savePlatformOAuthTokens({
+      access_token: 'access-token', refresh_token: 'refresh-token', expires_in: 3600,
+      scope: 'profile offline_access',
+    });
+
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ data: { currentAuth: { scope: 'profile offline_access' } } }),
+    }));
+
+    const status = await inspectPlatformOAuthStatus('access-token');
+
+    expect(status.grantedScopes).toEqual(['offline_access', 'profile']);
+    expect(status.missingScopes).toEqual([
+      'hero_leaderboard:read', 'matchup_statistic:read', 'player:read:interval',
+    ]);
+    expect(status.capabilities).toMatchObject({
+      profile: true, offlineRefresh: true, playerIntervals: false,
+      heroLeaderboard: false, matchupStatistics: false,
+    });
+    expect(JSON.stringify(status)).not.toContain('access-token');
+    expect(mocks.credentials.get('predgg_granted_scopes')).toBe('offline_access profile');
   });
 });

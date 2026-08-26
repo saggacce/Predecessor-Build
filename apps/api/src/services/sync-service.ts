@@ -894,43 +894,303 @@ export async function syncVersionsFromPredgg(db: PrismaClient): Promise<number> 
   // When new versions are detected, refresh hero meta (abilities/stats may change per patch)
   if (upserted > 0) {
     syncHeroMeta(db).catch((err) => logger.warn({ err }, 'hero-meta: background sync failed'));
+    syncGameCatalog(db).catch((err) => logger.warn({ err }, 'game-catalog: background sync failed'));
   }
 
   logger.info({ upserted, elapsed: Date.now() - start }, 'versions sync complete');
   return upserted;
 }
 
-const MATCH_DETAIL_QUERY = `
+interface PredggCatalogItemData {
+  id: string;
+  displayName: string;
+  rarity: string;
+  slotType: string;
+  class: string;
+  aggressionType: string;
+  price: number;
+  totalPrice: number;
+  isEvolved: boolean;
+  isHidden: boolean;
+  icon: string;
+  smallIcon: string;
+  stats: Array<{ id: string; stat: string; value: number; showPercent: boolean }>;
+  effects: Array<{ id: string; name: string; text: string; active: boolean; condition: string | null; cooldown: string | null }>;
+  buildsFrom: Array<{ id: string }>;
+  buildsInto: Array<{ id: string }>;
+  blockedBy: Array<{ id: string }>;
+  blocks: Array<{ id: string }>;
+  item: { id: string; name: string; slug: string };
+}
+
+interface PredggCatalogPerkData {
+  id: string;
+  name: string;
+  displayName: string;
+  slot: string;
+  icon: string;
+  iconCenterPosition: number[] | null;
+  simpleDescription: string | null;
+  description: string;
+  aggressionTypes: string[];
+  displayOrder: number;
+  unlockLevel: number | null;
+  hero: { slug: string } | null;
+  eternalCategory: { id: string; name: string } | null;
+  minorBlessings: Array<{ perk: { id: string } }> | null;
+  perk: { id: string; name: string };
+}
+
+interface PredggEternalCategory {
+  id: string;
+  name: string;
+  data: {
+    id: string;
+    displayName: string;
+    displayNameSingular: string;
+    description: string;
+    color: string;
+    perks: Array<{ perk: { id: string } }>;
+  } | null;
+}
+
+const GAME_CATALOG_QUERY = `
+  query RiftlineGameCatalog($versionId: ID!) {
+    version(by: { id: $versionId }) {
+      id name
+      itemData {
+        id displayName rarity slotType class aggressionType price totalPrice isEvolved isHidden icon smallIcon
+        stats { id stat value showPercent }
+        effects { id name text active condition cooldown }
+        buildsFrom { id }
+        buildsInto { id }
+        blockedBy { id }
+        blocks { id }
+        item { id name slug }
+      }
+      perkData {
+        id name displayName slot icon iconCenterPosition simpleDescription description aggressionTypes displayOrder unlockLevel
+        hero { slug }
+        eternalCategory { id name }
+        minorBlessings { perk { id } }
+        perk { id name }
+      }
+    }
+    eternalCategories {
+      id name
+      data(versionId: $versionId) {
+        id displayName displayNameSingular description color
+        perks { perk { id } }
+      }
+    }
+  }
+`;
+
+/** Synchronizes patch-specific items, hero augments, Eternals and blessings. */
+export async function syncGameCatalog(db: PrismaClient, versionPredggId?: string): Promise<{
+  version: string;
+  items: number;
+  perks: number;
+  eternalCategories: number;
+}> {
+  const localVersion = versionPredggId
+    ? await db.version.findUnique({ where: { predggId: versionPredggId } })
+    : await db.version.findFirst({ orderBy: { releaseDate: 'desc' } });
+  if (!localVersion) throw new Error('No local game version available for catalog sync');
+
+  const data = await predggQuery<{
+    version: { id: string; name: string | null; itemData: PredggCatalogItemData[]; perkData: PredggCatalogPerkData[] } | null;
+    eternalCategories: PredggEternalCategory[];
+  }>(GAME_CATALOG_QUERY, { versionId: localVersion.predggId });
+  if (!data.version) throw new Error(`Version ${localVersion.predggId} not found on pred.gg`);
+
+  const syncedAt = new Date();
+  let itemCount = 0;
+  let perkCount = 0;
+  let categoryCount = 0;
+
+  for (const itemData of data.version.itemData) {
+    const item = await db.gameItem.upsert({
+      where: { predggId: itemData.item.id },
+      update: { name: itemData.item.name, slug: itemData.item.slug },
+      create: { predggId: itemData.item.id, name: itemData.item.name, slug: itemData.item.slug },
+    });
+    await db.gameItemVersion.upsert({
+      where: { itemId_versionId: { itemId: item.id, versionId: localVersion.id } },
+      update: {
+        predggDataId: itemData.id, displayName: itemData.displayName, rarity: itemData.rarity,
+        slotType: itemData.slotType, heroClass: itemData.class,
+        aggressionType: itemData.aggressionType === 'TESTING_OUR_SPACE_WITH_TEXT_123' ? null : itemData.aggressionType,
+        price: itemData.price, totalPrice: itemData.totalPrice, isEvolved: itemData.isEvolved,
+        isHidden: itemData.isHidden, icon: itemData.icon, smallIcon: itemData.smallIcon,
+        stats: itemData.stats, effects: itemData.effects,
+        buildsFromIds: itemData.buildsFrom.map((item) => item.id),
+        buildsIntoIds: itemData.buildsInto.map((item) => item.id),
+        blockedByIds: itemData.blockedBy.map((item) => item.id),
+        blocksIds: itemData.blocks.map((item) => item.id), syncedAt,
+      },
+      create: {
+        itemId: item.id, versionId: localVersion.id, predggDataId: itemData.id,
+        displayName: itemData.displayName, rarity: itemData.rarity, slotType: itemData.slotType,
+        heroClass: itemData.class,
+        aggressionType: itemData.aggressionType === 'TESTING_OUR_SPACE_WITH_TEXT_123' ? null : itemData.aggressionType,
+        price: itemData.price, totalPrice: itemData.totalPrice, isEvolved: itemData.isEvolved,
+        isHidden: itemData.isHidden, icon: itemData.icon, smallIcon: itemData.smallIcon,
+        stats: itemData.stats, effects: itemData.effects,
+        buildsFromIds: itemData.buildsFrom.map((candidate) => candidate.id),
+        buildsIntoIds: itemData.buildsInto.map((candidate) => candidate.id),
+        blockedByIds: itemData.blockedBy.map((candidate) => candidate.id),
+        blocksIds: itemData.blocks.map((candidate) => candidate.id), syncedAt,
+      },
+    });
+    itemCount++;
+  }
+
+  for (const perkData of data.version.perkData) {
+    const perkSlug = `${perkData.perk.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'perk'}-${perkData.perk.id}`;
+    const perk = await db.gamePerk.upsert({
+      where: { predggId: perkData.perk.id },
+      update: { name: perkData.perk.name, slug: perkSlug },
+      create: { predggId: perkData.perk.id, name: perkData.perk.name, slug: perkSlug },
+    });
+    const validCategory = perkData.eternalCategory?.name === 'Placeholder' ? null : perkData.eternalCategory;
+    await db.gamePerkVersion.upsert({
+      where: { perkId_versionId: { perkId: perk.id, versionId: localVersion.id } },
+      update: {
+        predggDataId: perkData.id, displayName: perkData.displayName, slot: perkData.slot,
+        icon: perkData.icon, iconCenterPosition: perkData.iconCenterPosition ?? Prisma.DbNull,
+        simpleDescription: perkData.simpleDescription, description: perkData.description,
+        aggressionTypes: perkData.aggressionTypes, displayOrder: perkData.displayOrder,
+        unlockLevel: perkData.unlockLevel, heroSlug: perkData.hero?.slug ?? null,
+        eternalCategoryPredggId: validCategory?.id ?? null,
+        minorBlessingPredggIds: perkData.minorBlessings?.map((blessing) => blessing.perk.id) ?? [], syncedAt,
+      },
+      create: {
+        perkId: perk.id, versionId: localVersion.id, predggDataId: perkData.id,
+        displayName: perkData.displayName, slot: perkData.slot, icon: perkData.icon,
+        iconCenterPosition: perkData.iconCenterPosition ?? Prisma.DbNull,
+        simpleDescription: perkData.simpleDescription, description: perkData.description,
+        aggressionTypes: perkData.aggressionTypes, displayOrder: perkData.displayOrder,
+        unlockLevel: perkData.unlockLevel, heroSlug: perkData.hero?.slug ?? null,
+        eternalCategoryPredggId: validCategory?.id ?? null,
+        minorBlessingPredggIds: perkData.minorBlessings?.map((blessing) => blessing.perk.id) ?? [], syncedAt,
+      },
+    });
+    perkCount++;
+  }
+
+  for (const categoryData of data.eternalCategories.filter((category) => category.name !== 'Placeholder' && category.data)) {
+    const category = await db.eternalCategory.upsert({
+      where: { predggId: categoryData.id },
+      update: { name: categoryData.name },
+      create: { predggId: categoryData.id, name: categoryData.name },
+    });
+    const detail = categoryData.data!;
+    await db.eternalCategoryVersion.upsert({
+      where: { categoryId_versionId: { categoryId: category.id, versionId: localVersion.id } },
+      update: {
+        predggDataId: detail.id, displayName: detail.displayName,
+        displayNameSingular: detail.displayNameSingular, description: detail.description,
+        color: detail.color, perkPredggIds: detail.perks.map((perk) => perk.perk.id), syncedAt,
+      },
+      create: {
+        categoryId: category.id, versionId: localVersion.id, predggDataId: detail.id,
+        displayName: detail.displayName, displayNameSingular: detail.displayNameSingular,
+        description: detail.description, color: detail.color,
+        perkPredggIds: detail.perks.map((perk) => perk.perk.id), syncedAt,
+      },
+    });
+    categoryCount++;
+  }
+
+  await db.syncLog.create({
+    data: { entity: 'game-catalog', entityId: localVersion.predggId, operation: 'upsert', status: 'ok' },
+  });
+  logger.info({ version: localVersion.name, items: itemCount, perks: perkCount, eternalCategories: categoryCount }, 'game catalog sync complete');
+  return { version: localVersion.name, items: itemCount, perks: perkCount, eternalCategories: categoryCount };
+}
+
+/** Backfills catalogs only for patches represented in the local match history. */
+export async function syncTrackedGameCatalogs(db: PrismaClient): Promise<{
+  versions: number;
+  catalogs: Array<{ version: string; items: number; perks: number; eternalCategories: number }>;
+}> {
+  const tracked = await db.match.findMany({
+    where: { versionId: { not: null } },
+    distinct: ['versionId'],
+    select: { version: { select: { predggId: true } } },
+  });
+  const latest = await db.version.findFirst({ orderBy: { releaseDate: 'desc' }, select: { predggId: true } });
+  const versionIds = [...new Set([
+    latest?.predggId,
+    ...tracked.map((row) => row.version?.predggId),
+  ].filter((id): id is string => Boolean(id)))];
+  const catalogs = [];
+  for (const predggId of versionIds) {
+    const version = await db.version.findUnique({ where: { predggId }, select: { id: true } });
+    if (!version) continue;
+    const alreadySynced = await db.gameItemVersion.count({ where: { versionId: version.id } });
+    if (alreadySynced > 0) continue;
+    catalogs.push(await syncGameCatalog(db, predggId));
+  }
+  return { versions: catalogs.length, catalogs };
+}
+
+function matchDetailQuery(includeProtectedFields: boolean): string {
+  const protectedFields = includeProtectedFields ? `
+        abilityOrder { ability gameTime }
+        rating {
+          points newPoints isRankup
+          rating { id name }
+          rank { name tierName }
+        }
+  ` : '';
+  return `
   query GetMatch($uuid: String!) {
     match(by: { id: $uuid }) {
-      id uuid startTime duration gameMode region winningTeam
+      id uuid startTime endTime duration gameMode region winningTeam endReason spoilerBlockedUntil
       version { id }
       matchPlayers {
         name team role kills deaths assists heroDamage totalDamageDealt
         gold wardsPlaced wardsDestroyed level
         physicalDamageDealtToHeroes magicalDamageDealtToHeroes trueDamageDealtToHeroes
         heroDamageTaken totalDamageTaken totalHealingDone
+        crestHealingDone itemHealingDone utilityHealingDone totalShieldingReceived totalDamageMitigated
+        physicalDamageTaken magicalDamageTaken trueDamageTaken
+        physicalDamageTakenFromHeroes magicalDamageTakenFromHeroes trueDamageTakenFromHeroes
         totalDamageDealtToStructures totalDamageDealtToObjectives
-        largestCriticalStrike laneMinionsKilled goldSpent
+        largestCriticalStrike laneMinionsKilled minionsKilled
+        neutralMinionsKilled neutralMinionsTeamJungle neutralMinionsEnemyJungle goldSpent
         largestKillingSpree multiKill
         physicalDamageDealt magicalDamageDealt trueDamageDealt
         hero { slug }
-        inventoryItemData { name }
-        perks { id name data { displayName slot } }
+        inventoryItemData { name item { slug } }
+        perks {
+          id name
+          data {
+            displayName slot icon simpleDescription description unlockLevel
+            eternalCategory { id name }
+          }
+        }
+        ${protectedFields}
         player { id name isNameConsole }
       }
     }
   }
 `;
+}
 
 interface PredggMatchDetail {
   id: string;
   uuid: string;
   startTime: string;
+  endTime: string | null;
   duration: number;
   gameMode: string;
   region: string | null;
   winningTeam: string | null;
+  endReason: string | null;
+  spoilerBlockedUntil: string | null;
   version: { id: string } | null;
   matchPlayers: Array<{
     name: string | null;
@@ -951,10 +1211,25 @@ interface PredggMatchDetail {
     heroDamageTaken: number | null;
     totalDamageTaken: number | null;
     totalHealingDone: number | null;
+    crestHealingDone: number | null;
+    itemHealingDone: number | null;
+    utilityHealingDone: number | null;
+    totalShieldingReceived: number | null;
+    totalDamageMitigated: number | null;
+    physicalDamageTaken: number | null;
+    magicalDamageTaken: number | null;
+    trueDamageTaken: number | null;
+    physicalDamageTakenFromHeroes: number | null;
+    magicalDamageTakenFromHeroes: number | null;
+    trueDamageTakenFromHeroes: number | null;
     totalDamageDealtToStructures: number | null;
     totalDamageDealtToObjectives: number | null;
     largestCriticalStrike: number | null;
     laneMinionsKilled: number | null;
+    minionsKilled: number | null;
+    neutralMinionsKilled: number | null;
+    neutralMinionsTeamJungle: number | null;
+    neutralMinionsEnemyJungle: number | null;
     goldSpent: number | null;
     largestKillingSpree: number | null;
     multiKill: number | null;
@@ -962,8 +1237,17 @@ interface PredggMatchDetail {
     magicalDamageDealt: number | null;
     trueDamageDealt: number | null;
     hero: { slug: string } | null;
-    inventoryItemData: Array<{ name: string } | null>;
-    perks: Array<{ id: string; name: string; data: { displayName: string; slot: string } | null }> | null;
+    inventoryItemData: Array<{ name: string; item: { slug: string } | null } | null>;
+    perks: Array<{ id: string; name: string; data: {
+      displayName: string; slot: string; icon: string; simpleDescription: string; description: string;
+      unlockLevel: number; eternalCategory: { id: string; name: string } | null;
+    } | null }> | null;
+    abilityOrder?: Array<{ ability: string; gameTime: number }> | null;
+    rating?: {
+      points: number | null; newPoints: number | null; isRankup: boolean;
+      rating: { id: string; name: string };
+      rank: { name: string; tierName: string } | null;
+    } | null;
     player: { id: string; name: string | null; isNameConsole: boolean } | null;
   }>;
 }
@@ -986,7 +1270,7 @@ export async function resyncMatch(
   }
 
   const data = await predggQuery<{ match: PredggMatchDetail | null }>(
-    MATCH_DETAIL_QUERY,
+    matchDetailQuery(Boolean(userToken)),
     { uuid: predggUuid },
     userToken,
   );
@@ -1006,7 +1290,13 @@ export async function resyncMatch(
 
   await db.match.update({
     where: { id: match.id },
-    data: { syncedAt: new Date(), versionId: version?.id ?? undefined },
+    data: {
+      syncedAt: new Date(),
+      versionId: version?.id ?? undefined,
+      endTime: data.match.endTime ? new Date(data.match.endTime) : null,
+      endReason: data.match.endReason ?? null,
+      spoilerBlockedUntil: data.match.spoilerBlockedUntil ? new Date(data.match.spoilerBlockedUntil) : null,
+    },
   });
 
   const now = new Date();
@@ -1057,25 +1347,54 @@ export async function resyncMatch(
         heroDamageTaken: mp.heroDamageTaken ?? null,
         totalDamageTaken: mp.totalDamageTaken ?? null,
         totalHealingDone: mp.totalHealingDone ?? null,
+        crestHealingDone: mp.crestHealingDone ?? null,
+        itemHealingDone: mp.itemHealingDone ?? null,
+        utilityHealingDone: mp.utilityHealingDone ?? null,
+        totalShieldingReceived: mp.totalShieldingReceived ?? null,
+        totalDamageMitigated: mp.totalDamageMitigated ?? null,
+        physicalDamageTaken: mp.physicalDamageTaken ?? null,
+        magicalDamageTaken: mp.magicalDamageTaken ?? null,
+        trueDamageTaken: mp.trueDamageTaken ?? null,
+        physicalDamageTakenFromHeroes: mp.physicalDamageTakenFromHeroes ?? null,
+        magicalDamageTakenFromHeroes: mp.magicalDamageTakenFromHeroes ?? null,
+        trueDamageTakenFromHeroes: mp.trueDamageTakenFromHeroes ?? null,
         totalDamageDealtToStructures: mp.totalDamageDealtToStructures ?? null,
         totalDamageDealtToObjectives: mp.totalDamageDealtToObjectives ?? null,
         largestCriticalStrike: mp.largestCriticalStrike ?? null,
         laneMinionsKilled: mp.laneMinionsKilled ?? null,
+        minionsKilled: mp.minionsKilled ?? null,
+        neutralMinionsKilled: mp.neutralMinionsKilled ?? null,
+        neutralMinionsTeamJungle: mp.neutralMinionsTeamJungle ?? null,
+        neutralMinionsEnemyJungle: mp.neutralMinionsEnemyJungle ?? null,
         goldSpent: mp.goldSpent ?? null,
         largestKillingSpree: mp.largestKillingSpree ?? null,
         multiKill: mp.multiKill ?? null,
         physicalDamageDealt: mp.physicalDamageDealt ?? null,
         magicalDamageDealt: mp.magicalDamageDealt ?? null,
         trueDamageDealt: mp.trueDamageDealt ?? null,
-        inventoryItems: (mp.inventoryItemData ?? []).filter(Boolean).map((i) => i!.name.toLowerCase()),
+        inventoryItems: (mp.inventoryItemData ?? []).filter(Boolean).map((i) => i!.item?.slug ?? i!.name.toLowerCase()),
         perkSlug: null,
         perks: (mp.perks ?? []).map((p) => ({
           id: p.id,
           name: p.name,
           displayName: p.data?.displayName ?? p.name,
           slot: p.data?.slot ?? null,
+          icon: p.data?.icon ?? null,
+          simpleDescription: p.data?.simpleDescription ?? null,
+          description: p.data?.description ?? null,
+          unlockLevel: p.data?.unlockLevel ?? null,
+          eternalCategory: p.data?.eternalCategory ?? null,
         })),
-        abilityOrder: [],
+        abilityOrder: mp.abilityOrder ?? Prisma.DbNull,
+        ratingId: mp.rating?.rating.id ?? null,
+        ratingPoints: mp.rating?.points ?? null,
+        ratingNewPoints: mp.rating?.newPoints ?? null,
+        ratingDelta: mp.rating?.points != null && mp.rating?.newPoints != null
+          ? mp.rating.newPoints - mp.rating.points
+          : null,
+        ratingRankName: mp.rating?.rank?.name ?? null,
+        ratingTierName: mp.rating?.rank?.tierName ?? null,
+        ratingIsRankup: mp.rating?.isRankup ?? null,
       },
     });
     } catch (err: unknown) {

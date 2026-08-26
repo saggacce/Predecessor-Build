@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { Activity, ArrowDownRight, ArrowUpRight, Crosshair, Flag, Link as LinkIcon, Minus, RefreshCw, Sparkles, Target } from 'lucide-react';
 import { toast } from 'sonner';
-import { ApiErrorResponse, apiClient, type PlayerMetricTrend, type PlayerWeeklyReport, type WeeklyGoalEvaluation } from '../api/client';
+import { ApiErrorResponse, apiClient, type ChampionPoolContext, type PlayerBenchmarkResponse, type PlayerMetricTrend, type PlayerWeeklyReport, type WeeklyGoalEvaluation } from '../api/client';
 import { HeroAvatarWithTooltip } from '../components/HeroAvatar';
 import { MatchEnrichmentCard } from '../components/MatchEnrichmentCard';
 import { PlayerCoachChat } from '../components/PlayerCoachChat';
@@ -57,6 +57,54 @@ function MetricCard({ trend }: { trend: PlayerMetricTrend }) {
   );
 }
 
+const poolSelectStyle = {
+  padding: '0.35rem 0.5rem', borderRadius: 6, border: '1px solid var(--border-color)',
+  background: 'var(--bg-dark)', color: 'var(--text-secondary)', fontSize: '0.68rem',
+} as const;
+
+function MatchupSummary({ title, row, accent, empty }: {
+  title: string;
+  row: ChampionPoolContext['hardestMatchup'];
+  accent: string;
+  empty: string;
+}) {
+  return (
+    <article style={{ padding: '0.75rem', borderRadius: 8, background: 'rgba(15,23,42,0.48)', border: '1px solid var(--border-color)' }}>
+      <p style={{ margin: 0, color: accent, fontSize: '0.62rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{title}</p>
+      {row ? (
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginTop: '0.55rem' }}>
+          <HeroAvatarWithTooltip slug={row.heroSlug} name={row.heroSlug} size={34} rounded={7} />
+          <div>
+            <strong style={{ textTransform: 'capitalize', fontSize: '0.8rem' }}>{row.heroSlug}</strong>
+            <p style={{ margin: '0.15rem 0 0', color: 'var(--text-muted)', fontSize: '0.66rem' }}>{row.matches} partidas · {row.winRate}% WR · {row.kda.toFixed(2)} KDA</p>
+          </div>
+        </div>
+      ) : <p style={{ margin: '0.45rem 0 0', color: 'var(--text-muted)', fontSize: '0.66rem' }}>{empty}</p>}
+    </article>
+  );
+}
+
+function benchmarkMetricLabel(key: string): string {
+  const labels: Record<string, string> = {
+    winRate: 'Win rate', kda: 'KDA', damagePerMinute: 'Daño/min', goldPerMinute: 'Oro/min',
+    csPerMinute: 'CS/min', wardsPerMatch: 'Wards/partida',
+  };
+  return labels[key] ?? key;
+}
+
+function CapabilityBadge({ label, available, reason }: { label: string; available: boolean; reason: string | null }) {
+  return (
+    <span title={reason ?? 'Disponible'} style={{
+      padding: '0.2rem 0.45rem', borderRadius: 999, fontSize: '0.6rem',
+      color: available ? 'var(--accent-win)' : 'var(--text-muted)',
+      background: available ? 'rgba(74,222,128,0.07)' : 'rgba(255,255,255,0.035)',
+      border: `1px solid ${available ? 'rgba(74,222,128,0.2)' : 'var(--border-color)'}`,
+    }}>
+      {available ? '✓' : '🔒'} {label}
+    </span>
+  );
+}
+
 function roleMetricValue(value: number | null, unit: 'ratio' | 'per_match' | 'per_minute' | 'percent'): string {
   if (value === null || !Number.isFinite(value)) return '—';
   if (unit === 'percent') return `${value.toFixed(1)}%`;
@@ -74,6 +122,10 @@ export default function PlayerWeeklyReportPage() {
   const [coverageRefresh, setCoverageRefresh] = useState(0);
   const [goalEvaluations, setGoalEvaluations] = useState<WeeklyGoalEvaluation[]>([]);
   const [savingGoal, setSavingGoal] = useState(false);
+  const [poolContext, setPoolContext] = useState<ChampionPoolContext | null>(null);
+  const [benchmark, setBenchmark] = useState<PlayerBenchmarkResponse | null>(null);
+  const [poolFilters, setPoolFilters] = useState({ days: 90, role: '', gameMode: 'RANKED', heroSlug: '' });
+  const [poolFiltersReady, setPoolFiltersReady] = useState(false);
   const linkedPlayerId = user?.linkedPlayerId;
 
   const loadReport = useCallback(async () => {
@@ -105,6 +157,36 @@ export default function PlayerWeeklyReportPage() {
     const timer = window.setTimeout(() => void Promise.all([loadReport(), loadGoalProgress()]), 0);
     return () => window.clearTimeout(timer);
   }, [loadGoalProgress, loadReport]);
+
+  useEffect(() => {
+    if (!report || poolFiltersReady) return;
+    setPoolFilters((current) => ({
+      ...current,
+      role: report.roleCoach?.role ?? '',
+      heroSlug: report.championPool.mainHero ?? '',
+    }));
+    setPoolFiltersReady(true);
+  }, [poolFiltersReady, report]);
+
+  useEffect(() => {
+    if (!linkedPlayerId || !poolFiltersReady) return;
+    let cancelled = false;
+    const contextRequest = apiClient.players.championPoolContext(linkedPlayerId, {
+      days: poolFilters.days,
+      role: poolFilters.role || undefined,
+      gameMode: poolFilters.gameMode || undefined,
+      heroSlug: poolFilters.heroSlug || undefined,
+    }).then((data) => { if (!cancelled) setPoolContext(data); }).catch(() => { if (!cancelled) setPoolContext(null); });
+    const benchmarkRequest = poolFilters.heroSlug
+      ? apiClient.players.benchmarks(linkedPlayerId, {
+        heroSlug: poolFilters.heroSlug,
+        role: poolFilters.role || undefined,
+        gameMode: poolFilters.gameMode || undefined,
+      }).then((data) => { if (!cancelled) setBenchmark(data); }).catch(() => { if (!cancelled) setBenchmark(null); })
+      : Promise.resolve(setBenchmark(null));
+    void Promise.all([contextRequest, benchmarkRequest]);
+    return () => { cancelled = true; };
+  }, [linkedPlayerId, poolFilters, poolFiltersReady]);
 
   async function syncMatches() {
     try {
@@ -303,6 +385,69 @@ export default function PlayerWeeklyReportPage() {
           <strong style={{ fontSize: '0.84rem' }}>{report.championPool.recommendation.title}</strong>
           <p style={{ margin: '0.35rem 0', color: 'var(--text-secondary)', fontSize: '0.77rem', lineHeight: 1.45 }}>{report.championPool.recommendation.rationale}</p>
           <p style={{ margin: 0, fontSize: '0.76rem', lineHeight: 1.45 }}><strong>Plan:</strong> {report.championPool.recommendation.action}</p>
+        </div>
+
+        <div style={{ marginTop: '1rem', paddingTop: '1rem', borderTop: '1px solid var(--border-color)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '0.75rem', flexWrap: 'wrap' }}>
+            <div>
+              <strong style={{ fontSize: '0.88rem' }}>Enfrentamientos personales</strong>
+              <p style={{ margin: '0.2rem 0 0', color: 'var(--text-muted)', fontSize: '0.7rem' }}>
+                Tu rendimiento real contra héroes enemigos y junto a aliados, filtrado por contexto.
+              </p>
+            </div>
+            <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
+              <select value={poolFilters.days} onChange={(event) => setPoolFilters((current) => ({ ...current, days: Number(event.target.value) }))} style={poolSelectStyle} aria-label="Periodo del champion pool">
+                <option value={30}>30 días</option><option value={90}>90 días</option><option value={180}>180 días</option><option value={365}>1 año</option>
+              </select>
+              <select value={poolFilters.gameMode} onChange={(event) => setPoolFilters((current) => ({ ...current, gameMode: event.target.value }))} style={poolSelectStyle} aria-label="Modo de juego">
+                <option value="">Todos los modos</option>
+                {(poolContext?.filters.available.gameModes ?? ['RANKED', 'STANDARD']).map((mode) => <option key={mode} value={mode}>{mode}</option>)}
+              </select>
+              <select value={poolFilters.role} onChange={(event) => setPoolFilters((current) => ({ ...current, role: event.target.value }))} style={poolSelectStyle} aria-label="Rol">
+                <option value="">Todos los roles</option>
+                {(poolContext?.filters.available.roles ?? ['CARRY', 'JUNGLE', 'MIDLANE', 'OFFLANE', 'SUPPORT']).map((role) => <option key={role} value={role}>{role}</option>)}
+              </select>
+              <select value={poolFilters.heroSlug} onChange={(event) => setPoolFilters((current) => ({ ...current, heroSlug: event.target.value }))} style={poolSelectStyle} aria-label="Héroe">
+                <option value="">Todos los héroes</option>
+                {(poolContext?.filters.available.heroes ?? report.championPool.heroes.map((hero) => hero.heroSlug)).map((hero) => <option key={hero} value={hero}>{hero}</option>)}
+              </select>
+            </div>
+          </div>
+
+          {poolContext && poolContext.sampleSize > 0 ? (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '0.7rem', marginTop: '0.8rem' }}>
+              <MatchupSummary title="Más difícil" row={poolContext.hardestMatchup} accent="var(--accent-loss)" empty="Se necesitan al menos dos partidas contra el mismo héroe." />
+              <MatchupSummary title="Más favorable" row={poolContext.strongestMatchup} accent="var(--accent-win)" empty="Se necesitan al menos dos partidas contra el mismo héroe." />
+              <MatchupSummary title="Mejor sinergia" row={[...poolContext.synergies].filter((row) => row.matches >= 2).sort((a, b) => b.winRate - a.winRate)[0] ?? null} accent="var(--accent-cyan)" empty="Aún no hay una pareja con muestra suficiente." />
+            </div>
+          ) : (
+            <p style={{ margin: '0.8rem 0 0', color: 'var(--text-muted)', fontSize: '0.74rem' }}>No hay partidas que coincidan con estos filtros.</p>
+          )}
+
+          {benchmark && (
+            <div style={{ marginTop: '0.8rem', padding: '0.8rem', borderRadius: 8, background: 'rgba(34,211,238,0.04)', border: '1px solid rgba(34,211,238,0.16)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.6rem', flexWrap: 'wrap' }}>
+                <strong style={{ fontSize: '0.78rem' }}>Comparación con jugadores de Pred.gg</strong>
+                {benchmark.benchmark.rating?.percentile != null && <span style={{ color: 'var(--accent-cyan)', fontSize: '0.67rem', fontWeight: 700 }}>Top {(benchmark.benchmark.rating.percentile * 100).toFixed(1)}% en Pred.gg</span>}
+              </div>
+              {benchmark.benchmark.available && benchmark.benchmark.comparison ? (
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(125px, 1fr))', gap: '0.45rem', marginTop: '0.65rem' }}>
+                  {benchmark.benchmark.comparison.map((metric) => (
+                    <div key={metric.key} style={{ padding: '0.55rem', borderRadius: 6, background: 'rgba(15,23,42,0.5)' }}>
+                      <span style={{ display: 'block', color: 'var(--text-muted)', fontSize: '0.58rem', textTransform: 'uppercase' }}>{benchmarkMetricLabel(metric.key)}</span>
+                      <strong className="mono" style={{ fontSize: '0.8rem', color: metric.delta >= 0 ? 'var(--accent-win)' : 'var(--accent-loss)' }}>{metric.player.toFixed(2)}</strong>
+                      <span style={{ color: 'var(--text-muted)', fontSize: '0.58rem' }}> · base {metric.population.toFixed(2)}</span>
+                    </div>
+                  ))}
+                </div>
+              ) : <p style={{ margin: '0.55rem 0 0', color: 'var(--text-muted)', fontSize: '0.68rem' }}>{benchmark.benchmark.reason}</p>}
+              <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap', marginTop: '0.65rem' }}>
+                <CapabilityBadge label="Especialistas" available={benchmark.specialists.available} reason={benchmark.specialists.reason} />
+                <CapabilityBadge label="Matchups globales" available={benchmark.matchups.available} reason={benchmark.matchups.reason} />
+                <CapabilityBadge label="Distribución de rango" available={benchmark.ratingDistribution.available} reason={benchmark.ratingDistribution.reason} />
+              </div>
+            </div>
+          )}
         </div>
       </section>
 
