@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router';
 import { Activity, ArrowDownRight, ArrowUpRight, Link as LinkIcon, Minus, Target } from 'lucide-react';
 import { toast } from 'sonner';
 import { ApiErrorResponse, apiClient, type PlayerMetricTrend, type PlayerWeeklyReport } from '../api/client';
-import { HeroAvatar } from '../components/HeroAvatar';
+import { HeroAvatarWithTooltip } from '../components/HeroAvatar';
 import { useAuth } from '../hooks/useAuth';
 
 const METRIC_LABELS: Record<PlayerMetricTrend['metric'], string> = {
@@ -154,7 +154,7 @@ export default function PlayerWeeklyReportPage() {
           <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: '0.68rem', textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 700 }}>Héroe principal de la semana</p>
           {report.topHero ? (
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem', marginTop: '0.7rem' }}>
-              <HeroAvatar hero={{ slug: report.topHero.heroSlug, name: report.topHero.heroSlug }} size={48} rounded={8} />
+              <HeroAvatarWithTooltip slug={report.topHero.heroSlug} name={report.topHero.heroSlug} size={48} rounded={8} />
               <div>
                 <strong style={{ textTransform: 'capitalize' }}>{report.topHero.heroSlug}</strong>
                 <p style={{ margin: '0.2rem 0 0', color: 'var(--text-muted)', fontSize: '0.74rem' }}>
