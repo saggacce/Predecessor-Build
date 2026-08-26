@@ -387,7 +387,12 @@ export interface MatchPlayerDetail {
   level: number | null;
   inventoryItems: string[];
   perkSlug: string | null;
-  perks: Array<{ id: string; name: string; displayName: string; slot: string | null }> | null;
+  perks: Array<{
+    id: string; name: string; displayName: string; slot: string | null;
+    icon?: string | null; simpleDescription?: string | null; description?: string | null;
+    unlockLevel?: number | null; eternalCategory?: { id: string; name: string } | null;
+  }> | null;
+  abilityOrder: Array<{ ability: string; gameTime: number }> | null;
   rankLabel: string | null;
   ratingPoints: number | null;
   physicalDamageDealtToHeroes: number | null;
@@ -396,16 +401,35 @@ export interface MatchPlayerDetail {
   heroDamageTaken: number | null;
   totalDamageTaken: number | null;
   totalHealingDone: number | null;
+  crestHealingDone: number | null;
+  itemHealingDone: number | null;
+  utilityHealingDone: number | null;
+  totalShieldingReceived: number | null;
+  totalDamageMitigated: number | null;
+  physicalDamageTaken: number | null;
+  magicalDamageTaken: number | null;
+  trueDamageTaken: number | null;
+  physicalDamageTakenFromHeroes: number | null;
+  magicalDamageTakenFromHeroes: number | null;
+  trueDamageTakenFromHeroes: number | null;
   totalDamageDealtToStructures: number | null;
   totalDamageDealtToObjectives: number | null;
   largestCriticalStrike: number | null;
   laneMinionsKilled: number | null;
+  minionsKilled: number | null;
+  neutralMinionsKilled: number | null;
+  neutralMinionsTeamJungle: number | null;
+  neutralMinionsEnemyJungle: number | null;
   goldSpent: number | null;
   largestKillingSpree: number | null;
   multiKill: number | null;
   physicalDamageDealt: number | null;
   magicalDamageDealt: number | null;
   trueDamageDealt: number | null;
+  matchRating: {
+    ratingId: string | null; points: number | null; newPoints: number | null; delta: number | null;
+    rankName: string | null; tierName: string | null; isRankup: boolean | null;
+  } | null;
   goldEarnedAtInterval: number[] | null;
 }
 
@@ -467,10 +491,13 @@ export interface MatchDetail {
   id: string;
   predggUuid: string;
   startTime: string;
+  endTime: string | null;
   duration: number;
   gameMode: string;
   region: string | null;
   winningTeam: string | null;
+  endReason: string | null;
+  spoilerBlockedUntil: string | null;
   version: string | null;
   rosterSynced: boolean;
   eventStreamSynced: boolean;
@@ -1164,6 +1191,213 @@ export interface LiveMatchResponse {
   events: MatchEvents;
 }
 
+export interface ChampionPoolContextRow {
+  heroSlug: string;
+  matches: number;
+  wins: number;
+  kills: number;
+  deaths: number;
+  assists: number;
+  winRate: number;
+  kda: number;
+}
+
+export interface ChampionPoolContext {
+  period: { days: number; from: string; to: string };
+  filters: {
+    role: string | null;
+    gameMode: string | null;
+    heroSlug: string | null;
+    available: { roles: string[]; gameModes: string[]; heroes: string[] };
+  };
+  sampleSize: number;
+  heroes: ChampionPoolContextRow[];
+  matchups: ChampionPoolContextRow[];
+  synergies: ChampionPoolContextRow[];
+  strongestMatchup: ChampionPoolContextRow | null;
+  hardestMatchup: ChampionPoolContextRow | null;
+}
+
+export interface MatchBuildAnalysis {
+  matchId: string;
+  matchPlayerId: string;
+  heroSlug: string;
+  role: string | null;
+  result: 'win' | 'loss';
+  context: {
+    catalogVersionId: string | null;
+    deaths: number;
+    damageReceived: { physical: number; magical: number; true: number; total: number };
+    enemyHealing: number;
+    enemyShielding: number;
+    enemyMitigation: number;
+    enemyHeroes: Array<{
+      heroSlug: string;
+      role: string | null;
+      playerName: string;
+      healing: number;
+      shieldingReceived: number;
+      damageMitigated: number;
+    }>;
+  };
+  globalAnalysis: {
+    playerIdentity: Array<{ key: string; label: string; description: string; evidence: string[] }>;
+    enemyThreats: Array<{
+      key: string;
+      label: string;
+      description: string;
+      severity: 'warning' | 'critical';
+      evidence: string;
+      response: string;
+      sources: Array<{ heroSlug: string; sourceType: 'ability' | 'item'; name: string; description: string }>;
+    }>;
+    buildProfile: Array<{ key: string; label: string; description: string; items: string[] }>;
+    coherence: { score: number; summary: string };
+    strengths: string[];
+    tradeoffs: string[];
+  };
+  inventory: Array<{
+    slug: string;
+    displayName: string;
+    aggressionType: string | null;
+    rarity: string | null;
+    slotType: string | null;
+    isEvolved: boolean;
+    isHidden: boolean;
+    stats: Array<{ stat: string; value: number; showPercent?: boolean }>;
+    effects: Array<{ name: string; text: string; condition?: string | null; cooldown?: string | null }>;
+  }>;
+  inventoryAssessments: Array<{
+    slug: string;
+    displayName: string;
+    verdict: 'correct' | 'neutral';
+    purpose: string[];
+    functions: Array<{ key: string; label: string; description: string }>;
+    roleFit: string;
+    matchupFit: string;
+    tradeoff: string;
+    explanation: string;
+  }>;
+  verdict: {
+    grade: 'correct' | 'mostly_correct' | 'mixed' | 'poor';
+    summary: string;
+    score: number;
+  };
+  recommendedBuild: {
+    principle: string;
+    changes: Array<{
+      signalKey: string;
+      action: 'add' | 'replace';
+      item: {
+        slug: string; displayName: string; aggressionType: string | null; reason: string; totalPrice: number;
+        stats: Array<{ stat: string; value: number; showPercent?: boolean }>;
+        effects: Array<{ name: string; text: string; condition?: string | null; cooldown?: string | null }>;
+      };
+      insteadOf: { slug: string; displayName: string } | null;
+      timing: string;
+      why: string;
+    }>;
+    sequence: Array<{
+      position: number;
+      slug: string;
+      displayName: string;
+      phase: string;
+      reason: string;
+      replaces: { slug: string; displayName: string } | null;
+      stats: Array<{ stat: string; value: number; showPercent?: boolean }>;
+      effects: Array<{ name: string; text: string; condition?: string | null; cooldown?: string | null }>;
+    }>;
+  };
+  purchaseTimeline: {
+    available: boolean;
+    ownPurchases: Array<{ gameTime: number; minute: string; itemName: string; itemSlug: string }>;
+    opponentResponses: Array<{
+      gameTime: number;
+      minute: string;
+      heroSlug: string;
+      playerName: string;
+      itemName: string;
+      itemSlug: string;
+      explanation: string;
+    }>;
+    lesson: string;
+  };
+  eternalLoadout: Array<{
+    id: string;
+    displayName: string;
+    slot: string;
+    verdict: 'correct' | 'conditional' | 'questionable';
+    why: string;
+    effect: string | null;
+    icon?: string | null;
+  }>;
+  recommendedLoadout: {
+    augment: {
+      id: string; slug: string; displayName: string; slot: string; icon: string | null; effect: string; reason: string;
+      replaces: { id: string; displayName: string } | null;
+    } | null;
+    eternal: {
+      id: string; slug: string; displayName: string; slot: string; icon: string | null; effect: string; reason: string;
+      replaces: { id: string; displayName: string } | null;
+    } | null;
+    blessings: Array<{
+      id: string; slug: string; displayName: string; slot: string; icon: string | null; effect: string; reason: string;
+      replaces: { id: string; displayName: string } | null;
+    }>;
+    explanation: string;
+  };
+  abilityOrder: Array<{ ability: string; gameTime: number }>;
+  signals: Array<{
+    key: string;
+    severity: 'info' | 'warning' | 'critical';
+    title: string;
+    evidence: string;
+    recommendation: string;
+    whyItMatters?: string;
+    sources?: Array<{ heroSlug: string; sourceType: 'ability' | 'item'; name: string; description: string }>;
+    appliesAgainst?: string[];
+    suggestedItems?: Array<{
+      slug: string; displayName: string; aggressionType: string | null; reason: string; totalPrice: number;
+      stats: Array<{ stat: string; value: number; showPercent?: boolean }>;
+      effects: Array<{ name: string; text: string; condition?: string | null; cooldown?: string | null }>;
+    }>;
+  }>;
+}
+
+export interface PlayerBuildReview {
+  playerId: string;
+  period: { days: number; from: string; to: string };
+  matches: Array<{
+    match: {
+      id: string;
+      predggUuid: string;
+      startTime: string;
+      duration: number;
+      gameMode: string;
+      version: string | null;
+    };
+    analysis: MatchBuildAnalysis;
+  }>;
+}
+
+export interface PlayerBenchmarkResponse {
+  heroSlug: string;
+  role: string | null;
+  gameMode: string | null;
+  oauth: { grantedScopes: string[]; missingScopes: string[] };
+  benchmark: {
+    available: boolean;
+    reason: string | null;
+    player?: Record<string, number> | null;
+    population?: Record<string, number> | null;
+    comparison?: Array<{ key: string; player: number; population: number; delta: number }>;
+    rating?: { points: number; percentile: number | null; rating: { id: string; name: string; startTime: string; endTime: string | null }; rank: { name: string; tierName: string } | null } | null;
+  };
+  specialists: { available: boolean; reason: string | null; results: Array<{ player: { id: string; name: string }; matchesPlayed: number; matchesWon: number; winrate: number }> };
+  matchups: { available: boolean; reason: string | null; results: unknown[] };
+  ratingDistribution: { available: boolean; reason: string | null; results: unknown[] };
+}
+
 // ── Fetch helper ─────────────────────────────────────────────────────────────
 
 async function fetchApi<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
@@ -1209,6 +1443,20 @@ export const apiClient = {
       }),
     getProfile: (id: string) => fetchApi<PlayerProfile>(`/players/${id}`),
     scout: (id: string) => fetchApi<ScoutingProfile>(`/players/${id}/scout`),
+    championPoolContext: (id: string, filters: { days?: number; role?: string; gameMode?: string; heroSlug?: string }) => {
+      const params = new URLSearchParams();
+      if (filters.days) params.set('days', String(filters.days));
+      if (filters.role) params.set('role', filters.role);
+      if (filters.gameMode) params.set('gameMode', filters.gameMode);
+      if (filters.heroSlug) params.set('heroSlug', filters.heroSlug);
+      return fetchApi<ChampionPoolContext>(`/players/${id}/champion-pool-context?${params}`);
+    },
+    benchmarks: (id: string, filters: { heroSlug: string; role?: string; gameMode?: string }) => {
+      const params = new URLSearchParams({ heroSlug: filters.heroSlug });
+      if (filters.role) params.set('role', filters.role);
+      if (filters.gameMode) params.set('gameMode', filters.gameMode);
+      return fetchApi<PlayerBenchmarkResponse>(`/players/${id}/benchmarks?${params}`);
+    },
     compare: (playerIdA: string, playerIdB: string) =>
       fetchApi<{ players: [PlayerProfile, PlayerProfile]; deltas: unknown[] }>('/players/compare', {
         method: 'POST',
@@ -1310,6 +1558,10 @@ export const apiClient = {
     syncPlayers: (id: string) => fetchApi<MatchDetail>(`/matches/${id}/sync`, { method: 'POST' }),
     getEvents: (id: string) => fetchApi<MatchEvents>(`/matches/${id}/events`),
     getLive: (predggUuid: string) => fetchApi<LiveMatchResponse>(`/matches/live/${predggUuid}`),
+    buildAnalysis: (matchId: string, matchPlayerId: string) =>
+      fetchApi<MatchBuildAnalysis>(`/matches/${matchId}/build-analysis/${matchPlayerId}`),
+    liveBuildAnalysis: (predggUuid: string) =>
+      fetchApi<MatchBuildAnalysis>(`/matches/live/${predggUuid}/build-analysis`),
   },
 
   reports: {
@@ -1320,6 +1572,12 @@ export const apiClient = {
       }),
     playerWeekly: (playerId: string) =>
       fetchApi<PlayerWeeklyReport>(`/reports/player-weekly/${encodeURIComponent(playerId)}`),
+    playerBuilds: (playerId: string, options: { days?: number; limit?: number } = {}) => {
+      const params = new URLSearchParams();
+      if (options.days) params.set('days', String(options.days));
+      if (options.limit) params.set('limit', String(options.limit));
+      return fetchApi<PlayerBuildReview>(`/reports/player-builds/${encodeURIComponent(playerId)}${params.size ? `?${params}` : ''}`);
+    },
     playerCoachChat: (playerId: string, question: string, history: Array<{ role: 'user' | 'assistant'; content: string }>) =>
       fetchApi<PlayerCoachChatResponse>(`/reports/player-coach/${encodeURIComponent(playerId)}/chat`, {
         method: 'POST',
@@ -1437,6 +1695,8 @@ export const apiClient = {
   admin: {
     syncHeroes: () =>
       fetchApi<{ ok: boolean; synced: number; errors: number }>('/admin/sync-heroes', { method: 'POST' }),
+    syncGameCatalog: (versionId?: string) =>
+      fetchApi<{ ok: boolean; version: string; items: number; perks: number; eternalCategories: number }>('/admin/sync-game-catalog', { method: 'POST', body: JSON.stringify({ versionId }) }),
     syncVersions: () =>
       fetchApi<AdminSyncVersionsResult>('/admin/sync-versions', { method: 'POST' }),
     syncStaleAll: () =>

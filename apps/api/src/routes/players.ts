@@ -7,6 +7,8 @@ import { requireAuth } from '../middleware/require-auth.js';
 import { db } from '../db.js';
 import { getValidToken } from './auth.js';
 import { getPlatformAccessToken } from '../services/predgg-token-service.js';
+import { getPlayerChampionPoolContext } from '../services/player-champion-pool-service.js';
+import { getPlayerPredggBenchmarks } from '../services/predgg-benchmark-service.js';
 
 export const playersRouter = Router();
 
@@ -309,6 +311,38 @@ playersRouter.get('/:id/scout', requireAuth, async (req, res, next) => {
     if (json.errors?.length) throw new AppError(502, json.errors.map((e) => e.message).join(', '), 'PREDGG_ERROR');
 
     res.json(buildScoutingProfile(json.data));
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * GET /players/:id/champion-pool-context
+ * Local, patch-safe champion pool cohorts with enemy matchups and ally synergies.
+ */
+playersRouter.get('/:id/champion-pool-context', requireAuth, async (req, res, next) => {
+  try {
+    const filters = z.object({
+      days: z.coerce.number().int().min(7).max(365).default(90),
+      role: z.enum(['CARRY', 'JUNGLE', 'MIDLANE', 'OFFLANE', 'SUPPORT']).optional(),
+      gameMode: z.string().trim().min(1).max(40).optional(),
+      heroSlug: z.string().trim().min(1).max(80).toLowerCase().optional(),
+    }).parse(req.query);
+    res.json(await getPlayerChampionPoolContext(String(req.params.id), filters));
+  } catch (err) {
+    next(err);
+  }
+});
+
+/** GET /players/:id/benchmarks — personal metrics against pred.gg population data. */
+playersRouter.get('/:id/benchmarks', requireAuth, async (req, res, next) => {
+  try {
+    const options = z.object({
+      heroSlug: z.string().trim().min(1).max(80).toLowerCase(),
+      role: z.enum(['CARRY', 'JUNGLE', 'MIDLANE', 'OFFLANE', 'SUPPORT']).optional(),
+      gameMode: z.enum(['RANKED', 'STANDARD', 'ARAM', 'RUSH', 'DAYBREAK']).optional(),
+    }).parse(req.query);
+    res.json(await getPlayerPredggBenchmarks(String(req.params.id), options));
   } catch (err) {
     next(err);
   }

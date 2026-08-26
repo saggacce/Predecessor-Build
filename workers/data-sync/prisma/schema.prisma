@@ -16,17 +16,121 @@ datasource db {
 /// patch-aware analytics (winrates, stats per patch).
 model Version {
   /// Internal cuid — used in joins
-  id          String           @id @default(cuid())
+  id                      String                   @id @default(cuid())
   /// pred.gg version ID (numeric string)
-  predggId    String           @unique
+  predggId                String                   @unique
   /// Human-readable patch name shown in UI, e.g. "0.19.2"
-  name        String
-  releaseDate DateTime
+  name                    String
+  releaseDate             DateTime
   /// "MAJOR" | "MINOR" | "HOTFIX" — from pred.gg
-  patchType   String
-  syncedAt    DateTime
-  matches     Match[]
-  snapshots   PlayerSnapshot[]
+  patchType               String
+  syncedAt                DateTime
+  matches                 Match[]
+  snapshots               PlayerSnapshot[]
+  itemVersions            GameItemVersion[]
+  perkVersions            GamePerkVersion[]
+  eternalCategoryVersions EternalCategoryVersion[]
+}
+
+/// Stable pred.gg item identity. Patch-specific values live in GameItemVersion.
+model GameItem {
+  id       String            @id @default(cuid())
+  predggId String            @unique
+  name     String
+  slug     String            @unique
+  versions GameItemVersion[]
+}
+
+model GameItemVersion {
+  id             String   @id @default(cuid())
+  itemId         String
+  versionId      String
+  predggDataId   String
+  displayName    String
+  rarity         String
+  slotType       String
+  heroClass      String
+  aggressionType String?
+  price          Int
+  totalPrice     Int
+  isEvolved      Boolean
+  isHidden       Boolean
+  icon           String?
+  smallIcon      String?
+  stats          Json
+  effects        Json
+  buildsFromIds  Json
+  buildsIntoIds  Json
+  blockedByIds   Json
+  blocksIds      Json
+  syncedAt       DateTime @default(now())
+  item           GameItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  version        Version  @relation(fields: [versionId], references: [id], onDelete: Cascade)
+
+  @@unique([itemId, versionId])
+  @@index([versionId, isHidden, rarity])
+  @@index([aggressionType])
+}
+
+/// Stable pred.gg perk identity: hero augment, Eternal or minor blessing.
+model GamePerk {
+  id       String            @id @default(cuid())
+  predggId String            @unique
+  name     String
+  slug     String            @unique
+  versions GamePerkVersion[]
+}
+
+model GamePerkVersion {
+  id                      String   @id @default(cuid())
+  perkId                  String
+  versionId               String
+  predggDataId            String
+  displayName             String
+  slot                    String
+  icon                    String?
+  iconCenterPosition      Json?
+  simpleDescription       String?
+  description             String
+  aggressionTypes         Json
+  displayOrder            Int
+  unlockLevel             Int?
+  heroSlug                String?
+  eternalCategoryPredggId String?
+  minorBlessingPredggIds  Json
+  syncedAt                DateTime @default(now())
+  perk                    GamePerk @relation(fields: [perkId], references: [id], onDelete: Cascade)
+  version                 Version  @relation(fields: [versionId], references: [id], onDelete: Cascade)
+
+  @@unique([perkId, versionId])
+  @@index([versionId, slot])
+  @@index([heroSlug])
+  @@index([eternalCategoryPredggId])
+}
+
+model EternalCategory {
+  id       String                   @id @default(cuid())
+  predggId String                   @unique
+  name     String                   @unique
+  versions EternalCategoryVersion[]
+}
+
+model EternalCategoryVersion {
+  id                  String          @id @default(cuid())
+  categoryId          String
+  versionId           String
+  predggDataId        String
+  displayName         String
+  displayNameSingular String
+  description         String
+  color               String
+  perkPredggIds       Json
+  syncedAt            DateTime        @default(now())
+  category            EternalCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  version             Version         @relation(fields: [versionId], references: [id], onDelete: Cascade)
+
+  @@unique([categoryId, versionId])
+  @@index([versionId])
 }
 
 /// A Predecessor player known to the system.
@@ -35,31 +139,31 @@ model Version {
 /// no linked account (~60% of players).
 model Player {
   /// Internal cuid — used in all internal joins
-  id             String           @id @default(cuid())
+  id                 String             @id @default(cuid())
   /// pred.gg player ID (UUID format) — used for API lookups
-  predggId       String           @unique
+  predggId           String             @unique
   /// pred.gg UUID — same value as predggId in practice; kept for legacy reasons
-  predggUuid     String           @unique
+  predggUuid         String             @unique
   /// Display name from pred.gg. Console players show a generated "user-XXXXXXXX" name.
-  displayName    String
+  displayName        String
   /// Whether the player set their profile to private on pred.gg
-  isPrivate      Boolean          @default(false)
+  isPrivate          Boolean            @default(false)
   /// Region inferred from match location data (not provided by pred.gg directly)
-  inferredRegion String?
-  firstSeen      DateTime         @default(now())
+  inferredRegion     String?
+  firstSeen          DateTime           @default(now())
   /// Last time this player's data was synced from pred.gg
-  lastSynced     DateTime
+  lastSynced         DateTime
   /// Optional override name set by staff in RiftLine (takes priority over displayName in UI)
-  customName     String?
+  customName         String?
   /// True for players who play on console. Console players cannot be synced
   /// via the pred.gg player endpoint — their matches appear with isNameConsole=true.
-  isConsole      Boolean          @default(false)
-  matchPlayers        MatchPlayer[]
-  snapshots           PlayerSnapshot[]
-  rosterEntries       TeamRoster[]
-  rivalRosterEntries  RivalRosterEntry[]
+  isConsole          Boolean            @default(false)
+  matchPlayers       MatchPlayer[]
+  snapshots          PlayerSnapshot[]
+  rosterEntries      TeamRoster[]
+  rivalRosterEntries RivalRosterEntry[]
   /// RiftLine user account linked to this player (one-to-one, optional)
-  userAccount         User?
+  userAccount        User?
 }
 
 /// Point-in-time snapshot of a player's aggregate stats fetched from pred.gg.
@@ -94,50 +198,50 @@ model PlayerSnapshot {
 /// Teams are the primary organizational unit — matches, analysis and
 /// goals are scoped to a team.
 model Team {
-  id           String    @id @default(cuid())
-  name         String
-  abbreviation String?
+  id                String             @id @default(cuid())
+  name              String
+  abbreviation      String?
   /// OWN = team belonging to the org; RIVAL = opponent being scouted
-  type         TeamType
-  region       String?
+  type              TeamType
+  region            String?
   /// Internal notes visible only to staff
-  notes        String?
-  createdAt    DateTime  @default(now())
-  logoUrl      String?
+  notes             String?
+  createdAt         DateTime           @default(now())
+  logoUrl           String?
   /// Subscription tier: "FREE" | "PRO" | "TEAM" | "ENTERPRISE"
-  teamTier          String           @default("FREE")
+  teamTier          String             @default("FREE")
   teamTierExpiresAt DateTime?
   /// If set, this team is the academy/feeder team of the referenced OWN team
   academyOf         String?
   llmAnalyses       LlmAnalysis[]
   memberships       TeamMembership[]
   roster            TeamRoster[]
-  scrimSchedules    ScrimSchedule[]  @relation("HomeTeam")
-  rivalSchedules    ScrimSchedule[]  @relation("RivalTeam")
+  scrimSchedules    ScrimSchedule[]    @relation("HomeTeam")
+  rivalSchedules    ScrimSchedule[]    @relation("RivalTeam")
   playbookEntries   PlaybookEntry[]
   reviewSessions    ReviewSession[]
   comms             TeamComm[]
   rivalRoster       RivalRosterEntry[]
-  parentTeam        Team?            @relation("AcademyTeams", fields: [academyOf], references: [id])
-  academyTeams      Team[]           @relation("AcademyTeams")
+  parentTeam        Team?              @relation("AcademyTeams", fields: [academyOf], references: [id])
+  academyTeams      Team[]             @relation("AcademyTeams")
 }
 
 /// Links a Player to a Team for a specific time period.
 /// activeTo = null means the player is currently active on the roster.
 /// Historical entries (activeTo set) are kept for match attribution.
 model TeamRoster {
-  id         String    @id @default(cuid())
-  teamId     String
-  playerId   String
+  id           String    @id @default(cuid())
+  teamId       String
+  playerId     String
   /// In-game role: "CARRY" | "JUNGLE" | "MIDLANE" | "OFFLANE" | "SUPPORT"
-  role       String?
+  role         String?
   /// "STARTER" | "BENCH" — whether the player is in the main 5 or on the bench
-  rosterStatus String  @default("STARTER")
-  activeFrom DateTime  @default(now())
+  rosterStatus String    @default("STARTER")
+  activeFrom   DateTime  @default(now())
   /// null = currently active; set when the player leaves the roster
-  activeTo   DateTime?
-  player     Player    @relation(fields: [playerId], references: [id])
-  team       Team      @relation(fields: [teamId], references: [id])
+  activeTo     DateTime?
+  player       Player    @relation(fields: [playerId], references: [id])
+  team         Team      @relation(fields: [teamId], references: [id])
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -154,6 +258,7 @@ model Match {
   /// pred.gg match UUID — used for all pred.gg API calls
   predggUuid            String                 @unique
   startTime             DateTime
+  endTime               DateTime?
   /// Match duration in seconds
   duration              Int
   /// "RANKED" | "ARAM" | "BRAWL" | "STANDARD"
@@ -161,6 +266,9 @@ model Match {
   region                String?
   /// "DUSK" | "DAWN" | null (null = match in progress or unknown)
   winningTeam           String?
+  /// "CORE" | "SURRENDER" | null
+  endReason             String?
+  spoilerBlockedUntil   DateTime?
   versionId             String?
   syncedAt              DateTime
   /// True if the event stream sync attempt failed (prevents retry loops)
@@ -186,63 +294,84 @@ model Match {
 /// NOTE: inventoryItems are stored as lowercase slugs (e.g. "taintedblade")
 /// matching the filename convention in apps/web/public/items/.
 ///
-/// NOTE: perks stores the 3 pre-game augments the player selected:
-/// [{ id, name, displayName, slot }] where slot is
-/// "HERO_SPECIFIC_1" | "COMMON_1" | "COMMON_2"
+/// NOTE: perks stores the current loadout selected before the match:
+/// hero augment + Eternal + two minor blessings, including display metadata.
 model MatchPlayer {
-  id                           String  @id @default(cuid())
-  matchId                      String
+  id                            String   @id @default(cuid())
+  matchId                       String
   /// null when the player has no pred.gg account (console players)
-  playerId                     String?
+  playerId                      String?
   /// Name as it appears in pred.gg. "HIDDEN" for private/unlinked accounts.
-  playerName                   String
+  playerName                    String
   /// "DUSK" | "DAWN"
-  team                         String
+  team                          String
   /// "CARRY" | "JUNGLE" | "MIDLANE" | "OFFLANE" | "SUPPORT" | null
-  role                         String?
-  heroSlug                     String
-  kills                        Int
-  deaths                       Int
-  assists                      Int
-  heroDamage                   Int?
-  totalDamage                  Int?
-  gold                         Int?
-  wardsPlaced                  Int?
+  role                          String?
+  heroSlug                      String
+  kills                         Int
+  deaths                        Int
+  assists                       Int
+  heroDamage                    Int?
+  totalDamage                   Int?
+  gold                          Int?
+  wardsPlaced                   Int?
   /// Array of item slugs in lowercase, e.g. ["taintedblade", "stormbreaker"]
-  inventoryItems               Json
+  inventoryItems                Json
   /// Legacy field — always null. Kept to avoid migration on hypertable-adjacent tables.
-  perkSlug                     String?
+  perkSlug                      String?
   /// Pre-game augments: [{ id, name, displayName, slot }]. null = synced before augments feature.
-  perks                        Json?
+  perks                         Json?
   /// Sequence of ability upgrades per level: [1,3,1,2,...]. Rarely populated.
-  abilityOrder                 Json?
+  abilityOrder                  Json?
   /// pred.gg player UUID — same as Player.predggId when playerId is set
-  predggPlayerUuid             String?
-  level                        Int?
-  wardsDestroyed               Int?
+  predggPlayerUuid              String?
+  level                         Int?
+  wardsDestroyed                Int?
   /// Cumulative gold earned per minute as an array, e.g. [500, 1200, 2100, ...]
   /// Requires Bearer token to sync. null = event stream not yet synced.
-  goldEarnedAtInterval         Json?
-  goldSpent                    Int?
-  heroDamageTaken              Int?
+  goldEarnedAtInterval          Json?
+  goldSpent                     Int?
+  heroDamageTaken               Int?
+  crestHealingDone              Int?
+  itemHealingDone               Int?
+  utilityHealingDone            Int?
+  totalShieldingReceived        Int?
+  totalDamageMitigated          Int?
+  physicalDamageTaken           Int?
+  magicalDamageTaken            Int?
+  trueDamageTaken               Int?
+  physicalDamageTakenFromHeroes Int?
+  magicalDamageTakenFromHeroes  Int?
+  trueDamageTakenFromHeroes     Int?
   /// CS — lane minions killed (does not include jungle camps)
-  laneMinionsKilled            Int?
-  largestCriticalStrike        Int?
-  largestKillingSpree          Int?
-  magicalDamageDealt           Int?
-  magicalDamageDealtToHeroes   Int?
+  laneMinionsKilled             Int?
+  minionsKilled                 Int?
+  neutralMinionsKilled          Int?
+  neutralMinionsTeamJungle      Int?
+  neutralMinionsEnemyJungle     Int?
+  largestCriticalStrike         Int?
+  largestKillingSpree           Int?
+  magicalDamageDealt            Int?
+  magicalDamageDealtToHeroes    Int?
   /// Highest multi-kill achieved (2=double, 3=triple, etc.)
-  multiKill                    Int?
-  physicalDamageDealt          Int?
-  physicalDamageDealtToHeroes  Int?
-  totalDamageDealtToObjectives Int?
-  totalDamageDealtToStructures Int?
-  totalDamageTaken             Int?
-  totalHealingDone             Int?
-  trueDamageDealt              Int?
-  trueDamageDealtToHeroes      Int?
-  match                        Match   @relation(fields: [matchId], references: [id])
-  player                       Player? @relation(fields: [playerId], references: [id])
+  multiKill                     Int?
+  physicalDamageDealt           Int?
+  physicalDamageDealtToHeroes   Int?
+  totalDamageDealtToObjectives  Int?
+  totalDamageDealtToStructures  Int?
+  totalDamageTaken              Int?
+  totalHealingDone              Int?
+  trueDamageDealt               Int?
+  trueDamageDealtToHeroes       Int?
+  ratingId                      String?
+  ratingPoints                  Float?
+  ratingNewPoints               Float?
+  ratingDelta                   Float?
+  ratingRankName                String?
+  ratingTierName                String?
+  ratingIsRankup                Boolean?
+  match                         Match    @relation(fields: [matchId], references: [id])
+  player                        Player?  @relation(fields: [playerId], references: [id])
 
   /// A player can only appear once per match
   @@unique([matchId, playerId])
@@ -422,41 +551,41 @@ model SyncLog {
 /// - "PLATFORM_ADMIN": can configure platform settings, permissions and users
 /// - "VIEWER": default role; access controlled by team membership role
 model User {
-  id                  String           @id @default(cuid())
-  email               String           @unique
+  id                  String                  @id @default(cuid())
+  email               String                  @unique
   name                String
   /// bcrypt hash (cost factor 12)
   passwordHash        String
   /// "SUPER_ADMIN" | "PLATFORM_ADMIN" | "VIEWER"
-  globalRole          String           @default("VIEWER")
-  isActive            Boolean          @default(true)
-  createdAt           DateTime         @default(now())
+  globalRole          String                  @default("VIEWER")
+  isActive            Boolean                 @default(true)
+  createdAt           DateTime                @default(now())
   lastLoginAt         DateTime?
   avatarUrl           String?
   bio                 String?
   timezone            String?
   /// Links to a Player record — enables personal match feed and player goals.
   /// Set via profile page or automatically during pred.gg OAuth login.
-  linkedPlayerId      String?          @unique
+  linkedPlayerId      String?                 @unique
   /// "en" | "es" — UI language preference
-  language            String           @default("en")
+  language            String                  @default("en")
   /// "FREE" | "PRO" | "PREMIUM"
-  playerTier          String           @default("FREE")
+  playerTier          String                  @default("FREE")
   playerTierExpiresAt DateTime?
   /// Social / OAuth provider links (for display only; not used for auth)
-  discordId           String?          @unique
+  discordId           String?                 @unique
   discordUsername     String?
-  epicGamesId         String?          @unique
+  epicGamesId         String?                 @unique
   epicGamesUsername   String?
-  steamId             String?          @unique
+  steamId             String?                 @unique
   steamUsername       String?
   /// Whether the user has seen the onboarding welcome modal
-  onboardingModalSeen Boolean          @default(false)
-  sentInvitations     Invitation[]     @relation("InvitedBy")
+  onboardingModalSeen Boolean                 @default(false)
+  sentInvitations     Invitation[]            @relation("InvitedBy")
   memberships         TeamMembership[]
-  linkedPlayer        Player?          @relation(fields: [linkedPlayerId], references: [id])
-  sentComms           TeamComm[]       @relation("SentComms")
-  receivedComms       TeamComm[]       @relation("ReceivedComms")
+  linkedPlayer        Player?                 @relation(fields: [linkedPlayerId], references: [id])
+  sentComms           TeamComm[]              @relation("SentComms")
+  receivedComms       TeamComm[]              @relation("ReceivedComms")
   scrimSchedules      ScrimSchedule[]
   playbookEntries     PlaybookEntry[]
   weeklyGoals         WeeklyGoal[]
@@ -522,9 +651,9 @@ model RivalRosterEntry {
   addedAt   DateTime @default(now())
   addedById String
 
-  team      Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
-  player    Player   @relation(fields: [playerId], references: [id], onDelete: Cascade)
-  addedBy   User     @relation(fields: [addedById], references: [id])
+  team    Team   @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  player  Player @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  addedBy User   @relation(fields: [addedById], references: [id])
 
   @@unique([teamId, playerId])
 }
@@ -799,29 +928,29 @@ model FeedbackReport {
 /// type: "SCRIM" | "OFFICIAL" | "PRACTICE"
 /// result: null = not played yet; "WIN" | "LOSS" | "DRAW" after the fact
 model ScrimSchedule {
-  id           String    @id @default(cuid())
-  teamId       String
+  id             String          @id @default(cuid())
+  teamId         String
   /// RIVAL team from the DB (optional)
-  rivalTeamId  String?
+  rivalTeamId    String?
   /// Free-text rival name when not in DB
-  rivalName    String?
-  scheduledAt  DateTime
+  rivalName      String?
+  scheduledAt    DateTime
   /// "SCRIM" | "OFFICIAL" | "PRACTICE"
-  type         String    @default("SCRIM")
+  type           String          @default("SCRIM")
   /// "PENDIENTE" | "CONFIRMADO" | "CANCELADO"
-  status       String    @default("PENDIENTE")
-  notes        String?
+  status         String          @default("PENDIENTE")
+  notes          String?
   /// Filled after the match: "WIN" | "LOSS" | "DRAW"
-  result       String?
+  result         String?
   /// Set when analyst marks analysis complete (post-match task)
-  analysedAt    DateTime?
+  analysedAt     DateTime?
   /// Set when coach marks post-match review complete
-  reviewedAt    DateTime?
+  reviewedAt     DateTime?
   /// pred.gg match UUID detected automatically by the scrim-results worker
-  predggMatchId String?
-  createdById  String
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+  predggMatchId  String?
+  createdById    String
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
   team           Team            @relation("HomeTeam", fields: [teamId], references: [id])
   rivalTeam      Team?           @relation("RivalTeam", fields: [rivalTeamId], references: [id])
   createdBy      User            @relation(fields: [createdById], references: [id])
@@ -831,25 +960,25 @@ model ScrimSchedule {
 /// Structured review session organized after a scrim or match.
 /// status: "PENDIENTE" | "EN_CURSO" | "COMPLETADA"
 model ReviewSession {
-  id           String       @id @default(cuid())
-  teamId       String
+  id          String         @id @default(cuid())
+  teamId      String
   /// Optional link to a ScrimSchedule entry
-  scrimId      String?
-  title        String
+  scrimId     String?
+  title       String
   /// General session notes (markdown / free text)
-  notes        String?
+  notes       String?
   /// "PENDIENTE" | "EN_CURSO" | "COMPLETADA"
-  status       String       @default("PENDIENTE")
-  scheduledAt  DateTime?
-  completedAt  DateTime?
-  createdById  String
-  createdAt    DateTime     @default(now())
-  updatedAt    DateTime     @updatedAt
-  team         Team         @relation(fields: [teamId], references: [id], onDelete: Cascade)
-  scrim        ScrimSchedule? @relation(fields: [scrimId], references: [id], onDelete: SetNull)
-  createdBy    User         @relation(fields: [createdById], references: [id])
-  agendaItems  AgendaItem[]
-  actionItems  ActionItem[]
+  status      String         @default("PENDIENTE")
+  scheduledAt DateTime?
+  completedAt DateTime?
+  createdById String
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+  team        Team           @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  scrim       ScrimSchedule? @relation(fields: [scrimId], references: [id], onDelete: SetNull)
+  createdBy   User           @relation(fields: [createdById], references: [id])
+  agendaItems AgendaItem[]
+  actionItems ActionItem[]
 }
 
 /// A point on the review session agenda — what to watch/discuss.
@@ -940,28 +1069,28 @@ model WeeklyGoal {
 /// status: "OPEN" | "IN_PROGRESS" | "DONE" | "DISMISSED"
 /// toRole: target role ("ANALISTA" | "COACH" | "MANAGER" | "JUGADOR" | null = all)
 model TeamComm {
-  id            String    @id @default(cuid())
-  teamId        String
-  fromUserId    String
+  id           String    @id @default(cuid())
+  teamId       String
+  fromUserId   String
   /// Role-broadcast target (null = addressed to specific user only)
-  toRole        String?
+  toRole       String?
   /// Specific user target (null = broadcast to role)
-  toUserId      String?
+  toUserId     String?
   /// "REQUEST" | "ANNOUNCEMENT" | "NOTE"
-  type          String    @default("REQUEST")
-  subject       String
-  body          String
+  type         String    @default("REQUEST")
+  subject      String
+  body         String
   /// "normal" | "urgent"
-  priority      String    @default("normal")
+  priority     String    @default("normal")
   /// "OPEN" | "IN_PROGRESS" | "DONE" | "DISMISSED"
-  status        String    @default("OPEN")
-  resolvedAt    DateTime?
-  resolvedById  String?
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
-  team          Team      @relation(fields: [teamId], references: [id])
-  fromUser      User      @relation("SentComms", fields: [fromUserId], references: [id])
-  toUser        User?     @relation("ReceivedComms", fields: [toUserId], references: [id])
+  status       String    @default("OPEN")
+  resolvedAt   DateTime?
+  resolvedById String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  team         Team      @relation(fields: [teamId], references: [id])
+  fromUser     User      @relation("SentComms", fields: [fromUserId], references: [id])
+  toUser       User?     @relation("ReceivedComms", fields: [toUserId], references: [id])
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

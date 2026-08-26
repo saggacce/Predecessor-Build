@@ -5,7 +5,17 @@ import { apiClient } from '../api/client';
 import { useAuth } from '../hooks/useAuth';
 
 interface ApiStatusData {
-  predgg: { status: 'ok' | 'error'; responseMs: number | null; error: string | null; endpoint: string };
+  predgg: {
+    status: 'ok' | 'error'; responseMs: number | null; error: string | null; endpoint: string;
+    oauth: {
+      requestedScopes: string[];
+      grantedScopes: string[];
+      missingScopes: string[];
+      capabilities: Record<string, boolean>;
+      checkedAt: string | null;
+      error: string | null;
+    };
+  };
   syncErrors: { total: number; last24h: number; bySource: Array<{ source: string | null; _count: { id: number } }> };
   lastSuccessfulSync: { syncedAt: string; entity: string; source: string | null } | null;
 }
@@ -102,6 +112,37 @@ export default function ApiStatusPage() {
                 {data.predgg.error}
               </div>
             )}
+            <div style={{ marginTop: '1rem', paddingTop: '1rem', borderTop: '1px solid var(--border-color)', display: 'grid', gap: '0.75rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem' }}>
+                <span style={{ fontSize: '0.78rem', fontWeight: 700 }}>Permisos OAuth de pred.gg</span>
+                <span style={{ fontSize: '0.7rem', color: data.predgg.oauth.missingScopes.length === 0 ? 'var(--accent-win)' : 'var(--accent-prime)', fontWeight: 700 }}>
+                  {data.predgg.oauth.missingScopes.length === 0 ? 'Completos' : `${data.predgg.oauth.missingScopes.length} pendientes`}
+                </span>
+              </div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem' }}>
+                {data.predgg.oauth.requestedScopes.map((scope) => {
+                  const granted = data.predgg.oauth.grantedScopes.includes(scope);
+                  return (
+                    <span key={scope} title={granted ? 'Permiso concedido' : 'Requiere volver a conectar pred.gg'} style={{
+                      padding: '0.2rem 0.5rem', borderRadius: 999, fontSize: '0.67rem', fontFamily: 'var(--font-mono)',
+                      color: granted ? 'var(--accent-win)' : 'var(--accent-prime)',
+                      background: granted ? 'rgba(74,222,128,0.07)' : 'rgba(251,191,36,0.07)',
+                      border: `1px solid ${granted ? 'rgba(74,222,128,0.2)' : 'rgba(251,191,36,0.25)'}`,
+                    }}>
+                      {granted ? '✓' : '!'} {scope}
+                    </span>
+                  );
+                })}
+              </div>
+              {data.predgg.oauth.missingScopes.length > 0 && (
+                <div style={{ fontSize: '0.72rem', color: 'var(--accent-prime)' }}>
+                  Vuelve a conectar pred.gg para solicitar las funciones avanzadas. Renovar el token no añade permisos nuevos.
+                </div>
+              )}
+              {data.predgg.oauth.error && (
+                <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>{data.predgg.oauth.error}</div>
+              )}
+            </div>
           </div>
 
           <div className="glass-card">
