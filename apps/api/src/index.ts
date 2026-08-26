@@ -2,10 +2,12 @@
 // process.loadEnvFile is built into Node.js 20.12+ — no extra dependencies.
 import { fileURLToPath } from 'url';
 import { resolve, dirname } from 'path';
-try {
-  process.loadEnvFile(resolve(dirname(fileURLToPath(import.meta.url)), '../../../.env'));
-} catch {
-  // .env not present — rely on system environment variables
+if (process.env.NODE_ENV !== 'test') {
+  try {
+    process.loadEnvFile(resolve(dirname(fileURLToPath(import.meta.url)), '../../../.env'));
+  } catch {
+    // .env not present — rely on system environment variables
+  }
 }
 
 import express from 'express';
@@ -45,6 +47,12 @@ import { cleanupOldData } from './services/sync-service.js';
 
 const app = express();
 const PORT = parseInt(process.env.PORT ?? '3001', 10);
+
+// Production is served through Nginx. Trust exactly that hop so req.ip and
+// authentication rate limits use the real client IP from X-Forwarded-For.
+if (process.env.NODE_ENV === 'production') {
+  app.set('trust proxy', parseInt(process.env.TRUST_PROXY_HOPS ?? '1', 10));
+}
 
 app.use(helmet({
   crossOriginResourcePolicy: { policy: 'cross-origin' },

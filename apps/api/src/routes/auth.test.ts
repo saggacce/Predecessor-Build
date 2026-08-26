@@ -14,6 +14,11 @@ vi.hoisted(() => {
   delete process.env.PRED_GG_OAUTH_SCOPES;
 });
 
+vi.mock('../services/predgg-token-service.js', () => ({
+  savePlatformOAuthTokens: vi.fn().mockResolvedValue({ accessToken: 'access-token', expiresAt: Date.now() + 1_800_000 }),
+  getPlatformAccessToken: vi.fn().mockResolvedValue({ accessToken: 'access-token', expiresAt: Date.now() + 1_800_000 }),
+}));
+
 const app = express();
 app.use(cookieParser());
 app.use('/auth', authRouter);

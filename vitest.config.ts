@@ -12,5 +12,11 @@ export default defineConfig({
   },
   test: {
     include: ['packages/*/src/**/*.test.ts', 'apps/*/src/**/*.test.ts'],
+    env: {
+      NODE_ENV: 'test',
+      // Unit tests mock persistence. This deliberately unreachable test-only URL
+      // prevents an incomplete mock from ever falling through to staging/prod.
+      DATABASE_URL: 'postgresql://riftline_test:riftline_test@127.0.0.1:1/riftline_test',
+    },
   },
 });
