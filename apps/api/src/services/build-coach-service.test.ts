@@ -4,6 +4,7 @@ const mocks = vi.hoisted(() => ({
   matchPlayerFindFirst: vi.fn(),
   gameItemFindMany: vi.fn(),
   gameItemVersionFindMany: vi.fn(),
+  transactionFindMany: vi.fn(),
 }));
 
 vi.mock('../db.js', () => ({
@@ -11,6 +12,7 @@ vi.mock('../db.js', () => ({
     matchPlayer: { findFirst: mocks.matchPlayerFindFirst },
     gameItem: { findMany: mocks.gameItemFindMany },
     gameItemVersion: { findMany: mocks.gameItemVersionFindMany },
+    transaction: { findMany: mocks.transactionFindMany },
   },
 }));
 
@@ -20,16 +22,17 @@ describe('contextual build coach', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.matchPlayerFindFirst.mockResolvedValue({
-      id: 'mp-1', matchId: 'match-1', heroSlug: 'dekker', role: 'SUPPORT', team: 'DAWN',
+      id: 'mp-1', matchId: 'match-1', playerId: 'player-1', heroSlug: 'dekker', role: 'SUPPORT', team: 'DAWN',
       kills: 0, deaths: 7, assists: 10, inventoryItems: ['offensive-item'], perks: [], abilityOrder: [],
+      heroDamage: 10_000, totalHealingDone: 2_000, totalShieldingReceived: 1_000,
       physicalDamageTakenFromHeroes: 18_000, physicalDamageTaken: 19_000,
       magicalDamageTakenFromHeroes: 4_000, magicalDamageTaken: 4_500,
       trueDamageTakenFromHeroes: 0, trueDamageTaken: 0,
       match: {
         versionId: 'version-1', winningTeam: 'DUSK',
         matchPlayers: [
-          { id: 'mp-1', team: 'DAWN', role: 'SUPPORT', heroSlug: 'dekker', totalHealingDone: 2_000, totalShieldingReceived: 1_000, totalDamageMitigated: 8_000 },
-          { id: 'enemy-1', team: 'DUSK', role: 'SUPPORT', heroSlug: 'narbash', totalHealingDone: 20_000, totalShieldingReceived: 2_000, totalDamageMitigated: 25_000 },
+          { id: 'mp-1', playerId: 'player-1', playerName: 'Coach', team: 'DAWN', role: 'SUPPORT', heroSlug: 'dekker', totalHealingDone: 2_000, totalShieldingReceived: 1_000, totalDamageMitigated: 8_000 },
+          { id: 'enemy-1', playerId: 'enemy-player-1', playerName: 'Enemy', team: 'DUSK', role: 'SUPPORT', heroSlug: 'narbash', totalHealingDone: 20_000, totalShieldingReceived: 2_000, totalDamageMitigated: 25_000 },
         ],
       },
     });
@@ -38,8 +41,12 @@ describe('contextual build coach', () => {
       isEvolved: false, isHidden: false, stats: [], effects: [], blocksIds: ['data-1'], blockedByIds: ['data-1'],
     }] }]);
     mocks.gameItemVersionFindMany.mockResolvedValue([
-      { displayName: 'Physical Guard', aggressionType: 'ARMOR', totalPrice: 3000, item: { slug: 'physical-guard' } },
-      { displayName: 'Tainted Guard', aggressionType: 'ANTI_HEAL', totalPrice: 3100, item: { slug: 'tainted-guard' } },
+      { displayName: 'Physical Guard', aggressionType: 'ARMOR', totalPrice: 3000, stats: [], effects: [], item: { slug: 'physical-guard', name: 'PhysicalGuard' } },
+      { displayName: 'Tainted Guard', aggressionType: 'ANTI_HEAL', totalPrice: 3100, stats: [], effects: [], item: { slug: 'tainted-guard', name: 'TaintedGuard' } },
+    ]);
+    mocks.transactionFindMany.mockResolvedValue([
+      { gameTime: 720, transactionType: 'BUY', itemName: 'Offense', playerId: 'player-1', team: 'DAWN' },
+      { gameTime: 850, transactionType: 'BUY', itemName: 'PhysicalGuard', playerId: 'enemy-player-1', team: 'DUSK' },
     ]);
   });
 
@@ -52,6 +59,10 @@ describe('contextual build coach', () => {
     ]));
     expect(result.signals.find((signal) => signal.key === 'physical-defense')?.suggestedItems?.[0]).toMatchObject({ slug: 'physical-guard' });
     expect(result.context.damageReceived.physical).toBe(18_000);
+    expect(result.verdict.grade).toBe('poor');
+    expect(result.recommendedBuild.changes.find((change) => change.signalKey === 'anti-heal')?.why).toContain('narbash');
+    expect(result.purchaseTimeline.ownPurchases[0]).toMatchObject({ minute: '12:00', itemName: 'Offense' });
+    expect(result.purchaseTimeline.opponentResponses[0]).toMatchObject({ heroSlug: 'narbash', minute: '14:10' });
     expect(result.signals).not.toEqual(expect.arrayContaining([
       expect.objectContaining({ key: 'item-conflict' }),
     ]));

@@ -1231,6 +1231,14 @@ export interface MatchBuildAnalysis {
     enemyHealing: number;
     enemyShielding: number;
     enemyMitigation: number;
+    enemyHeroes: Array<{
+      heroSlug: string;
+      role: string | null;
+      playerName: string;
+      healing: number;
+      shieldingReceived: number;
+      damageMitigated: number;
+    }>;
   };
   inventory: Array<{
     slug: string;
@@ -1241,7 +1249,51 @@ export interface MatchBuildAnalysis {
     isEvolved: boolean;
     isHidden: boolean;
   }>;
-  eternalLoadout: Array<{ id: string; displayName: string; slot: string }>;
+  inventoryAssessments: Array<{
+    slug: string;
+    displayName: string;
+    verdict: 'correct' | 'neutral';
+    purpose: string[];
+    explanation: string;
+  }>;
+  verdict: {
+    grade: 'correct' | 'mostly_correct' | 'mixed' | 'poor';
+    summary: string;
+    score: number;
+  };
+  recommendedBuild: {
+    principle: string;
+    changes: Array<{
+      signalKey: string;
+      action: 'add' | 'replace';
+      item: { slug: string; displayName: string; aggressionType: string | null; reason: string };
+      insteadOf: { slug: string; displayName: string } | null;
+      timing: string;
+      why: string;
+    }>;
+  };
+  purchaseTimeline: {
+    available: boolean;
+    ownPurchases: Array<{ gameTime: number; minute: string; itemName: string; itemSlug: string }>;
+    opponentResponses: Array<{
+      gameTime: number;
+      minute: string;
+      heroSlug: string;
+      playerName: string;
+      itemName: string;
+      itemSlug: string;
+      explanation: string;
+    }>;
+    lesson: string;
+  };
+  eternalLoadout: Array<{
+    id: string;
+    displayName: string;
+    slot: string;
+    verdict: 'correct' | 'conditional' | 'questionable';
+    why: string;
+    effect: string | null;
+  }>;
   abilityOrder: Array<{ ability: string; gameTime: number }>;
   signals: Array<{
     key: string;
@@ -1249,7 +1301,7 @@ export interface MatchBuildAnalysis {
     title: string;
     evidence: string;
     recommendation: string;
-    suggestedItems?: Array<{ slug: string; displayName: string; aggressionType: string | null }>;
+    suggestedItems?: Array<{ slug: string; displayName: string; aggressionType: string | null; reason: string }>;
   }>;
 }
 

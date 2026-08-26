@@ -1711,6 +1711,15 @@ function BuildCoachCard({ matchId, matchPlayerId, liveMode }: { matchId: string;
   }, [liveMode, matchId, matchPlayerId]);
 
   if (!analysis) return null;
+  const gradeLabel = {
+    correct: 'Build correcta', mostly_correct: 'Correcta con una adaptación pendiente',
+    mixed: 'Build mejorable', poor: 'Build mal adaptada al rival',
+  }[analysis.verdict.grade];
+  const gradeColor = analysis.verdict.grade === 'correct'
+    ? 'var(--accent-win)'
+    : analysis.verdict.grade === 'poor'
+      ? 'var(--accent-loss)'
+      : 'var(--accent-prime)';
   return (
     <section className="glass-card" style={{ padding: '1rem', borderColor: 'rgba(240,180,41,0.3)' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.75rem', flexWrap: 'wrap' }}>
@@ -1722,6 +1731,42 @@ function BuildCoachCard({ matchId, matchPlayerId, liveMode }: { matchId: string;
           Daño recibido: {analysis.context.damageReceived.physical.toLocaleString()} físico · {analysis.context.damageReceived.magical.toLocaleString()} mágico
         </div>
       </div>
+
+      <div style={{ marginTop: '0.85rem', padding: '0.85rem', borderRadius: 9, background: `color-mix(in srgb, ${gradeColor} 7%, rgba(15,23,42,0.6))`, border: `1px solid color-mix(in srgb, ${gradeColor} 30%, transparent)` }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.7rem', alignItems: 'center', flexWrap: 'wrap' }}>
+          <strong style={{ color: gradeColor, fontSize: '0.84rem' }}>{gradeLabel}</strong>
+          <span style={{ fontFamily: 'var(--font-mono)', color: gradeColor, fontSize: '0.72rem', fontWeight: 800 }}>{analysis.verdict.score}/100 adaptación</span>
+        </div>
+        <p style={{ margin: '0.4rem 0 0', color: 'var(--text-secondary)', fontSize: '0.72rem', lineHeight: 1.5 }}>{analysis.verdict.summary}</p>
+      </div>
+
+      <div style={{ marginTop: '0.9rem' }}>
+        <p style={{ margin: '0 0 0.45rem', color: 'var(--text-muted)', fontSize: '0.61rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Qué tenía el equipo rival</p>
+        <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
+          {analysis.context.enemyHeroes.map((enemy) => (
+            <span key={`${enemy.heroSlug}-${enemy.role}`} title={`${enemy.healing.toLocaleString()} curación · ${enemy.shieldingReceived.toLocaleString()} escudos recibidos · ${enemy.damageMitigated.toLocaleString()} daño mitigado`} style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', padding: '0.3rem 0.45rem', borderRadius: 6, background: 'rgba(255,255,255,0.035)', border: '1px solid var(--border-color)', fontSize: '0.65rem', color: 'var(--text-secondary)' }}>
+              <img src={`/heroes/${enemy.heroSlug}.webp`} alt="" style={{ width: 22, height: 22, borderRadius: 4, objectFit: 'cover' }} onError={(event) => { (event.currentTarget as HTMLImageElement).style.display = 'none'; }} />
+              <strong style={{ color: 'var(--text-primary)', textTransform: 'capitalize' }}>{enemy.heroSlug}</strong> · {enemy.role?.toLowerCase() ?? 'sin rol'}
+            </span>
+          ))}
+        </div>
+      </div>
+
+      <div style={{ marginTop: '0.95rem' }}>
+        <p style={{ margin: '0 0 0.45rem', color: 'var(--text-muted)', fontSize: '0.61rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Evaluación de tu build final</p>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '0.55rem' }}>
+          {analysis.inventoryAssessments.map((item) => (
+            <article key={item.slug} style={{ display: 'flex', gap: '0.55rem', padding: '0.65rem', borderRadius: 8, background: 'rgba(15,23,42,0.52)', border: '1px solid var(--border-color)' }}>
+              <img src={`/items/${item.slug}.webp`} alt="" style={{ width: 36, height: 36, borderRadius: 5, flexShrink: 0 }} onError={(event) => { (event.currentTarget as HTMLImageElement).style.display = 'none'; }} />
+              <div>
+                <strong style={{ display: 'block', color: item.verdict === 'correct' ? 'var(--accent-win)' : 'var(--text-primary)', fontSize: '0.72rem' }}>{item.displayName}</strong>
+                <p style={{ margin: '0.22rem 0 0', color: 'var(--text-muted)', fontSize: '0.64rem', lineHeight: 1.4 }}>{item.explanation}</p>
+              </div>
+            </article>
+          ))}
+        </div>
+      </div>
+
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))', gap: '0.65rem', marginTop: '0.8rem' }}>
         {analysis.signals.map((signal) => {
           const color = signal.severity === 'critical' ? 'var(--accent-loss)' : signal.severity === 'warning' ? 'var(--accent-prime)' : 'var(--accent-win)';
@@ -1742,6 +1787,79 @@ function BuildCoachCard({ matchId, matchPlayerId, liveMode }: { matchId: string;
             </article>
           );
         })}
+      </div>
+
+      <div style={{ marginTop: '1rem', padding: '0.85rem', borderRadius: 9, background: 'rgba(56,212,200,0.035)', border: '1px solid rgba(56,212,200,0.18)' }}>
+        <p style={{ margin: 0, color: 'var(--accent-cyan)', fontSize: '0.62rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Build recomendada contra este equipo</p>
+        <p style={{ margin: '0.35rem 0 0', color: 'var(--text-secondary)', fontSize: '0.68rem', lineHeight: 1.45 }}>{analysis.recommendedBuild.principle}</p>
+        {analysis.recommendedBuild.changes.length > 0 ? (
+          <div style={{ display: 'grid', gap: '0.55rem', marginTop: '0.7rem' }}>
+            {analysis.recommendedBuild.changes.map((change) => (
+              <article key={`${change.signalKey}-${change.item.slug}`} style={{ padding: '0.7rem', borderRadius: 8, background: 'rgba(15,23,42,0.5)', border: '1px solid var(--border-color)' }}>
+                <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
+                  {change.insteadOf && <>
+                    <img src={`/items/${change.insteadOf.slug}.webp`} alt="" style={{ width: 32, height: 32, borderRadius: 5, opacity: 0.55 }} />
+                    <span style={{ color: 'var(--text-muted)', fontSize: '0.65rem', textDecoration: 'line-through' }}>{change.insteadOf.displayName}</span>
+                    <span style={{ color: 'var(--text-muted)' }}>→</span>
+                  </>}
+                  <img src={`/items/${change.item.slug}.webp`} alt="" style={{ width: 36, height: 36, borderRadius: 5 }} />
+                  <strong style={{ color: 'var(--accent-cyan)', fontSize: '0.76rem' }}>{change.item.displayName}</strong>
+                </div>
+                <p style={{ margin: '0.4rem 0 0', color: 'var(--text-secondary)', fontSize: '0.67rem', lineHeight: 1.45 }}><strong>Por qué:</strong> {change.why}</p>
+                <p style={{ margin: '0.28rem 0 0', color: 'var(--accent-prime)', fontSize: '0.65rem', lineHeight: 1.4 }}><strong>Cuándo:</strong> {change.timing}</p>
+              </article>
+            ))}
+          </div>
+        ) : <p style={{ margin: '0.6rem 0 0', color: 'var(--accent-win)', fontSize: '0.68rem' }}>No hace falta sustituir una pieza por una respuesta contextual con los datos disponibles.</p>}
+      </div>
+
+      {analysis.eternalLoadout.length > 0 && (
+        <div style={{ marginTop: '1rem' }}>
+          <p style={{ margin: '0 0 0.45rem', color: 'var(--text-muted)', fontSize: '0.61rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Augmento, Eternal y bendiciones</p>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '0.55rem' }}>
+            {analysis.eternalLoadout.map((perk, index) => {
+              const color = perk.verdict === 'correct' ? 'var(--accent-win)' : perk.verdict === 'questionable' ? 'var(--accent-loss)' : 'var(--accent-prime)';
+              const verdict = perk.verdict === 'correct' ? 'Correcto' : perk.verdict === 'questionable' ? 'Cuestionable' : 'Situacional';
+              return (
+                <article key={`${perk.id}-${index}`} style={{ padding: '0.7rem', borderRadius: 8, background: 'rgba(167,139,250,0.045)', border: '1px solid rgba(167,139,250,0.18)' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.5rem' }}>
+                    <div>
+                      <span style={{ display: 'block', color: 'var(--accent-violet)', fontSize: '0.59rem', fontWeight: 800 }}>{perkSlotLabel(perk.slot)}</span>
+                      <strong style={{ color: 'var(--text-primary)', fontSize: '0.72rem' }}>{perk.displayName}</strong>
+                    </div>
+                    <span style={{ color, fontSize: '0.6rem', fontWeight: 800 }}>{verdict}</span>
+                  </div>
+                  <p style={{ margin: '0.4rem 0 0', color: 'var(--text-secondary)', fontSize: '0.65rem', lineHeight: 1.45 }}>{perk.why}</p>
+                  {perk.effect && <p style={{ margin: '0.3rem 0 0', color: 'var(--text-muted)', fontSize: '0.61rem', lineHeight: 1.35 }}>{stripPredggMarkup(perk.effect)}</p>}
+                </article>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      <div style={{ marginTop: '1rem' }}>
+        <p style={{ margin: '0 0 0.45rem', color: 'var(--text-muted)', fontSize: '0.61rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Cómo evolucionó la compra</p>
+        <p style={{ margin: 0, color: 'var(--text-secondary)', fontSize: '0.67rem', lineHeight: 1.45 }}>{analysis.purchaseTimeline.lesson}</p>
+        {analysis.purchaseTimeline.ownPurchases.length > 0 && (
+          <div style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap', marginTop: '0.55rem' }}>
+            {analysis.purchaseTimeline.ownPurchases.slice(0, 16).map((purchase, index) => (
+              <span key={`${purchase.gameTime}-${purchase.itemName}-${index}`} title={`Comprado en ${purchase.minute}`} style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem', padding: '0.22rem 0.38rem', borderRadius: 5, background: 'rgba(255,255,255,0.035)', color: 'var(--text-muted)', fontSize: '0.6rem' }}>
+                <img src={`/items/${purchase.itemSlug}.webp`} alt="" style={{ width: 18, height: 18, borderRadius: 3 }} onError={(event) => { (event.currentTarget as HTMLImageElement).style.display = 'none'; }} />
+                {purchase.minute} · {purchase.itemName}
+              </span>
+            ))}
+          </div>
+        )}
+        {analysis.purchaseTimeline.opponentResponses.length > 0 && (
+          <div style={{ display: 'grid', gap: '0.4rem', marginTop: '0.65rem' }}>
+            {analysis.purchaseTimeline.opponentResponses.map((response, index) => (
+              <div key={`${response.gameTime}-${response.heroSlug}-${index}`} style={{ padding: '0.55rem 0.65rem', borderLeft: '3px solid var(--accent-violet)', background: 'rgba(167,139,250,0.04)', borderRadius: 5, color: 'var(--text-secondary)', fontSize: '0.65rem', lineHeight: 1.4 }}>
+                <strong style={{ color: 'var(--accent-violet)', textTransform: 'capitalize' }}>{response.minute} · {response.heroSlug}:</strong> {response.explanation}
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </section>
   );
