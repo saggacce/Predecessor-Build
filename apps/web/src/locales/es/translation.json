@@ -32,6 +32,10 @@
   },
   "nav": {
     "dashboard": "Dashboard",
+    "playerHome": "Mi progreso",
+    "playerCoach": "Coach semanal",
+    "playerMatches": "Mis partidas",
+    "playerProfile": "Mi perfil",
     "management": "Gestión de equipo",
     "teamsRoster": "Equipos y Plantilla",
     "staffInvitations": "Staff e Invitaciones",
@@ -95,7 +99,16 @@
     "checkingSession": "Verificando sesión...",
     "managerNoTeam": "Aún no tienes un equipo",
     "managerNoTeamDesc": "Como manager, tu primer paso es crear tu equipo. Una vez creado, podrás invitar al staff y a los jugadores.",
-    "createTeam": "Crear equipo"
+    "createTeam": "Crear equipo",
+    "playerSpace": "Tu espacio personal de mejora",
+    "playerNextStep": "Tu siguiente paso",
+    "playerCoachTitle": "Revisa tu coach semanal",
+    "playerCoachDescription": "Compara tu última semana con tu nivel habitual y sal con un foco concreto para tus próximas partidas.",
+    "playerCoachCta": "Ver informe",
+    "playerMatchesTitle": "Mis partidas",
+    "playerMatchesDescription": "Revisa tus resultados y abre el detalle de cada partida",
+    "playerProfileTitle": "Mi perfil de jugador",
+    "playerProfileDescription": "Gestiona tu cuenta y el jugador vinculado"
   },
   "teamRoster": {
     "title": "Equipos y Plantilla",

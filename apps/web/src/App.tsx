@@ -249,7 +249,38 @@ function SidebarSectionEl({ section, isOpen, onToggle, badgeCount = 0 }: Sidebar
 
 function useSections(t: (key: string) => string): SidebarSection[] {
   const { user } = useAuth();
-  const isStandalonePlayer = user?.globalRole === 'PLAYER';
+  const { viewAs } = useViewAs();
+  const isStandalonePlayer = (viewAs ?? user?.globalRole) === 'PLAYER';
+
+  if (isStandalonePlayer) {
+    return [
+      {
+        id: 'dashboard',
+        label: t('nav.playerHome'),
+        icon: <LayoutDashboard size={17} />,
+        to: '/',
+      },
+      {
+        id: 'player-coach',
+        label: t('nav.playerCoach'),
+        icon: <FileText size={17} />,
+        to: '/reports/weekly',
+      },
+      {
+        id: 'matches',
+        label: t('nav.playerMatches'),
+        icon: <Film size={17} />,
+        to: '/player/matches',
+      },
+      {
+        id: 'profile',
+        label: t('nav.playerProfile'),
+        icon: <Settings size={17} />,
+        to: '/profile',
+      },
+    ];
+  }
+
   return [
     {
       id: 'dashboard',
@@ -269,7 +300,7 @@ function useSections(t: (key: string) => string): SidebarSection[] {
       id: 'matches',
       label: t('nav.matches'),
       icon: <Film size={17} />,
-      to: isStandalonePlayer ? '/player/matches' : '/matches',
+      to: '/matches',
     },
     {
       id: 'analysis',
@@ -447,8 +478,9 @@ function Sidebar() {
 // ── Weekly Reports — role-aware ───────────────────────────────────────────────
 function WeeklyReportsPage() {
   const { user } = useAuth();
+  const { viewAs } = useViewAs();
   const hasTeam = (user?.memberships?.length ?? 0) > 0;
-  const isStandalonePlayer = user?.globalRole === 'PLAYER' || (!hasTeam && user?.globalRole !== 'PLATFORM_ADMIN');
+  const isStandalonePlayer = viewAs === 'PLAYER' || user?.globalRole === 'PLAYER' || (!hasTeam && user?.globalRole !== 'PLATFORM_ADMIN');
 
   if (isStandalonePlayer) {
     return <PlayerWeeklyReportPage />;

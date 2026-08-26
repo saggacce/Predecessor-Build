@@ -189,6 +189,7 @@ export default function Dashboard() {
   const isCoach = teamRole === 'COACH';
   const isAnalista = teamRole === 'ANALISTA';
   const isJugador = teamRole === 'JUGADOR';
+  const isStandalonePlayerView = viewAs === 'PLAYER' || (!ownTeam && user?.globalRole === 'PLAYER');
 
   // Manager who has registered but not yet created/joined a team
   const isManagerWithNoTeam = !isPlatformAdmin && teamsLoaded && !ownTeam && (
@@ -410,7 +411,7 @@ export default function Dashboard() {
           {isPlatformAdmin && <span style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--accent-teal-bright)', marginLeft: '0.5rem' }}>· PLATFORM ADMIN</span>}
         </h1>
         <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', marginTop: '0.25rem', display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
-          {ownTeam ? ownTeam.name : t('dashboard.noTeam')}
+          {isStandalonePlayerView ? t('dashboard.playerSpace') : ownTeam ? ownTeam.name : t('dashboard.noTeam')}
           {latestPatch && (
             <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem', background: 'rgba(107,170,248,0.12)', border: '1px solid rgba(107,170,248,0.25)', borderRadius: 4, padding: '1px 7px', fontFamily: 'var(--font-mono)', fontSize: '0.7rem', fontWeight: 700, color: 'var(--accent-blue)' }}>
               Patch {latestPatch.name}
@@ -1619,25 +1620,40 @@ function PlayerStandaloneView() {
 
   if (!profile) return null;
 
-  const wr = profile.generalStats?.winRate ? Math.round(profile.generalStats.winRate as number) : null;
-  const kda = profile.generalStats?.kda ? (profile.generalStats.kda as number).toFixed(2) : null;
-
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-      {/* Stats */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '1rem' }}>
-        {[
-          { label: t('playerScouting.kda'), value: kda ?? '—', color: 'var(--accent-teal-bright)' },
-          { label: t('dashboard.winRate'), value: wr ? `${wr}%` : '—', color: wr && wr >= 50 ? 'var(--accent-win)' : 'var(--accent-loss)' },
-          { label: t('dashboard.matches'), value: profile.recentMatches.length, color: 'var(--text-primary)' },
-          ...(profile.heroStats[0] ? [{ label: 'Main Hero', value: profile.heroStats[0].heroData?.name ?? profile.heroStats[0].heroData?.slug ?? '—', color: 'var(--accent-blue)' }] : []),
-        ].map(({ label, value, color }) => (
-          <div key={label} className="glass-card" style={{ textAlign: 'center', padding: '1rem' }}>
-            <div style={{ fontFamily: 'var(--font-mono)', fontSize: label === 'Main Hero' ? '0.85rem' : '1.4rem', fontWeight: 700, color }}>{String(value)}</div>
-            <div style={{ fontSize: '0.62rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginTop: '0.15rem' }}>{label}</div>
+      {/* Primary player action */}
+      <Link to="/reports/weekly" style={{ textDecoration: 'none' }}>
+        <section
+          className="glass-card landing-feature-card"
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'minmax(0, 1fr) auto',
+            alignItems: 'center',
+            gap: '1rem',
+            padding: '1.25rem 1.4rem',
+            borderColor: 'rgba(167,139,250,0.38)',
+            background: 'linear-gradient(135deg, rgba(124,58,237,0.14), rgba(15,23,42,0.72))',
+          }}
+        >
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', color: 'var(--accent-violet)', fontSize: '0.68rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.07em' }}>
+              <Target size={15} /> {t('dashboard.playerNextStep')}
+            </div>
+            <h2 style={{ margin: '0.55rem 0 0.3rem', color: 'var(--text-primary)', fontSize: '1.2rem' }}>{t('dashboard.playerCoachTitle')}</h2>
+            <p style={{ margin: 0, color: 'var(--text-secondary)', fontSize: '0.82rem', lineHeight: 1.5 }}>
+              {t('dashboard.playerCoachDescription')}
+            </p>
           </div>
-        ))}
-      </div>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', color: 'var(--accent-violet)', fontSize: '0.78rem', fontWeight: 700, whiteSpace: 'nowrap' }}>
+            {t('dashboard.playerCoachCta')} <ArrowRight size={15} />
+          </span>
+        </section>
+      </Link>
+
+      {/* Personal performance */}
+      <PlayerStatSummary profile={profile} />
+      <PlayerHeroPool heroStats={profile.heroStats} />
 
       {/* Last 5 matches */}
       {profile.recentMatches.length > 0 && (
@@ -1659,28 +1675,22 @@ function PlayerStandaloneView() {
       {/* Weekly goal */}
       <WeeklyGoalWidget goals={myGoals} onGoalsChange={setMyGoals} />
 
-      {/* Quick links */}
+      {/* Player quick links */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '0.75rem' }}>
-        <Link to="/analysis/players" state={{ autoLoadPlayerId: linkedId }} style={{ textDecoration: 'none' }}>
-          <div className="glass-card landing-feature-card" style={{ display: 'flex', alignItems: 'center', gap: '0.85rem', padding: '0.9rem 1.1rem', cursor: 'pointer', borderLeft: '3px solid var(--accent-teal-bright)' }}>
-            <Users size={18} style={{ color: 'var(--accent-teal-bright)', flexShrink: 0 }} />
-            <div>
-              <div style={{ fontWeight: 700, fontSize: '0.85rem', color: 'var(--text-primary)' }}>{t('playerScouting.title')}</div>
-              <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '0.1rem' }}>{t('dashboard.scoutPlayerDesc')}</div>
-            </div>
-            <ArrowRight size={14} style={{ color: 'var(--text-muted)', marginLeft: 'auto', flexShrink: 0 }} />
-          </div>
-        </Link>
-        <Link to="/matches" style={{ textDecoration: 'none' }}>
-          <div className="glass-card landing-feature-card" style={{ display: 'flex', alignItems: 'center', gap: '0.85rem', padding: '0.9rem 1.1rem', cursor: 'pointer', borderLeft: '3px solid var(--accent-violet)' }}>
-            <BookOpen size={18} style={{ color: 'var(--accent-violet)', flexShrink: 0 }} />
-            <div>
-              <div style={{ fontWeight: 700, fontSize: '0.85rem', color: 'var(--text-primary)' }}>{t('nav.matches')}</div>
-              <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '0.1rem' }}>{t('dashboard.recentMatches')}</div>
-            </div>
-            <ArrowRight size={14} style={{ color: 'var(--text-muted)', marginLeft: 'auto', flexShrink: 0 }} />
-          </div>
-        </Link>
+        <QuickLink
+          to="/player/matches"
+          icon={<BookOpen size={18} />}
+          label={t('dashboard.playerMatchesTitle')}
+          description={t('dashboard.playerMatchesDescription')}
+          color="var(--accent-violet)"
+        />
+        <QuickLink
+          to="/profile"
+          icon={<Users size={18} />}
+          label={t('dashboard.playerProfileTitle')}
+          description={t('dashboard.playerProfileDescription')}
+          color="var(--accent-teal-bright)"
+        />
       </div>
     </div>
   );

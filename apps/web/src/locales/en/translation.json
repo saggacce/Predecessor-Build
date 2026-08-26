@@ -32,6 +32,10 @@
   },
   "nav": {
     "dashboard": "Dashboard",
+    "playerHome": "My progress",
+    "playerCoach": "Weekly coach",
+    "playerMatches": "My matches",
+    "playerProfile": "My profile",
     "management": "Team Management",
     "teamsRoster": "Teams & Roster",
     "staffInvitations": "Staff & Invitations",
@@ -95,7 +99,16 @@
     "checkingSession": "Checking session...",
     "managerNoTeam": "You don't have a team yet",
     "managerNoTeamDesc": "As a manager, your first step is to create your team. Once created, you can invite staff and players.",
-    "createTeam": "Create team"
+    "createTeam": "Create team",
+    "playerSpace": "Your personal improvement space",
+    "playerNextStep": "Your next step",
+    "playerCoachTitle": "Review your weekly coach report",
+    "playerCoachDescription": "Compare your latest week with your usual level and leave with one clear focus for your next matches.",
+    "playerCoachCta": "View report",
+    "playerMatchesTitle": "My matches",
+    "playerMatchesDescription": "Review your results and open each match for more detail",
+    "playerProfileTitle": "My player profile",
+    "playerProfileDescription": "Manage your account and linked player"
   },
   "teamRoster": {
     "title": "Teams & Roster",
