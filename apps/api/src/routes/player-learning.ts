@@ -449,6 +449,28 @@ playerLearningRouter.post('/live/sessions/:id/verify-mode', requireAuth, async (
   }
 });
 
+playerLearningRouter.post('/live/sessions/:id/end', requireAuth, async (req, res, next) => {
+  try {
+    const profile = await ownProfile(req.user!.userId);
+    const existing = await db.liveTrainingSession.findFirst({ where: { id: String(req.params.id), profileId: profile.id } });
+    if (!existing) throw new AppError(404, 'Live training session not found', 'LIVE_SESSION_NOT_FOUND');
+    if (existing.endedAt) {
+      res.json({ session: existing });
+      return;
+    }
+    const status = existing.status === 'BLOCKED'
+      ? 'BLOCKED'
+      : existing.modeVerification === 'VERIFIED_ALLOWED' ? 'COMPLETED' : 'ABORTED';
+    const session = await db.liveTrainingSession.update({
+      where: { id: existing.id },
+      data: { status, endedAt: new Date() },
+    });
+    res.json({ session });
+  } catch (error) {
+    next(error);
+  }
+});
+
 playerLearningRouter.post('/live/sessions/:id/events', requireAuth, async (req, res, next) => {
   try {
     const body = z.object({ gameTime: z.number().int().min(0).nullable().optional(), eventType: z.string().max(80), evidence: z.record(z.string(), z.unknown()), advice: z.string().max(500).nullable().optional(), confidence: z.enum(['low', 'medium', 'high']) }).parse(req.body);

@@ -1859,6 +1859,8 @@ export const apiClient = {
     startLiveSession: (requestedGameMode: string) => fetchApi<{ session: { id: string; requestedGameMode: string; modeVerification: string; status: string }; canAdvise: boolean; reason: string }>('/player-learning/live/sessions', { method: 'POST', body: JSON.stringify({ requestedGameMode, captureConsent: true }) }),
     verifyLiveMode: (sessionId: string, detectedGameMode: string, signal: { source: 'screen_ocr' | 'screen_template' | 'match_api'; confidence: number; capturedAt: string }) =>
       fetchApi<{ session: { id: string; detectedGameMode: string | null; modeVerification: string; status: string }; canAdvise: boolean; reason: string | null }>(`/player-learning/live/sessions/${encodeURIComponent(sessionId)}/verify-mode`, { method: 'POST', body: JSON.stringify({ detectedGameMode, signal }) }),
+    endLiveSession: (sessionId: string) =>
+      fetchApi<{ session: { id: string; modeVerification: string; status: string; endedAt: string } }>(`/player-learning/live/sessions/${encodeURIComponent(sessionId)}/end`, { method: 'POST' }),
     submitLiveObservation: (sessionId: string, data: {
       gameTime?: number | null;
       eventType: 'RECALL_WINDOW' | 'OBJECTIVE_PREPARATION' | 'VISION_OPPORTUNITY' | 'BUILD_ADAPTATION' | 'SKILL_LEVEL_AVAILABLE' | 'MINIMAP_INFORMATION' | 'DEATH_REVIEW';

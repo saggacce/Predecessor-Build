@@ -8,6 +8,8 @@ on:
       - 'apps/companion/**'
       - 'apps/web/src/pages/PlayerAcademyPage.tsx'
       - 'apps/web/src/types/companion.d.ts'
+      - 'apps/web/src/services/liveModeOcr.ts'
+      - 'apps/api/src/routes/player-learning.ts'
       - 'package-lock.json'
       - '.github/workflows/companion.yml'
   push:
@@ -16,6 +18,8 @@ on:
       - 'apps/companion/**'
       - 'apps/web/src/pages/PlayerAcademyPage.tsx'
       - 'apps/web/src/types/companion.d.ts'
+      - 'apps/web/src/services/liveModeOcr.ts'
+      - 'apps/api/src/routes/player-learning.ts'
       - 'package-lock.json'
       - '.github/workflows/companion.yml'
 

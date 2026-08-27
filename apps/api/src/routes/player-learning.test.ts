@@ -148,6 +148,18 @@ describe('personal learning persistence', () => {
     expect(second.body).toMatchObject({ canAdvise: true, session: { modeVerification: 'VERIFIED_ALLOWED', status: 'ACTIVE' } });
   });
 
+  it('closes an unverified capture as aborted instead of leaving a pending session', async () => {
+    mockDb.liveTrainingSession.findFirst.mockResolvedValue({ id: 'live-1', profileId: 'profile-1', modeVerification: 'UNVERIFIED', status: 'PENDING', endedAt: null });
+    mockDb.liveTrainingSession.update.mockImplementation(async ({ data }: any) => ({ id: 'live-1', ...data }));
+    const cookie = await authCookie({ userId: 'user-1', globalRole: 'PLAYER', memberships: [] });
+    const response = await request(app).post('/player-learning/live/sessions/live-1/end').set('Cookie', cookie);
+    expect(response.status).toBe(200);
+    expect(response.body.session.status).toBe('ABORTED');
+    expect(mockDb.liveTrainingSession.update).toHaveBeenCalledWith(expect.objectContaining({
+      where: { id: 'live-1' }, data: expect.objectContaining({ status: 'ABORTED', endedAt: expect.any(Date) }),
+    }));
+  });
+
   it('delivers a sparse educational cue only from a verified observation', async () => {
     mockDb.liveTrainingSession.findFirst.mockResolvedValue({ id: 'live-1', profileId: 'profile-1', modeVerification: 'VERIFIED_ALLOWED', status: 'ACTIVE' });
     mockDb.liveTrainingEvent.findMany.mockResolvedValue([]);

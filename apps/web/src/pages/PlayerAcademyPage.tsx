@@ -15,6 +15,7 @@ import {
   type PlayerTrainingCycle,
 } from '../api/client';
 import { LearningProgressOverview } from '../components/LearningProgressOverview';
+import { createLiveModeOcr } from '../services/liveModeOcr';
 
 type AcademyTab = 'path' | 'diagnostic' | 'progress' | 'knowledge' | 'replay' | 'live';
 
@@ -253,23 +254,77 @@ function ReplayReview() {
 }
 
 function LocalTraining() {
-  const videoRef = useRef<HTMLVideoElement>(null); const streamRef = useRef<MediaStream | null>(null); const [mode, setMode] = useState('STANDARD'); const [status, setStatus] = useState('Sin iniciar'); const [capturing, setCapturing] = useState(false);
+  const videoRef = useRef<HTMLVideoElement>(null); const streamRef = useRef<MediaStream | null>(null); const liveSessionIdRef = useRef<string | null>(null); const sentSignalsRef = useRef(new Set<string>()); const [mode, setMode] = useState('STANDARD'); const [status, setStatus] = useState('Sin iniciar'); const [capturing, setCapturing] = useState(false);
   const [companionEnvironment, setCompanionEnvironment] = useState<Awaited<ReturnType<RiftLineCompanionBridge['getEnvironment']>>>(null);
   const [gameWindows, setGameWindows] = useState<RiftLineGameWindow[]>([]); const [selectedSourceId, setSelectedSourceId] = useState<string | null>(null); const [scanning, setScanning] = useState(false);
+  const [liveSessionId, setLiveSessionId] = useState<string | null>(null); const [modeVerification, setModeVerification] = useState('UNVERIFIED'); const [ocrStatus, setOcrStatus] = useState('OCR local pendiente');
   const companion = typeof window !== 'undefined' ? window.riftlineCompanion : undefined;
   const rankedSelected = mode === 'RANKED';
   useEffect(() => {
-    if (!companion) return () => streamRef.current?.getTracks().forEach((track) => track.stop());
+    const cleanup = () => {
+      const sessionId = liveSessionIdRef.current;
+      liveSessionIdRef.current = null;
+      if (sessionId) void apiClient.playerLearning.endLiveSession(sessionId).catch(() => undefined);
+      streamRef.current?.getTracks().forEach((track) => track.stop());
+    };
+    if (!companion) return cleanup;
     void companion.getEnvironment().then(setCompanionEnvironment);
     void companion.scanGameWindows().then((sources) => { setGameWindows(sources); setSelectedSourceId(sources.find((source) => source.selected)?.id ?? sources[0]?.id ?? null); });
     const removePanicListener = companion.onPanicStop(() => {
+      const sessionId = liveSessionIdRef.current;
+      liveSessionIdRef.current = null;
+      if (sessionId) void apiClient.playerLearning.endLiveSession(sessionId);
       streamRef.current?.getTracks().forEach((track) => track.stop());
       streamRef.current = null;
+      setLiveSessionId(null);
       setCapturing(false);
       setStatus('Captura y overlay detenidos mediante el atajo de emergencia.');
     });
-    return () => { removePanicListener(); streamRef.current?.getTracks().forEach((track) => track.stop()); };
+    return () => { removePanicListener(); cleanup(); };
   }, [companion]);
+  useEffect(() => {
+    if (!companion || !capturing || !liveSessionId) return;
+    let cancelled = false;
+    let running = false;
+    let detector: Awaited<ReturnType<typeof createLiveModeOcr>> | null = null;
+    const scanMode = async () => {
+      if (cancelled || running || !videoRef.current || videoRef.current.readyState < 2) return;
+      running = true;
+      try {
+        setOcrStatus('Preparando OCR local…');
+        detector ??= await createLiveModeOcr((progress) => setOcrStatus(`Leyendo rótulos del modo… ${Math.round(progress * 100)}%`));
+        if (cancelled) return;
+        const signal = await detector.scan(videoRef.current);
+        if (!signal) {
+          setOcrStatus('No se encontró un rótulo de modo fiable. El coach permanece en silencio.');
+          return;
+        }
+        const signalKey = `screen_ocr:${signal.detectedGameMode}`;
+        if (sentSignalsRef.current.has(signalKey)) {
+          setOcrStatus(`OCR: ${signal.detectedGameMode} ya registrado; falta una segunda fuente independiente.`);
+          return;
+        }
+        sentSignalsRef.current.add(signalKey);
+        const verification = await apiClient.playerLearning.verifyLiveMode(liveSessionId, signal.detectedGameMode, { source: 'screen_ocr', confidence: signal.confidence, capturedAt: signal.capturedAt });
+        setModeVerification(verification.session.modeVerification);
+        setOcrStatus(`OCR: ${signal.detectedGameMode} · confianza ${Math.round(signal.confidence * 100)}%. ${verification.reason ?? 'Modo permitido verificado.'}`);
+        if (verification.session.status === 'BLOCKED') {
+          streamRef.current?.getTracks().forEach((track) => track.stop());
+          streamRef.current = null;
+          liveSessionIdRef.current = null;
+          setLiveSessionId(null);
+          setCapturing(false);
+          setStatus(verification.reason ?? 'Sesión bloqueada por seguridad.');
+          void companion.clearAdvice();
+        }
+      } catch {
+        setOcrStatus('El OCR local no pudo completar la lectura. El coach permanece en silencio.');
+      } finally { running = false; }
+    };
+    void scanMode();
+    const interval = window.setInterval(() => void scanMode(), 8_000);
+    return () => { cancelled = true; window.clearInterval(interval); if (detector) void detector.terminate(); };
+  }, [capturing, companion, liveSessionId]);
   async function scanGame() {
     if (!companion) return [];
     setScanning(true);
@@ -303,17 +358,39 @@ function LocalTraining() {
       }
       const result = await apiClient.playerLearning.startLiveSession(mode);
       if (result.session.status === 'BLOCKED') { setStatus(result.reason); return; }
+      liveSessionIdRef.current = result.session.id;
+      setLiveSessionId(result.session.id);
+      sentSignalsRef.current.clear();
+      setModeVerification(result.session.modeVerification);
+      setOcrStatus(companion ? 'Esperando el primer fotograma legible…' : 'OCR disponible sólo en el acompañante de escritorio.');
       const stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
       streamRef.current = stream;
       if (videoRef.current) videoRef.current.srcObject = stream;
       setCapturing(true);
       setStatus(companion ? 'Ventana de Predecessor capturada. El coach sigue en silencio hasta verificar automáticamente el modo.' : 'Captura local activa. Consejos desactivados: el modo todavía no ha sido verificado automáticamente.');
-      stream.getVideoTracks()[0]?.addEventListener('ended', () => { setCapturing(false); setStatus('La ventana dejó de compartirse.'); });
-    } catch (error) { setStatus(error instanceof Error ? error.message : 'No se pudo iniciar la captura'); }
+      stream.getVideoTracks()[0]?.addEventListener('ended', () => {
+        const sessionId = liveSessionIdRef.current;
+        liveSessionIdRef.current = null;
+        if (sessionId) void apiClient.playerLearning.endLiveSession(sessionId);
+        setLiveSessionId(null);
+        setCapturing(false);
+        setStatus('La ventana dejó de compartirse.');
+      });
+    } catch (error) {
+      const sessionId = liveSessionIdRef.current;
+      liveSessionIdRef.current = null;
+      if (sessionId) void apiClient.playerLearning.endLiveSession(sessionId).catch(() => undefined);
+      setLiveSessionId(null);
+      setStatus(error instanceof Error ? error.message : 'No se pudo iniciar la captura');
+    }
   }
   function stop() {
+    const sessionId = liveSessionIdRef.current;
+    liveSessionIdRef.current = null;
+    if (sessionId) void apiClient.playerLearning.endLiveSession(sessionId).catch(() => undefined);
     streamRef.current?.getTracks().forEach((track) => track.stop());
     streamRef.current = null;
+    setLiveSessionId(null);
     setCapturing(false);
     setStatus('Captura detenida');
     if (companion) void companion.clearAdvice();
@@ -322,6 +399,28 @@ function LocalTraining() {
     if (!companion) return;
     const result = await companion.showAdvice({ title: 'Prueba visual del overlay', cue: 'Esta tarjeta no es un consejo de partida.', reason: 'Sirve para comprobar tamaño, posición y legibilidad sin analizar ni alterar el juego.', principle: 'El acompañante sólo mostrará consejos reales después de verificar un modo permitido y reunir evidencia suficiente.', priority: 'NORMAL', durationMs: 8_000 });
     setStatus(result.shown ? 'Prueba visible durante ocho segundos. Ctrl+Shift+F10 la oculta y detiene la captura.' : 'No se pudo mostrar la prueba del overlay.');
+  }
+  function saveCalibrationFrame() {
+    const video = videoRef.current;
+    if (!video?.videoWidth || !video.videoHeight) {
+      setStatus('Todavía no hay un fotograma disponible para guardar.');
+      return;
+    }
+    const canvas = document.createElement('canvas');
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    const context = canvas.getContext('2d');
+    if (!context) return;
+    context.drawImage(video, 0, 0);
+    canvas.toBlob((blob) => {
+      if (!blob) return;
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      link.download = `riftline-calibration-${mode.toLowerCase()}-${canvas.width}x${canvas.height}-${Date.now()}.jpg`;
+      link.click();
+      window.setTimeout(() => URL.revokeObjectURL(link.href), 1_000);
+      setStatus('Muestra guardada localmente. Revísala antes de compartirla: puede contener nombres o chat visibles.');
+    }, 'image/jpeg', 0.9);
   }
   const detectors = [
     ['HUD personal', 'Héroe, nivel, oro, vida, maná, inventario y habilidades visibles.'],
@@ -332,7 +431,7 @@ function LocalTraining() {
   return <div style={{ display: 'grid', gap: '1rem' }}>
     <section style={{ ...card, borderColor: 'rgba(248,113,113,.35)' }}><div style={{ display: 'flex', gap: '.7rem', alignItems: 'center' }}><ShieldAlert color="#f87171"/><div><strong>Ranked nunca está permitido</strong><div style={{ color: 'var(--text-muted)', fontSize: '.78rem' }}>La sesión necesita dos señales automáticas coincidentes para reconocer un modo permitido. Una señal fiable de Ranked la bloquea de forma irreversible; ante cualquier duda, no hay consejos.</div></div></div></section>
     {companionEnvironment && <section style={{ ...card, borderColor: 'rgba(56,212,200,.34)' }}><div style={{ display: 'flex', justifyContent: 'space-between', gap: '.75rem', flexWrap: 'wrap' }}><div><div style={{ color: 'var(--accent-cyan)', fontSize: '.7rem', fontWeight: 800 }}>ACOMPAÑANTE WINDOWS CONECTADO · v{companionEnvironment.version}</div><strong>Captura limitada a una ventana de Predecessor</strong><p style={{ color: 'var(--text-muted)', fontSize: '.76rem', marginBottom: 0 }}>Atajo de emergencia: {companionEnvironment.panicShortcut}. El overlay ignora el ratón y el teclado; no envía acciones al juego.</p></div><button disabled={scanning || capturing} onClick={() => void scanGame()} style={button}>{scanning ? 'Buscando…' : 'Detectar Predecessor'}</button></div>{gameWindows.length > 0 ? <div style={{ display: 'flex', gap: '.45rem', flexWrap: 'wrap', marginTop: '.75rem' }}>{gameWindows.map((source) => <button key={source.id} disabled={capturing} onClick={() => void selectSource(source.id)} style={{ ...button, borderColor: selectedSourceId === source.id ? 'var(--accent-cyan)' : 'var(--border-color)', color: selectedSourceId === source.id ? 'var(--accent-cyan)' : 'var(--text-primary)' }}>{source.name}</button>)}</div> : <p style={{ color: 'var(--text-muted)', fontSize: '.76rem', marginBottom: 0 }}>Predecessor todavía no está abierto o no expone una ventana capturable.</p>}</section>}
-    <section style={card}><h3 style={{ marginTop: 0 }}>{companion ? 'Captura privada de Predecessor' : 'Prototipo de captura local'}</h3><p>La selección manual sólo expresa qué esperas jugar: nunca verifica el modo ni habilita coaching. Los detectores automáticos deben confirmarlo antes de que aparezca un consejo real.</p><label style={{ color: 'var(--text-muted)', fontSize: '.74rem' }}>Modo que esperas jugar</label><div style={{ display: 'flex', gap: '.5rem', flexWrap: 'wrap', marginTop: '.35rem' }}><select value={mode} onChange={(e) => { setMode(e.target.value); setStatus(e.target.value === 'RANKED' ? 'Bloqueado: RiftLine no inicia captura ni consejos en Ranked.' : 'Sin iniciar'); }} disabled={capturing} style={button}>{['STANDARD','QUICK','ARAM','LABS','PRACTICE','AI','CUSTOM','RANKED'].map((value) => <option key={value}>{value}</option>)}</select>{capturing ? <button onClick={stop} style={button}>Detener captura</button> : <button disabled={rankedSelected} onClick={() => void start()} style={{ ...button, opacity: rankedSelected ? .45 : 1, cursor: rankedSelected ? 'not-allowed' : 'pointer', display: 'inline-flex', alignItems: 'center', gap: '.35rem' }}><Crosshair size={14}/> {rankedSelected ? 'Bloqueado en Ranked' : companion ? 'Capturar Predecessor' : 'Compartir pantalla'}</button>}{companion && <button disabled={!capturing} onClick={() => void previewOverlay()} style={{ ...button, opacity: capturing ? 1 : .45 }}>Probar tarjeta del overlay</button>}</div><p style={{ color: rankedSelected || status.includes('silencio') || status.includes('desactivados') ? '#fbbf24' : 'var(--text-muted)' }}>{status}</p><video ref={videoRef} autoPlay muted style={{ width: '100%', maxHeight: 440, background: '#05070b', borderRadius: 8, display: capturing ? 'block' : 'none' }}/></section>
+    <section style={card}><h3 style={{ marginTop: 0 }}>{companion ? 'Captura privada de Predecessor' : 'Prototipo de captura local'}</h3><p>La selección manual sólo expresa qué esperas jugar: nunca verifica el modo ni habilita coaching. Los detectores automáticos deben confirmarlo antes de que aparezca un consejo real.</p><label style={{ color: 'var(--text-muted)', fontSize: '.74rem' }}>Modo que esperas jugar</label><div style={{ display: 'flex', gap: '.5rem', flexWrap: 'wrap', marginTop: '.35rem' }}><select value={mode} onChange={(e) => { setMode(e.target.value); setStatus(e.target.value === 'RANKED' ? 'Bloqueado: RiftLine no inicia captura ni consejos en Ranked.' : 'Sin iniciar'); }} disabled={capturing} style={button}>{['STANDARD','QUICK','ARAM','LABS','PRACTICE','AI','CUSTOM','RANKED'].map((value) => <option key={value}>{value}</option>)}</select>{capturing ? <button onClick={stop} style={button}>Detener captura</button> : <button disabled={rankedSelected} onClick={() => void start()} style={{ ...button, opacity: rankedSelected ? .45 : 1, cursor: rankedSelected ? 'not-allowed' : 'pointer', display: 'inline-flex', alignItems: 'center', gap: '.35rem' }}><Crosshair size={14}/> {rankedSelected ? 'Bloqueado en Ranked' : companion ? 'Capturar Predecessor' : 'Compartir pantalla'}</button>}{companion && <button disabled={!capturing} onClick={() => void previewOverlay()} style={{ ...button, opacity: capturing ? 1 : .45 }}>Probar tarjeta del overlay</button>}{companion && <button disabled={!capturing} onClick={saveCalibrationFrame} style={{ ...button, opacity: capturing ? 1 : .45 }}>Guardar muestra local</button>}</div><p style={{ color: rankedSelected || status.includes('silencio') || status.includes('desactivados') ? '#fbbf24' : 'var(--text-muted)' }}>{status}</p>{capturing && companion && <div style={{ padding: '.65rem .75rem', marginBottom: '.65rem', borderRadius: 8, background: 'rgba(255,255,255,.025)', color: 'var(--text-muted)', fontSize: '.75rem' }}><strong style={{ color: modeVerification === 'VERIFIED_ALLOWED' ? 'var(--accent-cyan)' : '#fbbf24' }}>Verificación: {modeVerification}</strong><div>{ocrStatus}</div></div>}<video ref={videoRef} autoPlay muted style={{ width: '100%', maxHeight: 440, background: '#05070b', borderRadius: 8, display: capturing ? 'block' : 'none' }}/></section>
     <section style={card}><h3 style={{ marginTop: 0 }}>Qué observará la primera versión</h3><div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: '.6rem' }}>{detectors.map(([title, description]) => <article key={title} style={{ padding: '.75rem', border: '1px solid var(--border-color)', borderRadius: 8, background: 'rgba(255,255,255,.018)' }}><strong>{title}</strong><p style={{ color: 'var(--text-muted)', fontSize: '.74rem', lineHeight: 1.45, marginBottom: 0 }}>{description}</p></article>)}</div></section>
     <section style={card}><h3 style={{ marginTop: 0 }}>Cómo intervendrá el coach</h3><ul style={{ color: 'var(--text-secondary)', lineHeight: 1.55 }}><li>No habla durante un combate.</li><li>Como máximo cuatro intervenciones cada diez minutos y nunca repite el mismo concepto en cinco minutos.</li><li>Una observación dudosa se guarda para el informe, pero no interrumpe.</li><li>Cada consejo explica qué señales lo activaron y qué condición podría cambiarlo.</li></ul><p style={{ color: 'var(--text-muted)', fontSize: '.76rem', marginBottom: 0 }}>La Academia distingue las señales declaradas, guiadas y observadas: el overlay no podrá ascenderte por sí solo.</p></section>
   </div>;

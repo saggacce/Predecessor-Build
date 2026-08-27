@@ -14,6 +14,8 @@ Este primer hito permite probar de extremo a extremo:
 6. parada de emergencia con `Ctrl+Shift+F10`;
 7. bloqueo de Ranked y modo silencioso mientras no haya dos señales automáticas coincidentes.
 
+El primer detector ya integrado ejecuta OCR dentro del renderer aislado. Sólo envía a la API el modo normalizado, la confianza y la hora; el fotograma y el texto completo no salen del equipo. Una lectura fiable de Ranked bloquea inmediatamente. Una lectura de un modo permitido cuenta como una sola fuente y no activa consejos por sí misma.
+
 Todavía no se debe considerar un coach automático: los detectores visuales necesitan calibrarse con capturas reales de cada resolución y escala de interfaz. El botón de prueba sólo valida el overlay y está rotulado como prueba; no simula una decisión del coach.
 
 ## Ejecutar contra staging
@@ -60,3 +62,5 @@ Para activar consejos reales hacen falta muestras propias de Predecessor en, com
 - cronómetro y avisos de objetivos.
 
 Las muestras deben evitar nombres, chat y cualquier dato personal que no sea necesario. Cada detector tendrá umbral de confianza, versión de plantilla y pruebas de regresión antes de poder producir una señal o recomendación.
+
+El botón **Guardar muestra local** descarga el fotograma en el propio equipo para esta calibración. RiftLine no lo sube automáticamente y el usuario debe revisarlo antes de compartirlo.
