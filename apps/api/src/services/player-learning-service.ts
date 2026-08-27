@@ -7,6 +7,11 @@ import {
   competencyLabel,
   levelLabel,
 } from './player-learning-catalog.js';
+import {
+  PLACEMENT_GENERAL_COUNT,
+  PLACEMENT_QUESTION_COUNT,
+  PLACEMENT_ROLE_COUNT,
+} from './player-placement-catalog.js';
 
 const DEFAULT_MASTERY = 0.25;
 
@@ -62,30 +67,17 @@ export function presentLearningProfile(profile: Awaited<ReturnType<typeof ensure
   };
 }
 
-export function selectPlacementQuestions(role?: string | null, count = 10) {
+export function selectPlacementQuestions(role?: string | null, count = PLACEMENT_QUESTION_COUNT) {
   const normalizedRole = role?.toUpperCase() ?? null;
   const general = LEARNING_QUESTIONS.filter((question) => !question.roles?.length);
   const roleQuestions = normalizedRole
     ? LEARNING_QUESTIONS.filter((question) => question.roles?.includes(normalizedRole))
     : [];
-  const generalTarget = Math.max(0, count - roleQuestions.length);
-  const buckets = new Map(COMPETENCIES.map(({ key }) => [
-    key,
-    general.filter((question) => question.competencyKey === key),
-  ]));
-  const balanced: typeof general = [];
-  while (balanced.length < generalTarget) {
-    let added = false;
-    for (const { key } of COMPETENCIES) {
-      const next = buckets.get(key)?.shift();
-      if (!next) continue;
-      balanced.push(next);
-      added = true;
-      if (balanced.length >= generalTarget) break;
-    }
-    if (!added) break;
-  }
-  const selected = [...balanced, ...roleQuestions].slice(0, count);
+  const generalTarget = count === PLACEMENT_QUESTION_COUNT
+    ? PLACEMENT_GENERAL_COUNT
+    : Math.max(0, count - Math.min(roleQuestions.length, PLACEMENT_ROLE_COUNT));
+  const roleTarget = Math.max(0, count - generalTarget);
+  const selected = [...general.slice(0, generalTarget), ...roleQuestions.slice(0, roleTarget)];
   const stableHash = (value: string) => [...value].reduce((hash, character) => ((hash * 31) + character.charCodeAt(0)) >>> 0, 7);
   return selected.map(({ options, ...question }) => {
     const answerOptions = options.filter((option) => option.id !== 'not_sure')
@@ -93,9 +85,84 @@ export function selectPlacementQuestions(role?: string | null, count = 10) {
     const unsure = options.filter((option) => option.id === 'not_sure');
     return {
       ...question,
+      competencyLabel: competencyLabel(question.competencyKey),
       options: [...answerOptions, ...unsure].map(({ score: _score, evaluation: _evaluation, feedback: _feedback, ...option }) => option),
     };
   });
+}
+
+export interface PlacementAttemptScore {
+  questionKey: string;
+  competencyKey: string;
+  score: number;
+}
+
+export function summarizePlacement(attempts: PlacementAttemptScore[], role?: string | null) {
+  const current = new Set(selectPlacementQuestions(role).map((question) => question.key));
+  const relevant = attempts.filter((attempt) => current.has(attempt.questionKey));
+  if (relevant.length < current.size) return null;
+
+  const questionByKey = new Map(LEARNING_QUESTIONS.map((question) => [question.key, question]));
+  const average = (items: PlacementAttemptScore[]) => items.length
+    ? items.reduce((sum, item) => sum + item.score, 0) / items.length
+    : 0;
+  const roleAttempts = relevant.filter((attempt) => questionByKey.get(attempt.questionKey)?.roles?.length);
+  const generalAttempts = relevant.filter((attempt) => !questionByKey.get(attempt.questionKey)?.roles?.length);
+  const foundationAttempts = relevant.filter((attempt) => (questionByKey.get(attempt.questionKey)?.level ?? 1) === 1);
+  const advancedAttempts = relevant.filter((attempt) => (questionByKey.get(attempt.questionKey)?.level ?? 1) >= 3);
+  const overallScore = average(relevant);
+  const generalScore = average(generalAttempts);
+  const roleScore = average(roleAttempts);
+  const foundationScore = average(foundationAttempts);
+  const advancedScore = average(advancedAttempts);
+
+  let band = {
+    key: 'STARTING',
+    label: 'Iniciación',
+    description: 'Estás construyendo el vocabulario y las relaciones básicas para decidir con intención.',
+  };
+  if (overallScore >= 0.82 && foundationScore >= 0.8 && roleScore >= 0.75 && advancedScore >= 0.72) {
+    band = {
+      key: 'ADVANCED_KNOWLEDGE',
+      label: 'Conocimiento avanzado',
+      description: 'Razonas bien situaciones complejas; falta comprobar que ese criterio aparece de forma consistente en partida.',
+    };
+  } else if (overallScore >= 0.68 && foundationScore >= 0.7 && roleScore >= 0.62) {
+    band = {
+      key: 'INTERMEDIATE_KNOWLEDGE',
+      label: 'Conocimiento intermedio',
+      description: 'Comprendes la mayoría de relaciones importantes y ya puedes trabajar adaptación y consistencia.',
+    };
+  } else if (overallScore >= 0.48 && foundationScore >= 0.5) {
+    band = {
+      key: 'DEVELOPING_FOUNDATIONS',
+      label: 'Fundamentos en desarrollo',
+      description: 'Ya reconoces varias decisiones correctas, pero todavía hay bases que deben volverse estables.',
+    };
+  }
+
+  const competencies = COMPETENCIES.map((definition) => {
+    const scores = relevant.filter((attempt) => attempt.competencyKey === definition.key);
+    return {
+      key: definition.key,
+      label: definition.label,
+      score: average(scores),
+      evidenceCount: scores.length,
+    };
+  }).filter((item) => item.evidenceCount > 0);
+
+  return {
+    band,
+    overallScore,
+    generalScore,
+    roleScore,
+    answered: relevant.length,
+    total: current.size,
+    strongest: [...competencies].sort((a, b) => b.score - a.score)[0] ?? null,
+    priority: [...competencies].sort((a, b) => a.score - b.score)[0] ?? null,
+    competencies,
+    limitation: 'Mide conocimiento y criterio declarado. La ejecución, la consistencia y la adaptación real se confirmarán con partidas, misiones y replay.',
+  };
 }
 
 export async function recordQuestionAnswer(input: {
@@ -158,7 +225,7 @@ export async function recordQuestionAnswer(input: {
     let placementComplete = false;
     let placementAverage = 0;
     if (input.sourceType === 'PLACEMENT') {
-      const currentKeys = selectPlacementQuestions(input.placementRole, 10).map((item) => item.key);
+      const currentKeys = selectPlacementQuestions(input.placementRole).map((item) => item.key);
       const placementAttempts = await tx.coachQuestionAttempt.findMany({
         where: { profileId: input.profileId, sourceType: 'PLACEMENT', questionKey: { in: currentKeys } },
         select: { competencyKey: true, score: true },
@@ -173,6 +240,7 @@ export async function recordQuestionAnswer(input: {
           where: { profileId: input.profileId, sourceType: { not: 'PLACEMENT' } },
           select: { competencyKey: true, score: true },
         });
+        const competenciesWithAppliedEvidence = new Set(nonPlacementAttempts.map((attempt) => attempt.competencyKey));
         const scoresByCompetency = new Map<string, number[]>();
         for (const scoredAttempt of [...placementAttempts, ...nonPlacementAttempts]) {
           const scores = scoresByCompetency.get(scoredAttempt.competencyKey) ?? [];
@@ -185,10 +253,11 @@ export async function recordQuestionAnswer(input: {
           if (evidenceCount === 0) return Promise.resolve(item);
           const average = (scores.reduce((sum, score) => sum + score, 0) + (item.appliedCount * 0.65)) / evidenceCount;
           const provisionalLevel = average >= 0.75 ? 2 : 1;
+          const preserveEarnedLevel = item.appliedCount > 0 || competenciesWithAppliedEvidence.has(item.competencyKey);
           return tx.playerCompetency.update({
             where: { id: item.id },
             data: {
-              level: Math.max(item.level, provisionalLevel),
+              level: preserveEarnedLevel ? Math.max(item.level, provisionalLevel) : provisionalLevel,
               mastery: average,
               confidence: Math.min(1, evidenceCount / 5),
               evidenceCount,

@@ -11,6 +11,7 @@ import {
   recommendMission,
   recordQuestionAnswer,
   selectPlacementQuestions,
+  summarizePlacement,
 } from '../services/player-learning-service.js';
 import { evaluateLiveMode } from '../services/live-training-policy.js';
 
@@ -84,9 +85,9 @@ playerLearningRouter.patch('/profile/me', requireAuth, async (req, res, next) =>
 playerLearningRouter.get('/placement', requireAuth, async (req, res, next) => {
   try {
     let profile = await ownProfile(req.user!.userId);
-    const currentQuestions = selectPlacementQuestions(profile.activeRole, 10);
+    const currentQuestions = selectPlacementQuestions(profile.activeRole);
     const currentKeys = currentQuestions.map((question) => question.key);
-    const answered = await db.coachQuestionAttempt.findMany({ where: { profileId: profile.id, sourceType: 'PLACEMENT', questionKey: { in: currentKeys } }, select: { questionKey: true } });
+    const answered = await db.coachQuestionAttempt.findMany({ where: { profileId: profile.id, sourceType: 'PLACEMENT', questionKey: { in: currentKeys } }, select: { questionKey: true, competencyKey: true, score: true } });
     const answeredKeys = new Set(answered.map((attempt) => attempt.questionKey));
     const questions = currentQuestions.filter((question) => !answeredKeys.has(question.key));
     if (questions.length > 0 && profile.placementStatus !== 'IN_PROGRESS') {
@@ -96,7 +97,9 @@ playerLearningRouter.get('/placement', requireAuth, async (req, res, next) => {
       status: profile.placementStatus,
       questions,
       answered: answeredKeys.size,
-      note: 'El resultado inicial es provisional: las partidas, misiones y revisiones aportan evidencia adicional.',
+      total: currentQuestions.length,
+      summary: summarizePlacement(answered, profile.activeRole),
+      note: 'El diagnóstico mide conocimiento y criterio. El rango práctico se confirma con partidas, misiones y revisiones.',
     });
   } catch (error) {
     next(error);

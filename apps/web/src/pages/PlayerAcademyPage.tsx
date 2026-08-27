@@ -9,6 +9,7 @@ import {
   type LearningQuestionView,
   type MissionRecommendation,
   type PlayerLearningProfile,
+  type PlacementSummary,
   type PlayerReplaySession,
   type PlayerTrainingCycle,
 } from '../api/client';
@@ -75,6 +76,11 @@ export default function PlayerAcademyPage() {
 
 function LearningPath({ profile, mission, cycles, onChanged }: { profile: PlayerLearningProfile; mission: MissionRecommendation | null; cycles: PlayerTrainingCycle[]; onChanged: () => Promise<void> }) {
   const active = cycles.find((cycle) => cycle.status === 'ACTIVE');
+  const [placementSummary, setPlacementSummary] = useState<PlacementSummary | null>(null);
+  useEffect(() => {
+    if (!profile.activeRole) return;
+    void apiClient.playerLearning.placement().then((placement) => setPlacementSummary(placement.summary)).catch(() => setPlacementSummary(null));
+  }, [profile.activeRole, profile.placementStatus]);
   async function startMission() {
     if (!mission) return;
     try {
@@ -85,7 +91,7 @@ function LearningPath({ profile, mission, cycles, onChanged }: { profile: Player
   return <div style={{ display: 'grid', gap: '1rem' }}>
     <section style={card}>
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem', flexWrap: 'wrap' }}>
-        <div><div style={{ color: 'var(--text-muted)', fontSize: '.72rem' }}>NIVEL PEDAGÓGICO {profile.overallLevel}</div><h2 style={{ margin: '.2rem 0' }}>{profile.overallLevelLabel}</h2><div style={{ color: 'var(--text-muted)' }}>Confianza de la evaluación: {percent(profile.confidence)} · {profile.placementStatus === 'PROVISIONAL' ? 'resultado provisional' : 'en construcción'}</div></div>
+        <div><div style={{ color: 'var(--text-muted)', fontSize: '.72rem' }}>NIVEL PEDAGÓGICO {profile.overallLevel}</div><h2 style={{ margin: '.2rem 0' }}>{profile.overallLevelLabel}</h2>{placementSummary && <div style={{ color: 'var(--accent-cyan)', marginBottom: '.2rem' }}>Conocimiento diagnosticado: {placementSummary.band.label}</div>}<div style={{ color: 'var(--text-muted)' }}>Confianza de la evaluación: {percent(profile.confidence)} · {profile.placementStatus === 'PROVISIONAL' ? 'resultado provisional' : 'en construcción'}</div></div>
         <label style={{ fontSize: '.78rem', color: 'var(--text-muted)' }}>Rol principal<br/><select value={profile.activeRole ?? ''} onChange={async (event) => { await apiClient.playerLearning.updateProfile((event.target.value || null) as PlayerLearningProfile['activeRole']); await onChanged(); }} style={{ ...button, marginTop: '.3rem' }}><option value="">Aún no definido</option>{['CARRY','SUPPORT','MIDLANE','JUNGLE','OFFLANE'].map((role) => <option key={role}>{role}</option>)}</select></label>
       </div>
     </section>
@@ -97,8 +103,9 @@ function LearningPath({ profile, mission, cycles, onChanged }: { profile: Player
 function Diagnostic({ profile, onChanged, onFinished }: { profile: PlayerLearningProfile; onChanged: () => Promise<void>; onFinished: () => void }) {
   const [questions, setQuestions] = useState<LearningQuestionView[]>([]); const [index, setIndex] = useState(0); const [feedback, setFeedback] = useState<{ feedback: string; principle: string } | null>(null); const [busy, setBusy] = useState(false);
   const [answeredBeforeVisit, setAnsweredBeforeVisit] = useState(0);
+  const [total, setTotal] = useState(20); const [summary, setSummary] = useState<PlacementSummary | null>(null);
   const [promotion, setPromotion] = useState<{ eligible: boolean; reason?: string; competency?: { label: string }; question?: LearningQuestionView } | null>(null); const [promotionAnswered, setPromotionAnswered] = useState(false);
-  useEffect(() => { if (!profile.activeRole) return; Promise.all([apiClient.playerLearning.placement(), apiClient.playerLearning.promotion()]).then(([placement, promotionResult]) => { setQuestions(placement.questions); setAnsweredBeforeVisit(placement.answered); setPromotion(promotionResult); }).catch(() => toast.error('No se pudo cargar el diagnóstico')); }, [profile.activeRole]);
+  useEffect(() => { if (!profile.activeRole) return; Promise.all([apiClient.playerLearning.placement(), apiClient.playerLearning.promotion()]).then(([placement, promotionResult]) => { setQuestions(placement.questions); setAnsweredBeforeVisit(placement.answered); setTotal(placement.total); setSummary(placement.summary); setPromotion(promotionResult); }).catch(() => toast.error('No se pudo cargar el diagnóstico')); }, [profile.activeRole]);
   async function chooseRole(activeRole: NonNullable<PlayerLearningProfile['activeRole']>) {
     setBusy(true);
     try {
@@ -112,11 +119,50 @@ function Diagnostic({ profile, onChanged, onFinished }: { profile: PlayerLearnin
     }
   }
   if (!profile.activeRole) return <section style={{ ...card, maxWidth: 760 }}><BrainCircuit color="var(--accent-violet)"/><div style={{ color: 'var(--accent-cyan)', fontSize: '.72rem', fontWeight: 800, marginTop: '.7rem' }}>PRIMER PASO · 1 DE 2</div><h2>¿Qué rol quieres aprender primero?</h2><p style={{ color: 'var(--text-secondary)', lineHeight: 1.5 }}>Tu diagnóstico combinará fundamentos generales con situaciones propias de este rol. Podrás cambiarlo más adelante; no afecta a tu rango ni bloquea el resto de la plataforma.</p><div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '.55rem', marginTop: '1rem' }}>{(['CARRY','SUPPORT','MIDLANE','JUNGLE','OFFLANE'] as const).map((role) => <button key={role} disabled={busy} onClick={() => void chooseRole(role)} style={{ ...button, padding: '.8rem', textAlign: 'center', opacity: busy ? .6 : 1 }}>{role}</button>)}</div></section>;
+  if (summary) return <section style={{ ...card, maxWidth: 860 }}>
+    <CheckCircle2 color="var(--accent-cyan)"/>
+    <div style={{ color: 'var(--accent-cyan)', fontSize: '.72rem', fontWeight: 800, marginTop: '.7rem' }}>DIAGNÓSTICO DE CONOCIMIENTO · {summary.answered} SITUACIONES</div>
+    <h2 style={{ marginBottom: '.35rem' }}>{summary.band.label}</h2>
+    <p style={{ color: 'var(--text-secondary)', lineHeight: 1.55 }}>{summary.band.description}</p>
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(175px, 1fr))', gap: '.65rem', margin: '1rem 0' }}>
+      {[['Criterio global', summary.overallScore], ['Fundamentos comunes', summary.generalScore], [`Rol ${profile.activeRole}`, summary.roleScore]].map(([label, score]) => <div key={String(label)} style={{ padding: '.8rem', borderRadius: 8, background: 'rgba(255,255,255,.035)' }}><div style={{ color: 'var(--text-muted)', fontSize: '.72rem' }}>{String(label)}</div><strong style={{ fontSize: '1.25rem' }}>{percent(Number(score))}</strong></div>)}
+    </div>
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '.65rem' }}>
+      {summary.strongest && <div style={{ padding: '.8rem', borderLeft: '3px solid var(--accent-cyan)', background: 'rgba(56,212,200,.06)' }}><small style={{ color: 'var(--text-muted)' }}>SEÑAL MÁS FUERTE</small><div>{summary.strongest.label}</div></div>}
+      {summary.priority && <div style={{ padding: '.8rem', borderLeft: '3px solid var(--accent-violet)', background: 'rgba(167,139,250,.06)' }}><small style={{ color: 'var(--text-muted)' }}>PRIMERA PRIORIDAD</small><div>{summary.priority.label}</div></div>}
+    </div>
+    <p style={{ color: 'var(--text-muted)', fontSize: '.8rem', lineHeight: 1.5 }}>{summary.limitation}</p>
+    <button style={button} onClick={onFinished}>Ver mi ruta personalizada</button>
+  </section>;
   const isPromotion = index >= questions.length && !!promotion?.eligible && !!promotion.question && !promotionAnswered;
   const current = questions[index] ?? (isPromotion ? promotion?.question : undefined);
   if (!current) return <section style={card}><CheckCircle2 color="var(--accent-cyan)"/><h3>Diagnóstico recorrido</h3><p>Ya has contestado esta ronda. Es una estimación provisional; tu nivel se confirmará con misiones y revisiones reales.</p><p style={{ color: 'var(--text-muted)' }}><strong>Prueba de ascenso:</strong> {promotion?.reason ?? 'La siguiente prueba aparecerá cuando una misión y varias evidencias demuestren consistencia.'}</p><button style={button} onClick={onFinished}>Ver mi ruta personalizada</button></section>;
-  async function answer(optionId: string) { setBusy(true); try { const { result } = await apiClient.playerLearning.answerQuestion(current.key, optionId, isPromotion ? 'PROMOTION' : 'PLACEMENT'); setFeedback(result); await onChanged(); } catch (error) { toast.error(error instanceof Error ? error.message : 'No se pudo guardar'); } finally { setBusy(false); } }
-  return <section style={card}><div style={{ color: 'var(--text-muted)', fontSize: '.75rem' }}>{isPromotion ? `Prueba de ascenso · ${promotion?.competency?.label}` : `Situación ${answeredBeforeVisit + index + 1} de ${answeredBeforeVisit + questions.length} · ${current.competencyKey}`}</div><h2>{current.prompt}</h2><p style={{ color: 'var(--text-muted)' }}>{current.context}</p>{!feedback ? <div style={{ display: 'grid', gap: '.55rem' }}>{current.options.map((option) => <button disabled={busy} key={option.id} style={{ ...button, textAlign: 'left' }} onClick={() => void answer(option.id)}>{option.text}</button>)}</div> : <div style={{ padding: '1rem', borderLeft: '3px solid var(--accent-cyan)', background: 'rgba(56,212,200,.06)' }}><strong>Qué aprender de la respuesta</strong><p>{feedback.feedback}</p><p style={{ color: 'var(--accent-cyan)' }}>{feedback.principle}</p><button style={button} onClick={() => { setFeedback(null); if (isPromotion) setPromotionAnswered(true); else if (index + 1 >= questions.length) onFinished(); else setIndex((value) => value + 1); }}>{isPromotion ? 'Finalizar prueba' : index + 1 >= questions.length ? 'Ver mi ruta personalizada' : 'Siguiente situación'}</button></div>}</section>;
+  async function answer(optionId: string) {
+    setBusy(true);
+    try {
+      const { result } = await apiClient.playerLearning.answerQuestion(current.key, optionId, isPromotion ? 'PROMOTION' : 'PLACEMENT');
+      await onChanged();
+      if (isPromotion) {
+        setFeedback(result);
+      } else if (index + 1 < questions.length) {
+        setIndex((value) => value + 1);
+      } else {
+        const completed = await apiClient.playerLearning.placement();
+        setQuestions(completed.questions);
+        setAnsweredBeforeVisit(completed.answered);
+        setTotal(completed.total);
+        setSummary(completed.summary);
+        setIndex(0);
+      }
+    } catch (error) { toast.error(error instanceof Error ? error.message : 'No se pudo guardar'); } finally { setBusy(false); }
+  }
+  const situationNumber = answeredBeforeVisit + index + 1;
+  return <section style={{ ...card, maxWidth: 860 }}>
+    <div style={{ display: 'flex', justifyContent: 'space-between', gap: '.75rem', color: 'var(--text-muted)', fontSize: '.75rem' }}><span>{isPromotion ? `Prueba de ascenso · ${promotion?.competency?.label}` : `Situación ${situationNumber} de ${total} · ${current.competencyLabel}`}</span>{!isPromotion && <span>{Math.round(((situationNumber - 1) / total) * 100)}%</span>}</div>
+    {!isPromotion && <><div style={{ height: 5, background: 'rgba(255,255,255,.06)', borderRadius: 8, marginTop: '.45rem' }}><div style={{ width: percent((situationNumber - 1) / total), height: '100%', background: 'var(--accent-cyan)', borderRadius: 8 }} /></div>{situationNumber === 1 && <p style={{ color: 'var(--text-muted)', fontSize: '.78rem' }}>20 situaciones · unos 10–15 minutos. No mostraremos correcciones hasta terminar para no influir en tus respuestas posteriores.</p>}</>}
+    <h2>{current.prompt}</h2><p style={{ color: 'var(--text-muted)', lineHeight: 1.5 }}>{current.context}</p>
+    {!feedback ? <div style={{ display: 'grid', gap: '.55rem' }}>{current.options.map((option) => <button disabled={busy} key={option.id} style={{ ...button, textAlign: 'left', lineHeight: 1.4, opacity: busy ? .65 : 1 }} onClick={() => void answer(option.id)}>{option.text}</button>)}</div> : <div style={{ padding: '1rem', borderLeft: '3px solid var(--accent-cyan)', background: 'rgba(56,212,200,.06)' }}><strong>Qué aprender de la respuesta</strong><p>{feedback.feedback}</p><p style={{ color: 'var(--accent-cyan)' }}>{feedback.principle}</p><button style={button} onClick={() => { setFeedback(null); setPromotionAnswered(true); }}>Finalizar prueba</button></div>}
+  </section>;
 }
 
 function readableText(value: unknown) {

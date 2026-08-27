@@ -1,3 +1,5 @@
+import { PLACEMENT_QUESTIONS_V3 } from './player-placement-catalog.js';
+
 export const LEARNING_LEVELS = [
   { level: 1, key: 'INITIATION', label: 'Iniciación', description: 'Reconoce las reglas, recursos y funciones básicas sin vocabulario innecesario.' },
   { level: 2, key: 'FOUNDATIONS', label: 'Fundamentos', description: 'Toma decisiones básicas con una intención y comprende sus consecuencias.' },
@@ -43,7 +45,7 @@ const unknown = (feedback: string): LearningQuestionOption => ({
   id: 'not_sure', text: 'No estoy seguro todavía', evaluation: 'UNKNOWN', score: 0, feedback,
 });
 
-export const LEARNING_QUESTIONS: LearningQuestion[] = [
+export const LEGACY_PLACEMENT_QUESTIONS_V2: LearningQuestion[] = [
   {
     key: 'placement-v2-gold-conversion', competencyKey: 'moba_fundamentals', level: 1,
     prompt: 'Tienes 1.450 de oro, la oleada está empujada y no hay un objetivo próximo. ¿Qué decisión aporta más valor?',
@@ -225,6 +227,8 @@ export const LEARNING_QUESTIONS: LearningQuestion[] = [
     principle: 'Offlane convierte presión en valor y reconoce cuándo la presencia pesa más.', knowledgeKeys: ['offlane_role', 'objectives'],
   },
 ];
+
+export const LEARNING_QUESTIONS: LearningQuestion[] = PLACEMENT_QUESTIONS_V3;
 
 export interface MissionTemplate {
   key: string;

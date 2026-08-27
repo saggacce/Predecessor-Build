@@ -77,8 +77,9 @@ describe('personal learning persistence', () => {
     const response = await request(app).get('/player-learning/placement').set('Cookie', cookie);
     expect(response.status).toBe(200);
     expect(response.body.status).toBe('IN_PROGRESS');
-    expect(response.body.questions).toHaveLength(10);
-    expect(response.body.questions.every((question: { key: string }) => question.key.startsWith('placement-v2-'))).toBe(true);
+    expect(response.body.questions).toHaveLength(20);
+    expect(response.body.total).toBe(20);
+    expect(response.body.questions.every((question: { key: string }) => question.key.startsWith('placement-v3-'))).toBe(true);
     expect(new Set(response.body.questions.map((question: { competencyKey: string }) => question.competencyKey)).size).toBe(7);
   });
 
