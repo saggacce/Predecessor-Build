@@ -69,6 +69,14 @@ El resumen de partida limita la carga cognitiva a un foco principal, un máximo 
 
 La pestaña `Analysis` organiza el contenido en Resumen, Build y loadout, Habilidades, Línea y economía, Combate y posición, y Objetivos y visión. Las inferencias posicionales se limitan a las coordenadas de muertes, objetivos, estructuras y wards; sin VOD no se afirma conocer el movimiento continuo.
 
+### 9. Momentos de aprendizaje y replay guiado
+
+El análisis individual selecciona un máximo de tres ventanas de replay por partida para evitar sobrecarga. Los candidatos actuales incluyen muertes antes de objetivos, cambios adversos relevantes en la diferencia de oro, una primera muerte que conviene investigar y preparación positiva de visión.
+
+Cada momento separa un hecho comprobado de una hipótesis que el jugador debe validar. Incluye el intervalo recomendado del replay, preguntas concretas, un principio transferible, confianza y limitación. La aplicación no presenta estos candidatos como errores confirmados ni atribuye causalidad individual a un cambio colectivo de oro.
+
+La primera versión se calcula bajo demanda y no persiste la respuesta del jugador. La evolución prevista es guardar la causa confirmada con ámbito personal o de equipo y vincularla a un objetivo de entrenamiento, reutilizando el mismo motor en SoloQ y sesiones de review colectivo.
+
 ## Degradación y fiabilidad
 
 - Cada capacidad informa su estado y motivo de indisponibilidad.

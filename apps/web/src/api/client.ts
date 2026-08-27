@@ -1390,6 +1390,25 @@ export interface EducationalCoachObservation {
   limitation: string | null;
 }
 
+export interface LearningMoment {
+  id: string;
+  scope: 'personal';
+  context: 'soloq';
+  type: 'pre_objective_death' | 'gold_swing' | 'death_review' | 'vision_preparation';
+  tone: 'review' | 'reinforce';
+  priority: 'high' | 'medium' | 'low';
+  gameTime: number;
+  reviewWindow: { start: number; end: number };
+  title: string;
+  fact: string;
+  inference: string;
+  whyItMatters: string;
+  reviewChecklist: string[];
+  transferablePrinciple: string;
+  confidence: { level: 'low' | 'medium' | 'high'; basis: string };
+  limitation: string;
+}
+
 export interface PlayerMatchCoachAnalysis {
   matchId: string;
   matchPlayerId: string;
@@ -1427,6 +1446,7 @@ export interface PlayerMatchCoachAnalysis {
     objectiveEvents: boolean;
     disclaimer: string;
   };
+  learningMoments: LearningMoment[];
   sections: {
     abilities: EducationalCoachObservation[];
     economy: EducationalCoachObservation[];

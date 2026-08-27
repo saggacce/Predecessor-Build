@@ -248,6 +248,8 @@ Primera iteración centrada en enseñar criterios transferibles sin convertir el
 - [x] Build, orden de compra, augment, Eternal y Blessings explicados en el contexto de la partida
 - [x] Objetivo semanal evaluado al completar un ciclo de cinco partidas
 - [x] Validación inicial con cinco partidas Ranked reales y degradación honesta cuando faltan datos
+- [x] Momentos clave de replay: máximo tres ventanas con hecho, hipótesis, checklist, principio transferible y límite del dato
+- [ ] Persistir la causa confirmada por el jugador y convertir patrones repetidos en objetivos personales
 
 ---
 

@@ -20,6 +20,25 @@ export interface EducationalObservation {
   limitation: string | null;
 }
 
+export interface LearningMoment {
+  id: string;
+  scope: 'personal';
+  context: 'soloq';
+  type: 'pre_objective_death' | 'gold_swing' | 'death_review' | 'vision_preparation';
+  tone: 'review' | 'reinforce';
+  priority: 'high' | 'medium' | 'low';
+  gameTime: number;
+  reviewWindow: { start: number; end: number };
+  title: string;
+  fact: string;
+  inference: string;
+  whyItMatters: string;
+  reviewChecklist: string[];
+  transferablePrinciple: string;
+  confidence: { level: CoachConfidence; basis: string };
+  limitation: string;
+}
+
 type AbilityUpgrade = { ability: string; gameTime: number };
 
 function arrayValue<T>(value: unknown): T[] {
@@ -37,6 +56,22 @@ function perMinute(value: number | null, duration: number): number | null {
 
 function confidence(level: CoachConfidence, basis: string) {
   return { level, basis };
+}
+
+function formatGameTime(seconds: number): string {
+  const safeSeconds = Math.max(0, Math.round(seconds));
+  return `${Math.floor(safeSeconds / 60)}:${String(safeSeconds % 60).padStart(2, '0')}`;
+}
+
+function objectiveLabel(entityType: string): string {
+  const labels: Record<string, string> = {
+    FANGTOOTH: 'Fangtooth',
+    PRIMAL_FANGTOOTH: 'Primal Fangtooth',
+    ORB_PRIME: 'Orb Prime',
+    MINI_PRIME: 'Mini Prime',
+    SHAPER: 'Shaper',
+  };
+  return labels[entityType] ?? entityType;
 }
 
 function roleLabel(role: string | null): string {
@@ -271,6 +306,152 @@ export async function getPlayerMatchCoachAnalysis(matchId: string, matchPlayerId
     });
   }
 
+  const learningMoments: LearningMoment[] = [];
+  const objectiveDeathTimes = new Set<number>();
+  const deathsWithUpcomingObjective = deaths
+    .map((death) => ({
+      death,
+      objective: majorObjectives.find((objective) => objective.gameTime > death.gameTime && objective.gameTime - death.gameTime <= 90) ?? null,
+    }))
+    .filter((entry): entry is { death: typeof deaths[number]; objective: typeof majorObjectives[number] } => entry.objective !== null)
+    .sort((a, b) => a.death.gameTime - b.death.gameTime)
+    .slice(0, 2);
+
+  for (const { death, objective } of deathsWithUpcomingObjective) {
+    const secondsBefore = objective.gameTime - death.gameTime;
+    objectiveDeathTimes.add(death.gameTime);
+    learningMoments.push({
+      id: `pre-objective-death-${death.gameTime}`,
+      scope: 'personal',
+      context: 'soloq',
+      type: 'pre_objective_death',
+      tone: 'review',
+      priority: secondsBefore <= 60 ? 'high' : 'medium',
+      gameTime: death.gameTime,
+      reviewWindow: { start: Math.max(0, death.gameTime - 25), end: Math.min(duration, death.gameTime + 12) },
+      title: `Revisa la decisión anterior a ${objectiveLabel(objective.entityType)}`,
+      fact: `Moriste en ${formatGameTime(death.gameTime)} y ${objectiveLabel(objective.entityType)} se resolvió ${secondsBefore} segundos después a favor de ${objective.killerTeam ?? 'un equipo no identificado'}.`,
+      inference: 'La muerte pudo reducir tus opciones para preparar visión, ocupar una entrada o responder al objetivo. Los eventos no demuestran que la jugada anterior fuese incorrecta.',
+      whyItMatters: 'Llegar vivo y con recursos a una ventana de objetivo suele valer más que una jugada de riesgo cuyo beneficio no se puede convertir.',
+      reviewChecklist: [
+        '¿Qué información tenías sobre los rivales que no aparecían en el mapa?',
+        '¿Tu oleada y tus aliados permitían asumir ese riesgo?',
+        '¿Conservabas vida, enfriamientos y una ruta de salida?',
+        '¿El beneficio esperado compensaba perder presencia en el objetivo?',
+      ],
+      transferablePrinciple: 'La preparación de un objetivo empieza antes de que aparezca: reduce riesgos evitables cuando tu presencia será necesaria en la siguiente ventana.',
+      confidence: confidence('high', 'La muerte y el objetivo son eventos directos con timestamps sincronizados.'),
+      limitation: 'Sin replay no se conocen la intención, las comunicaciones, la oleada ni los enfriamientos disponibles.',
+    });
+  }
+
+  const opponents = player.match.matchPlayers.filter((entry) => entry.team !== player.team);
+  const allGoldRows = [...teammates, ...opponents].map((entry) => arrayValue<number>(entry.goldEarnedAtInterval));
+  const completeGoldTimeline = allGoldRows.length >= 10 && allGoldRows.every((series) => series.length >= 3);
+  if (completeGoldTimeline) {
+    const maxMinuteIndex = Math.min(...allGoldRows.map((series) => series.length)) - 1;
+    const leadAt = (minuteIndex: number) => {
+      const ownGold = teammates.reduce((sum, entry) => sum + (arrayValue<number>(entry.goldEarnedAtInterval)[minuteIndex] ?? 0), 0);
+      const enemyGold = opponents.reduce((sum, entry) => sum + (arrayValue<number>(entry.goldEarnedAtInterval)[minuteIndex] ?? 0), 0);
+      return ownGold - enemyGold;
+    };
+    let largestAdverseSwing: { from: number; to: number; before: number; after: number; change: number } | null = null;
+    for (let minuteIndex = 2; minuteIndex <= maxMinuteIndex; minuteIndex += 1) {
+      const before = leadAt(minuteIndex - 2);
+      const after = leadAt(minuteIndex);
+      const change = after - before;
+      if (!largestAdverseSwing || change < largestAdverseSwing.change) {
+        largestAdverseSwing = { from: minuteIndex - 1, to: minuteIndex + 1, before, after, change };
+      }
+    }
+    if (largestAdverseSwing && largestAdverseSwing.change <= -1_500) {
+      const gameTime = largestAdverseSwing.to * 60;
+      learningMoments.push({
+        id: `gold-swing-${gameTime}`,
+        scope: 'personal',
+        context: 'soloq',
+        type: 'gold_swing',
+        tone: 'review',
+        priority: Math.abs(largestAdverseSwing.change) >= 3_000 ? 'high' : 'medium',
+        gameTime,
+        reviewWindow: { start: Math.max(0, largestAdverseSwing.from * 60 - 15), end: Math.min(duration, gameTime + 15) },
+        title: 'Localiza qué cambió el tempo de la partida',
+        fact: `Entre aproximadamente ${formatGameTime(largestAdverseSwing.from * 60)} y ${formatGameTime(gameTime)}, la diferencia de oro de tu equipo empeoró en ${Math.abs(largestAdverseSwing.change).toLocaleString()} de oro.`,
+        inference: 'La variación señala una ventana importante, pero puede combinar bajas, oleadas, estructuras, objetivos y compras de varios jugadores; no atribuye el cambio únicamente a ti.',
+        whyItMatters: 'Reconocer qué decisiones preceden a una pérdida de tempo ayuda a adaptar el siguiente minuto en lugar de continuar jugando como si el estado de la partida no hubiera cambiado.',
+        reviewChecklist: [
+          '¿Qué objetivo, estructura u oleadas estaban disponibles al comenzar la ventana?',
+          '¿Qué jugadores acababan de comprar o estaban fuera del mapa?',
+          '¿Tu siguiente decisión protegió recursos seguros o persiguió una jugada ya perdida?',
+          '¿Qué alternativa de bajo riesgo habría estabilizado la partida?',
+        ],
+        transferablePrinciple: 'Cuando cambia bruscamente la economía, vuelve a evaluar qué peleas son razonables y cuál es tu siguiente pico de poder.',
+        confidence: confidence('medium', 'La variación se calcula con las diez curvas de oro; la causa concreta requiere revisar la secuencia.'),
+        limitation: 'El oro se registra por intervalos de un minuto y no incluye movimiento continuo, estado exacto de oleadas ni comunicaciones.',
+      });
+    }
+  }
+
+  const firstStandaloneDeath = deaths
+    .filter((death) => !objectiveDeathTimes.has(death.gameTime))
+    .sort((a, b) => a.gameTime - b.gameTime)[0];
+  if (learningMoments.length < 2 && firstStandaloneDeath) {
+    learningMoments.push({
+      id: `death-review-${firstStandaloneDeath.gameTime}`,
+      scope: 'personal',
+      context: 'soloq',
+      type: 'death_review',
+      tone: 'review',
+      priority: 'medium',
+      gameTime: firstStandaloneDeath.gameTime,
+      reviewWindow: { start: Math.max(0, firstStandaloneDeath.gameTime - 25), end: Math.min(duration, firstStandaloneDeath.gameTime + 12) },
+      title: 'Investiga la decisión, no sólo el resultado',
+      fact: `Tu primera muerte fuera de una ventana inmediata de objetivo ocurrió en ${formatGameTime(firstStandaloneDeath.gameTime)}.`,
+      inference: 'La muerte identifica un buen punto de revisión, pero no permite concluir si hubo un error de posición, ejecución, información o una decisión rentable.',
+      whyItMatters: 'Las primeras muertes suelen mostrar con claridad qué información se ignoró o qué expectativa sobre el intercambio no se cumplió.',
+      reviewChecklist: [
+        '¿Qué rivales estaban visibles y cuáles podían llegar?',
+        '¿Qué habilidad rival debía gastarse antes de entrar?',
+        '¿Cuál era tu salida si la jugada no funcionaba?',
+        '¿Qué recurso obtuvo tu equipo a cambio de tu muerte?',
+      ],
+      transferablePrinciple: 'Evalúa una muerte por la información y el intercambio disponibles antes de la jugada, no únicamente por cómo terminó.',
+      confidence: confidence('medium', 'El momento de la muerte es exacto; la valoración depende del replay.'),
+      limitation: 'La API no registra habilidades lanzadas, cámara, movimiento continuo ni intención.',
+    });
+  }
+
+  const preparedVision = placedWards
+    .map((ward) => ({
+      ward,
+      objective: majorObjectives.find((objective) => objective.killerTeam === player.team && objective.gameTime > ward.gameTime && objective.gameTime - ward.gameTime <= 120) ?? null,
+    }))
+    .find((entry) => entry.objective !== null);
+  if (learningMoments.length < 3 && preparedVision?.objective) {
+    learningMoments.push({
+      id: `vision-preparation-${preparedVision.ward.gameTime}`,
+      scope: 'personal',
+      context: 'soloq',
+      type: 'vision_preparation',
+      tone: 'reinforce',
+      priority: 'low',
+      gameTime: preparedVision.ward.gameTime,
+      reviewWindow: { start: Math.max(0, preparedVision.ward.gameTime - 10), end: Math.min(duration, preparedVision.objective.gameTime + 10) },
+      title: 'Comprueba cómo tu visión ayudó a preparar el objetivo',
+      fact: `Colocaste visión en ${formatGameTime(preparedVision.ward.gameTime)} y tu equipo aseguró ${objectiveLabel(preparedVision.objective.entityType)} ${preparedVision.objective.gameTime - preparedVision.ward.gameTime} segundos después.`,
+      inference: 'La proximidad temporal sugiere una preparación útil, pero no demuestra qué información reveló el ward ni cuánto influyó en la decisión del equipo.',
+      whyItMatters: 'Revisar también decisiones positivas permite convertirlas en hábitos conscientes y repetibles.',
+      reviewChecklist: [
+        '¿Qué entrada o rotación pretendía cubrir el ward?',
+        '¿Se colocó antes de que el rival controlara la zona?',
+        '¿Tu equipo pudo jugar alrededor de la información obtenida?',
+      ],
+      transferablePrinciple: 'La visión tiene más valor cuando se coloca con una decisión futura concreta, no sólo para aumentar el contador de wards.',
+      confidence: confidence('medium', 'Ward y objetivo son eventos directos; su relación causal no está demostrada.'),
+      limitation: 'No se conoce qué unidades reveló el ward durante toda su duración.',
+    });
+  }
+
   const mainFocus = observations.find((item) => item.priority === 'primary')
     ?? observations.find((item) => item.tone === 'development')
     ?? observations[0];
@@ -311,6 +492,7 @@ export async function getPlayerMatchCoachAnalysis(matchId: string, matchPlayerId
       objectiveEvents: majorObjectives.length > 0,
       disclaimer: 'El coach distingue hechos del marcador, inferencias de eventos y aspectos que requieren VOD. No reconstruye movimiento continuo ni comunicación.',
     },
+    learningMoments: learningMoments.slice(0, 3),
     sections: {
       abilities: observations.filter((item) => item.category === 'abilities'),
       economy: observations.filter((item) => item.category === 'economy'),

@@ -629,7 +629,7 @@ const OBJ_GROUPS = [
   { key: 'river',     label: 'River',      types: ['RIVER','SEEDLING','LANE_SEEDLING'], color: '#38d4c8' },
 ] as const;
 
-type PersonalCoachSection = 'overview' | 'build' | 'abilities' | 'economy' | 'combat' | 'objectives';
+type PersonalCoachSection = 'overview' | 'moments' | 'build' | 'abilities' | 'economy' | 'combat' | 'objectives';
 
 function coachConfidenceLabel(level: 'low' | 'medium' | 'high'): string {
   return level === 'high' ? 'alta' : level === 'medium' ? 'media' : 'inicial';
@@ -671,6 +671,49 @@ function CoachObservationCard({ observation }: { observation: EducationalCoachOb
   );
 }
 
+function LearningMomentCard({ moment, index }: {
+  moment: PlayerMatchCoachAnalysis['learningMoments'][number];
+  index: number;
+}) {
+  const color = moment.tone === 'reinforce'
+    ? 'var(--accent-win)'
+    : moment.priority === 'high'
+      ? 'var(--accent-prime)'
+      : 'var(--accent-blue)';
+  const confidenceLabel = coachConfidenceLabel(moment.confidence.level);
+  return (
+    <article className="glass-card" style={{ padding: '0.95rem', borderColor: `color-mix(in srgb, ${color} 28%, transparent)` }}>
+      <div style={{ display: 'flex', gap: '0.8rem', alignItems: 'flex-start' }}>
+        <div style={{ width: 28, height: 28, borderRadius: 7, display: 'grid', placeItems: 'center', flexShrink: 0, background: `color-mix(in srgb, ${color} 13%, transparent)`, border: `1px solid color-mix(in srgb, ${color} 35%, transparent)`, color, fontSize: '0.7rem', fontWeight: 900 }}>{index + 1}</div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.65rem', flexWrap: 'wrap' }}>
+            <span style={{ color, fontSize: '0.58rem', fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.07em' }}>{moment.tone === 'reinforce' ? 'Decisión para conservar' : 'Momento para investigar'}</span>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', fontSize: '0.61rem' }}>
+              <Clock size={11} /> Replay {formatTime(moment.reviewWindow.start)}–{formatTime(moment.reviewWindow.end)}
+            </span>
+          </div>
+          <h3 style={{ margin: '0.3rem 0 0', color: 'var(--text-primary)', fontSize: '0.86rem' }}>{moment.title}</h3>
+          <p style={{ margin: '0.5rem 0 0', color: 'var(--text-secondary)', fontSize: '0.7rem', lineHeight: 1.5 }}><strong style={{ color: 'var(--text-primary)' }}>Hecho comprobado:</strong> {moment.fact}</p>
+          <p style={{ margin: '0.38rem 0 0', color: 'var(--text-secondary)', fontSize: '0.69rem', lineHeight: 1.5 }}><strong style={{ color: 'var(--text-primary)' }}>Hipótesis que debes validar:</strong> {moment.inference}</p>
+          <div style={{ marginTop: '0.55rem', padding: '0.58rem 0.68rem', borderLeft: `3px solid ${color}`, borderRadius: 7, background: 'rgba(255,255,255,0.025)' }}>
+            <strong style={{ display: 'block', color, fontSize: '0.62rem' }}>Principio que puedes transferir</strong>
+            <span style={{ display: 'block', marginTop: '0.2rem', color: 'var(--text-primary)', fontSize: '0.68rem', lineHeight: 1.45 }}>{moment.transferablePrinciple}</span>
+          </div>
+          <details style={{ marginTop: '0.55rem' }}>
+            <summary style={{ cursor: 'pointer', color: 'var(--accent-cyan)', fontSize: '0.65rem', fontWeight: 750 }}>Qué mirar en el replay</summary>
+            <p style={{ margin: '0.42rem 0 0', color: 'var(--text-secondary)', fontSize: '0.66rem', lineHeight: 1.45 }}>{moment.whyItMatters}</p>
+            <ol style={{ margin: '0.45rem 0 0', paddingLeft: '1.15rem', color: 'var(--text-secondary)', fontSize: '0.66rem', lineHeight: 1.55 }}>
+              {moment.reviewChecklist.map((item) => <li key={item}>{item}</li>)}
+            </ol>
+            <p style={{ margin: '0.4rem 0 0', color: 'var(--accent-prime)', fontSize: '0.61rem', lineHeight: 1.4 }}><strong>Límite del dato:</strong> {moment.limitation}</p>
+          </details>
+          <div style={{ marginTop: '0.5rem', color: 'var(--text-muted)', fontSize: '0.58rem' }}>Confianza {confidenceLabel}: {moment.confidence.basis}</div>
+        </div>
+      </div>
+    </article>
+  );
+}
+
 function PlayerCoachAnalysisPanel({ analysis, section, onSectionChange, buildCard }: {
   analysis: PlayerMatchCoachAnalysis | null;
   section: PersonalCoachSection;
@@ -679,13 +722,14 @@ function PlayerCoachAnalysisPanel({ analysis, section, onSectionChange, buildCar
 }) {
   const tabs: Array<{ key: PersonalCoachSection; label: string }> = [
     { key: 'overview', label: 'Resumen' },
+    { key: 'moments', label: 'Momentos clave' },
     { key: 'build', label: 'Build y loadout' },
     { key: 'abilities', label: 'Habilidades' },
     { key: 'economy', label: 'Línea y economía' },
     { key: 'combat', label: 'Combate y posición' },
     { key: 'objectives', label: 'Objetivos y visión' },
   ];
-  const observations = analysis && section !== 'overview' && section !== 'build'
+  const observations = analysis && section !== 'overview' && section !== 'moments' && section !== 'build'
     ? analysis.sections[section]
     : [];
 
@@ -725,7 +769,20 @@ function PlayerCoachAnalysisPanel({ analysis, section, onSectionChange, buildCar
         </div>
       ) : null}
 
-      {section !== 'overview' && section !== 'build' ? (
+      {section === 'moments' && !analysis ? <div className="glass-card" style={{ marginTop: '0.8rem', padding: '1rem', color: 'var(--text-muted)', fontSize: '0.72rem' }}>Buscando momentos que merecen revisión…</div> : null}
+      {section === 'moments' && analysis ? (
+        <div style={{ display: 'grid', gap: '0.7rem', marginTop: '0.8rem' }}>
+          <div className="glass-card" style={{ padding: '0.8rem 0.9rem', borderColor: 'rgba(56,212,200,0.22)' }}>
+            <strong style={{ display: 'block', color: 'var(--accent-cyan)', fontSize: '0.68rem' }}>No son errores automáticos</strong>
+            <p style={{ margin: '0.28rem 0 0', color: 'var(--text-secondary)', fontSize: '0.67rem', lineHeight: 1.45 }}>RiftLine señala ventanas con evidencia suficiente para volver al replay. Tú confirmas la causa observando información, oleadas, enfriamientos, aliados y beneficio esperado.</p>
+          </div>
+          {analysis.learningMoments.length > 0
+            ? analysis.learningMoments.map((moment, index) => <LearningMomentCard key={moment.id} moment={moment} index={index} />)
+            : <div className="glass-card" style={{ padding: '1rem', color: 'var(--text-muted)', fontSize: '0.7rem' }}>No hay una ventana suficientemente clara para recomendar revisión sin forzar una conclusión.</div>}
+        </div>
+      ) : null}
+
+      {section !== 'overview' && section !== 'moments' && section !== 'build' ? (
         <div style={{ display: 'grid', gap: '0.7rem', marginTop: '0.8rem' }}>
           {observations.length > 0
             ? observations.map((observation) => <CoachObservationCard key={observation.id} observation={observation} />)
@@ -745,7 +802,7 @@ function AnalysisTab({ match, duskWon, dawnWon: _dawnWon, onResync, syncing, pre
   const [events, setEvents] = useState<MatchEvents | null>(preloadedEvents ?? null);
   const [loadingEvents, setLoadingEvents] = useState(false);
   const [coachAnalysis, setCoachAnalysis] = useState<PlayerMatchCoachAnalysis | null>(null);
-  const [coachSection, setCoachSection] = useState<'overview' | 'build' | 'abilities' | 'economy' | 'combat' | 'objectives'>('overview');
+  const [coachSection, setCoachSection] = useState<PersonalCoachSection>('overview');
 
   useEffect(() => {
     if (!liveMode && !buildCoachPlayerId) return;

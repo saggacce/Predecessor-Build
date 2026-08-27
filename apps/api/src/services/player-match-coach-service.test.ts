@@ -65,6 +65,19 @@ describe('player match coach analysis', () => {
       }),
     ]));
     expect(result.sections.abilities[0]).toMatchObject({ id: 'abilities-progression' });
+    expect(result.learningMoments).toHaveLength(2);
+    expect(result.learningMoments[0]).toMatchObject({
+      type: 'pre_objective_death',
+      tone: 'review',
+      gameTime: 530,
+      reviewWindow: { start: 505, end: 542 },
+      fact: expect.stringContaining('Fangtooth'),
+      inference: expect.stringContaining('no demuestran'),
+      reviewChecklist: expect.any(Array),
+      limitation: expect.stringContaining('replay'),
+    });
+    expect(result.learningMoments.every((moment) => moment.reviewChecklist.length <= 4)).toBe(true);
+    expect(result.learningMoments.length).toBeLessThanOrEqual(3);
     expect(result.coverage.disclaimer).toContain('inferencias');
   });
 });
