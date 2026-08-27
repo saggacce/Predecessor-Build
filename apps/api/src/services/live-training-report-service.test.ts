@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildLiveTrainingReview } from './live-training-report-service.js';
+import { buildLiveDetectorReadiness, buildLiveTrainingReview } from './live-training-report-service.js';
 
 describe('live training review report', () => {
   it('turns visible signals into replay questions without inventing a cause', () => {
@@ -34,5 +34,30 @@ describe('live training review report', () => {
     expect(result.reviewMoments.map((moment) => moment.eventId)).toEqual(['skill-1', 'death-1']);
     expect(result.primaryFocus?.eventId).toBe('death-1');
     expect(result.secondaryFocus[0]?.eventId).toBe('skill-1');
+  });
+
+  it('reports detector capability without claiming accuracy before real labelled samples exist', () => {
+    const events = [{
+      id: 'death-1', eventType: 'DEATH_REVIEW', gameTime: 80, advice: null,
+      evidence: { detector: 'screen-ocr-hud-v1' }, createdAt: new Date('2026-08-27T18:01:20Z'),
+    }];
+    const readiness = buildLiveDetectorReadiness('VERIFIED_ALLOWED', events, [
+      { source: 'screen_ocr' }, { source: 'screen_template' },
+    ]);
+    expect(readiness).toMatchObject({
+      overallStatus: 'PARTIAL_EVIDENCE', implementedCount: 3, totalCount: 6,
+      observedThisSession: 2, canEstimateAccuracy: false,
+    });
+    expect(readiness.detectors.find((detector) => detector.key === 'mode_safety')).toMatchObject({ status: 'VERIFIED_THIS_SESSION', sessionSignals: 2 });
+    expect(readiness.detectors.find((detector) => detector.key === 'death_review')).toMatchObject({ status: 'SIGNAL_CAPTURED', sessionSignals: 1 });
+    expect(readiness.detectors.find((detector) => detector.key === 'inventory_build')).toMatchObject({ status: 'PENDING_IMPLEMENTATION', sessionSignals: 0 });
+    expect(readiness.accuracyExplanation).toContain('no hay suficientes');
+  });
+
+  it('keeps the readiness gate closed until mode verification succeeds', () => {
+    const readiness = buildLiveDetectorReadiness('UNVERIFIED', []);
+    expect(readiness.overallStatus).toBe('NEEDS_MODE_CALIBRATION');
+    expect(readiness.observedThisSession).toBe(0);
+    expect(readiness.detectors.slice(0, 3).every((detector) => detector.status === 'AVAILABLE_UNVALIDATED')).toBe(true);
   });
 });

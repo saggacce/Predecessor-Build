@@ -16,7 +16,7 @@ import {
 import { evaluateLiveMode, evaluateLiveModeSignals, type LiveModeSignal } from '../services/live-training-policy.js';
 import { buildLearningProgress } from '../services/player-learning-progress-service.js';
 import { decideLiveCoachDelivery, LIVE_COACH_EVENT_TYPES } from '../services/live-coach-delivery-policy.js';
-import { buildLiveTrainingReview } from '../services/live-training-report-service.js';
+import { buildLiveDetectorReadiness, buildLiveTrainingReview } from '../services/live-training-report-service.js';
 
 export const playerLearningRouter = Router();
 
@@ -63,6 +63,10 @@ playerLearningRouter.get('/knowledge', requireAuth, async (req, res, next) => {
   } catch (error) {
     next(error);
   }
+});
+
+playerLearningRouter.get('/live/readiness', requireAuth, (_req, res) => {
+  res.json({ readiness: buildLiveDetectorReadiness('UNVERIFIED', []) });
 });
 
 playerLearningRouter.get('/profile/me', requireAuth, async (req, res, next) => {
@@ -520,6 +524,7 @@ playerLearningRouter.get('/live/sessions/:id/report', requireAuth, async (req, r
     }, {});
     const spoken = session.events.filter((event) => !!event.advice).length;
     const review = buildLiveTrainingReview(session.startedAt, session.events);
+    const readiness = buildLiveDetectorReadiness(session.modeVerification, session.events, session.verificationSignals);
     res.json({
       report: {
         id: session.id,
@@ -531,6 +536,7 @@ playerLearningRouter.get('/live/sessions/:id/report', requireAuth, async (req, r
         endedAt: session.endedAt,
         summary: { observations: session.events.length, spoken, silent: session.events.length - spoken, byType },
         review,
+        readiness,
         events: session.events.map((event) => ({
           id: event.id,
           gameTime: event.gameTime,

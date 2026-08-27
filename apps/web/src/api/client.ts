@@ -1520,6 +1520,7 @@ export interface LiveTrainingReport {
   startedAt: string;
   endedAt: string | null;
   summary: { observations: number; spoken: number; silent: number; byType: Record<string, number> };
+  readiness: LiveDetectorReadiness;
   review: {
     primaryFocus: LiveTrainingReviewMoment | null;
     secondaryFocus: LiveTrainingReviewMoment[];
@@ -1539,6 +1540,25 @@ export interface LiveTrainingReport {
     createdAt: string;
   }>;
   limitation: string;
+}
+
+export interface LiveDetectorReadiness {
+  overallStatus: 'SAFETY_BLOCKED' | 'NEEDS_MODE_CALIBRATION' | 'MODE_ONLY' | 'PARTIAL_EVIDENCE';
+  implementedCount: number;
+  totalCount: number;
+  observedThisSession: number;
+  canEstimateAccuracy: false;
+  accuracyExplanation: string;
+  detectors: Array<{
+    key: string;
+    label: string;
+    area: string;
+    status: 'VERIFIED_THIS_SESSION' | 'SIGNAL_CAPTURED' | 'AVAILABLE_UNVALIDATED' | 'PENDING_IMPLEMENTATION' | 'SAFETY_BLOCKED';
+    sessionSignals: number;
+    whatItCanProve: string;
+    limitation: string;
+    nextStep: string;
+  }>;
 }
 
 export interface LiveTrainingReviewMoment {
@@ -1906,6 +1926,7 @@ export const apiClient = {
       fetchApi<{ session: { id: string; detectedGameMode: string | null; modeVerification: string; status: string }; canAdvise: boolean; reason: string | null }>(`/player-learning/live/sessions/${encodeURIComponent(sessionId)}/verify-mode`, { method: 'POST', body: JSON.stringify({ detectedGameMode, signal }) }),
     endLiveSession: (sessionId: string) =>
       fetchApi<{ session: { id: string; modeVerification: string; status: string; endedAt: string } }>(`/player-learning/live/sessions/${encodeURIComponent(sessionId)}/end`, { method: 'POST' }),
+    liveReadiness: () => fetchApi<{ readiness: LiveDetectorReadiness }>('/player-learning/live/readiness'),
     liveSessionReport: (sessionId: string) =>
       fetchApi<{ report: LiveTrainingReport }>(`/player-learning/live/sessions/${encodeURIComponent(sessionId)}/report`),
     submitLiveObservation: (sessionId: string, data: {

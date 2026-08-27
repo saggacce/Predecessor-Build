@@ -85,3 +85,17 @@ El botón **Guardar muestra local** descarga el fotograma en el propio equipo pa
 Al detener una captura, la Academia cierra también su sesión de servidor y muestra un informe auditable: modo solicitado/detectado, estado de verificación, observaciones guardadas, intervenciones mostradas y observaciones que se reservaron para revisión. Cada marcador separa hecho, inferencia, limitación y pregunta de replay, y propone un fragmento alrededor del instante de captura. Desde el informe se puede crear una revisión, adjuntar después una grabación, alinear los tiempos y clasificar cada momento como buena decisión, decisión mejorable o no concluyente con una explicación escrita. Una captura no verificada termina como `ABORTED`, no queda pendiente ni genera evidencia observada.
 
 Las observaciones sin una rúbrica revisada no puntúan competencias. El informe expone este impacto y una sesión de overlay nunca concede por sí sola un ascenso de nivel.
+
+## Cobertura y calidad de detectores
+
+La Academia no presenta una capacidad prevista como si ya estuviera disponible. El panel **Cobertura real del acompañante** distingue:
+
+- protección del modo verificada en la sesión;
+- señal de HUD capturada, que todavía debe confirmarse en el replay;
+- detector disponible pero pendiente de validación con partidas reales;
+- área pendiente de implementación;
+- captura bloqueada por seguridad.
+
+Cada área explica qué puede demostrar, qué no puede concluir y cuál es la siguiente validación. Inventario y orden de compra, marcador de ambos equipos y minimapa aparecen explícitamente como pendientes hasta que exista un detector real.
+
+El sistema no publica una precisión estimada, ni porcentajes de falsos positivos o falsos negativos, mientras no haya suficientes capturas reales etiquetadas. Un evento detectado prueba que el detector produjo una señal; no prueba por sí solo que dicha señal fuera correcta.

@@ -8,6 +8,7 @@ import {
   type EncyclopediaEntry,
   type LearningReviewStatus,
   type LearningQuestionView,
+  type LiveDetectorReadiness,
   type LiveTrainingReport,
   type MissionRecommendation,
   type PlayerLearningProfile,
@@ -373,6 +374,41 @@ function captureTime(seconds: number): string {
   return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
 }
 
+const DETECTOR_STATUS: Record<LiveDetectorReadiness['detectors'][number]['status'], { label: string; color: string }> = {
+  VERIFIED_THIS_SESSION: { label: 'Verificado en esta sesión', color: 'var(--accent-cyan)' },
+  SIGNAL_CAPTURED: { label: 'Señal capturada', color: '#a78bfa' },
+  AVAILABLE_UNVALIDATED: { label: 'Disponible · falta validar', color: '#fbbf24' },
+  PENDING_IMPLEMENTATION: { label: 'Pendiente de implementar', color: 'var(--text-muted)' },
+  SAFETY_BLOCKED: { label: 'Bloqueado por seguridad', color: '#f87171' },
+};
+
+function DetectorReadinessPanel({ readiness }: { readiness: LiveDetectorReadiness }) {
+  const headline = readiness.overallStatus === 'SAFETY_BLOCKED'
+    ? 'Captura bloqueada por seguridad'
+    : readiness.overallStatus === 'PARTIAL_EVIDENCE'
+      ? 'Evidencia parcial obtenida'
+      : readiness.overallStatus === 'MODE_ONLY'
+        ? 'Modo verificado; faltan señales de juego'
+        : 'Necesita calibración con una partida permitida';
+  return <section style={card}>
+    <div style={{ display: 'flex', justifyContent: 'space-between', gap: '.7rem', alignItems: 'start', flexWrap: 'wrap' }}>
+      <div><div style={{ color: 'var(--accent-violet)', fontSize: '.7rem', fontWeight: 800 }}>COBERTURA REAL DEL ACOMPAÑANTE</div><h3 style={{ margin: '.25rem 0' }}>{headline}</h3><p style={{ color: 'var(--text-muted)', fontSize: '.76rem', maxWidth: 780, marginBottom: 0 }}>{readiness.accuracyExplanation}</p></div>
+      <span style={{ ...button, cursor: 'default' }}>{readiness.implementedCount}/{readiness.totalCount} áreas con detector</span>
+    </div>
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))', gap: '.55rem', marginTop: '.8rem' }}>
+      {readiness.detectors.map((detector) => {
+        const status = DETECTOR_STATUS[detector.status];
+        return <details key={detector.key} style={{ padding: '.7rem .75rem', border: '1px solid var(--border-color)', borderRadius: 8, background: 'rgba(255,255,255,.018)' }}>
+          <summary style={{ cursor: 'pointer' }}><span style={{ display: 'block', color: 'var(--text-muted)', fontSize: '.65rem', textTransform: 'uppercase' }}>{detector.area}</span><strong>{detector.label}</strong><span style={{ display: 'block', color: status.color, fontSize: '.7rem', marginTop: '.2rem' }}>{status.label}{detector.sessionSignals > 0 ? ` · ${detector.sessionSignals} señales` : ''}</span></summary>
+          <p style={{ color: 'var(--text-secondary)', fontSize: '.74rem' }}><strong>Puede demostrar:</strong> {detector.whatItCanProve}</p>
+          <p style={{ color: 'var(--text-muted)', fontSize: '.74rem' }}><strong>No puede demostrar:</strong> {detector.limitation}</p>
+          <p style={{ fontSize: '.74rem', marginBottom: 0 }}><strong>Siguiente validación:</strong> {detector.nextStep}</p>
+        </details>;
+      })}
+    </div>
+  </section>;
+}
+
 function LiveTrainingReportReview({ report, busy, onCreateReplay }: { report: LiveTrainingReport; busy: boolean; onCreateReplay: () => void }) {
   const primary = report.review.primaryFocus;
   const eventsById = new Map(report.events.map((event) => [event.id, event]));
@@ -408,9 +444,21 @@ function LocalTraining({ onOpenReplay }: { onOpenReplay: () => void }) {
   const [gameWindows, setGameWindows] = useState<RiftLineGameWindow[]>([]); const [selectedSourceId, setSelectedSourceId] = useState<string | null>(null); const [scanning, setScanning] = useState(false);
   const [liveSessionId, setLiveSessionId] = useState<string | null>(null); const [modeVerification, setModeVerification] = useState('UNVERIFIED'); const [ocrStatus, setOcrStatus] = useState('OCR local pendiente');
   const [lastReport, setLastReport] = useState<LiveTrainingReport | null>(null); const [silentObservationCount, setSilentObservationCount] = useState(0); const [creatingReplayReview, setCreatingReplayReview] = useState(false);
+  const [detectorReadiness, setDetectorReadiness] = useState<LiveDetectorReadiness | null>(null);
   const [lastOcrSignal, setLastOcrSignal] = useState<OcrModeSignal | null>(null); const [modeTemplates, setModeTemplates] = useState<ModeTemplate[]>(() => loadModeTemplates()); const [calibrationFrameUrl, setCalibrationFrameUrl] = useState<string | null>(null); const [calibrationRect, setCalibrationRect] = useState<NormalizedRect | null>(null); const [calibrating, setCalibrating] = useState(false); const [calibrationStatus, setCalibrationStatus] = useState('');
   const companion = typeof window !== 'undefined' ? window.riftlineCompanion : undefined;
   const rankedSelected = mode === 'RANKED';
+  function acceptLiveReport(report: LiveTrainingReport) {
+    setLastReport(report);
+    setDetectorReadiness(report.readiness);
+  }
+  useEffect(() => {
+    let cancelled = false;
+    void apiClient.playerLearning.liveReadiness()
+      .then((result) => { if (!cancelled) setDetectorReadiness(result.readiness); })
+      .catch(() => { if (!cancelled) setDetectorReadiness(null); });
+    return () => { cancelled = true; };
+  }, []);
   useEffect(() => {
     const cleanup = () => {
       const sessionId = liveSessionIdRef.current;
@@ -428,7 +476,7 @@ function LocalTraining({ onOpenReplay }: { onOpenReplay: () => void }) {
       liveSessionIdRef.current = null;
       liveCanAdviseRef.current = false;
       captureStartedAtRef.current = null;
-      if (sessionId) void finishLiveTrainingSession(sessionId).then(setLastReport).catch(() => undefined);
+      if (sessionId) void finishLiveTrainingSession(sessionId).then(acceptLiveReport).catch(() => undefined);
       streamRef.current?.getTracks().forEach((track) => track.stop());
       streamRef.current = null;
       setLiveSessionId(null);
@@ -451,7 +499,7 @@ function LocalTraining({ onOpenReplay }: { onOpenReplay: () => void }) {
       setCapturing(false);
       setStatus(reason);
       void companion.clearAdvice();
-      void finishLiveTrainingSession(liveSessionId).then(setLastReport).catch(() => undefined);
+      void finishLiveTrainingSession(liveSessionId).then(acceptLiveReport).catch(() => undefined);
     };
     const scanMode = async () => {
       if (cancelled || running || !videoRef.current || videoRef.current.readyState < 2) return;
@@ -559,6 +607,7 @@ function LocalTraining({ onOpenReplay }: { onOpenReplay: () => void }) {
       liveSessionIdRef.current = result.session.id;
       setLiveSessionId(result.session.id);
       setLastReport(null);
+      setDetectorReadiness(null);
       setSilentObservationCount(0);
       setLastOcrSignal(null);
       setCalibrationFrameUrl(null);
@@ -580,7 +629,7 @@ function LocalTraining({ onOpenReplay }: { onOpenReplay: () => void }) {
         liveSessionIdRef.current = null;
         liveCanAdviseRef.current = false;
         captureStartedAtRef.current = null;
-        if (sessionId) void finishLiveTrainingSession(sessionId).then(setLastReport).catch(() => undefined);
+        if (sessionId) void finishLiveTrainingSession(sessionId).then(acceptLiveReport).catch(() => undefined);
         setLiveSessionId(null);
         setCapturing(false);
         setStatus('La ventana dejó de compartirse.');
@@ -600,7 +649,7 @@ function LocalTraining({ onOpenReplay }: { onOpenReplay: () => void }) {
     liveSessionIdRef.current = null;
     liveCanAdviseRef.current = false;
     captureStartedAtRef.current = null;
-    if (sessionId) void finishLiveTrainingSession(sessionId).then(setLastReport).catch(() => undefined);
+    if (sessionId) void finishLiveTrainingSession(sessionId).then(acceptLiveReport).catch(() => undefined);
     streamRef.current?.getTracks().forEach((track) => track.stop());
     streamRef.current = null;
     setLiveSessionId(null);
@@ -740,12 +789,6 @@ function LocalTraining({ onOpenReplay }: { onOpenReplay: () => void }) {
       setCreatingReplayReview(false);
     }
   }
-  const detectors = [
-    ['HUD personal', 'Héroe, nivel, oro, vida, maná, inventario y habilidades visibles.'],
-    ['Marcador', 'Última build visible de compañeros y rivales, con antigüedad de la lectura.'],
-    ['Minimapa', 'Sólo señales visibles: héroes, estructuras, objetivos y wards mostrados.'],
-    ['Timeline local', 'Compras, muertes, objetivos y momentos que merecen revisión posterior.'],
-  ];
   return <div style={{ display: 'grid', gap: '1rem' }}>
     <section style={{ ...card, borderColor: 'rgba(248,113,113,.35)' }}><div style={{ display: 'flex', gap: '.7rem', alignItems: 'center' }}><ShieldAlert color="#f87171"/><div><strong>Ranked nunca está permitido</strong><div style={{ color: 'var(--text-muted)', fontSize: '.78rem' }}>La sesión necesita dos señales automáticas coincidentes para reconocer un modo permitido. Una señal fiable de Ranked la bloquea de forma irreversible; ante cualquier duda, no hay consejos.</div></div></div></section>
     {companionEnvironment && <section style={{ ...card, borderColor: 'rgba(56,212,200,.34)' }}><div style={{ display: 'flex', justifyContent: 'space-between', gap: '.75rem', flexWrap: 'wrap' }}><div><div style={{ color: 'var(--accent-cyan)', fontSize: '.7rem', fontWeight: 800 }}>ACOMPAÑANTE WINDOWS CONECTADO · v{companionEnvironment.version}</div><strong>Captura limitada a una ventana de Predecessor</strong><p style={{ color: 'var(--text-muted)', fontSize: '.76rem', marginBottom: 0 }}>Atajo de emergencia: {companionEnvironment.panicShortcut}. El overlay ignora el ratón y el teclado; no envía acciones al juego.</p></div><button disabled={scanning || capturing} onClick={() => void scanGame()} style={button}>{scanning ? 'Buscando…' : 'Detectar Predecessor'}</button></div>{gameWindows.length > 0 ? <div style={{ display: 'flex', gap: '.45rem', flexWrap: 'wrap', marginTop: '.75rem' }}>{gameWindows.map((source) => <button key={source.id} disabled={capturing} onClick={() => void selectSource(source.id)} style={{ ...button, borderColor: selectedSourceId === source.id ? 'var(--accent-cyan)' : 'var(--border-color)', color: selectedSourceId === source.id ? 'var(--accent-cyan)' : 'var(--text-primary)' }}>{source.name}</button>)}</div> : <p style={{ color: 'var(--text-muted)', fontSize: '.76rem', marginBottom: 0 }}>Predecessor todavía no está abierto o no expone una ventana capturable.</p>}</section>}
@@ -766,7 +809,7 @@ function LocalTraining({ onOpenReplay }: { onOpenReplay: () => void }) {
       {modeTemplates.length > 0 ? <div style={{ display: 'grid', gap: '.45rem', marginTop: '.8rem' }}>{modeTemplates.map((template) => <div key={template.id} style={{ display: 'flex', justifyContent: 'space-between', gap: '.7rem', alignItems: 'center', padding: '.55rem .65rem', borderRadius: 7, background: 'rgba(255,255,255,.025)' }}><div><strong>{template.mode}</strong><small style={{ display: 'block', color: 'var(--text-muted)' }}>{template.sourceWidth}×{template.sourceHeight} · OCR de calibración {Math.round(template.calibrationOcrConfidence * 100)}% · válida desde otra sesión</small></div><button onClick={() => removeModeTemplate(template.id)} style={{ ...button, color: 'var(--text-muted)' }}>Eliminar</button></div>)}</div> : <p style={{ color: 'var(--text-muted)', fontSize: '.76rem', marginBottom: 0 }}>Aún no hay plantillas. El coach seguirá en silencio aunque el OCR reconozca un modo permitido.</p>}
     </section>}
     {lastReport && <LiveTrainingReportReview report={lastReport} busy={creatingReplayReview} onCreateReplay={() => void createReplayReviewFromReport()} />}
-    <section style={card}><h3 style={{ marginTop: 0 }}>Qué observará la primera versión</h3><div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: '.6rem' }}>{detectors.map(([title, description]) => <article key={title} style={{ padding: '.75rem', border: '1px solid var(--border-color)', borderRadius: 8, background: 'rgba(255,255,255,.018)' }}><strong>{title}</strong><p style={{ color: 'var(--text-muted)', fontSize: '.74rem', lineHeight: 1.45, marginBottom: 0 }}>{description}</p></article>)}</div></section>
+    {detectorReadiness ? <DetectorReadinessPanel readiness={detectorReadiness}/> : capturing ? <section style={card}><strong>Cobertura en evaluación</strong><p style={{ color: 'var(--text-muted)', marginBottom: 0 }}>El resumen de detectores se actualizará al terminar la captura. Durante la partida sólo se muestra el estado de verificación necesario para mantener el sistema en silencio ante cualquier duda.</p></section> : null}
     <section style={card}><h3 style={{ marginTop: 0 }}>Cómo intervendrá el coach</h3><ul style={{ color: 'var(--text-secondary)', lineHeight: 1.55 }}><li>No habla durante un combate.</li><li>Como máximo cuatro intervenciones cada diez minutos y nunca repite el mismo concepto en cinco minutos.</li><li>Una observación dudosa se guarda para el informe, pero no interrumpe.</li><li>Cada consejo explica qué señales lo activaron y qué condición podría cambiarlo.</li></ul><p style={{ color: 'var(--text-muted)', fontSize: '.76rem', marginBottom: 0 }}>La Academia distingue las señales declaradas, guiadas y observadas: el overlay no podrá ascenderte por sí solo.</p></section>
   </div>;
 }

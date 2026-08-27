@@ -190,6 +190,18 @@ describe('personal learning persistence', () => {
     expect(response.body.report.limitation).toContain('replay');
     expect(response.body.report.review.primaryFocus).toMatchObject({ eventId: 'e1', eventType: 'DEATH_REVIEW' });
     expect(response.body.report.review.learningImpact).toMatchObject({ scoredObservations: 0, canPromote: false });
+    expect(response.body.report.readiness).toMatchObject({ overallStatus: 'PARTIAL_EVIDENCE', canEstimateAccuracy: false });
+    expect(response.body.report.readiness.detectors.find((detector: { key: string }) => detector.key === 'inventory_build')).toMatchObject({ status: 'PENDING_IMPLEMENTATION' });
+  });
+
+  it('exposes the honest detector baseline before a capture starts', async () => {
+    const cookie = await authCookie({ userId: 'user-1', globalRole: 'PLAYER', memberships: [] });
+    const response = await request(app).get('/player-learning/live/readiness').set('Cookie', cookie);
+    expect(response.status).toBe(200);
+    expect(response.body.readiness).toMatchObject({
+      overallStatus: 'NEEDS_MODE_CALIBRATION', implementedCount: 3, totalCount: 6,
+      observedThisSession: 0, canEstimateAccuracy: false,
+    });
   });
 
   it('delivers a sparse educational cue only from a verified observation', async () => {

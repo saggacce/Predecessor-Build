@@ -20,6 +20,34 @@ export interface LiveTrainingReviewMoment {
   suggestedClip: { startSeconds: number; endSeconds: number };
 }
 
+export type LiveDetectorReadinessStatus =
+  | 'VERIFIED_THIS_SESSION'
+  | 'SIGNAL_CAPTURED'
+  | 'AVAILABLE_UNVALIDATED'
+  | 'PENDING_IMPLEMENTATION'
+  | 'SAFETY_BLOCKED';
+
+export interface LiveDetectorReadinessItem {
+  key: string;
+  label: string;
+  area: string;
+  status: LiveDetectorReadinessStatus;
+  sessionSignals: number;
+  whatItCanProve: string;
+  limitation: string;
+  nextStep: string;
+}
+
+export interface LiveDetectorReadiness {
+  overallStatus: 'SAFETY_BLOCKED' | 'NEEDS_MODE_CALIBRATION' | 'MODE_ONLY' | 'PARTIAL_EVIDENCE';
+  implementedCount: number;
+  totalCount: number;
+  observedThisSession: number;
+  canEstimateAccuracy: false;
+  accuracyExplanation: string;
+  detectors: LiveDetectorReadinessItem[];
+}
+
 function objectValue(value: unknown): Record<string, unknown> {
   return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
 }
@@ -61,6 +89,91 @@ function eventCopy(eventType: string) {
     observedFact: 'El acompañante registró una señal visible durante la captura.',
     inference: 'La señal puede ayudar a localizar una decisión, pero no demuestra por sí sola si fue correcta.',
     replayQuestion: '¿Qué información tenías en ese momento y qué alternativas eran realmente ejecutables?',
+  };
+}
+
+export function buildLiveDetectorReadiness(
+  modeVerification: string,
+  events: LiveTrainingReportEventInput[],
+  verificationSignals: unknown = [],
+): LiveDetectorReadiness {
+  const signalCount = Array.isArray(verificationSignals) ? verificationSignals.length : 0;
+  const eventCount = (eventType: string) => events.filter((event) => event.eventType === eventType).length;
+  const deathSignals = eventCount('DEATH_REVIEW');
+  const skillSignals = eventCount('SKILL_LEVEL_AVAILABLE');
+  const blocked = modeVerification === 'BLOCKED_RANKED' || modeVerification === 'BLOCKED_UNKNOWN';
+  const verified = modeVerification === 'VERIFIED_ALLOWED';
+  const detectors: LiveDetectorReadinessItem[] = [
+    {
+      key: 'mode_safety',
+      label: 'Protección del modo de juego',
+      area: 'Seguridad',
+      status: blocked ? 'SAFETY_BLOCKED' : verified ? 'VERIFIED_THIS_SESSION' : 'AVAILABLE_UNVALIDATED',
+      sessionSignals: signalCount,
+      whatItCanProve: 'Reconoce el rótulo del modo mediante OCR y exige una segunda señal visual independiente antes de habilitar el coach.',
+      limitation: 'No identifica por sí solo el estado de la partida ni sustituye una fuente oficial del modo.',
+      nextStep: blocked ? 'La captura debe permanecer detenida.' : verified ? 'Mantener la regla de bloqueo ante cualquier señal contradictoria.' : 'Calibrar una plantilla en una sesión y verificarla en otra captura permitida.',
+    },
+    {
+      key: 'death_review',
+      label: 'Pantalla propia de reaparición',
+      area: 'Revisión',
+      status: deathSignals > 0 ? 'SIGNAL_CAPTURED' : 'AVAILABLE_UNVALIDATED',
+      sessionSignals: deathSignals,
+      whatItCanProve: 'Localiza un momento posterior a una muerte propia para abrir el replay en el intervalo anterior.',
+      limitation: 'No demuestra la causa de la muerte, el posicionamiento ni qué alternativa era ejecutable.',
+      nextStep: deathSignals > 0 ? 'Confirmar en el replay que el marcador coincide con una muerte propia.' : 'Probar una muerte propia en Práctica o contra IA y revisar el marcador generado.',
+    },
+    {
+      key: 'skill_point',
+      label: 'Punto de habilidad disponible',
+      area: 'Habilidades',
+      status: skillSignals > 0 ? 'SIGNAL_CAPTURED' : 'AVAILABLE_UNVALIDATED',
+      sessionSignals: skillSignals,
+      whatItCanProve: 'Detecta un aviso visible de punto de habilidad pendiente.',
+      limitation: 'No sabe todavía cuánto tiempo estuvo pendiente ni qué habilidad convenía subir.',
+      nextStep: skillSignals > 0 ? 'Comprobar en el replay la duración del aviso y el contexto de la subida.' : 'Provocar una subida de nivel en Práctica y comprobar si se registra una sola señal.',
+    },
+    {
+      key: 'inventory_build',
+      label: 'Inventario, compras y evolución de build',
+      area: 'Build',
+      status: 'PENDING_IMPLEMENTATION',
+      sessionSignals: 0,
+      whatItCanProve: 'Todavía no aporta evidencia automática.',
+      limitation: 'No se leen de forma fiable objetos propios, orden de compra, oro ni momento de regreso a base.',
+      nextStep: 'Calibrar regiones del HUD e identificar objetos con datos versionados antes de emitir recomendaciones.',
+    },
+    {
+      key: 'scoreboard_context',
+      label: 'Marcador y builds de ambos equipos',
+      area: 'Contexto rival',
+      status: 'PENDING_IMPLEMENTATION',
+      sessionSignals: 0,
+      whatItCanProve: 'Todavía no aporta evidencia automática.',
+      limitation: 'No se conoce la build visible de aliados o rivales ni la antigüedad de esa lectura.',
+      nextStep: 'Detectar cuándo está abierto el marcador y extraer una instantánea con sello temporal.',
+    },
+    {
+      key: 'minimap_context',
+      label: 'Minimapa, visión y objetivos visibles',
+      area: 'Macro',
+      status: 'PENDING_IMPLEMENTATION',
+      sessionSignals: 0,
+      whatItCanProve: 'Todavía no aporta evidencia automática.',
+      limitation: 'No se reconstruyen rutas, intención, niebla de guerra ni posiciones que no fueran visibles.',
+      nextStep: 'Empezar por eventos discretos y verificables; no inferir pathing o posicionamiento desde una sola imagen.',
+    },
+  ];
+  const observedThisSession = detectors.filter((detector) => detector.status === 'VERIFIED_THIS_SESSION' || detector.status === 'SIGNAL_CAPTURED').length;
+  return {
+    overallStatus: blocked ? 'SAFETY_BLOCKED' : !verified ? 'NEEDS_MODE_CALIBRATION' : observedThisSession > 1 ? 'PARTIAL_EVIDENCE' : 'MODE_ONLY',
+    implementedCount: detectors.filter((detector) => detector.status !== 'PENDING_IMPLEMENTATION').length,
+    totalCount: detectors.length,
+    observedThisSession,
+    canEstimateAccuracy: false,
+    accuracyExplanation: 'Aún no hay suficientes capturas reales etiquetadas para calcular precisión, falsos positivos o falsos negativos. Ver una señal no equivale a validar el detector.',
+    detectors,
   };
 }
 
