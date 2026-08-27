@@ -7,6 +7,7 @@ import { AppError } from '../middleware/error-handler.js';
 import { requireAuth } from '../middleware/require-auth.js';
 import { logger } from '../logger.js';
 import { getMatchBuildAnalysis } from '../services/build-coach-service.js';
+import { getPlayerMatchCoachAnalysis } from '../services/player-match-coach-service.js';
 
 export const matchesRouter = Router();
 
@@ -25,7 +26,27 @@ matchesRouter.get('/live/:predggUuid/build-analysis', requireAuth, async (req, r
       select: { id: true, matchId: true },
     });
     if (!matchPlayer) throw new AppError(404, 'Linked player not found in this match', 'MATCH_PLAYER_NOT_FOUND');
+    res.set('Cache-Control', 'no-store');
     res.json(await getMatchBuildAnalysis(matchPlayer.matchId, matchPlayer.id));
+  } catch (err) {
+    next(err);
+  }
+});
+
+matchesRouter.get('/live/:predggUuid/coach-analysis', requireAuth, async (req, res, next) => {
+  try {
+    const account = await db.user.findUnique({
+      where: { id: req.user!.userId },
+      select: { linkedPlayerId: true },
+    });
+    if (!account?.linkedPlayerId) throw new AppError(400, 'No player linked to this account', 'NO_PLAYER_LINKED');
+    const matchPlayer = await db.matchPlayer.findFirst({
+      where: { playerId: account.linkedPlayerId, match: { predggUuid: String(req.params.predggUuid) } },
+      select: { id: true, matchId: true },
+    });
+    if (!matchPlayer) throw new AppError(404, 'Linked player not found in this match', 'MATCH_PLAYER_NOT_FOUND');
+    res.set('Cache-Control', 'no-store');
+    res.json(await getPlayerMatchCoachAnalysis(matchPlayer.matchId, matchPlayer.id));
   } catch (err) {
     next(err);
   }
@@ -33,7 +54,17 @@ matchesRouter.get('/live/:predggUuid/build-analysis', requireAuth, async (req, r
 
 matchesRouter.get('/:id/build-analysis/:matchPlayerId', requireAuth, async (req, res, next) => {
   try {
+    res.set('Cache-Control', 'no-store');
     res.json(await getMatchBuildAnalysis(String(req.params.id), String(req.params.matchPlayerId)));
+  } catch (err) {
+    next(err);
+  }
+});
+
+matchesRouter.get('/:id/coach-analysis/:matchPlayerId', requireAuth, async (req, res, next) => {
+  try {
+    res.set('Cache-Control', 'no-store');
+    res.json(await getPlayerMatchCoachAnalysis(String(req.params.id), String(req.params.matchPlayerId)));
   } catch (err) {
     next(err);
   }

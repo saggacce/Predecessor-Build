@@ -1,5 +1,6 @@
 import { db } from '../db.js';
 import { AppError } from '../middleware/error-handler.js';
+import { Prisma } from '@prisma/client';
 
 export type BuildSignalSeverity = 'info' | 'warning' | 'critical';
 
@@ -10,6 +11,9 @@ interface BuildSignal {
   evidence: string;
   recommendation: string;
   whyItMatters?: string;
+  learningPrompt?: string;
+  whenNotToApply?: string;
+  confidence?: { level: 'low' | 'medium' | 'high'; basis: string };
   sources?: Array<{ heroSlug: string; sourceType: 'ability' | 'item'; name: string; description: string }>;
   appliesAgainst?: string[];
   desiredTags: string[];
@@ -192,6 +196,39 @@ function educationalExplanation(key: string): { whyItMatters: string; appliesAga
     },
   };
   return explanations[key] ?? null;
+}
+
+function educationalGuardrail(key: string): Pick<BuildSignal, 'learningPrompt' | 'whenNotToApply' | 'confidence'> {
+  const values: Record<string, { learningPrompt: string; whenNotToApply: string }> = {
+    'anti-heal': {
+      learningPrompt: 'Antes de comprar, identifica quién cura, cuándo activa la curación y si tú puedes aplicar anti-heal antes de esa ventana.',
+      whenNotToApply: 'No reserves una ranura por costumbre si la curación rival es pequeña, ocurre fuera de combate o un aliado ya mantiene Heridas Graves de forma fiable.',
+    },
+    'anti-shield': {
+      learningPrompt: 'Distingue si el escudo protege el burst decisivo o sólo aumenta una cifra al final de la partida.',
+      whenNotToApply: 'No priorices anti-escudo si puedes esperar la duración, cambiar el foco o si el escudo no coincide con la ventana de eliminación.',
+    },
+    'anti-tank': {
+      learningPrompt: 'Comprueba qué objetivo necesitas golpear y qué resistencia está acumulando antes de elegir penetración, shred o daño porcentual.',
+      whenNotToApply: 'La penetración pierde prioridad si tu función real es alcanzar a un objetivo frágil y puedes evitar por completo a la primera línea.',
+    },
+    'physical-defense': {
+      learningPrompt: 'Relaciona tus muertes con la fuente de daño: ataques sostenidos, crítico o burst físico requieren respuestas distintas.',
+      whenNotToApply: 'No compres armadura sólo porque haya varios héroes físicos si no te están alcanzando o el daño mágico sigue decidiendo tus muertes.',
+    },
+    'magical-defense': {
+      learningPrompt: 'Identifica si te elimina una sola habilidad, una rotación completa o daño mágico sostenido; cada patrón cambia la respuesta.',
+      whenNotToApply: 'No sacrifiques tu pico principal si el burst mágico puede evitarse con posición, visión o guardando movilidad.',
+    },
+  };
+  const selected = values[key] ?? {
+    learningPrompt: 'Relaciona la compra con una amenaza, el momento en que aparece y la función que tú debes cumplir.',
+    whenNotToApply: 'No conviertas esta recomendación en una regla fija: cambia si la amenaza, tu función o el estado de la partida cambian.',
+  };
+  return {
+    ...selected,
+    confidence: { level: 'medium', basis: 'Inferencia basada en estadísticas de la partida, composición, catálogo del parche y orden de compra disponible.' },
+  };
 }
 
 function conceptResponse(key: string): string {
@@ -516,6 +553,7 @@ export async function getMatchBuildAnalysis(matchId: string, matchPlayerId: stri
   for (const signal of signals) {
     const lesson = educationalExplanation(signal.key);
     if (lesson) Object.assign(signal, lesson);
+    Object.assign(signal, educationalGuardrail(signal.key));
     if (!['anti-heal', 'anti-shield'].includes(signal.key)) continue;
     const pattern = signal.key === 'anti-heal'
       ? /\bheal(?:s|ed|ing)?\b|\brestore[^.]{0,30}\bhealth\b|\blifesteal\b|\bomnivamp\b/i
@@ -780,11 +818,15 @@ export async function getMatchBuildAnalysis(matchId: string, matchPlayerId: stri
     eternal: ReturnType<typeof perkRecommendation> | null;
     blessings: Array<ReturnType<typeof perkRecommendation>>;
     explanation: string;
+    confidence: { level: 'low' | 'medium' | 'high'; basis: string };
+    limitation: string;
   } = {
     augment: null,
     eternal: null,
     blessings: [],
     explanation: 'No hay catálogo de loadout disponible para comparar alternativas en este parche.',
+    confidence: { level: 'low', basis: 'No hay catálogo versionado suficiente para comparar alternativas.' },
+    limitation: 'No se recomienda una alternativa sin conocer sus condiciones de activación en este parche.',
   };
   const perkCatalogVersionId = row.match.versionId ?? catalogVersionId;
   if (perkCatalogVersionId) {
@@ -854,7 +896,65 @@ export async function getMatchBuildAnalysis(matchId: string, matchPlayerId: stri
             : 'Es la bendición de su ranura que mejor complementa el patrón de utilidad recomendado.',
       )] : []),
       explanation: 'La comparación usa tu rol, las habilidades del héroe, la mitigación rival y las condiciones reales de activación. Una opción que exige matar unidades pierde valor en Support aunque su bonificación final parezca atractiva.',
+      confidence: {
+        level: perkCatalog.length >= 4 ? 'medium' : 'low',
+        basis: `Comparación contextual entre ${perkCatalog.length} opciones del catálogo del parche; no demuestra causalidad por sí sola.`,
+      },
+      limitation: 'La elección se apoya en condiciones descritas y telemetría final; el VOD puede revelar un plan de línea o coordinación que justifique otra opción.',
     };
+  }
+
+  let localBenchmark: {
+    source: 'riftline_local';
+    disclosure: string;
+    exactBuild: { matches: number; wins: number; winRate: number; confidence: 'low' | 'medium' | 'high' } | null;
+    laneMatchup: { opponentHeroSlug: string; matches: number; wins: number; winRate: number; confidence: 'low' | 'medium' | 'high' } | null;
+  } = {
+    source: 'riftline_local',
+    disclosure: 'Referencia calculada con partidas almacenadas por RiftLine; no es una estadística global de pred.gg.',
+    exactBuild: null,
+    laneMatchup: null,
+  };
+  try {
+    const laneOpponent = enemies.find((enemy) => enemy.role === row.role) ?? null;
+    const [buildRows, matchupRows] = await Promise.all([
+      db.$queryRaw<Array<{ matches: number; wins: number }>>(Prisma.sql`
+        SELECT matches, wins FROM "CoachBuildAggregate"
+        WHERE "heroSlug" = ${row.heroSlug}
+          AND role IS NOT DISTINCT FROM ${row.role}
+          AND "gameMode" = 'RANKED'
+          AND "buildItems" = ${JSON.stringify(inventorySlugs)}::jsonb
+        ORDER BY matches DESC LIMIT 1
+      `),
+      laneOpponent ? db.$queryRaw<Array<{ matches: number; wins: number }>>(Prisma.sql`
+        SELECT matches, wins FROM "CoachMatchupAggregate"
+        WHERE "heroSlug" = ${row.heroSlug}
+          AND role IS NOT DISTINCT FROM ${row.role}
+          AND "opponentHeroSlug" = ${laneOpponent.heroSlug}
+          AND "gameMode" = 'RANKED'
+        ORDER BY matches DESC LIMIT 1
+      `) : Promise.resolve([]),
+    ]);
+    const sampleConfidence = (matches: number): 'low' | 'medium' | 'high' => matches >= 30 ? 'high' : matches >= 10 ? 'medium' : 'low';
+    const buildSample = buildRows[0];
+    const matchupSample = matchupRows[0];
+    localBenchmark = {
+      ...localBenchmark,
+      exactBuild: buildSample ? {
+        ...buildSample,
+        winRate: buildSample.matches > 0 ? Math.round((buildSample.wins / buildSample.matches) * 1_000) / 10 : 0,
+        confidence: sampleConfidence(buildSample.matches),
+      } : null,
+      laneMatchup: matchupSample && laneOpponent ? {
+        opponentHeroSlug: laneOpponent.heroSlug,
+        ...matchupSample,
+        winRate: matchupSample.matches > 0 ? Math.round((matchupSample.wins / matchupSample.matches) * 1_000) / 10 : 0,
+        confidence: sampleConfidence(matchupSample.matches),
+      } : null,
+    };
+  } catch {
+    // Aggregates are an enhancement. Match coaching remains available before
+    // the first materialized-view refresh or on plain PostgreSQL test doubles.
   }
 
   const replacementsBySlug = new Map(changes.flatMap((change) => change.insteadOf ? [[change.insteadOf.slug, change.item] as const] : []));
@@ -943,6 +1043,7 @@ export async function getMatchBuildAnalysis(matchId: string, matchPlayerId: stri
     },
     eternalLoadout: loadout,
     recommendedLoadout,
+    localBenchmark,
     abilityOrder: jsonArray<{ ability: string; gameTime: number }>(row.abilityOrder),
     signals,
   };

@@ -285,6 +285,8 @@ model Match {
   structureDestructions StructureDestruction[]
   transactions          Transaction[]
   wardEvents            WardEvent[]
+
+  @@index([startTime(sort: Desc), gameMode, versionId])
 }
 
 /// Per-player stats for a single match. One row per player per match (max 10).
@@ -375,6 +377,9 @@ model MatchPlayer {
 
   /// A player can only appear once per match
   @@unique([matchId, playerId])
+  @@index([playerId, matchId])
+  @@index([playerId, role, heroSlug])
+  @@index([matchId, team, role])
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -406,6 +411,8 @@ model HeroKill {
   killerPlayerId String?
   killedPlayerId String?
   match          Match    @relation(fields: [matchId], references: [id])
+
+  @@index([matchId, gameTime])
 }
 
 /// An objective secured during a match (Fangtooth, Prime, Shaper, buffs, etc.)
@@ -426,6 +433,8 @@ model ObjectiveKill {
   locationY      Float?
   locationZ      Float?
   match          Match    @relation(fields: [matchId], references: [id])
+
+  @@index([matchId, gameTime])
 }
 
 /// A structure destroyed during a match.
@@ -443,6 +452,8 @@ model StructureDestruction {
   locationY       Float?
   locationZ       Float?
   match           Match    @relation(fields: [matchId], references: [id])
+
+  @@index([matchId, gameTime])
 }
 
 /// A ward placed or destroyed during a match.
@@ -462,6 +473,8 @@ model WardEvent {
   playerId  String?
   team      String?
   match     Match    @relation(fields: [matchId], references: [id])
+
+  @@index([matchId, playerId, gameTime])
 }
 
 /// An item transaction (buy/sell/undo) during a match.
@@ -479,6 +492,8 @@ model Transaction {
   playerId        String?
   team            String?
   match           Match    @relation(fields: [matchId], references: [id])
+
+  @@index([matchId, playerId, gameTime])
 }
 
 /// A hero ban during the draft phase. Only populated for RANKED matches.

@@ -1,11 +1,11 @@
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { useParams, useNavigate, useLocation } from 'react-router';
 import { HeroAvatarWithTooltip } from '../components/HeroAvatar';
 import { useHeroMeta } from '../hooks/useHeroMeta';
 import { ArrowLeft, Trophy, Skull, Clock, RefreshCw, Pencil, Check, X, Monitor, Gamepad2, Swords } from 'lucide-react';
 import { toast } from 'sonner';
-import { apiClient, type MatchBuildAnalysis, type MatchDetail as MatchDetailData, type MatchPlayerDetail, type MatchEvents, ApiErrorResponse } from '../api/client';
+import { apiClient, type EducationalCoachObservation, type MatchBuildAnalysis, type PlayerMatchCoachAnalysis, type MatchDetail as MatchDetailData, type MatchPlayerDetail, type MatchEvents, ApiErrorResponse } from '../api/client';
 import { useAuth } from '../hooks/useAuth';
 
 export default function MatchDetail({ liveMode = false }: { liveMode?: boolean }) {
@@ -629,6 +629,114 @@ const OBJ_GROUPS = [
   { key: 'river',     label: 'River',      types: ['RIVER','SEEDLING','LANE_SEEDLING'], color: '#38d4c8' },
 ] as const;
 
+type PersonalCoachSection = 'overview' | 'build' | 'abilities' | 'economy' | 'combat' | 'objectives';
+
+function coachConfidenceLabel(level: 'low' | 'medium' | 'high'): string {
+  return level === 'high' ? 'alta' : level === 'medium' ? 'media' : 'inicial';
+}
+
+function CoachObservationCard({ observation }: { observation: EducationalCoachObservation }) {
+  const color = observation.tone === 'strength'
+    ? 'var(--accent-win)'
+    : observation.priority === 'primary'
+      ? 'var(--accent-prime)'
+      : 'var(--accent-blue)';
+  const confidenceLabel = coachConfidenceLabel(observation.confidence.level);
+  return (
+    <article className="glass-card" style={{ padding: '0.9rem', borderColor: `color-mix(in srgb, ${color} 25%, transparent)` }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.75rem', alignItems: 'flex-start' }}>
+        <div>
+          <span style={{ display: 'block', color, fontSize: '0.58rem', fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.07em' }}>
+            {observation.tone === 'strength' ? 'Fortaleza' : observation.priority === 'primary' ? 'Foco principal' : observation.priority === 'reference' ? 'Concepto para revisar' : 'Foco secundario'}
+          </span>
+          <strong style={{ display: 'block', marginTop: '0.28rem', color: 'var(--text-primary)', fontSize: '0.82rem' }}>{observation.title}</strong>
+        </div>
+        <CoachHover label="Ver confianza" content={<div><strong style={{ display: 'block', marginBottom: '0.25rem', color }}>Confianza {confidenceLabel}</strong>{observation.confidence.basis}</div>}>
+          <span style={{ flexShrink: 0, color, fontSize: '0.58rem', fontWeight: 800 }}>Confianza {confidenceLabel}</span>
+        </CoachHover>
+      </div>
+      <p style={{ margin: '0.55rem 0 0', color: 'var(--text-secondary)', fontSize: '0.7rem', lineHeight: 1.5 }}><strong style={{ color: 'var(--text-primary)' }}>Qué vimos:</strong> {observation.evidence}</p>
+      <p style={{ margin: '0.38rem 0 0', color: 'var(--text-secondary)', fontSize: '0.7rem', lineHeight: 1.5 }}><strong style={{ color: 'var(--text-primary)' }}>Qué significa:</strong> {observation.interpretation}</p>
+      <div style={{ marginTop: '0.55rem', padding: '0.6rem 0.7rem', borderRadius: 7, borderLeft: `3px solid ${color}`, background: 'rgba(255,255,255,0.025)' }}>
+        <strong style={{ display: 'block', color, fontSize: '0.64rem' }}>Próxima práctica</strong>
+        <span style={{ display: 'block', marginTop: '0.2rem', color: 'var(--text-primary)', fontSize: '0.69rem', lineHeight: 1.45 }}>{observation.action}</span>
+      </div>
+      <details style={{ marginTop: '0.55rem' }}>
+        <summary style={{ cursor: 'pointer', color: 'var(--text-muted)', fontSize: '0.64rem', fontWeight: 700 }}>Cuándo no aplicar esta idea de forma automática</summary>
+        <p style={{ margin: '0.4rem 0 0', color: 'var(--text-secondary)', fontSize: '0.66rem', lineHeight: 1.45 }}>{observation.exception}</p>
+        {observation.transferExamples.length > 0 && <p style={{ margin: '0.35rem 0 0', color: 'var(--text-muted)', fontSize: '0.62rem', lineHeight: 1.45 }}><strong>Ejemplos transferibles:</strong> {observation.transferExamples.join(' · ')}</p>}
+        {observation.limitation && <p style={{ margin: '0.35rem 0 0', color: 'var(--accent-prime)', fontSize: '0.61rem', lineHeight: 1.4 }}><strong>Límite del dato:</strong> {observation.limitation}</p>}
+      </details>
+    </article>
+  );
+}
+
+function PlayerCoachAnalysisPanel({ analysis, section, onSectionChange, buildCard }: {
+  analysis: PlayerMatchCoachAnalysis | null;
+  section: PersonalCoachSection;
+  onSectionChange: (section: PersonalCoachSection) => void;
+  buildCard: ReactNode;
+}) {
+  const tabs: Array<{ key: PersonalCoachSection; label: string }> = [
+    { key: 'overview', label: 'Resumen' },
+    { key: 'build', label: 'Build y loadout' },
+    { key: 'abilities', label: 'Habilidades' },
+    { key: 'economy', label: 'Línea y economía' },
+    { key: 'combat', label: 'Combate y posición' },
+    { key: 'objectives', label: 'Objetivos y visión' },
+  ];
+  const observations = analysis && section !== 'overview' && section !== 'build'
+    ? analysis.sections[section]
+    : [];
+
+  return (
+    <section aria-label="Análisis personal del coach">
+      <div className="glass-card" style={{ padding: '0.55rem', overflowX: 'auto' }}>
+        <div role="tablist" aria-label="Apartados del análisis" style={{ display: 'flex', gap: '0.35rem', minWidth: 'max-content' }}>
+          {tabs.map((tab) => <button key={tab.key} id={`coach-tab-${tab.key}`} type="button" role="tab" aria-controls={`coach-panel-${tab.key}`} aria-selected={section === tab.key} onClick={() => onSectionChange(tab.key)} style={{ border: `1px solid ${section === tab.key ? 'rgba(56,212,200,0.45)' : 'var(--border-color)'}`, borderRadius: 7, padding: '0.42rem 0.65rem', background: section === tab.key ? 'rgba(56,212,200,0.1)' : 'rgba(255,255,255,0.02)', color: section === tab.key ? 'var(--accent-cyan)' : 'var(--text-secondary)', fontSize: '0.68rem', fontWeight: 750, cursor: 'pointer' }}>{tab.label}</button>)}
+        </div>
+      </div>
+
+      <div id={`coach-panel-${section}`} role="tabpanel" aria-labelledby={`coach-tab-${section}`}>
+      {section === 'build' ? <div style={{ marginTop: '0.8rem' }}>{buildCard}</div> : null}
+
+      {section === 'overview' && !analysis ? <div className="glass-card" style={{ marginTop: '0.8rem', padding: '1rem', color: 'var(--text-muted)', fontSize: '0.72rem' }}>Preparando el resumen educativo de tu partida…</div> : null}
+      {section === 'overview' && analysis ? (
+        <div style={{ display: 'grid', gap: '0.7rem', marginTop: '0.8rem' }}>
+          <article className="glass-card" style={{ padding: '1rem', borderColor: 'rgba(240,180,41,0.32)' }}>
+            <span style={{ color: 'var(--accent-prime)', fontSize: '0.6rem', fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.07em' }}>Una idea para la próxima partida</span>
+            <h3 style={{ margin: '0.35rem 0 0', fontSize: '1rem' }}>{analysis.summary.headline}</h3>
+            <p style={{ margin: '0.45rem 0 0', color: 'var(--text-secondary)', fontSize: '0.74rem', lineHeight: 1.5 }}>{analysis.summary.explanation}</p>
+            <div style={{ marginTop: '0.65rem', padding: '0.7rem', borderRadius: 7, background: 'rgba(240,180,41,0.055)', color: 'var(--text-primary)', fontSize: '0.72rem', lineHeight: 1.5 }}><strong>Señal durante la partida:</strong> {analysis.summary.nextMatchCue}</div>
+          </article>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '0.7rem' }}>
+            <article className="glass-card" style={{ padding: '0.85rem', borderColor: 'rgba(52,211,153,0.26)' }}>
+              <span style={{ color: 'var(--accent-win)', fontSize: '0.59rem', fontWeight: 900, textTransform: 'uppercase' }}>Qué conservar</span>
+              <strong style={{ display: 'block', marginTop: '0.3rem', fontSize: '0.78rem' }}>{analysis.summary.positive.title}</strong>
+              <p style={{ margin: '0.3rem 0 0', color: 'var(--text-secondary)', fontSize: '0.68rem', lineHeight: 1.45 }}>{analysis.summary.positive.evidence}</p>
+            </article>
+            {analysis.summary.secondaryInsights.slice(0, 2).map((insight) => <article key={insight.id} className="glass-card" style={{ padding: '0.85rem' }}>
+              <span style={{ color: 'var(--accent-blue)', fontSize: '0.59rem', fontWeight: 900, textTransform: 'uppercase' }}>Después</span>
+              <strong style={{ display: 'block', marginTop: '0.3rem', fontSize: '0.78rem' }}>{insight.title}</strong>
+              <p style={{ margin: '0.3rem 0 0', color: 'var(--text-secondary)', fontSize: '0.68rem', lineHeight: 1.45 }}>{insight.evidence}</p>
+            </article>)}
+          </div>
+          <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: '0.62rem', lineHeight: 1.45 }}>{analysis.coverage.disclaimer}</p>
+        </div>
+      ) : null}
+
+      {section !== 'overview' && section !== 'build' ? (
+        <div style={{ display: 'grid', gap: '0.7rem', marginTop: '0.8rem' }}>
+          {observations.length > 0
+            ? observations.map((observation) => <CoachObservationCard key={observation.id} observation={observation} />)
+            : <div className="glass-card" style={{ padding: '1rem', color: 'var(--text-muted)', fontSize: '0.7rem' }}>No hay evidencia suficiente para valorar este apartado sin inventar una conclusión. Se completará cuando haya datos compatibles.</div>}
+        </div>
+      ) : null}
+      </div>
+    </section>
+  );
+}
+
 function AnalysisTab({ match, duskWon, dawnWon: _dawnWon, onResync, syncing, preloadedEvents, buildCoachPlayerId, liveMode }: {
   match: MatchDetailData; duskWon: boolean; dawnWon: boolean;
   onResync: () => void; syncing: boolean; preloadedEvents?: MatchEvents;
@@ -636,6 +744,21 @@ function AnalysisTab({ match, duskWon, dawnWon: _dawnWon, onResync, syncing, pre
 }) {
   const [events, setEvents] = useState<MatchEvents | null>(preloadedEvents ?? null);
   const [loadingEvents, setLoadingEvents] = useState(false);
+  const [coachAnalysis, setCoachAnalysis] = useState<PlayerMatchCoachAnalysis | null>(null);
+  const [coachSection, setCoachSection] = useState<'overview' | 'build' | 'abilities' | 'economy' | 'combat' | 'objectives'>('overview');
+
+  useEffect(() => {
+    if (!liveMode && !buildCoachPlayerId) return;
+    let cancelled = false;
+    setCoachAnalysis(null);
+    const request = liveMode
+      ? apiClient.matches.liveCoachAnalysis(match.predggUuid)
+      : apiClient.matches.coachAnalysis(match.id, buildCoachPlayerId!);
+    void request
+      .then((result) => { if (!cancelled) setCoachAnalysis(result); })
+      .catch(() => { if (!cancelled) setCoachAnalysis(null); });
+    return () => { cancelled = true; };
+  }, [buildCoachPlayerId, liveMode, match.id, match.predggUuid]);
 
   useEffect(() => {
     if (preloadedEvents) return;
@@ -647,10 +770,23 @@ function AnalysisTab({ match, duskWon, dawnWon: _dawnWon, onResync, syncing, pre
       .finally(() => setLoadingEvents(false));
   }, [match.id, match.eventStreamSynced, preloadedEvents]);
 
+  const personalCoach = (liveMode || buildCoachPlayerId) ? (
+    <PlayerCoachAnalysisPanel
+      analysis={coachAnalysis}
+      section={coachSection}
+      onSectionChange={setCoachSection}
+      buildCard={<BuildCoachCard matchId={liveMode ? match.predggUuid : match.id} matchPlayerId={buildCoachPlayerId} liveMode={liveMode} />}
+    />
+  ) : null;
+
+  if (personalCoach && coachSection !== 'objectives') {
+    return <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>{personalCoach}</div>;
+  }
+
   if (!match.eventStreamSynced) {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-        {(liveMode || buildCoachPlayerId) && <BuildCoachCard matchId={liveMode ? match.predggUuid : match.id} matchPlayerId={buildCoachPlayerId} liveMode={liveMode} />}
+        {personalCoach}
         <div className="glass-card" style={{ padding: '2.5rem', textAlign: 'center' }}>
           <div style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', fontWeight: 600, marginBottom: '0.5rem' }}>Objective analysis not available</div>
           <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', maxWidth: '380px', margin: '0 auto 1.5rem' }}>
@@ -717,7 +853,7 @@ function AnalysisTab({ match, duskWon, dawnWon: _dawnWon, onResync, syncing, pre
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-      {(liveMode || buildCoachPlayerId) && <BuildCoachCard matchId={liveMode ? match.predggUuid : match.id} matchPlayerId={buildCoachPlayerId} liveMode={liveMode} />}
+      {personalCoach}
 
       {/* ── Objective Control ── */}
       <div>
@@ -1813,6 +1949,14 @@ function BuildCoachCard({ matchId, matchPlayerId, liveMode }: { matchId: string;
           <span style={{ fontFamily: 'var(--font-mono)', color: gradeColor, fontSize: '0.72rem', fontWeight: 800 }}>{analysis.verdict.score}/100 adaptación</span>
         </div>
         <p style={{ margin: '0.4rem 0 0', color: 'var(--text-secondary)', fontSize: '0.72rem', lineHeight: 1.5 }}>{analysis.verdict.summary}</p>
+        {(analysis.localBenchmark.exactBuild || analysis.localBenchmark.laneMatchup) && <div style={{ display: 'flex', gap: '0.45rem', flexWrap: 'wrap', marginTop: '0.55rem' }}>
+          {analysis.localBenchmark.exactBuild && <CoachHover label="Cómo se calcula esta referencia" content={analysis.localBenchmark.disclosure}>
+            <span style={{ padding: '0.25rem 0.42rem', borderRadius: 5, background: 'rgba(56,212,200,0.06)', color: 'var(--accent-cyan)', fontSize: '0.59rem' }}>Build exacta · {analysis.localBenchmark.exactBuild.matches} partidas · {analysis.localBenchmark.exactBuild.winRate}% WR · confianza {coachConfidenceLabel(analysis.localBenchmark.exactBuild.confidence)}</span>
+          </CoachHover>}
+          {analysis.localBenchmark.laneMatchup && <CoachHover label="Cómo se calcula este matchup" content={analysis.localBenchmark.disclosure}>
+            <span style={{ padding: '0.25rem 0.42rem', borderRadius: 5, background: 'rgba(167,139,250,0.06)', color: 'var(--accent-violet)', fontSize: '0.59rem', textTransform: 'capitalize' }}>vs {analysis.localBenchmark.laneMatchup.opponentHeroSlug} · {analysis.localBenchmark.laneMatchup.matches} partidas · {analysis.localBenchmark.laneMatchup.winRate}% WR · confianza {coachConfidenceLabel(analysis.localBenchmark.laneMatchup.confidence)}</span>
+          </CoachHover>}
+        </div>}
       </div>
 
       <div style={{ marginTop: '0.9rem' }}>
@@ -1904,6 +2048,7 @@ function BuildCoachCard({ matchId, matchPlayerId, liveMode }: { matchId: string;
                 <strong style={{ display: 'block', color: 'var(--text-primary)', fontSize: '0.65rem', marginBottom: '0.2rem' }}>Por qué importa</strong>
                 <span style={{ color: 'var(--text-secondary)', fontSize: '0.67rem', lineHeight: 1.45 }}>{signal.whyItMatters}</span>
               </div>}
+              {signal.learningPrompt && <p style={{ margin: '0.4rem 0 0', color: 'var(--text-primary)', fontSize: '0.67rem', lineHeight: 1.45 }}><strong>Cómo pensarlo:</strong> {signal.learningPrompt}</p>}
               {signal.sources && signal.sources.length > 0 && <div style={{ display: 'grid', gap: '0.35rem', margin: '0.5rem 0' }}>
                 <strong style={{ color: 'var(--text-muted)', fontSize: '0.61rem', textTransform: 'uppercase' }}>De dónde salió en esta partida</strong>
                 {signal.sources.map((source, index) => <div key={`${source.heroSlug}-${source.name}-${index}`} style={{ display: 'flex', gap: '0.45rem', alignItems: 'flex-start', padding: '0.45rem', borderRadius: 6, background: 'rgba(255,255,255,0.025)' }}>
@@ -1913,6 +2058,11 @@ function BuildCoachCard({ matchId, matchPlayerId, liveMode }: { matchId: string;
               </div>}
               <p style={{ margin: 0, color: 'var(--text-primary)', fontSize: '0.7rem', lineHeight: 1.4 }}>{signal.recommendation}</p>
               {signal.appliesAgainst && signal.appliesAgainst.length > 0 && <p style={{ margin: '0.45rem 0 0', color: 'var(--text-muted)', fontSize: '0.62rem', lineHeight: 1.4 }}><strong>Recuerda el concepto contra:</strong> {signal.appliesAgainst.join(', ')}.</p>}
+              {signal.whenNotToApply && <details style={{ marginTop: '0.45rem' }}>
+                <summary style={{ cursor: 'pointer', color: 'var(--text-muted)', fontSize: '0.62rem', fontWeight: 700 }}>Cuándo no aplicarlo automáticamente</summary>
+                <p style={{ margin: '0.3rem 0 0', color: 'var(--text-secondary)', fontSize: '0.63rem', lineHeight: 1.4 }}>{signal.whenNotToApply}</p>
+                {signal.confidence && <p style={{ margin: '0.3rem 0 0', color: 'var(--text-muted)', fontSize: '0.59rem' }}>Confianza {coachConfidenceLabel(signal.confidence.level)}: {signal.confidence.basis}</p>}
+              </details>}
               {signal.suggestedItems && signal.suggestedItems.length > 0 && (
                 <div style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap', marginTop: '0.55rem' }}>
                   {signal.suggestedItems.map((item) => (
@@ -2003,6 +2153,7 @@ function BuildCoachCard({ matchId, matchPlayerId, liveMode }: { matchId: string;
         <div style={{ marginTop: '1rem', padding: '0.85rem', borderRadius: 9, background: 'rgba(167,139,250,0.045)', border: '1px solid rgba(167,139,250,0.22)' }}>
           <p style={{ margin: 0, color: 'var(--accent-violet)', fontSize: '0.62rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Loadout que habría elegido el coach</p>
           <p style={{ margin: '0.35rem 0 0', color: 'var(--text-secondary)', fontSize: '0.66rem', lineHeight: 1.45 }}>{analysis.recommendedLoadout.explanation}</p>
+          <p style={{ margin: '0.3rem 0 0', color: 'var(--text-muted)', fontSize: '0.6rem', lineHeight: 1.4 }}>Confianza {coachConfidenceLabel(analysis.recommendedLoadout.confidence.level)}: {analysis.recommendedLoadout.confidence.basis}</p>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: '0.5rem', marginTop: '0.65rem' }}>
             {[analysis.recommendedLoadout.augment, analysis.recommendedLoadout.eternal, ...analysis.recommendedLoadout.blessings].flatMap((perk) => perk ? [perk] : []).map((perk) => (
               <CoachHover key={`${perk.slot}-${perk.id}`} label={`Ver información de ${perk.displayName}`} content={<PerkCoachTooltip perk={perk} />}>
@@ -2015,6 +2166,7 @@ function BuildCoachCard({ matchId, matchPlayerId, liveMode }: { matchId: string;
               </CoachHover>
             ))}
           </div>
+          <details style={{ marginTop: '0.55rem' }}><summary style={{ cursor: 'pointer', color: 'var(--text-muted)', fontSize: '0.61rem', fontWeight: 700 }}>Límite de esta comparación</summary><p style={{ margin: '0.3rem 0 0', color: 'var(--text-secondary)', fontSize: '0.62rem', lineHeight: 1.4 }}>{analysis.recommendedLoadout.limitation}</p></details>
         </div>
       )}
 

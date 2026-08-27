@@ -1345,6 +1345,14 @@ export interface MatchBuildAnalysis {
       replaces: { id: string; displayName: string } | null;
     }>;
     explanation: string;
+    confidence: { level: 'low' | 'medium' | 'high'; basis: string };
+    limitation: string;
+  };
+  localBenchmark: {
+    source: 'riftline_local';
+    disclosure: string;
+    exactBuild: { matches: number; wins: number; winRate: number; confidence: 'low' | 'medium' | 'high' } | null;
+    laneMatchup: { opponentHeroSlug: string; matches: number; wins: number; winRate: number; confidence: 'low' | 'medium' | 'high' } | null;
   };
   abilityOrder: Array<{ ability: string; gameTime: number }>;
   signals: Array<{
@@ -1354,6 +1362,9 @@ export interface MatchBuildAnalysis {
     evidence: string;
     recommendation: string;
     whyItMatters?: string;
+    learningPrompt?: string;
+    whenNotToApply?: string;
+    confidence?: { level: 'low' | 'medium' | 'high'; basis: string };
     sources?: Array<{ heroSlug: string; sourceType: 'ability' | 'item'; name: string; description: string }>;
     appliesAgainst?: string[];
     suggestedItems?: Array<{
@@ -1362,6 +1373,66 @@ export interface MatchBuildAnalysis {
       effects: Array<{ name: string; text: string; condition?: string | null; cooldown?: string | null }>;
     }>;
   }>;
+}
+
+export interface EducationalCoachObservation {
+  id: string;
+  category: 'abilities' | 'economy' | 'combat' | 'objectives';
+  priority: 'primary' | 'secondary' | 'reference';
+  tone: 'strength' | 'development' | 'context';
+  title: string;
+  evidence: string;
+  interpretation: string;
+  action: string;
+  exception: string;
+  transferExamples: string[];
+  confidence: { level: 'low' | 'medium' | 'high'; basis: string };
+  limitation: string | null;
+}
+
+export interface PlayerMatchCoachAnalysis {
+  matchId: string;
+  matchPlayerId: string;
+  heroSlug: string;
+  role: string | null;
+  result: 'win' | 'loss';
+  summary: {
+    headline: string;
+    explanation: string;
+    nextMatchCue: string;
+    positive: { title: string; evidence: string };
+    secondaryInsights: Array<{ id: string; title: string; evidence: string }>;
+    confidence: { level: 'low' | 'medium' | 'high'; basis: string };
+  };
+  metrics: {
+    killParticipation: number;
+    teamKillParticipationAverage: number;
+    gpm: number | null;
+    dpm: number | null;
+    csPerMinute: number | null;
+    laneGoldDelta: number | null;
+    laneGoldMinute: number | null;
+    deathsBeforeObjectives: number;
+    positionedDeaths: number;
+    wardsPlaced: number;
+    wardEvents: number;
+    objectiveSecures: number;
+  };
+  coverage: {
+    scoreboard: boolean;
+    goldTimeline: boolean;
+    abilityOrder: boolean;
+    eventPositions: boolean;
+    wardEvents: boolean;
+    objectiveEvents: boolean;
+    disclaimer: string;
+  };
+  sections: {
+    abilities: EducationalCoachObservation[];
+    economy: EducationalCoachObservation[];
+    combat: EducationalCoachObservation[];
+    objectives: EducationalCoachObservation[];
+  };
 }
 
 export interface PlayerBuildReview {
@@ -1562,6 +1633,10 @@ export const apiClient = {
       fetchApi<MatchBuildAnalysis>(`/matches/${matchId}/build-analysis/${matchPlayerId}`),
     liveBuildAnalysis: (predggUuid: string) =>
       fetchApi<MatchBuildAnalysis>(`/matches/live/${predggUuid}/build-analysis`),
+    coachAnalysis: (matchId: string, matchPlayerId: string) =>
+      fetchApi<PlayerMatchCoachAnalysis>(`/matches/${matchId}/coach-analysis/${matchPlayerId}`),
+    liveCoachAnalysis: (predggUuid: string) =>
+      fetchApi<PlayerMatchCoachAnalysis>(`/matches/live/${predggUuid}/coach-analysis`),
   },
 
   reports: {

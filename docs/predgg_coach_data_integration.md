@@ -1,6 +1,6 @@
 # Integración pred.gg para el coach personal
 
-**Actualizado:** 2026-08-26
+**Actualizado:** 2026-08-27
 
 Este documento describe la base de datos y las capacidades de pred.gg que RiftLine usa para convertir el historial de un jugador en recomendaciones de mejora. El diseño mantiene los módulos de equipo existentes, pero prioriza el uso personal y evita que una función opcional bloquee el informe completo.
 
@@ -46,9 +46,28 @@ El análisis de una partida cruza la build usada con la composición real de da�
 
 Este módulo explica evidencia y recomendación; no afirma que exista una única build correcta ni sustituye el contexto de ejecución de la partida. Si una partida referencia una compilación interna sin items, se usa el catálogo de contenido más cercano y anterior, manteniendo la coherencia del parche.
 
-### 7. Benchmarks y especialistas
+### 7. Benchmarks y agregados propios
 
-Para un héroe, rol y modo se comparan win rate, KDA, daño/minuto, oro/minuto, CS/minuto y visión con la población de pred.gg. Cuando están autorizados se añaden especialistas del héroe y matchups globales. La distribución de rating se intenta por separado porque pred.gg puede denegarla incluso con un token válido.
+Los permisos poblacionales de pred.gg no están concedidos a la aplicación. RiftLine no intenta sortear esa restricción. En su lugar mantiene tres agregados propios sobre las partidas almacenadas:
+
+- builds por parche, modo, rol, héroe e inventario final;
+- matchups por parche, modo, rol y pareja de héroes enfrentados;
+- intervalos semanales personales por modo, rol y héroe.
+
+Cada resultado identifica `riftline_local` como fuente, publica el tamaño de muestra y clasifica la confianza como inicial, media o alta. Las estadísticas restringidas de pred.gg permanecen como capacidad opcional y nunca se presentan como si fueran locales.
+
+### 8. Contrato educativo del coach
+
+El resumen de partida limita la carga cognitiva a un foco principal, un máximo de dos focos secundarios y una conducta que conviene conservar. Cada observación desarrollada separa:
+
+- evidencia observada;
+- interpretación y relevancia;
+- práctica para las siguientes partidas;
+- excepción para evitar convertirla en una regla automática;
+- ejemplos transferibles a otros héroes o situaciones;
+- confianza y limitación de la fuente.
+
+La pestaña `Analysis` organiza el contenido en Resumen, Build y loadout, Habilidades, Línea y economía, Combate y posición, y Objetivos y visión. Las inferencias posicionales se limitan a las coordenadas de muertes, objetivos, estructuras y wards; sin VOD no se afirma conocer el movimiento continuo.
 
 ## Degradación y fiabilidad
 
@@ -66,9 +85,13 @@ Para un héroe, rol y modo se comparan win rate, KDA, daño/minuto, oro/minuto, 
 | `POST /admin/sync-game-catalog` | Sincronización del catálogo del parche actual |
 | `GET /players/:id/champion-pool-context` | Pool, matchups y sinergias personales con filtros |
 | `GET /players/:id/benchmarks` | Comparación poblacional y capacidades avanzadas |
+| `GET /players/:id/coach-aggregates` | Agregados locales de build, matchup e intervalos personales |
 | `GET /matches/:id/build-analysis/:matchPlayerId` | Diagnóstico contextual de la build de una partida |
 | `GET /matches/live/:predggUuid/build-analysis` | El mismo diagnóstico para la partida abierta desde “Mis partidas” |
+| `GET /matches/:id/coach-analysis/:matchPlayerId` | Resumen educativo y apartados personales de una partida |
+| `GET /matches/live/:predggUuid/coach-analysis` | Análisis personal de la partida abierta desde “Mis partidas” |
+| `POST /admin/refresh-coach-aggregates` | Reconstrucción de los tres agregados locales |
 
 ## Siguiente evolución recomendada
 
-La siguiente iteración debe medir si las recomendaciones producen cambios: guardar un foco semanal, comprobarlo en las siguientes partidas y mostrar progreso. Antes de ampliar a gestión de equipos, conviene validar con suficientes partidas personales que el coach distingue señal estable de una muestra pequeña.
+El ciclo actual guarda un foco semanal, mide automáticamente las cinco partidas posteriores contra las cinco anteriores y cierra el objetivo como conseguido o pendiente de ajuste. La siguiente evolución debe validar la calidad pedagógica con sesiones de usuario y, después, reutilizar el mismo contrato para coaching coordinado de equipo sin alterar las conclusiones específicas de SoloQ.

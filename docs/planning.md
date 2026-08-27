@@ -52,7 +52,7 @@ Tablero de tareas generales y subtareas.
 
 ## [x] Tarea 4 — Calidad y operación
 - [x] Logs/errores: Pino, logging JSON estructurado
-- [x] 114 tests en Vitest + Supertest (cobertura: players, teams, admin, auth, sync personal, reports, map-zones, domain-engine)
+- [x] 151 tests en Vitest + Supertest (cobertura: players, teams, admin, auth, sync personal, reports, coaching, aggregates, map-zones, domain-engine)
 - [x] CI/CD GitHub Actions + branch protection en main
 - [x] Tests de agregación de métricas de jugador (PR #47)
 - [x] Tests de filtros por parche/ventana temporal (PR #47)
@@ -235,6 +235,19 @@ Para jugadores individuales (PLAYER standalone).
 - [x] `GET /reports/player-weekly/:playerId` — KDA semanal vs histórico, héroe más jugado, WR 7d vs 30d
 - [x] Página `/reports/weekly` exclusiva para PLAYER standalone, con actualización manual de partidas
 - [x] Player Development autogenerado desde métricas históricas (actividad, supervivencia, hero pool, momentum y consistencia)
+
+## [x] Tarea 27 — Coach educativo de SoloQ
+Primera iteración centrada en enseñar criterios transferibles sin convertir el análisis en una lista rígida ni en una pared de datos.
+
+- [x] Historial personal independiente de la retención general y preservación de jugadores vinculados
+- [x] TimescaleDB reproducible, compresión e índices para eventos temporales
+- [x] Agregados propios de build, matchup e intervalos personales con muestra, fuente y confianza
+- [x] Contrato educativo: evidencia, interpretación, práctica, excepción, ejemplos y límite del dato
+- [x] Resumen de una prioridad, hasta dos focos secundarios y una fortaleza que conservar
+- [x] Analysis dividido en resumen, build/loadout, habilidades, economía, combate/posición y objetivos/visión
+- [x] Build, orden de compra, augment, Eternal y Blessings explicados en el contexto de la partida
+- [x] Objetivo semanal evaluado al completar un ciclo de cinco partidas
+- [x] Validación inicial con cinco partidas Ranked reales y degradación honesta cuando faltan datos
 
 ---
 

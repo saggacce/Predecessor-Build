@@ -23,6 +23,7 @@ import { getValidToken } from './auth.js';
 import { getPlatformAccessToken, inspectPlatformOAuthStatus, platformTokenState, readPlatformOAuthStatus } from '../services/predgg-token-service.js';
 import { requireAuth } from '../middleware/require-auth.js';
 import { requirePlatformAdmin } from '../middleware/require-platform-admin.js';
+import { refreshCoachAggregates } from '../services/coach-aggregate-service.js';
 
 export const adminRouter = Router();
 
@@ -874,6 +875,15 @@ adminRouter.post('/cleanup-old-data', async (_req, res, next) => {
   } catch (err) { next(err); }
 });
 
+/** POST /admin/refresh-coach-aggregates — rebuilds RiftLine-owned coaching cohorts. */
+adminRouter.post('/refresh-coach-aggregates', async (_req, res, next) => {
+  try {
+    const startedAt = Date.now();
+    const result = await refreshCoachAggregates(db);
+    res.json({ ok: true, ...result, elapsedMs: Date.now() - startedAt });
+  } catch (err) { next(err); }
+});
+
 /**
  * POST /admin/cleanup-non-team-data
  * Deletes Match records (+ cascade: MatchPlayer, HeroKill, ObjectiveKill, WardEvent,
@@ -891,11 +901,20 @@ adminRouter.post('/cleanup-non-team-data', async (_req, res, next) => {
 
     logger.info({ teamPlayerCount: teamPlayerIds.length }, 'admin: cleanup-non-team-data — finding orphan matches');
 
-    // Find matches where none of the MatchPlayers belong to a team player
+    // Find matches where none of the MatchPlayers belong to a team player or
+    // to a standalone user. Personal coaching history is never orphan data.
+    const linkedUsers = await db.user.findMany({
+      where: { linkedPlayerId: { not: null } },
+      select: { linkedPlayerId: true },
+    });
+    const protectedPlayerIds = [...new Set([
+      ...teamPlayerIds,
+      ...linkedUsers.map((user) => user.linkedPlayerId).filter((id): id is string => id != null),
+    ])];
     const orphanMatches = await db.match.findMany({
       where: {
         matchPlayers: {
-          none: { playerId: { in: teamPlayerIds } },
+          none: { playerId: { in: protectedPlayerIds } },
         },
       },
       select: { id: true },
@@ -916,12 +935,12 @@ adminRouter.post('/cleanup-non-team-data', async (_req, res, next) => {
     // Also clean up PlayerSnapshot records for players not on any team
     const snapResult = await db.playerSnapshot.deleteMany({
       where: {
-        playerId: { notIn: teamPlayerIds },
+        playerId: { notIn: protectedPlayerIds },
       },
     });
 
     logger.info({ deletedMatches: deleted, deletedSnapshots: snapResult.count }, 'admin: cleanup-non-team-data complete');
-    res.json({ ok: true, deletedMatches: deleted, deletedSnapshots: snapResult.count, teamPlayers: teamPlayerIds.length });
+    res.json({ ok: true, deletedMatches: deleted, deletedSnapshots: snapResult.count, protectedPlayers: protectedPlayerIds.length });
   } catch (err) { next(err); }
 });
 

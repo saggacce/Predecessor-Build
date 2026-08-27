@@ -12,10 +12,18 @@ const STALE_THRESHOLD_MS = 24 * 60 * 60 * 1000; // 24 hours — active players
 const STALE_THRESHOLD_INACTIVE_MS = 7 * 24 * 60 * 60 * 1000; // 7 days — inactive players
 const ACTIVE_WINDOW_MS = 7 * 24 * 60 * 60 * 1000; // player with match in last 7 days = active
 const DATA_RETENTION_MONTHS = parseInt(process.env.DATA_RETENTION_MONTHS ?? '3', 10);
+const PERSONAL_HISTORY_MONTHS = parseInt(process.env.PERSONAL_HISTORY_MONTHS ?? '60', 10);
+const PREDGG_REQUEST_TIMEOUT_MS = parseInt(process.env.PREDGG_REQUEST_TIMEOUT_MS ?? '30000', 10);
 
 function getRetentionCutoff(): Date {
   const cutoff = new Date();
   cutoff.setMonth(cutoff.getMonth() - DATA_RETENTION_MONTHS);
+  return cutoff;
+}
+
+function getPersonalHistoryCutoff(): Date {
+  const cutoff = new Date();
+  cutoff.setMonth(cutoff.getMonth() - PERSONAL_HISTORY_MONTHS);
   return cutoff;
 }
 const STALE_SYNC_BATCH        = 30;   // batch for manual "Sync Players" click
@@ -42,6 +50,7 @@ async function predggQuery<T>(
       method: 'POST',
       headers: requestHeaders,
       body: JSON.stringify({ query, variables }),
+      signal: AbortSignal.timeout(PREDGG_REQUEST_TIMEOUT_MS),
     });
 
     if (!res.ok) throw new Error(`pred.gg HTTP ${res.status}: ${await res.text()}`);
@@ -1860,7 +1869,9 @@ export async function syncRecentMatchesForPlayer(
   userToken: string,
   matchLimit = 10,
 ): Promise<{ newMatches: number; syncedMatches: number; newMatchUuids: string[] }> {
-  const cutoff = getRetentionCutoff();
+  // Personal coaching needs a durable longitudinal sample. Do not couple the
+  // player's import window to the much shorter global telemetry retention.
+  const cutoff = getPersonalHistoryCutoff();
   const pageSize = Math.min(50, Math.max(matchLimit, 1));
   const matches: PredggMatchStat[] = [];
   const seenUuids = new Set<string>();
@@ -2010,8 +2021,9 @@ export interface CleanupResult {
 }
 
 /**
- * Deletes all data older than DATA_RETENTION_MONTHS months.
- * Preserves players in team rosters and linked to user accounts.
+ * Deletes unowned data older than DATA_RETENTION_MONTHS months.
+ * Matches involving a player linked to an account or team roster are retained
+ * so personal and team coaching trends remain available over time.
  * Run monthly to keep the database within the configured retention window.
  */
 export async function cleanupOldData(db: PrismaClient): Promise<CleanupResult> {
@@ -2020,34 +2032,46 @@ export async function cleanupOldData(db: PrismaClient): Promise<CleanupResult> {
 
   logger.info({ cutoff, retentionMonths: DATA_RETENTION_MONTHS }, 'starting data retention cleanup');
 
-  // 1. Event stream — drop_chunks for hypertables (milliseconds vs minutes)
-  // HeroBan is not a hypertable so still uses DELETE via Match IDs
-  const oldMatchIds = await db.match.findMany({
-    where: { startTime: { lt: cutoff } },
-    select: { id: true },
-  });
-  const ids = oldMatchIds.map((m) => m.id);
+  // drop_chunks cannot preserve selected matches inside a chunk. Resolve the
+  // exact unowned match IDs and delete by indexed matchId instead.
+  const oldMatchIds = await db.$queryRaw<Array<{ id: string }>>`
+    SELECT m.id
+    FROM "Match" m
+    WHERE m."startTime" < ${cutoff}
+      AND NOT EXISTS (
+        SELECT 1
+        FROM "MatchPlayer" mp
+        JOIN "Player" p ON p.id = mp."playerId"
+        WHERE mp."matchId" = m.id
+          AND (
+            EXISTS (SELECT 1 FROM "User" u WHERE u."linkedPlayerId" = p.id)
+            OR EXISTS (SELECT 1 FROM "TeamRoster" tr WHERE tr."playerId" = p.id)
+          )
+      )
+  `;
+  const ids = oldMatchIds.map((match) => match.id);
 
   let deletedEventStreamRows = 0;
-  await Promise.all([
-    db.$executeRaw`SELECT drop_chunks('"HeroKill"', ${cutoff}::timestamptz)`,
-    db.$executeRaw`SELECT drop_chunks('"ObjectiveKill"', ${cutoff}::timestamptz)`,
-    db.$executeRaw`SELECT drop_chunks('"WardEvent"', ${cutoff}::timestamptz)`,
-    db.$executeRaw`SELECT drop_chunks('"Transaction"', ${cutoff}::timestamptz)`,
-    db.$executeRaw`SELECT drop_chunks('"StructureDestruction"', ${cutoff}::timestamptz)`,
-  ]);
-  deletedEventStreamRows = -1; // drop_chunks doesn't return row count
-
-  // HeroBan is not a hypertable — delete normally
-  if (ids.length > 0) {
-    await db.heroBan.deleteMany({ where: { matchId: { in: ids } } });
+  for (let index = 0; index < ids.length; index += 1_000) {
+    const batch = ids.slice(index, index + 1_000);
+    const deleted = await Promise.all([
+      db.heroKill.deleteMany({ where: { matchId: { in: batch } } }),
+      db.objectiveKill.deleteMany({ where: { matchId: { in: batch } } }),
+      db.wardEvent.deleteMany({ where: { matchId: { in: batch } } }),
+      db.transaction.deleteMany({ where: { matchId: { in: batch } } }),
+      db.structureDestruction.deleteMany({ where: { matchId: { in: batch } } }),
+      db.heroBan.deleteMany({ where: { matchId: { in: batch } } }),
+    ]);
+    deletedEventStreamRows += deleted.reduce((sum, result) => sum + result.count, 0);
   }
 
   // 2. MatchPlayer + Match
   const mpResult = ids.length > 0
     ? await db.matchPlayer.deleteMany({ where: { matchId: { in: ids } } })
     : { count: 0 };
-  const matchResult = await db.match.deleteMany({ where: { startTime: { lt: cutoff } } });
+  const matchResult = ids.length > 0
+    ? await db.match.deleteMany({ where: { id: { in: ids } } })
+    : { count: 0 };
 
   // 3. Inactive players (no match since cutoff, not in teams, not linked to users)
   const inactivePlayers = await db.$queryRaw<Array<{ id: string }>>`
@@ -2091,5 +2115,3 @@ export async function cleanupOldData(db: PrismaClient): Promise<CleanupResult> {
 
   return result;
 }
-
-
