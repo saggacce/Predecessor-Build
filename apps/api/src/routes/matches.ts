@@ -8,6 +8,7 @@ import { requireAuth } from '../middleware/require-auth.js';
 import { logger } from '../logger.js';
 import { getMatchBuildAnalysis } from '../services/build-coach-service.js';
 import { getPlayerMatchCoachAnalysis } from '../services/player-match-coach-service.js';
+import { getMatchLearningCheckpoint } from '../services/player-learning-service.js';
 
 export const matchesRouter = Router();
 
@@ -46,7 +47,9 @@ matchesRouter.get('/live/:predggUuid/coach-analysis', requireAuth, async (req, r
     });
     if (!matchPlayer) throw new AppError(404, 'Linked player not found in this match', 'MATCH_PLAYER_NOT_FOUND');
     res.set('Cache-Control', 'no-store');
-    res.json(await getPlayerMatchCoachAnalysis(matchPlayer.matchId, matchPlayer.id));
+    const analysis = await getPlayerMatchCoachAnalysis(matchPlayer.matchId, matchPlayer.id);
+    const learningContext = await getMatchLearningCheckpoint(req.user!.userId, matchPlayer.matchId, matchPlayer.id, analysis.role);
+    res.json({ ...analysis, learningContext });
   } catch (err) {
     next(err);
   }
@@ -64,7 +67,11 @@ matchesRouter.get('/:id/build-analysis/:matchPlayerId', requireAuth, async (req,
 matchesRouter.get('/:id/coach-analysis/:matchPlayerId', requireAuth, async (req, res, next) => {
   try {
     res.set('Cache-Control', 'no-store');
-    res.json(await getPlayerMatchCoachAnalysis(String(req.params.id), String(req.params.matchPlayerId)));
+    const matchId = String(req.params.id);
+    const matchPlayerId = String(req.params.matchPlayerId);
+    const analysis = await getPlayerMatchCoachAnalysis(matchId, matchPlayerId);
+    const learningContext = await getMatchLearningCheckpoint(req.user!.userId, matchId, matchPlayerId, analysis.role);
+    res.json({ ...analysis, learningContext });
   } catch (err) {
     next(err);
   }

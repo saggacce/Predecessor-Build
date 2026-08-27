@@ -1452,10 +1452,74 @@ export interface PlayerTrainingCycle {
   status: 'ACTIVE' | 'COMPLETED' | 'ARCHIVED';
   sourceMatchId: string | null;
   sourceMomentId: string | null;
+  profileId?: string | null;
+  competencyKey?: string | null;
+  learningLevel?: number | null;
+  successCriteria?: Record<string, unknown> | null;
+  evaluation?: Record<string, unknown> | null;
   startedAt: string;
   completedAt: string | null;
   matchesPlayed: number;
   progress: number;
+}
+
+export interface PlayerLearningProfile {
+  id: string;
+  playerId: string;
+  overallLevel: number;
+  overallLevelLabel: string;
+  placementStatus: 'NOT_STARTED' | 'IN_PROGRESS' | 'PROVISIONAL' | 'CONFIRMED';
+  activeRole: 'CARRY' | 'SUPPORT' | 'MIDLANE' | 'JUNGLE' | 'OFFLANE' | null;
+  explanationDepth: 'FOUNDATIONAL' | 'STANDARD' | 'ADVANCED';
+  confidence: number;
+  competencies: Array<{ key: string; label: string; description: string; level: number; levelLabel: string; mastery: number; confidence: number; evidenceCount: number; nextReviewAt: string | null }>;
+}
+
+export interface LearningQuestionView {
+  key: string;
+  competencyKey: string;
+  level: number;
+  prompt: string;
+  context: string;
+  principle: string;
+  knowledgeKeys: string[];
+  options: Array<{ id: string; text: string }>;
+}
+
+export interface MissionRecommendation {
+  key: string;
+  competencyKey: string;
+  competencyLabel: string;
+  minLevel: number;
+  title: string;
+  cue: string;
+  targetMatches: number;
+  observable: boolean;
+  successCriteria: Record<string, unknown>;
+  replayChecks: string[];
+}
+
+export interface EncyclopediaEntry {
+  key: string;
+  kind: 'concept' | 'hero' | 'item' | 'loadout' | 'eternal_category';
+  title: string;
+  summary: string;
+  details: unknown;
+  competencyKey: string | null;
+  roles: string[];
+  patch: string | null;
+  source: string;
+  confidence: 'high' | 'medium' | 'low';
+}
+
+export interface ReplayMarker {
+  id: string; gameTime: number; videoTime: number; category: string; title: string; question: string;
+  status: LearningReviewStatus; conclusion: string | null;
+}
+
+export interface PlayerReplaySession {
+  id: string; matchId: string | null; matchPlayerId: string | null; title: string; recordingUrl: string | null;
+  durationSeconds: number | null; offsetSeconds: number; status: string; markers: ReplayMarker[]; updatedAt: string;
 }
 
 export interface PlayerMatchCoachAnalysis {
@@ -1464,6 +1528,10 @@ export interface PlayerMatchCoachAnalysis {
   heroSlug: string;
   role: string | null;
   result: 'win' | 'loss';
+  learningContext: {
+    profile: { overallLevel: number; levelLabel: string; explanationDepth: string };
+    checkpoint: { key: string; competencyKey: string; competencyLabel: string; prompt: string; context: string; principle: string; options: Array<{ id: string; text: string }> };
+  } | null;
   summary: {
     headline: string;
     explanation: string;
@@ -1709,15 +1777,35 @@ export const apiClient = {
   },
 
   playerLearning: {
+    profile: () => fetchApi<{ profile: PlayerLearningProfile; recommendation: MissionRecommendation }>('/player-learning/profile/me'),
+    updateProfile: (activeRole: PlayerLearningProfile['activeRole']) => fetchApi<{ profile: PlayerLearningProfile }>('/player-learning/profile/me', { method: 'PATCH', body: JSON.stringify({ activeRole }) }),
+    placement: () => fetchApi<{ status: PlayerLearningProfile['placementStatus']; questions: LearningQuestionView[]; note: string }>('/player-learning/placement'),
+    answerQuestion: (questionKey: string, selectedOptionId: string, sourceType: 'PLACEMENT' | 'MATCH' | 'REPLAY' | 'REVIEW' | 'PROMOTION' = 'PLACEMENT', sourceMatchId?: string | null) =>
+      fetchApi<{ result: { questionKey: string; competencyKey: string; competencyLabel: string; evaluation: string; score: number; feedback: string; principle: string; nextReviewAt: string | null } }>(`/player-learning/questions/${encodeURIComponent(questionKey)}/answer`, { method: 'POST', body: JSON.stringify({ selectedOptionId, sourceType, sourceMatchId }) }),
+    recommendedMission: () => fetchApi<{ mission: MissionRecommendation; templates: MissionRecommendation[] }>('/player-learning/missions/recommended'),
+    promotion: () => fetchApi<{ eligible: boolean; reason?: string; competency?: { key: string; label: string; currentLevel: number }; question?: LearningQuestionView }>('/player-learning/promotion'),
+    knowledgeCoverage: () => fetchApi<{ status: 'ready' | 'partial'; patch: { name: string } | null; lastKnowledgeSync: string | null; domains: Record<string, { total: number; complete: number; percent: number }>; gaps: string[]; disclaimer: string }>('/player-learning/knowledge/coverage'),
+    searchKnowledge: (query: string, kind?: EncyclopediaEntry['kind']) => {
+      const params = new URLSearchParams();
+      if (query) params.set('q', query);
+      if (kind) params.set('kind', kind);
+      return fetchApi<{ entries: EncyclopediaEntry[]; patch: string | null }>(`/player-learning/knowledge?${params}`);
+    },
     reviews: (matchId: string, matchPlayerId: string) =>
       fetchApi<{ reviews: LearningMomentReview[] }>(`/player-learning/matches/${encodeURIComponent(matchId)}/reviews?matchPlayerId=${encodeURIComponent(matchPlayerId)}`),
     saveReview: (matchId: string, momentId: string, data: { matchPlayerId: string; status: LearningReviewStatus; note?: string | null }) =>
       fetchApi<{ review: LearningMomentReview }>(`/player-learning/matches/${encodeURIComponent(matchId)}/reviews/${encodeURIComponent(momentId)}`, { method: 'PUT', body: JSON.stringify(data) }),
     cycles: () => fetchApi<{ cycles: PlayerTrainingCycle[] }>('/player-learning/cycles/me'),
-    createCycle: (data: { focusKey: string; title: string; cue: string; targetMatches?: number; sourceMatchId?: string | null; sourceMomentId?: string | null }) =>
+    createCycle: (data: { focusKey: string; title: string; cue: string; targetMatches?: number; sourceMatchId?: string | null; sourceMomentId?: string | null; competencyKey?: string | null; learningLevel?: number | null; successCriteria?: Record<string, unknown> | null }) =>
       fetchApi<{ cycle: PlayerTrainingCycle }>('/player-learning/cycles', { method: 'POST', body: JSON.stringify(data) }),
     updateCycle: (id: string, status: 'COMPLETED' | 'ARCHIVED') =>
       fetchApi<{ cycle: PlayerTrainingCycle }>(`/player-learning/cycles/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify({ status }) }),
+    replays: () => fetchApi<{ sessions: PlayerReplaySession[] }>('/player-learning/replays'),
+    createReplay: (data: { matchId?: string | null; matchPlayerId?: string | null; title: string; recordingUrl?: string | null; durationSeconds?: number | null; offsetSeconds?: number; markers?: Array<{ gameTime: number; sourceEventId?: string | null; category: string; title: string; question: string }> }) =>
+      fetchApi<{ session: PlayerReplaySession }>('/player-learning/replays', { method: 'POST', body: JSON.stringify(data) }),
+    updateReplayMarker: (sessionId: string, markerId: string, status: LearningReviewStatus, conclusion?: string | null) =>
+      fetchApi<{ marker: ReplayMarker }>(`/player-learning/replays/${encodeURIComponent(sessionId)}/markers/${encodeURIComponent(markerId)}`, { method: 'PATCH', body: JSON.stringify({ status, conclusion }) }),
+    startLiveSession: (requestedGameMode: string) => fetchApi<{ session: { id: string; requestedGameMode: string; modeVerification: string; status: string }; canAdvise: boolean; reason: string }>('/player-learning/live/sessions', { method: 'POST', body: JSON.stringify({ requestedGameMode, captureConsent: true }) }),
   },
 
   reports: {

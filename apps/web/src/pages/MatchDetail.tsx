@@ -773,6 +773,7 @@ function PlayerCoachAnalysisPanel({ analysis, section, onSectionChange, buildCar
   onOpenTimeline: (gameTime: number, label: string) => void;
   onStartCycle?: (moment: PlayerMatchCoachAnalysis['learningMoments'][number]) => Promise<void>;
 }) {
+  const [checkpointFeedback, setCheckpointFeedback] = useState<{ feedback: string; principle: string } | null>(null);
   const tabs: Array<{ key: PersonalCoachSection; label: string }> = [
     { key: 'overview', label: 'Resumen' },
     { key: 'moments', label: 'Momentos clave' },
@@ -841,6 +842,17 @@ function PlayerCoachAnalysisPanel({ analysis, section, onSectionChange, buildCar
             </article>)}
           </div>
           <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: '0.62rem', lineHeight: 1.45 }}>{analysis.coverage.disclaimer}</p>
+          {analysis.learningContext && <article className="glass-card" style={{ padding: '1rem', borderColor: 'rgba(167,139,250,.3)' }}>
+            <span style={{ color: 'var(--accent-violet)', fontSize: '.6rem', fontWeight: 900, textTransform: 'uppercase' }}>Comprueba tu razonamiento · {analysis.learningContext.checkpoint.competencyLabel}</span>
+            <h3 style={{ margin: '.35rem 0', fontSize: '.9rem' }}>{analysis.learningContext.checkpoint.prompt}</h3>
+            <p style={{ color: 'var(--text-muted)', fontSize: '.7rem' }}>{analysis.learningContext.checkpoint.context}</p>
+            {!checkpointFeedback ? <div style={{ display: 'grid', gap: '.4rem' }}>{analysis.learningContext.checkpoint.options.map((option) => <button key={option.id} type="button" onClick={async () => {
+              try {
+                const { result } = await apiClient.playerLearning.answerQuestion(analysis.learningContext!.checkpoint.key, option.id, 'MATCH', analysis.matchId);
+                setCheckpointFeedback({ feedback: result.feedback, principle: result.principle });
+              } catch { toast.error('No se pudo guardar esta respuesta.'); }
+            }} style={{ textAlign: 'left', border: '1px solid var(--border-color)', borderRadius: 7, padding: '.55rem .7rem', background: 'rgba(255,255,255,.025)', color: 'var(--text-primary)', cursor: 'pointer' }}>{option.text}</button>)}</div> : <div style={{ borderLeft: '3px solid var(--accent-cyan)', paddingLeft: '.7rem', fontSize: '.72rem' }}><p>{checkpointFeedback.feedback}</p><strong style={{ color: 'var(--accent-cyan)' }}>{checkpointFeedback.principle}</strong></div>}
+          </article>}
         </div>
       ) : null}
 
@@ -851,6 +863,12 @@ function PlayerCoachAnalysisPanel({ analysis, section, onSectionChange, buildCar
             <strong style={{ display: 'block', color: 'var(--accent-cyan)', fontSize: '0.68rem' }}>No son errores automáticos</strong>
             <p style={{ margin: '0.28rem 0 0', color: 'var(--text-secondary)', fontSize: '0.67rem', lineHeight: 1.45 }}>RiftLine señala ventanas con evidencia suficiente para volver al replay. Tú confirmas la causa observando información, oleadas, enfriamientos, aliados y beneficio esperado.</p>
           </div>
+          {analysis.learningMoments.length > 0 && onSaveReview ? <button type="button" onClick={async () => {
+            try {
+              await apiClient.playerLearning.createReplay({ matchId: analysis.matchId, matchPlayerId: analysis.matchPlayerId, title: `Revisión ${analysis.heroSlug} · ${analysis.result === 'win' ? 'victoria' : 'derrota'}`, markers: analysis.learningMoments.map((moment) => ({ gameTime: moment.gameTime, category: moment.type, title: moment.title, question: moment.reviewChecklist.join(' · ') })) });
+              toast.success('Revisión creada en Mi academia');
+            } catch { toast.error('No se pudo preparar la revisión.'); }
+          }} style={{ justifySelf: 'start', border: '1px solid rgba(56,212,200,.35)', borderRadius: 7, padding: '.48rem .7rem', background: 'rgba(56,212,200,.08)', color: 'var(--accent-cyan)', cursor: 'pointer' }}>Preparar estos momentos en el replay</button> : null}
           {analysis.learningMoments.length > 0
             ? analysis.learningMoments.map((moment, index) => <LearningMomentCard
               key={moment.id}
@@ -953,6 +971,7 @@ function AnalysisTab({ match, duskWon, dawnWon: _dawnWon, onResync, syncing, pre
 
   const personalCoach = (liveMode || buildCoachPlayerId) ? (
     <PlayerCoachAnalysisPanel
+      key={coachAnalysis?.matchId ?? match.id}
       analysis={coachAnalysis}
       section={coachSection}
       onSectionChange={setCoachSection}

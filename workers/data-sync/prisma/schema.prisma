@@ -139,31 +139,32 @@ model EternalCategoryVersion {
 /// no linked account (~60% of players).
 model Player {
   /// Internal cuid — used in all internal joins
-  id                 String             @id @default(cuid())
+  id                 String                  @id @default(cuid())
   /// pred.gg player ID (UUID format) — used for API lookups
-  predggId           String             @unique
+  predggId           String                  @unique
   /// pred.gg UUID — same value as predggId in practice; kept for legacy reasons
-  predggUuid         String             @unique
+  predggUuid         String                  @unique
   /// Display name from pred.gg. Console players show a generated "user-XXXXXXXX" name.
   displayName        String
   /// Whether the player set their profile to private on pred.gg
-  isPrivate          Boolean            @default(false)
+  isPrivate          Boolean                 @default(false)
   /// Region inferred from match location data (not provided by pred.gg directly)
   inferredRegion     String?
-  firstSeen          DateTime           @default(now())
+  firstSeen          DateTime                @default(now())
   /// Last time this player's data was synced from pred.gg
   lastSynced         DateTime
   /// Optional override name set by staff in RiftLine (takes priority over displayName in UI)
   customName         String?
   /// True for players who play on console. Console players cannot be synced
   /// via the pred.gg player endpoint — their matches appear with isNameConsole=true.
-  isConsole          Boolean            @default(false)
+  isConsole          Boolean                 @default(false)
   matchPlayers       MatchPlayer[]
   snapshots          PlayerSnapshot[]
   rosterEntries      TeamRoster[]
   rivalRosterEntries RivalRosterEntry[]
   /// RiftLine user account linked to this player (one-to-one, optional)
   userAccount        User?
+  learningProfiles   PlayerLearningProfile[]
 }
 
 /// Point-in-time snapshot of a player's aggregate stats fetched from pred.gg.
@@ -285,6 +286,7 @@ model Match {
   structureDestructions StructureDestruction[]
   transactions          Transaction[]
   wardEvents            WardEvent[]
+  playerReplaySessions  PlayerReplaySession[]
 
   @@index([startTime(sort: Desc), gameMode, versionId])
 }
@@ -566,51 +568,52 @@ model SyncLog {
 /// - "PLATFORM_ADMIN": can configure platform settings, permissions and users
 /// - "VIEWER": default role; access controlled by team membership role
 model User {
-  id                  String                  @id @default(cuid())
-  email               String                  @unique
-  name                String
+  id                    String                       @id @default(cuid())
+  email                 String                       @unique
+  name                  String
   /// bcrypt hash (cost factor 12)
-  passwordHash        String
+  passwordHash          String
   /// "SUPER_ADMIN" | "PLATFORM_ADMIN" | "VIEWER"
-  globalRole          String                  @default("VIEWER")
-  isActive            Boolean                 @default(true)
-  createdAt           DateTime                @default(now())
-  lastLoginAt         DateTime?
-  avatarUrl           String?
-  bio                 String?
-  timezone            String?
+  globalRole            String                       @default("VIEWER")
+  isActive              Boolean                      @default(true)
+  createdAt             DateTime                     @default(now())
+  lastLoginAt           DateTime?
+  avatarUrl             String?
+  bio                   String?
+  timezone              String?
   /// Links to a Player record — enables personal match feed and player goals.
   /// Set via profile page or automatically during pred.gg OAuth login.
-  linkedPlayerId      String?                 @unique
+  linkedPlayerId        String?                      @unique
   /// "en" | "es" — UI language preference
-  language            String                  @default("en")
+  language              String                       @default("en")
   /// "FREE" | "PRO" | "PREMIUM"
-  playerTier          String                  @default("FREE")
-  playerTierExpiresAt DateTime?
+  playerTier            String                       @default("FREE")
+  playerTierExpiresAt   DateTime?
   /// Social / OAuth provider links (for display only; not used for auth)
-  discordId           String?                 @unique
-  discordUsername     String?
-  epicGamesId         String?                 @unique
-  epicGamesUsername   String?
-  steamId             String?                 @unique
-  steamUsername       String?
+  discordId             String?                      @unique
+  discordUsername       String?
+  epicGamesId           String?                      @unique
+  epicGamesUsername     String?
+  steamId               String?                      @unique
+  steamUsername         String?
   /// Whether the user has seen the onboarding welcome modal
-  onboardingModalSeen Boolean                 @default(false)
-  sentInvitations     Invitation[]            @relation("InvitedBy")
-  memberships         TeamMembership[]
-  linkedPlayer        Player?                 @relation(fields: [linkedPlayerId], references: [id])
-  sentComms           TeamComm[]              @relation("SentComms")
-  receivedComms       TeamComm[]              @relation("ReceivedComms")
-  scrimSchedules      ScrimSchedule[]
-  playbookEntries     PlaybookEntry[]
-  weeklyGoals         WeeklyGoal[]
+  onboardingModalSeen   Boolean                      @default(false)
+  sentInvitations       Invitation[]                 @relation("InvitedBy")
+  memberships           TeamMembership[]
+  linkedPlayer          Player?                      @relation(fields: [linkedPlayerId], references: [id])
+  sentComms             TeamComm[]                   @relation("SentComms")
+  receivedComms         TeamComm[]                   @relation("ReceivedComms")
+  scrimSchedules        ScrimSchedule[]
+  playbookEntries       PlaybookEntry[]
+  weeklyGoals           WeeklyGoal[]
   learningMomentReviews PlayerLearningMomentReview[]
-  trainingCycles      PlayerTrainingCycle[]
-  reviewSessions      ReviewSession[]
-  actionItems         ActionItem[]
-  addedRivalRosters   RivalRosterEntry[]
-  missionCompletions  UserMissionCompletion[]
-  achievements        UserAchievement[]
+  trainingCycles        PlayerTrainingCycle[]
+  learningProfile       PlayerLearningProfile?
+  reviewSessions        ReviewSession[]
+  actionItems           ActionItem[]
+  addedRivalRosters     RivalRosterEntry[]
+  missionCompletions    UserMissionCompletion[]
+  achievements          UserAchievement[]
 }
 
 /// Tracks which onboarding missions a user has completed.
@@ -1105,25 +1108,189 @@ model PlayerLearningMomentReview {
 /// PlayerGoal/TeamGoal, so personal and coordinated contexts do not overwrite
 /// one another.
 model PlayerTrainingCycle {
-  id             String    @id @default(cuid())
-  userId         String
-  playerId       String
-  focusKey       String
-  title          String
-  cue            String
-  targetMatches  Int       @default(5)
+  id              String                 @id @default(cuid())
+  userId          String
+  playerId        String
+  focusKey        String
+  title           String
+  cue             String
+  targetMatches   Int                    @default(5)
   /// "ACTIVE" | "COMPLETED" | "ARCHIVED"
-  status         String    @default("ACTIVE")
-  sourceMatchId  String?
-  sourceMomentId String?
-  startedAt      DateTime  @default(now())
-  completedAt    DateTime?
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
-  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  status          String                 @default("ACTIVE")
+  sourceMatchId   String?
+  sourceMomentId  String?
+  /// Optional link to the adaptive learning profile. Older cycles remain valid.
+  profileId       String?
+  competencyKey   String?
+  learningLevel   Int?
+  successCriteria Json?
+  evaluation      Json?
+  startedAt       DateTime               @default(now())
+  completedAt     DateTime?
+  createdAt       DateTime               @default(now())
+  updatedAt       DateTime               @updatedAt
+  user            User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  profile         PlayerLearningProfile? @relation(fields: [profileId], references: [id], onDelete: SetNull)
 
   @@index([userId, status, startedAt(sort: Desc)])
   @@index([playerId, startedAt(sort: Desc)])
+  @@index([profileId, status, startedAt(sort: Desc)])
+}
+
+/// Pedagogical state for a standalone player. Competitive rank is deliberately
+/// separate: this level describes demonstrated learning, not MMR.
+model PlayerLearningProfile {
+  id               String                 @id @default(cuid())
+  userId           String                 @unique
+  playerId         String
+  /// 1 Iniciación · 2 Fundamentos · 3 Consistencia · 4 Adaptación · 5 Dominio
+  overallLevel     Int                    @default(1)
+  /// "NOT_STARTED" | "IN_PROGRESS" | "PROVISIONAL" | "CONFIRMED"
+  placementStatus  String                 @default("NOT_STARTED")
+  activeRole       String?
+  /// "FOUNDATIONAL" | "STANDARD" | "ADVANCED"
+  explanationDepth String                 @default("FOUNDATIONAL")
+  confidence       Float                  @default(0)
+  createdAt        DateTime               @default(now())
+  updatedAt        DateTime               @updatedAt
+  user             User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  player           Player                 @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  competencies     PlayerCompetency[]
+  attempts         CoachQuestionAttempt[]
+  trainingCycles   PlayerTrainingCycle[]
+  replaySessions   PlayerReplaySession[]
+  liveSessions     LiveTrainingSession[]
+
+  @@index([playerId, updatedAt(sort: Desc)])
+}
+
+/// Independent learning state per competence. Mastery is transparent and
+/// evidence-counted so one quiz answer or one bad match cannot define a player.
+model PlayerCompetency {
+  id             String                @id @default(cuid())
+  profileId      String
+  competencyKey  String
+  level          Int                   @default(1)
+  mastery        Float                 @default(0)
+  confidence     Float                 @default(0)
+  evidenceCount  Int                   @default(0)
+  correctCount   Int                   @default(0)
+  appliedCount   Int                   @default(0)
+  lastEvidenceAt DateTime?
+  nextReviewAt   DateTime?
+  createdAt      DateTime              @default(now())
+  updatedAt      DateTime              @updatedAt
+  profile        PlayerLearningProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  @@unique([profileId, competencyKey])
+  @@index([profileId, mastery, confidence])
+}
+
+/// Immutable snapshot of a player's answer and the deterministic rubric used
+/// to evaluate it. The LLM may explain the result but does not choose it.
+model CoachQuestionAttempt {
+  id                String                @id @default(cuid())
+  profileId         String
+  questionKey       String
+  competencyKey     String
+  learningLevel     Int
+  /// "PLACEMENT" | "MATCH" | "REPLAY" | "REVIEW" | "PROMOTION"
+  sourceType        String
+  sourceMatchId     String?
+  promptSnapshot    Json
+  optionsSnapshot   Json
+  selectedOptionId  String
+  /// "ADEQUATE" | "DEFENSIBLE" | "RISKY" | "UNKNOWN"
+  evaluation        String
+  score             Float
+  rationaleSnapshot String
+  evidenceSnapshot  Json?
+  answeredAt        DateTime              @default(now())
+  profile           PlayerLearningProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  @@index([profileId, competencyKey, answeredAt(sort: Desc)])
+  @@index([profileId, sourceType, answeredAt(sort: Desc)])
+}
+
+/// A personal recording/replay review. Team VOD remains in VodLink and is not
+/// mixed with private player conclusions.
+model PlayerReplaySession {
+  id              String                @id @default(cuid())
+  profileId       String
+  matchId         String?
+  matchPlayerId   String?
+  title           String
+  recordingUrl    String?
+  durationSeconds Int?
+  offsetSeconds   Int                   @default(0)
+  /// "DRAFT" | "READY" | "IN_REVIEW" | "COMPLETED" | "ARCHIVED"
+  status          String                @default("DRAFT")
+  createdAt       DateTime              @default(now())
+  updatedAt       DateTime              @updatedAt
+  profile         PlayerLearningProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  match           Match?                @relation(fields: [matchId], references: [id], onDelete: SetNull)
+  markers         PlayerReplayMarker[]
+
+  @@index([profileId, status, updatedAt(sort: Desc)])
+  @@index([matchId])
+}
+
+model PlayerReplayMarker {
+  id            String              @id @default(cuid())
+  sessionId     String
+  gameTime      Int
+  videoTime     Int
+  sourceEventId String?
+  category      String
+  title         String
+  question      String
+  /// "PENDING" | "CONFIRMED_MISTAKE" | "GOOD_DECISION" | "INCONCLUSIVE"
+  status        String              @default("PENDING")
+  conclusion    String?
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @updatedAt
+  session       PlayerReplaySession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId, gameTime])
+}
+
+/// Local personal training session. Live advice is fail-closed: only explicitly
+/// allowed non-ranked modes can reach VERIFIED_ALLOWED.
+model LiveTrainingSession {
+  id                  String                @id @default(cuid())
+  profileId           String
+  requestedGameMode   String
+  detectedGameMode    String?
+  /// "UNVERIFIED" | "VERIFIED_ALLOWED" | "BLOCKED_RANKED" | "BLOCKED_UNKNOWN"
+  modeVerification    String                @default("UNVERIFIED")
+  verificationSignals Json?
+  /// "PENDING" | "ACTIVE" | "COMPLETED" | "ABORTED" | "BLOCKED"
+  status              String                @default("PENDING")
+  captureConsent      Boolean               @default(false)
+  rankedBlockedAt     DateTime?
+  startedAt           DateTime              @default(now())
+  endedAt             DateTime?
+  createdAt           DateTime              @default(now())
+  updatedAt           DateTime              @updatedAt
+  profile             PlayerLearningProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  events              LiveTrainingEvent[]
+
+  @@index([profileId, status, startedAt(sort: Desc)])
+  @@index([modeVerification, status])
+}
+
+model LiveTrainingEvent {
+  id         String              @id @default(cuid())
+  sessionId  String
+  gameTime   Int?
+  eventType  String
+  evidence   Json
+  advice     String?
+  confidence String
+  createdAt  DateTime            @default(now())
+  session    LiveTrainingSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId, createdAt])
 }
 
 /// Internal communication between team members.

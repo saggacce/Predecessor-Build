@@ -23,7 +23,7 @@ interface RecentCoachMatch {
   };
 }
 
-interface FundamentalKnowledge {
+export interface FundamentalKnowledge {
   key: string;
   label: string;
   keywords: string[];
@@ -31,7 +31,7 @@ interface FundamentalKnowledge {
   value: string;
 }
 
-const FUNDAMENTALS: FundamentalKnowledge[] = [
+export const FUNDAMENTALS: FundamentalKnowledge[] = [
   {
     key: 'economy',
     label: 'Oro, experiencia y compras',
@@ -116,6 +116,15 @@ const FUNDAMENTALS: FundamentalKnowledge[] = [
     value: 'Offlane debe convertir su presión y durabilidad en una ventaja útil sin aislarse de las ventanas decisivas. Presionar una línea, agruparse o flanquear son opciones contextuales que dependen de oleadas, teleportes o movilidad, objetivos y capacidad del equipo para esperar.',
   },
 ];
+
+export function fundamentalCompetency(key: string): string {
+  if (['economy'].includes(key)) return 'moba_fundamentals';
+  if (['objectives', 'vision', 'tempo'].includes(key)) return 'macro';
+  if (['build_adaptation', 'anti_heal', 'damage_defence'].includes(key)) return 'builds';
+  if (['combat'].includes(key)) return 'micro_concepts';
+  if (key.endsWith('_role')) return 'role_knowledge';
+  return 'moba_fundamentals';
+}
 
 function asArray<T>(value: unknown): T[] {
   return Array.isArray(value) ? value as T[] : [];

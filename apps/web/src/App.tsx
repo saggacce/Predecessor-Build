@@ -5,7 +5,7 @@ import { useTranslation } from 'react-i18next';
 import {
   Film, BarChart2, Wrench, FileText, Users, Settings,
   LogIn, LogOut, Loader, Radio, Zap, ChevronDown, ChevronRight,
-  LayoutDashboard, KeyRound, Presentation,
+  LayoutDashboard, KeyRound, Presentation, GraduationCap,
 } from 'lucide-react';
 import type { VersionRecord } from '@predecessor/data-model';
 import Dashboard from './pages/Dashboard';
@@ -30,6 +30,7 @@ import PlayerWeeklyReportPage from './pages/PlayerWeeklyReportPage';
 import UsersPage from './pages/UsersPage';
 import ProfilePage from './pages/ProfilePage';
 import ApiStatusPage from './pages/ApiStatusPage';
+import PlayerAcademyPage from './pages/PlayerAcademyPage';
 import ConfigPage from './pages/ConfigPage';
 import FeedbackPage from './pages/FeedbackPage';
 import PermissionsPage from './pages/PermissionsPage';
@@ -277,6 +278,12 @@ function useSections(t: (key: string) => string): SidebarSection[] {
         label: t('nav.playerHome'),
         icon: <LayoutDashboard size={17} />,
         to: '/',
+      },
+      {
+        id: 'academy',
+        label: 'Mi academia',
+        icon: <GraduationCap size={17} />,
+        to: '/academy',
       },
       {
         id: 'player-coach',
@@ -641,6 +648,7 @@ function AppContent() {
             <Route path="/matches/:id" element={<MatchDetail />} />
             <Route path="/matches/live/:predggUuid" element={<MatchDetail liveMode />} />
             <Route path="/player/matches" element={<PlayerMatchesPage />} />
+            <Route path="/academy" element={<PlayerAcademyPage />} />
 
             {/* Analysis */}
             <Route path="/analysis/teams" element={<TeamAnalysis />} />
