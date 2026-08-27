@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { CSSProperties } from 'react';
+import { useSearchParams } from 'react-router';
 import { BookOpen, BrainCircuit, CheckCircle2, Crosshair, Film, Loader, MonitorPlay, Search, ShieldAlert, Target } from 'lucide-react';
 import { toast } from 'sonner';
 import {
@@ -20,7 +21,8 @@ const button: CSSProperties = { border: '1px solid var(--border-color)', borderR
 function percent(value: number) { return `${Math.round(value * 100)}%`; }
 
 export default function PlayerAcademyPage() {
-  const [tab, setTab] = useState<AcademyTab>('path');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [tab, setTab] = useState<AcademyTab>(() => searchParams.get('onboarding') === '1' ? 'diagnostic' : 'path');
   const [profile, setProfile] = useState<PlayerLearningProfile | null>(null);
   const [mission, setMission] = useState<MissionRecommendation | null>(null);
   const [cycles, setCycles] = useState<PlayerTrainingCycle[]>([]);
@@ -63,7 +65,7 @@ export default function PlayerAcademyPage() {
         {tabs.map((item) => <button key={item.id} role="tab" aria-selected={tab === item.id} onClick={() => setTab(item.id)} style={{ ...button, display: 'flex', gap: '.4rem', alignItems: 'center', borderColor: tab === item.id ? 'var(--accent-cyan)' : 'var(--border-color)', color: tab === item.id ? 'var(--accent-cyan)' : 'var(--text-primary)' }}>{item.icon}{item.label}</button>)}
       </div>
       {tab === 'path' && <LearningPath profile={profile} mission={mission} cycles={cycles} onChanged={refresh} />}
-      {tab === 'diagnostic' && <Diagnostic profile={profile} onChanged={refresh} />}
+      {tab === 'diagnostic' && <Diagnostic profile={profile} onChanged={refresh} onFinished={() => { setSearchParams({}); setTab('path'); }} />}
       {tab === 'knowledge' && <Knowledge />}
       {tab === 'replay' && <ReplayReview />}
       {tab === 'live' && <LocalTraining />}
@@ -92,16 +94,28 @@ function LearningPath({ profile, mission, cycles, onChanged }: { profile: Player
   </div>;
 }
 
-function Diagnostic({ profile, onChanged }: { profile: PlayerLearningProfile; onChanged: () => Promise<void> }) {
+function Diagnostic({ profile, onChanged, onFinished }: { profile: PlayerLearningProfile; onChanged: () => Promise<void>; onFinished: () => void }) {
   const [questions, setQuestions] = useState<LearningQuestionView[]>([]); const [index, setIndex] = useState(0); const [feedback, setFeedback] = useState<{ feedback: string; principle: string } | null>(null); const [busy, setBusy] = useState(false);
   const [promotion, setPromotion] = useState<{ eligible: boolean; reason?: string; competency?: { label: string }; question?: LearningQuestionView } | null>(null); const [promotionAnswered, setPromotionAnswered] = useState(false);
   useEffect(() => { if (!profile.activeRole) return; Promise.all([apiClient.playerLearning.placement(), apiClient.playerLearning.promotion()]).then(([placement, promotionResult]) => { setQuestions(placement.questions); setPromotion(promotionResult); }).catch(() => toast.error('No se pudo cargar el diagnóstico')); }, [profile.activeRole]);
-  if (!profile.activeRole) return <section style={card}><BrainCircuit color="var(--accent-violet)"/><h3>Define primero el rol que quieres aprender</h3><p>Selecciona tu rol principal en «Mi ruta». Así una parte del diagnóstico podrá evaluar responsabilidades reales de Carry, Support, Midlane, Jungla u Offlane en lugar de darte preguntas genéricas.</p></section>;
+  async function chooseRole(activeRole: NonNullable<PlayerLearningProfile['activeRole']>) {
+    setBusy(true);
+    try {
+      await apiClient.playerLearning.updateProfile(activeRole);
+      await onChanged();
+      toast.success('Rol guardado. Empezamos tu diagnóstico.');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'No se pudo guardar el rol');
+    } finally {
+      setBusy(false);
+    }
+  }
+  if (!profile.activeRole) return <section style={{ ...card, maxWidth: 760 }}><BrainCircuit color="var(--accent-violet)"/><div style={{ color: 'var(--accent-cyan)', fontSize: '.72rem', fontWeight: 800, marginTop: '.7rem' }}>PRIMER PASO · 1 DE 2</div><h2>¿Qué rol quieres aprender primero?</h2><p style={{ color: 'var(--text-secondary)', lineHeight: 1.5 }}>Tu diagnóstico combinará fundamentos generales con situaciones propias de este rol. Podrás cambiarlo más adelante; no afecta a tu rango ni bloquea el resto de la plataforma.</p><div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '.55rem', marginTop: '1rem' }}>{(['CARRY','SUPPORT','MIDLANE','JUNGLE','OFFLANE'] as const).map((role) => <button key={role} disabled={busy} onClick={() => void chooseRole(role)} style={{ ...button, padding: '.8rem', textAlign: 'center', opacity: busy ? .6 : 1 }}>{role}</button>)}</div></section>;
   const isPromotion = index >= questions.length && !!promotion?.eligible && !!promotion.question && !promotionAnswered;
   const current = questions[index] ?? (isPromotion ? promotion?.question : undefined);
-  if (!current) return <section style={card}><CheckCircle2 color="var(--accent-cyan)"/><h3>Diagnóstico recorrido</h3><p>Ya has contestado esta ronda. Es una estimación provisional; tu nivel se confirmará con misiones y revisiones reales.</p><p style={{ color: 'var(--text-muted)' }}><strong>Prueba de ascenso:</strong> {promotion?.reason ?? 'La siguiente prueba aparecerá cuando una misión y varias evidencias demuestren consistencia.'}</p></section>;
+  if (!current) return <section style={card}><CheckCircle2 color="var(--accent-cyan)"/><h3>Diagnóstico recorrido</h3><p>Ya has contestado esta ronda. Es una estimación provisional; tu nivel se confirmará con misiones y revisiones reales.</p><p style={{ color: 'var(--text-muted)' }}><strong>Prueba de ascenso:</strong> {promotion?.reason ?? 'La siguiente prueba aparecerá cuando una misión y varias evidencias demuestren consistencia.'}</p><button style={button} onClick={onFinished}>Ver mi ruta personalizada</button></section>;
   async function answer(optionId: string) { setBusy(true); try { const { result } = await apiClient.playerLearning.answerQuestion(current.key, optionId, isPromotion ? 'PROMOTION' : 'PLACEMENT'); setFeedback(result); await onChanged(); } catch (error) { toast.error(error instanceof Error ? error.message : 'No se pudo guardar'); } finally { setBusy(false); } }
-  return <section style={card}><div style={{ color: 'var(--text-muted)', fontSize: '.75rem' }}>{isPromotion ? `Prueba de ascenso · ${promotion?.competency?.label}` : `Situación ${index + 1} de ${questions.length} · ${current.competencyKey}`}</div><h2>{current.prompt}</h2><p style={{ color: 'var(--text-muted)' }}>{current.context}</p>{!feedback ? <div style={{ display: 'grid', gap: '.55rem' }}>{current.options.map((option) => <button disabled={busy} key={option.id} style={{ ...button, textAlign: 'left' }} onClick={() => void answer(option.id)}>{option.text}</button>)}</div> : <div style={{ padding: '1rem', borderLeft: '3px solid var(--accent-cyan)', background: 'rgba(56,212,200,.06)' }}><strong>Qué aprender de la respuesta</strong><p>{feedback.feedback}</p><p style={{ color: 'var(--accent-cyan)' }}>{feedback.principle}</p><button style={button} onClick={() => { setFeedback(null); if (isPromotion) setPromotionAnswered(true); else setIndex((value) => value + 1); }}>{isPromotion ? 'Finalizar prueba' : 'Siguiente situación'}</button></div>}</section>;
+  return <section style={card}><div style={{ color: 'var(--text-muted)', fontSize: '.75rem' }}>{isPromotion ? `Prueba de ascenso · ${promotion?.competency?.label}` : `Situación ${index + 1} de ${questions.length} · ${current.competencyKey}`}</div><h2>{current.prompt}</h2><p style={{ color: 'var(--text-muted)' }}>{current.context}</p>{!feedback ? <div style={{ display: 'grid', gap: '.55rem' }}>{current.options.map((option) => <button disabled={busy} key={option.id} style={{ ...button, textAlign: 'left' }} onClick={() => void answer(option.id)}>{option.text}</button>)}</div> : <div style={{ padding: '1rem', borderLeft: '3px solid var(--accent-cyan)', background: 'rgba(56,212,200,.06)' }}><strong>Qué aprender de la respuesta</strong><p>{feedback.feedback}</p><p style={{ color: 'var(--accent-cyan)' }}>{feedback.principle}</p><button style={button} onClick={() => { setFeedback(null); if (isPromotion) setPromotionAnswered(true); else if (index + 1 >= questions.length) onFinished(); else setIndex((value) => value + 1); }}>{isPromotion ? 'Finalizar prueba' : index + 1 >= questions.length ? 'Ver mi ruta personalizada' : 'Siguiente situación'}</button></div>}</section>;
 }
 
 function readableText(value: unknown) {

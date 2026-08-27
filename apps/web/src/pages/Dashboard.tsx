@@ -154,6 +154,7 @@ function MissionsPanel({ missions, completedCount, progressPct, lang, onMissionC
 // ── Main dashboard ────────────────────────────────────────────────────────────
 export default function Dashboard() {
   const { t, i18n } = useTranslation();
+  const navigate = useNavigate();
   const { user, internalAuthenticated } = useAuth();
   const { viewAs } = useViewAs();
   const { mode } = useWorkspaceMode();
@@ -201,6 +202,22 @@ export default function Dashboard() {
     || viewAs === 'PLAYER'
     || user?.globalRole === 'PLAYER'
     || (teamsLoaded && !ownTeam && user?.globalRole !== 'PLATFORM_ADMIN' && user?.globalRole !== 'MANAGER');
+
+  // A new player should not have to discover the Academy before receiving an
+  // initial assessment. The Academy owns the guided role + placement flow;
+  // subsequent visits are left under the player's control.
+  useEffect(() => {
+    if (!internalAuthenticated || !user?.linkedPlayerId || !isStandalonePlayerView) return;
+    let cancelled = false;
+    void apiClient.playerLearning.profile()
+      .then(({ profile }) => {
+        if (!cancelled && profile.placementStatus === 'NOT_STARTED') {
+          navigate('/academy?onboarding=1', { replace: true });
+        }
+      })
+      .catch(() => null);
+    return () => { cancelled = true; };
+  }, [internalAuthenticated, isStandalonePlayerView, navigate, user?.linkedPlayerId]);
 
   useEffect(() => {
     if (!internalAuthenticated) return;
