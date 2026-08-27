@@ -51,4 +51,6 @@ Este documento recoge la evolución de RiftLine hacia un coach educativo para So
 
 ## Siguiente fase recomendada
 
-Validar durante varias semanas los ciclos de cinco partidas con un único usuario real. Las conclusiones guardadas del replay deben utilizarse después para medir qué consejos fueron correctos, cuáles eran ruido y qué patrones producen mejora sostenida por rol y héroe.
+Construir el coach adaptativo definido en `docs/adaptive_coach_knowledge_architecture.md`. La primera capa ya separa evidencia personal y conocimiento versionado. El siguiente incremento debe modelar competencias y crear un banco pequeño de preguntas situacionales revisadas antes de generar cuestionarios o ascensos automáticamente.
+
+En paralelo, validar durante varias semanas los ciclos de cinco partidas con un único usuario real. Las conclusiones guardadas del replay deben utilizarse para medir qué consejos fueron correctos, cuáles eran ruido y qué patrones producen mejora sostenida por rol y héroe.

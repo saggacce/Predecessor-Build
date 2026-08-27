@@ -222,6 +222,14 @@ export interface PlayerMatchEnrichmentStatus {
 export interface PlayerCoachChatResponse {
   answer: string;
   evidence: Array<{ id: string; label: string; value: string; scope: string }>;
+  knowledge: Array<{
+    id: string;
+    kind: 'fundamental' | 'hero' | 'item' | 'loadout';
+    label: string;
+    value: string;
+    source: string;
+    patch: string | null;
+  }>;
   coverage: { complete: number; total: number; percent: number };
   model: string;
 }

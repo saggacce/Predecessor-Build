@@ -21,6 +21,37 @@ Tablero de tareas generales y subtareas.
 - **Patch-aware** — filtrar por parche; avisar cuando la muestra mezcla versiones distintas
 - **Muestra mínima** — no destacar WR/pocket picks sin suficientes partidas
 - **Bajo ruido** — dashboards y bot solo muestran eventos críticos, no todo
+- **La IA no es la fuente de verdad** — explica conocimiento versionado y evidencias trazables; no rellena huecos
+
+## Tarea 32 — Coach adaptativo y progresión educativa
+*Diseño detallado: `docs/adaptive_coach_knowledge_architecture.md`.*
+
+### P0 — Conocimiento experto trazable
+- [x] Separar evidencias personales (`E`) y conocimiento del juego (`K`) en el coach IA
+- [x] Recuperar fundamentos MOBA por intención y rol
+- [x] Añadir contexto sincronizado de héroes, objetos, Augmentos, Eternos y bendiciones
+- [x] Mostrar fuentes y parche del conocimiento citado
+- [ ] Banco de pruebas doradas sobre exactitud, límites y carga cognitiva
+- [ ] Estado de cobertura/frescura del conocimiento en administración
+
+### P1 — Diagnóstico y perfil pedagógico
+- [ ] Competencias, nivel provisional, confianza e historial de evidencias
+- [ ] Banco revisado de preguntas situacionales
+- [ ] Diagnóstico inicial adaptativo de diez preguntas
+- [ ] Profundidad y vocabulario del coach según nivel
+
+### P2 — Aprendizaje activo
+- [ ] Preguntas contextuales dentro del análisis de partida
+- [ ] Respuestas con rúbrica contextual: adecuada, defendible, arriesgada o no evaluable
+- [ ] Misiones personalizadas de tres a cinco partidas
+- [ ] Replay y reflexión para decisiones no observables
+- [ ] Repetición espaciada y validación de transferencia
+
+### P3 — Ascensos y mejora del coach
+- [ ] Prueba de ascenso combinando conocimiento, aplicación y reflexión
+- [ ] Progresión independiente por competencia y resumen global educativo
+- [ ] Panel de calidad del coach y dataset corregido/anonimizado
+- [ ] Evaluar fine-tuning sólo si recuperación, reglas y prompt no resuelven errores repetidos
 
 ## Los tres pilares estratégicos
 1. **Objective Intelligence** — control, setup, conversión, muertes antes de objetivo
