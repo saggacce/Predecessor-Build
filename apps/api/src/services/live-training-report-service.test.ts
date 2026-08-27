@@ -72,7 +72,23 @@ describe('live training review report', () => {
     expect(quality).toEqual({
       labelledSamples: 21, confirmedSignals: 18, falsePositives: 2, notVerifiable: 1,
       minimumForEstimate: 20, estimatedSignalPrecision: 0.9, status: 'MINIMUM_REACHED',
+      fullyReviewedReplays: 0, expectedEvents: 0, missedEvents: 0,
+      minimumExpectedForRecall: 20, estimatedRecall: null, recallStatus: 'NO_REPLAYS',
     });
-    expect(readiness.accuracyExplanation).toContain('eventos omitidos');
+    expect(readiness.accuracyExplanation).toContain('por separado');
+  });
+
+  it('estimates missed-event coverage only from fully reviewed eligible replays', () => {
+    const calibrations = [
+      { eventType: 'DEATH_REVIEW', expectedEvents: 12, confirmedSignals: 10, missedEvents: 2, eligible: true },
+      { eventType: 'DEATH_REVIEW', expectedEvents: 8, confirmedSignals: 7, missedEvents: 1, eligible: true },
+      { eventType: 'DEATH_REVIEW', expectedEvents: 20, confirmedSignals: 20, missedEvents: 0, eligible: false },
+    ];
+    const readiness = buildLiveDetectorReadiness('UNVERIFIED', [], [], [], calibrations);
+    const quality = readiness.detectors.find((detector) => detector.key === 'death_review')?.quality;
+    expect(quality).toMatchObject({
+      fullyReviewedReplays: 2, expectedEvents: 20, missedEvents: 3,
+      estimatedRecall: 0.85, recallStatus: 'MINIMUM_REACHED',
+    });
   });
 });

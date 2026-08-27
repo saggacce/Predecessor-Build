@@ -1219,16 +1219,19 @@ model PlayerReplaySession {
   profileId       String
   matchId         String?
   matchPlayerId   String?
+  liveTrainingSessionId String?               @unique
   title           String
   recordingUrl    String?
   durationSeconds Int?
   offsetSeconds   Int                   @default(0)
+  detectorCalibration Json?
   /// "DRAFT" | "READY" | "IN_REVIEW" | "COMPLETED" | "ARCHIVED"
   status          String                @default("DRAFT")
   createdAt       DateTime              @default(now())
   updatedAt       DateTime              @updatedAt
   profile         PlayerLearningProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
   match           Match?                @relation(fields: [matchId], references: [id], onDelete: SetNull)
+  liveTrainingSession LiveTrainingSession? @relation(fields: [liveTrainingSessionId], references: [id], onDelete: SetNull)
   markers         PlayerReplayMarker[]
 
   @@index([profileId, status, updatedAt(sort: Desc)])
@@ -1277,6 +1280,7 @@ model LiveTrainingSession {
   updatedAt           DateTime              @updatedAt
   profile             PlayerLearningProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
   events              LiveTrainingEvent[]
+  replaySession       PlayerReplaySession?
 
   @@index([profileId, status, startedAt(sort: Desc)])
   @@index([modeVerification, status])

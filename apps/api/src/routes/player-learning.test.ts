@@ -45,6 +45,7 @@ describe('personal learning persistence', () => {
       ].map((competencyKey) => ({ competencyKey, level: 1, mastery: 0.25, confidence: 0, evidenceCount: 0 })),
     });
     mockDb.coachQuestionAttempt.findMany.mockResolvedValue([]);
+    mockDb.playerReplaySession.findMany.mockResolvedValue([]);
     mockDb.playerReplayMarker.findMany.mockResolvedValue([]);
     mockDb.liveTrainingEvent.findMany.mockResolvedValue([]);
     mockDb.$transaction.mockImplementation(async (callback: (tx: typeof mockDb) => unknown) => callback(mockDb));
@@ -123,6 +124,32 @@ describe('personal learning persistence', () => {
     expect(mockDb.playerReplaySession.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ profileId: 'profile-1', status: 'DRAFT' }) }));
   });
 
+  it('links an empty replay review to an owned live session so missed events can be calibrated', async () => {
+    mockDb.liveTrainingSession.findFirst.mockResolvedValue({ id: 'live-1' });
+    mockDb.playerReplaySession.findFirst.mockResolvedValue(null);
+    mockDb.playerReplaySession.create.mockResolvedValue({ id: 'replay-1', profileId: 'profile-1', liveTrainingSessionId: 'live-1', markers: [] });
+    const cookie = await authCookie({ userId: 'user-1', globalRole: 'PLAYER', memberships: [] });
+    const response = await request(app).post('/player-learning/replays').set('Cookie', cookie).send({
+      liveTrainingSessionId: 'live-1', title: 'Calibrar captura sin señales', markers: [],
+    });
+    expect(response.status).toBe(201);
+    expect(mockDb.playerReplaySession.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ liveTrainingSessionId: 'live-1', markers: { create: [] } }),
+    }));
+  });
+
+  it('reuses the existing calibration replay for the same live session', async () => {
+    mockDb.liveTrainingSession.findFirst.mockResolvedValue({ id: 'live-1' });
+    mockDb.playerReplaySession.findFirst.mockResolvedValue({ id: 'replay-existing', profileId: 'profile-1', liveTrainingSessionId: 'live-1', markers: [] });
+    const cookie = await authCookie({ userId: 'user-1', globalRole: 'PLAYER', memberships: [] });
+    const response = await request(app).post('/player-learning/replays').set('Cookie', cookie).send({
+      liveTrainingSessionId: 'live-1', title: 'Calibrar captura', markers: [],
+    });
+    expect(response.status).toBe(200);
+    expect(response.body.session.id).toBe('replay-existing');
+    expect(mockDb.playerReplaySession.create).not.toHaveBeenCalled();
+  });
+
   it('attaches a recording and realigns generated replay markers', async () => {
     mockDb.playerReplaySession.findFirst.mockResolvedValue({ id: 'replay-1', profileId: 'profile-1', offsetSeconds: 0 });
     mockDb.playerReplaySession.update.mockResolvedValue({ id: 'replay-1', recordingUrl: 'https://local.test/replay.mp4', offsetSeconds: 12, status: 'READY', markers: [] });
@@ -151,7 +178,38 @@ describe('personal learning persistence', () => {
     expect(response.status).toBe(200);
     expect(response.body.marker.signalAssessment).toBe('FALSE_POSITIVE');
     expect(mockDb.playerReplayMarker.update).toHaveBeenCalledWith({ where: { id: 'marker-1' }, data: { signalAssessment: 'FALSE_POSITIVE' } });
+    expect(mockDb.playerReplaySession.update).toHaveBeenCalledWith({ where: { id: 'replay-1' }, data: { detectorCalibration: expect.anything() } });
     expect(mockDb.playerCompetency.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('counts missed detector events only after the complete recording is reviewed', async () => {
+    mockDb.playerReplaySession.findFirst.mockResolvedValue({
+      id: 'replay-1', profileId: 'profile-1', liveTrainingSessionId: 'live-1', recordingUrl: 'https://local.test/full-replay.mp4', offsetSeconds: 0,
+    });
+    mockDb.liveTrainingSession.findFirst.mockResolvedValue({ id: 'live-1', modeVerification: 'VERIFIED_ALLOWED', status: 'COMPLETED' });
+    mockDb.liveTrainingEvent.findMany.mockResolvedValue([
+      { id: 'death-1', eventType: 'DEATH_REVIEW' },
+      { id: 'death-2', eventType: 'DEATH_REVIEW' },
+      { id: 'skill-1', eventType: 'SKILL_LEVEL_AVAILABLE' },
+    ]);
+    mockDb.playerReplayMarker.findMany.mockResolvedValue([
+      { sourceEventId: 'death-1', signalAssessment: 'CONFIRMED_SIGNAL' },
+      { sourceEventId: 'death-2', signalAssessment: 'FALSE_POSITIVE' },
+      { sourceEventId: 'skill-1', signalAssessment: 'CONFIRMED_SIGNAL' },
+    ]);
+    mockDb.playerReplaySession.update.mockImplementation(async ({ data }: any) => ({ id: 'replay-1', ...data, markers: [] }));
+    const cookie = await authCookie({ userId: 'user-1', globalRole: 'PLAYER', memberships: [] });
+    const response = await request(app).patch('/player-learning/replays/replay-1').set('Cookie', cookie).send({
+      detectorCalibration: { fullRecordingReviewed: true, expectedDeathReviews: 2, expectedSkillAlerts: 1 },
+    });
+    expect(response.status).toBe(200);
+    const update = mockDb.playerReplaySession.update.mock.calls.at(-1)?.[0].data.detectorCalibration;
+    expect(update.byEventType.DEATH_REVIEW).toEqual(expect.objectContaining({
+      expectedEvents: 2, confirmedSignals: 1, falsePositives: 1, missedEvents: 1, eligible: true,
+    }));
+    expect(update.byEventType.SKILL_LEVEL_AVAILABLE).toEqual(expect.objectContaining({
+      expectedEvents: 1, confirmedSignals: 1, missedEvents: 0, eligible: true,
+    }));
   });
 
   it('blocks ranked before any live capture can become active', async () => {

@@ -1566,6 +1566,12 @@ export interface LiveDetectorReadiness {
       minimumForEstimate: number;
       estimatedSignalPrecision: number | null;
       status: 'NO_SAMPLES' | 'COLLECTING' | 'MINIMUM_REACHED';
+      fullyReviewedReplays: number;
+      expectedEvents: number;
+      missedEvents: number;
+      minimumExpectedForRecall: number;
+      estimatedRecall: number | null;
+      recallStatus: 'NO_REPLAYS' | 'COLLECTING' | 'MINIMUM_REACHED';
     };
   }>;
 }
@@ -1640,9 +1646,24 @@ export interface ReplayMarker {
   signalAssessment: 'UNREVIEWED' | 'CONFIRMED_SIGNAL' | 'FALSE_POSITIVE' | 'NOT_VERIFIABLE';
 }
 
+export interface ReplayDetectorCalibration {
+  version: number;
+  fullRecordingReviewed: true;
+  reviewedAt: string;
+  byEventType: Record<'DEATH_REVIEW' | 'SKILL_LEVEL_AVAILABLE', {
+    expectedEvents: number;
+    confirmedSignals: number;
+    falsePositives: number;
+    notVerifiable: number;
+    unreviewed: number;
+    missedEvents: number;
+    eligible: boolean;
+  }>;
+}
+
 export interface PlayerReplaySession {
-  id: string; matchId: string | null; matchPlayerId: string | null; title: string; recordingUrl: string | null;
-  durationSeconds: number | null; offsetSeconds: number; status: string; markers: ReplayMarker[]; updatedAt: string;
+  id: string; matchId: string | null; matchPlayerId: string | null; liveTrainingSessionId: string | null; title: string; recordingUrl: string | null;
+  durationSeconds: number | null; offsetSeconds: number; status: string; detectorCalibration: ReplayDetectorCalibration | null; markers: ReplayMarker[]; updatedAt: string;
 }
 
 export interface PlayerMatchCoachAnalysis {
@@ -1925,9 +1946,9 @@ export const apiClient = {
     updateCycle: (id: string, status: 'COMPLETED' | 'ARCHIVED', evaluation?: { outcome: 'ACHIEVED' | 'PARTIAL' | 'NOT_YET'; reflection: string }) =>
       fetchApi<{ cycle: PlayerTrainingCycle }>(`/player-learning/cycles/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify({ status, evaluation }) }),
     replays: () => fetchApi<{ sessions: PlayerReplaySession[] }>('/player-learning/replays'),
-    createReplay: (data: { matchId?: string | null; matchPlayerId?: string | null; title: string; recordingUrl?: string | null; durationSeconds?: number | null; offsetSeconds?: number; markers?: Array<{ gameTime: number; sourceEventId?: string | null; category: string; title: string; question: string }> }) =>
+    createReplay: (data: { matchId?: string | null; matchPlayerId?: string | null; liveTrainingSessionId?: string | null; title: string; recordingUrl?: string | null; durationSeconds?: number | null; offsetSeconds?: number; markers?: Array<{ gameTime: number; sourceEventId?: string | null; category: string; title: string; question: string }> }) =>
       fetchApi<{ session: PlayerReplaySession }>('/player-learning/replays', { method: 'POST', body: JSON.stringify(data) }),
-    updateReplay: (sessionId: string, data: { title?: string; recordingUrl?: string | null; offsetSeconds?: number }) =>
+    updateReplay: (sessionId: string, data: { title?: string; recordingUrl?: string | null; offsetSeconds?: number; detectorCalibration?: { fullRecordingReviewed: true; expectedDeathReviews: number; expectedSkillAlerts: number } }) =>
       fetchApi<{ session: PlayerReplaySession }>(`/player-learning/replays/${encodeURIComponent(sessionId)}`, { method: 'PATCH', body: JSON.stringify(data) }),
     updateReplayMarker: (sessionId: string, markerId: string, data: { status?: LearningReviewStatus; conclusion?: string | null; signalAssessment?: ReplayMarker['signalAssessment'] }) =>
       fetchApi<{ marker: ReplayMarker }>(`/player-learning/replays/${encodeURIComponent(sessionId)}/markers/${encodeURIComponent(markerId)}`, { method: 'PATCH', body: JSON.stringify(data) }),

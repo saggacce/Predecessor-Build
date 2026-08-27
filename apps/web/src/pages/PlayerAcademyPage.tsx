@@ -320,6 +320,8 @@ function ReplayMarkerReview({ sessionId, marker, onChanged }: { sessionId: strin
 function ReplaySessionReview({ session, onChanged }: { session: PlayerReplaySession; onChanged: () => Promise<void> }) {
   const [recordingUrl, setRecordingUrl] = useState(session.recordingUrl ?? '');
   const [offsetSeconds, setOffsetSeconds] = useState(session.offsetSeconds);
+  const [expectedDeaths, setExpectedDeaths] = useState(session.detectorCalibration?.byEventType.DEATH_REVIEW.expectedEvents ?? 0);
+  const [expectedSkillAlerts, setExpectedSkillAlerts] = useState(session.detectorCalibration?.byEventType.SKILL_LEVEL_AVAILABLE.expectedEvents ?? 0);
   const [saving, setSaving] = useState(false);
   async function saveRecording() {
     setSaving(true);
@@ -333,11 +335,30 @@ function ReplaySessionReview({ session, onChanged }: { session: PlayerReplaySess
       setSaving(false);
     }
   }
+  async function saveDetectorCalibration() {
+    if (!session.recordingUrl) {
+      toast.error('Guarda primero la grabación completa para poder calibrar.');
+      return;
+    }
+    setSaving(true);
+    try {
+      await apiClient.playerLearning.updateReplay(session.id, {
+        detectorCalibration: { fullRecordingReviewed: true, expectedDeathReviews: expectedDeaths, expectedSkillAlerts },
+      });
+      toast.success('Revisión completa guardada para calibrar eventos omitidos');
+      await onChanged();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'No se pudo guardar la calibración');
+    } finally {
+      setSaving(false);
+    }
+  }
   return <section style={card}>
     <div style={{ display: 'flex', justifyContent: 'space-between', gap: '.6rem', flexWrap: 'wrap' }}><div><strong>{session.title}</strong><div style={{ color: 'var(--text-muted)', fontSize: '.75rem' }}>{session.status} · {session.markers.length} momentos</div></div>{session.recordingUrl && <a href={session.recordingUrl} target="_blank" rel="noreferrer">Abrir grabación</a>}</div>
     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '.5rem', marginTop: '.7rem' }}><input value={recordingUrl} onChange={(event) => setRecordingUrl(event.target.value)} placeholder="URL privada o local servida por ti" style={{ ...button, minWidth: 0 }}/><input type="number" value={offsetSeconds} onChange={(event) => setOffsetSeconds(Number(event.target.value) || 0)} aria-label="Ajuste temporal en segundos" title="Segundos que separan el inicio de la captura y el inicio de la grabación" style={{ ...button, minWidth: 0 }}/><button disabled={saving} onClick={() => void saveRecording()} style={{ ...button, opacity: saving ? .55 : 1 }}>{saving ? 'Guardando…' : 'Guardar y alinear'}</button></div>
     <p style={{ color: 'var(--text-muted)', fontSize: '.72rem' }}>El ajuste temporal desplaza todos los marcadores. Usa un valor positivo si el vídeo empieza antes que la captura y comprueba siempre el primer momento.</p>
-    {session.markers.length > 0 ? session.markers.map((marker) => <ReplayMarkerReview key={marker.id} sessionId={session.id} marker={marker} onChanged={onChanged}/>) : <p style={{ color: 'var(--text-muted)' }}>Añade una grabación o crea la revisión desde un informe para obtener momentos guiados.</p>}
+    {session.liveTrainingSessionId && <div style={{ margin: '.75rem 0', padding: '.75rem', borderRadius: 8, border: '1px solid rgba(56,212,200,.24)', background: 'rgba(56,212,200,.035)' }}><strong>Calibración opcional con el replay completo</strong><p style={{ color: 'var(--text-muted)', fontSize: '.74rem' }}>Después de validar cada marcador, revisa toda la grabación y cuenta cuántas veces ocurrieron realmente estas dos señales. Sólo así RiftLine puede medir eventos omitidos. No completa misiones ni cambia tu nivel.</p><div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: '.45rem' }}><label style={{ color: 'var(--text-muted)', fontSize: '.7rem' }}>Pantallas propias de reaparición<input type="number" min={0} max={100} value={expectedDeaths} onChange={(event) => setExpectedDeaths(Math.max(0, Math.min(100, Number(event.target.value) || 0)))} style={{ ...button, display: 'block', width: '100%', boxSizing: 'border-box', marginTop: '.2rem' }}/></label><label style={{ color: 'var(--text-muted)', fontSize: '.7rem' }}>Avisos de punto de habilidad<input type="number" min={0} max={100} value={expectedSkillAlerts} onChange={(event) => setExpectedSkillAlerts(Math.max(0, Math.min(100, Number(event.target.value) || 0)))} style={{ ...button, display: 'block', width: '100%', boxSizing: 'border-box', marginTop: '.2rem' }}/></label><button disabled={saving || !session.recordingUrl} onClick={() => void saveDetectorCalibration()} style={{ ...button, alignSelf: 'end', opacity: saving || !session.recordingUrl ? .5 : 1 }}>Confirmar revisión completa</button></div>{session.detectorCalibration && <div style={{ marginTop: '.55rem', color: 'var(--text-muted)', fontSize: '.72rem' }}>{(['DEATH_REVIEW', 'SKILL_LEVEL_AVAILABLE'] as const).map((eventType) => { const result = session.detectorCalibration!.byEventType[eventType]; return <div key={eventType}>{eventType === 'DEATH_REVIEW' ? 'Reapariciones' : 'Avisos de habilidad'}: {result.confirmedSignals} confirmados · {result.missedEvents} omitidos{result.eligible ? '' : ' · muestra excluida hasta resolver marcadores pendientes o no verificables'}</div>; })}</div>}</div>}
+    {session.markers.length > 0 ? session.markers.map((marker) => <ReplayMarkerReview key={marker.id} sessionId={session.id} marker={marker} onChanged={onChanged}/>) : <p style={{ color: 'var(--text-muted)' }}>{session.liveTrainingSessionId ? 'El acompañante no creó marcadores. Si revisas la grabación completa, la calibración permitirá registrar los eventos que omitió.' : 'Añade una grabación o crea la revisión desde un informe para obtener momentos guiados.'}</p>}
   </section>;
 }
 
@@ -424,6 +445,11 @@ function DetectorReadinessPanel({ readiness }: { readiness: LiveDetectorReadines
             : detector.quality.estimatedSignalPrecision === null
               ? `${detector.quality.labelledSamples} revisadas · ${detector.quality.confirmedSignals} confirmadas · ${detector.quality.falsePositives} falsos positivos · mínimo ${detector.quality.minimumForEstimate} señales evaluables para estimar acierto.`
               : `${Math.round(detector.quality.estimatedSignalPrecision * 100)}% de las señales emitidas fueron confirmadas en ${detector.quality.confirmedSignals + detector.quality.falsePositives} casos evaluables; no mide eventos omitidos.`}</p>
+          <p style={{ color: 'var(--text-muted)', fontSize: '.74rem' }}><strong>Eventos omitidos:</strong> {detector.quality.recallStatus === 'NO_REPLAYS'
+            ? 'sin grabaciones completas revisadas.'
+            : detector.quality.estimatedRecall === null
+              ? `${detector.quality.fullyReviewedReplays} replays completos · ${detector.quality.expectedEvents} eventos reales · ${detector.quality.missedEvents} omitidos · mínimo ${detector.quality.minimumExpectedForRecall} eventos para estimar cobertura.`
+              : `${Math.round(detector.quality.estimatedRecall * 100)}% de ${detector.quality.expectedEvents} eventos reales detectados · ${detector.quality.missedEvents} omitidos.`}</p>
           <p style={{ fontSize: '.74rem', marginBottom: 0 }}><strong>Siguiente validación:</strong> {detector.nextStep}</p>
         </details>;
       })}
@@ -455,7 +481,7 @@ function LiveTrainingReportReview({ report, busy, onCreateReplay }: { report: Li
         const event = eventsById.get(moment.eventId);
         return <details key={moment.eventId} style={{ padding: '.65rem .75rem', borderRadius: 8, background: 'rgba(255,255,255,.025)' }}><summary style={{ cursor: 'pointer' }}><strong>{captureTime(moment.captureTimeSeconds)} · {moment.title}</strong><small style={{ marginLeft: '.55rem', color: 'var(--text-muted)' }}>{event?.advice ? 'Mostrada en overlay' : 'Guardada sin interrumpir'}</small></summary><p><strong>Observado:</strong> {moment.observedFact}</p><p><strong>Qué puede significar:</strong> {moment.inference}</p><p style={{ color: 'var(--text-muted)' }}>{moment.limitation}</p><p><strong>Revisa desde {captureTime(moment.suggestedClip.startSeconds)} hasta {captureTime(moment.suggestedClip.endSeconds)}:</strong> {moment.replayQuestion}</p>{event && <LiveEvidenceSummary evidence={event.evidence}/>}</details>;
       })}</div>
-    </> : <p>No se registraron observaciones: es el resultado correcto cuando el modo o las señales no son suficientemente fiables.</p>}
+    </> : <div style={{ display: 'flex', justifyContent: 'space-between', gap: '.6rem', alignItems: 'center', flexWrap: 'wrap' }}><p style={{ margin: 0 }}>No se registraron observaciones: es el resultado correcto cuando el modo o las señales no son suficientemente fiables.</p>{report.modeVerification === 'VERIFIED_ALLOWED' && report.status === 'COMPLETED' && <button disabled={busy} onClick={onCreateReplay} style={{ ...button, opacity: busy ? .55 : 1 }}>{busy ? 'Creando revisión…' : 'Crear revisión para comprobar eventos omitidos'}</button>}</div>}
     <p style={{ color: 'var(--text-muted)', fontSize: '.72rem', marginBottom: 0 }}><strong>Fortalezas:</strong> {report.review.strengthsLimitation}</p>
   </section>;
 }
@@ -790,10 +816,11 @@ function LocalTraining({ onOpenReplay }: { onOpenReplay: () => void }) {
     setModeTemplates(nextTemplates);
   }
   async function createReplayReviewFromReport() {
-    if (!lastReport?.review.reviewMoments.length) return;
+    if (!lastReport) return;
     setCreatingReplayReview(true);
     try {
       await apiClient.playerLearning.createReplay({
+        liveTrainingSessionId: lastReport.modeVerification === 'VERIFIED_ALLOWED' && lastReport.status === 'COMPLETED' ? lastReport.id : null,
         title: `Revisión del entrenamiento · ${lastReport.detectedGameMode ?? lastReport.requestedGameMode}`,
         markers: lastReport.review.reviewMoments.map((moment) => ({
           gameTime: moment.captureTimeSeconds,
@@ -803,7 +830,9 @@ function LocalTraining({ onOpenReplay }: { onOpenReplay: () => void }) {
           question: moment.replayQuestion,
         })),
       });
-      toast.success('Revisión creada con los momentos detectados. Añade o abre tu grabación para confirmar las causas.');
+      toast.success(lastReport.review.reviewMoments.length
+        ? 'Revisión creada con los momentos detectados. Añade o abre tu grabación para confirmar las causas.'
+        : 'Revisión creada sin marcadores. Añade la grabación completa para comprobar si hubo eventos omitidos.');
       onOpenReplay();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'No se pudo crear la revisión');

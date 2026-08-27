@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { z } from 'zod';
+import { Prisma } from '@prisma/client';
 import { db } from '../db.js';
 import { requireAuth } from '../middleware/require-auth.js';
 import { AppError } from '../middleware/error-handler.js';
@@ -16,7 +17,7 @@ import {
 import { evaluateLiveMode, evaluateLiveModeSignals, type LiveModeSignal } from '../services/live-training-policy.js';
 import { buildLearningProgress } from '../services/player-learning-progress-service.js';
 import { decideLiveCoachDelivery, LIVE_COACH_EVENT_TYPES } from '../services/live-coach-delivery-policy.js';
-import { buildLiveDetectorReadiness, buildLiveTrainingReview, type LiveDetectorValidationInput } from '../services/live-training-report-service.js';
+import { buildLiveDetectorReadiness, buildLiveTrainingReview, type LiveDetectorCalibrationInput, type LiveDetectorValidationInput } from '../services/live-training-report-service.js';
 
 export const playerLearningRouter = Router();
 
@@ -44,6 +45,10 @@ async function ownProfile(userId: string) {
   return ensureLearningProfile(userId, playerId);
 }
 
+function jsonObject(value: unknown): Record<string, unknown> {
+  return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
+}
+
 async function liveDetectorValidations(profileId: string): Promise<LiveDetectorValidationInput[]> {
   const markers = await db.playerReplayMarker.findMany({
     where: {
@@ -65,6 +70,30 @@ async function liveDetectorValidations(profileId: string): Promise<LiveDetectorV
     const eventType = marker.sourceEventId ? eventTypes.get(marker.sourceEventId) : null;
     if (!eventType || marker.signalAssessment === 'UNREVIEWED') return [];
     return [{ eventType, signalAssessment: marker.signalAssessment as LiveDetectorValidationInput['signalAssessment'] }];
+  });
+}
+
+async function liveDetectorCalibrations(profileId: string): Promise<LiveDetectorCalibrationInput[]> {
+  const sessions = await db.playerReplaySession.findMany({
+    where: { profileId, liveTrainingSessionId: { not: null } },
+    select: { detectorCalibration: true },
+    orderBy: { updatedAt: 'desc' },
+    take: 100,
+  });
+  return sessions.flatMap((session) => {
+    const calibration = jsonObject(session.detectorCalibration);
+    const byEventType = jsonObject(calibration.byEventType);
+    return ['DEATH_REVIEW', 'SKILL_LEVEL_AVAILABLE'].flatMap((eventType) => {
+      const entry = jsonObject(byEventType[eventType]);
+      if (calibration.fullRecordingReviewed !== true || typeof entry.expectedEvents !== 'number') return [];
+      return [{
+        eventType,
+        expectedEvents: entry.expectedEvents,
+        confirmedSignals: typeof entry.confirmedSignals === 'number' ? entry.confirmedSignals : 0,
+        missedEvents: typeof entry.missedEvents === 'number' ? entry.missedEvents : 0,
+        eligible: entry.eligible === true,
+      }];
+    });
   });
 }
 
@@ -93,8 +122,8 @@ playerLearningRouter.get('/knowledge', requireAuth, async (req, res, next) => {
 playerLearningRouter.get('/live/readiness', requireAuth, async (req, res, next) => {
   try {
     const profile = await ownProfile(req.user!.userId);
-    const validations = await liveDetectorValidations(profile.id);
-    res.json({ readiness: buildLiveDetectorReadiness('UNVERIFIED', [], [], validations) });
+    const [validations, calibrations] = await Promise.all([liveDetectorValidations(profile.id), liveDetectorCalibrations(profile.id)]);
+    res.json({ readiness: buildLiveDetectorReadiness('UNVERIFIED', [], [], validations, calibrations) });
   } catch (error) {
     next(error);
   }
@@ -387,6 +416,7 @@ playerLearningRouter.post('/replays', requireAuth, async (req, res, next) => {
   try {
     const body = z.object({
       matchId: z.string().nullable().optional(), matchPlayerId: z.string().nullable().optional(),
+      liveTrainingSessionId: z.string().nullable().optional(),
       title: z.string().trim().min(1).max(180), recordingUrl: z.string().url().max(2000).nullable().optional(),
       durationSeconds: z.number().int().positive().nullable().optional(), offsetSeconds: z.number().int().min(-7200).max(7200).default(0),
       markers: z.array(z.object({
@@ -396,9 +426,22 @@ playerLearningRouter.post('/replays', requireAuth, async (req, res, next) => {
     }).parse(req.body);
     const profile = await ownProfile(req.user!.userId);
     if (body.matchId && body.matchPlayerId) await assertOwnMatchPlayer(req.user!.userId, body.matchId, body.matchPlayerId);
+    if (body.liveTrainingSessionId) {
+      const liveSession = await db.liveTrainingSession.findFirst({ where: { id: body.liveTrainingSessionId, profileId: profile.id }, select: { id: true } });
+      if (!liveSession) throw new AppError(403, 'This live training session does not belong to your profile', 'FORBIDDEN');
+      const existingReplay = await db.playerReplaySession.findFirst({
+        where: { profileId: profile.id, liveTrainingSessionId: body.liveTrainingSessionId },
+        include: { markers: { orderBy: { gameTime: 'asc' } } },
+      });
+      if (existingReplay) {
+        res.json({ session: existingReplay });
+        return;
+      }
+    }
     const session = await db.playerReplaySession.create({
       data: {
         profileId: profile.id, matchId: body.matchId ?? null, matchPlayerId: body.matchPlayerId ?? null,
+        liveTrainingSessionId: body.liveTrainingSessionId ?? null,
         title: body.title, recordingUrl: body.recordingUrl ?? null, durationSeconds: body.durationSeconds ?? null,
         offsetSeconds: body.offsetSeconds, status: body.recordingUrl ? 'READY' : 'DRAFT',
         markers: { create: body.markers.map((marker) => ({ ...marker, videoTime: Math.max(0, marker.gameTime + body.offsetSeconds) })) },
@@ -416,10 +459,61 @@ playerLearningRouter.patch('/replays/:sessionId', requireAuth, async (req, res, 
       title: z.string().trim().min(1).max(180).optional(),
       recordingUrl: z.string().url().max(2000).nullable().optional(),
       offsetSeconds: z.number().int().min(-7200).max(7200).optional(),
+      detectorCalibration: z.object({
+        fullRecordingReviewed: z.literal(true),
+        expectedDeathReviews: z.number().int().min(0).max(100),
+        expectedSkillAlerts: z.number().int().min(0).max(100),
+      }).optional(),
     }).refine((value) => Object.keys(value).length > 0, { message: 'At least one replay field is required' }).parse(req.body);
     const profile = await ownProfile(req.user!.userId);
     const existing = await db.playerReplaySession.findFirst({ where: { id: String(req.params.sessionId), profileId: profile.id } });
     if (!existing) throw new AppError(404, 'Replay review not found', 'REPLAY_NOT_FOUND');
+    let detectorCalibration: Record<string, unknown> | undefined;
+    if (body.detectorCalibration) {
+      if (!existing.liveTrainingSessionId) throw new AppError(409, 'This replay is not linked to a live training session', 'REPLAY_NOT_LIVE_TRAINING');
+      const liveSession = await db.liveTrainingSession.findFirst({
+        where: { id: existing.liveTrainingSessionId, profileId: profile.id },
+        select: { id: true, modeVerification: true, status: true },
+      });
+      if (!liveSession || liveSession.modeVerification !== 'VERIFIED_ALLOWED' || liveSession.status !== 'COMPLETED') {
+        throw new AppError(409, 'Only a completed, automatically verified session can calibrate gameplay detectors', 'LIVE_CALIBRATION_NOT_ELIGIBLE');
+      }
+      const recordingUrl = body.recordingUrl !== undefined ? body.recordingUrl : existing.recordingUrl;
+      if (!recordingUrl) throw new AppError(409, 'Attach the complete recording before calibrating detectors', 'REPLAY_RECORDING_REQUIRED');
+      const [events, markers] = await Promise.all([
+        db.liveTrainingEvent.findMany({
+          where: { sessionId: existing.liveTrainingSessionId, eventType: { in: ['DEATH_REVIEW', 'SKILL_LEVEL_AVAILABLE'] } },
+          select: { id: true, eventType: true },
+        }),
+        db.playerReplayMarker.findMany({
+          where: { sessionId: existing.id, sourceEventId: { not: null } },
+          select: { sourceEventId: true, signalAssessment: true },
+        }),
+      ]);
+      const markerAssessment = new Map(markers.flatMap((marker) => marker.sourceEventId ? [[marker.sourceEventId, marker.signalAssessment]] : []));
+      const summarize = (eventType: string, expectedEvents: number) => {
+        const assessments = events.filter((event) => event.eventType === eventType).map((event) => markerAssessment.get(event.id) ?? 'UNREVIEWED');
+        const confirmedSignals = assessments.filter((assessment) => assessment === 'CONFIRMED_SIGNAL').length;
+        const falsePositives = assessments.filter((assessment) => assessment === 'FALSE_POSITIVE').length;
+        const notVerifiable = assessments.filter((assessment) => assessment === 'NOT_VERIFIABLE').length;
+        const unreviewed = assessments.filter((assessment) => assessment === 'UNREVIEWED').length;
+        if (expectedEvents < confirmedSignals) throw new AppError(400, 'Expected events cannot be lower than confirmed detector signals', 'CALIBRATION_COUNT_CONFLICT');
+        return {
+          expectedEvents, confirmedSignals, falsePositives, notVerifiable, unreviewed,
+          missedEvents: expectedEvents - confirmedSignals,
+          eligible: notVerifiable === 0 && unreviewed === 0,
+        };
+      };
+      detectorCalibration = {
+        version: 1,
+        fullRecordingReviewed: true,
+        reviewedAt: new Date().toISOString(),
+        byEventType: {
+          DEATH_REVIEW: summarize('DEATH_REVIEW', body.detectorCalibration.expectedDeathReviews),
+          SKILL_LEVEL_AVAILABLE: summarize('SKILL_LEVEL_AVAILABLE', body.detectorCalibration.expectedSkillAlerts),
+        },
+      };
+    }
     const session = await db.$transaction(async (tx) => {
       const offsetSeconds = body.offsetSeconds ?? existing.offsetSeconds;
       if (body.offsetSeconds !== undefined) {
@@ -434,6 +528,7 @@ playerLearningRouter.patch('/replays/:sessionId', requireAuth, async (req, res, 
           ...(body.title !== undefined ? { title: body.title } : {}),
           ...(body.recordingUrl !== undefined ? { recordingUrl: body.recordingUrl, status: body.recordingUrl ? 'READY' : 'DRAFT' } : {}),
           ...(body.offsetSeconds !== undefined ? { offsetSeconds } : {}),
+          ...(detectorCalibration ? { detectorCalibration } : body.recordingUrl === null ? { detectorCalibration: Prisma.DbNull } : {}),
         },
         include: { markers: { orderBy: { gameTime: 'asc' } } },
       });
@@ -464,13 +559,19 @@ playerLearningRouter.patch('/replays/:sessionId/markers/:markerId', requireAuth,
     if (body.signalAssessment && !marker.sourceEventId) {
       throw new AppError(409, 'Only an automatically detected moment can validate a detector signal', 'REPLAY_SIGNAL_NOT_DETECTED');
     }
-    const updated = await db.playerReplayMarker.update({ where: { id: marker.id }, data: body });
-    if (marker.status === 'PENDING' && body.status && body.status !== 'PENDING') {
-      await db.playerCompetency.updateMany({
-        where: { profileId: profile.id, competencyKey: 'review_autonomy' },
-        data: { appliedCount: { increment: 1 }, evidenceCount: { increment: 1 }, lastEvidenceAt: new Date() },
-      });
-    }
+    const updated = await db.$transaction(async (tx) => {
+      const changed = await tx.playerReplayMarker.update({ where: { id: marker.id }, data: body });
+      if (body.signalAssessment) {
+        await tx.playerReplaySession.update({ where: { id: marker.sessionId }, data: { detectorCalibration: Prisma.DbNull } });
+      }
+      if (marker.status === 'PENDING' && body.status && body.status !== 'PENDING') {
+        await tx.playerCompetency.updateMany({
+          where: { profileId: profile.id, competencyKey: 'review_autonomy' },
+          data: { appliedCount: { increment: 1 }, evidenceCount: { increment: 1 }, lastEvidenceAt: new Date() },
+        });
+      }
+      return changed;
+    });
     res.json({ marker: updated });
   } catch (error) {
     next(error);
@@ -564,8 +665,8 @@ playerLearningRouter.get('/live/sessions/:id/report', requireAuth, async (req, r
     }, {});
     const spoken = session.events.filter((event) => !!event.advice).length;
     const review = buildLiveTrainingReview(session.startedAt, session.events);
-    const validations = await liveDetectorValidations(profile.id);
-    const readiness = buildLiveDetectorReadiness(session.modeVerification, session.events, session.verificationSignals, validations);
+    const [validations, calibrations] = await Promise.all([liveDetectorValidations(profile.id), liveDetectorCalibrations(profile.id)]);
+    const readiness = buildLiveDetectorReadiness(session.modeVerification, session.events, session.verificationSignals, validations, calibrations);
     res.json({
       report: {
         id: session.id,
