@@ -15,7 +15,7 @@ vi.mock('../db.js', () => ({
     playerLearningProfile: { upsert: vi.fn(), findUniqueOrThrow: vi.fn(), update: vi.fn() },
     playerCompetency: { createMany: vi.fn(), updateMany: vi.fn(), findUnique: vi.fn(), update: vi.fn() },
     coachQuestionAttempt: { findMany: vi.fn(), findFirst: vi.fn() },
-    playerReplaySession: { create: vi.fn(), findMany: vi.fn() },
+    playerReplaySession: { create: vi.fn(), findMany: vi.fn(), findFirst: vi.fn(), update: vi.fn() },
     playerReplayMarker: { findFirst: vi.fn(), findMany: vi.fn(), update: vi.fn() },
     liveTrainingSession: { create: vi.fn(), findFirst: vi.fn(), update: vi.fn() },
     liveTrainingEvent: { create: vi.fn(), findMany: vi.fn() },
@@ -123,6 +123,20 @@ describe('personal learning persistence', () => {
     expect(mockDb.playerReplaySession.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ profileId: 'profile-1', status: 'DRAFT' }) }));
   });
 
+  it('attaches a recording and realigns generated replay markers', async () => {
+    mockDb.playerReplaySession.findFirst.mockResolvedValue({ id: 'replay-1', profileId: 'profile-1', offsetSeconds: 0 });
+    mockDb.playerReplaySession.update.mockResolvedValue({ id: 'replay-1', recordingUrl: 'https://local.test/replay.mp4', offsetSeconds: 12, status: 'READY', markers: [] });
+    mockDb.playerReplayMarker.findMany.mockResolvedValue([{ id: 'marker-1', gameTime: 600 }]);
+    mockDb.playerReplayMarker.update.mockResolvedValue({ id: 'marker-1', gameTime: 600, videoTime: 612 });
+    const cookie = await authCookie({ userId: 'user-1', globalRole: 'PLAYER', memberships: [] });
+    const response = await request(app).patch('/player-learning/replays/replay-1').set('Cookie', cookie).send({
+      recordingUrl: 'https://local.test/replay.mp4', offsetSeconds: 12,
+    });
+    expect(response.status).toBe(200);
+    expect(mockDb.playerReplaySession.update).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ status: 'READY', offsetSeconds: 12 }) }));
+    expect(mockDb.playerReplayMarker.update).toHaveBeenCalledWith({ where: { id: 'marker-1' }, data: { videoTime: 612 } });
+  });
+
   it('blocks ranked before any live capture can become active', async () => {
     mockDb.liveTrainingSession.create.mockImplementation(async ({ data }: any) => ({ id: 'live-1', ...data }));
     const cookie = await authCookie({ userId: 'user-1', globalRole: 'PLAYER', memberships: [] });
@@ -174,6 +188,8 @@ describe('personal learning persistence', () => {
     expect(response.status).toBe(200);
     expect(response.body.report.summary).toEqual({ observations: 2, spoken: 1, silent: 1, byType: { DEATH_REVIEW: 1, RECALL_WINDOW: 1 } });
     expect(response.body.report.limitation).toContain('replay');
+    expect(response.body.report.review.primaryFocus).toMatchObject({ eventId: 'e1', eventType: 'DEATH_REVIEW' });
+    expect(response.body.report.review.learningImpact).toMatchObject({ scoredObservations: 0, canPromote: false });
   });
 
   it('delivers a sparse educational cue only from a verified observation', async () => {

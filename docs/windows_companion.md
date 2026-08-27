@@ -82,4 +82,6 @@ Las muestras deben evitar nombres, chat y cualquier dato personal que no sea nec
 
 El botón **Guardar muestra local** descarga el fotograma en el propio equipo para esta calibración. RiftLine no lo sube automáticamente y el usuario debe revisarlo antes de compartirlo.
 
-Al detener una captura, la Academia cierra también su sesión de servidor y muestra un informe auditable: modo solicitado/detectado, estado de verificación, observaciones guardadas, intervenciones mostradas y observaciones que se reservaron para revisión. Una captura no verificada termina como `ABORTED`, no queda pendiente ni genera evidencia observada.
+Al detener una captura, la Academia cierra también su sesión de servidor y muestra un informe auditable: modo solicitado/detectado, estado de verificación, observaciones guardadas, intervenciones mostradas y observaciones que se reservaron para revisión. Cada marcador separa hecho, inferencia, limitación y pregunta de replay, y propone un fragmento alrededor del instante de captura. Desde el informe se puede crear una revisión, adjuntar después una grabación, alinear los tiempos y clasificar cada momento como buena decisión, decisión mejorable o no concluyente con una explicación escrita. Una captura no verificada termina como `ABORTED`, no queda pendiente ni genera evidencia observada.
+
+Las observaciones sin una rúbrica revisada no puntúan competencias. El informe expone este impacto y una sesión de overlay nunca concede por sí sola un ascenso de nivel.

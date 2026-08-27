@@ -16,6 +16,7 @@ import {
 import { evaluateLiveMode, evaluateLiveModeSignals, type LiveModeSignal } from '../services/live-training-policy.js';
 import { buildLearningProgress } from '../services/player-learning-progress-service.js';
 import { decideLiveCoachDelivery, LIVE_COACH_EVENT_TYPES } from '../services/live-coach-delivery-policy.js';
+import { buildLiveTrainingReview } from '../services/live-training-report-service.js';
 
 export const playerLearningRouter = Router();
 
@@ -374,6 +375,40 @@ playerLearningRouter.post('/replays', requireAuth, async (req, res, next) => {
   }
 });
 
+playerLearningRouter.patch('/replays/:sessionId', requireAuth, async (req, res, next) => {
+  try {
+    const body = z.object({
+      title: z.string().trim().min(1).max(180).optional(),
+      recordingUrl: z.string().url().max(2000).nullable().optional(),
+      offsetSeconds: z.number().int().min(-7200).max(7200).optional(),
+    }).refine((value) => Object.keys(value).length > 0, { message: 'At least one replay field is required' }).parse(req.body);
+    const profile = await ownProfile(req.user!.userId);
+    const existing = await db.playerReplaySession.findFirst({ where: { id: String(req.params.sessionId), profileId: profile.id } });
+    if (!existing) throw new AppError(404, 'Replay review not found', 'REPLAY_NOT_FOUND');
+    const session = await db.$transaction(async (tx) => {
+      const offsetSeconds = body.offsetSeconds ?? existing.offsetSeconds;
+      if (body.offsetSeconds !== undefined) {
+        const markers = await tx.playerReplayMarker.findMany({ where: { sessionId: existing.id }, select: { id: true, gameTime: true } });
+        for (const marker of markers) {
+          await tx.playerReplayMarker.update({ where: { id: marker.id }, data: { videoTime: Math.max(0, marker.gameTime + offsetSeconds) } });
+        }
+      }
+      return tx.playerReplaySession.update({
+        where: { id: existing.id },
+        data: {
+          ...(body.title !== undefined ? { title: body.title } : {}),
+          ...(body.recordingUrl !== undefined ? { recordingUrl: body.recordingUrl, status: body.recordingUrl ? 'READY' : 'DRAFT' } : {}),
+          ...(body.offsetSeconds !== undefined ? { offsetSeconds } : {}),
+        },
+        include: { markers: { orderBy: { gameTime: 'asc' } } },
+      });
+    });
+    res.json({ session });
+  } catch (error) {
+    next(error);
+  }
+});
+
 playerLearningRouter.patch('/replays/:sessionId/markers/:markerId', requireAuth, async (req, res, next) => {
   try {
     const body = z.object({ status: reviewStatus, conclusion: z.string().trim().max(1600).nullable().optional() }).parse(req.body);
@@ -484,6 +519,7 @@ playerLearningRouter.get('/live/sessions/:id/report', requireAuth, async (req, r
       return counts;
     }, {});
     const spoken = session.events.filter((event) => !!event.advice).length;
+    const review = buildLiveTrainingReview(session.startedAt, session.events);
     res.json({
       report: {
         id: session.id,
@@ -494,6 +530,7 @@ playerLearningRouter.get('/live/sessions/:id/report', requireAuth, async (req, r
         startedAt: session.startedAt,
         endedAt: session.endedAt,
         summary: { observations: session.events.length, spoken, silent: session.events.length - spoken, byType },
+        review,
         events: session.events.map((event) => ({
           id: event.id,
           gameTime: event.gameTime,

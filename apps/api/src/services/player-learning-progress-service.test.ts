@@ -39,4 +39,18 @@ describe('player learning progress', () => {
     expect(result.trends[0]).toMatchObject({ competencyKey: 'builds', direction: 'IMPROVING', evidenceCount: 4 });
     expect(result.trends[0].delta).toBeCloseTo(0.6);
   });
+
+  it('shows an unscored overlay marker without changing mastery trends', () => {
+    const result = buildLearningProgress({
+      attempts: [], cycles: [], replayMarkers: [],
+      liveEvents: [{
+        id: 'l1', eventType: 'DEATH_REVIEW', confidence: 'high',
+        evidence: { competencyKey: 'review_autonomy', explanation: 'Pantalla de reaparición detectada; causa pendiente de replay.' },
+        createdAt: new Date('2026-08-27T18:00:00Z'),
+      }],
+    });
+    expect(result.summary.overlayObservations).toBe(1);
+    expect(result.timeline[0]).toMatchObject({ source: 'OVERLAY', score: null });
+    expect(result.trends).toEqual([]);
+  });
 });

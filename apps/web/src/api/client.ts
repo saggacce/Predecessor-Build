@@ -1520,6 +1520,15 @@ export interface LiveTrainingReport {
   startedAt: string;
   endedAt: string | null;
   summary: { observations: number; spoken: number; silent: number; byType: Record<string, number> };
+  review: {
+    primaryFocus: LiveTrainingReviewMoment | null;
+    secondaryFocus: LiveTrainingReviewMoment[];
+    reviewMoments: LiveTrainingReviewMoment[];
+    strengths: Array<{ title: string; explanation: string }>;
+    strengthsLimitation: string;
+    learningImpact: { scoredObservations: number; unscoredObservations: number; canPromote: false; explanation: string };
+    nextPractice: { title: string; cue: string } | null;
+  };
   events: Array<{
     id: string;
     gameTime: number | null;
@@ -1530,6 +1539,19 @@ export interface LiveTrainingReport {
     createdAt: string;
   }>;
   limitation: string;
+}
+
+export interface LiveTrainingReviewMoment {
+  eventId: string;
+  eventType: string;
+  title: string;
+  category: string;
+  captureTimeSeconds: number;
+  observedFact: string;
+  inference: string;
+  limitation: string;
+  replayQuestion: string;
+  suggestedClip: { startSeconds: number; endSeconds: number };
 }
 
 export interface LearningQuestionView {
@@ -1875,6 +1897,8 @@ export const apiClient = {
     replays: () => fetchApi<{ sessions: PlayerReplaySession[] }>('/player-learning/replays'),
     createReplay: (data: { matchId?: string | null; matchPlayerId?: string | null; title: string; recordingUrl?: string | null; durationSeconds?: number | null; offsetSeconds?: number; markers?: Array<{ gameTime: number; sourceEventId?: string | null; category: string; title: string; question: string }> }) =>
       fetchApi<{ session: PlayerReplaySession }>('/player-learning/replays', { method: 'POST', body: JSON.stringify(data) }),
+    updateReplay: (sessionId: string, data: { title?: string; recordingUrl?: string | null; offsetSeconds?: number }) =>
+      fetchApi<{ session: PlayerReplaySession }>(`/player-learning/replays/${encodeURIComponent(sessionId)}`, { method: 'PATCH', body: JSON.stringify(data) }),
     updateReplayMarker: (sessionId: string, markerId: string, status: LearningReviewStatus, conclusion?: string | null) =>
       fetchApi<{ marker: ReplayMarker }>(`/player-learning/replays/${encodeURIComponent(sessionId)}/markers/${encodeURIComponent(markerId)}`, { method: 'PATCH', body: JSON.stringify({ status, conclusion }) }),
     startLiveSession: (requestedGameMode: string) => fetchApi<{ session: { id: string; requestedGameMode: string; modeVerification: string; status: string }; canAdvise: boolean; reason: string }>('/player-learning/live/sessions', { method: 'POST', body: JSON.stringify({ requestedGameMode, captureConsent: true }) }),

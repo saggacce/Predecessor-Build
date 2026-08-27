@@ -6,6 +6,7 @@ import { toast } from 'sonner';
 import {
   apiClient,
   type EncyclopediaEntry,
+  type LearningReviewStatus,
   type LearningQuestionView,
   type LiveTrainingReport,
   type MissionRecommendation,
@@ -13,6 +14,7 @@ import {
   type PlayerLearningProgress,
   type PlacementSummary,
   type PlayerReplaySession,
+  type ReplayMarker,
   type PlayerTrainingCycle,
 } from '../api/client';
 import { LearningProgressOverview } from '../components/LearningProgressOverview';
@@ -88,7 +90,7 @@ export default function PlayerAcademyPage() {
       {tab === 'progress' && progress && <LearningProgressOverview progress={progress} />}
       {tab === 'knowledge' && <Knowledge />}
       {tab === 'replay' && <ReplayReview />}
-      {tab === 'live' && <LocalTraining />}
+      {tab === 'live' && <LocalTraining onOpenReplay={() => setTab('replay')} />}
     </div>
   );
 }
@@ -259,11 +261,78 @@ function Knowledge() {
   return <div style={{ display: 'grid', gap: '1rem' }}><section style={card}><h3 style={{ marginTop: 0 }}>Cobertura trazable {coverage?.patch ? `· parche ${coverage.patch.name}` : ''}</h3><p style={{ color: 'var(--text-muted)' }}>{coverage?.disclaimer}</p><div style={{ display: 'flex', gap: '.5rem', flexWrap: 'wrap' }}>{coverage && Object.entries(coverage.domains).map(([key, value]) => <span key={key} style={{ ...button, cursor: 'default', fontSize: '.72rem' }}>{key}: {value.total} · {value.percent}%</span>)}</div>{coverage?.gaps.map((gap) => <p key={gap} style={{ color: '#fbbf24', fontSize: '.78rem' }}>Pendiente: {gap}</p>)}</section><section style={card}><div style={{ display: 'flex', gap: '.5rem', marginBottom: '1rem', flexWrap: 'wrap' }}><div style={{ position: 'relative', flex: '1 1 300px' }}><Search size={15} style={{ position: 'absolute', left: 10, top: 11 }} /><input value={query} onChange={(e) => setQuery(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') void search(); }} placeholder="Busca héroes, habilidades, objetos, Eternos, Augmentos o conceptos" style={{ ...button, width: '100%', paddingLeft: 34, boxSizing: 'border-box' }} /></div><select value={kind} onChange={(e) => setKind(e.target.value as typeof kind)} style={button}><option value="">Todo</option><option value="concept">Conceptos</option><option value="hero">Héroes</option><option value="item">Objetos</option><option value="loadout">Loadout</option><option value="eternal_category">Eternos</option></select><button onClick={() => void search()} style={button}>Buscar</button></div><div style={{ display: 'grid', gap: '.65rem' }}>{entries.map((entry) => <article key={`${entry.kind}-${entry.key}`} style={{ padding: '.8rem', background: 'rgba(255,255,255,.025)', borderRadius: 8 }}><div style={{ fontSize: '.65rem', color: 'var(--accent-violet)', textTransform: 'uppercase' }}>{entry.kind} · {entry.patch ? `parche ${entry.patch}` : 'fundamento estable'} · confianza {entry.confidence}</div><strong>{entry.title}</strong><p style={{ margin: '.3rem 0', color: 'var(--text-muted)' }}>{entry.summary}</p><small>{entry.source}</small><details style={{ marginTop: '.55rem' }}><summary style={{ cursor: 'pointer', color: 'var(--accent-cyan)', fontSize: '.75rem' }}>Ver datos y explicación disponibles</summary><KnowledgeDetails entry={entry}/></details></article>)}</div></section></div>;
 }
 
+const REPLAY_STATUS_LABELS: Record<LearningReviewStatus, string> = {
+  PENDING: 'Pendiente de revisar',
+  CONFIRMED_MISTAKE: 'Decisión mejorable confirmada',
+  GOOD_DECISION: 'Buena decisión confirmada',
+  INCONCLUSIVE: 'No concluyente',
+};
+
+function ReplayMarkerReview({ sessionId, marker, onChanged }: { sessionId: string; marker: ReplayMarker; onChanged: () => Promise<void> }) {
+  const [conclusion, setConclusion] = useState(marker.conclusion ?? '');
+  const [saving, setSaving] = useState(false);
+  async function save(status: Exclude<LearningReviewStatus, 'PENDING'>) {
+    if (conclusion.trim().length < 20) {
+      toast.error('Describe qué demuestra el vídeo antes de clasificar el momento.');
+      return;
+    }
+    setSaving(true);
+    try {
+      await apiClient.playerLearning.updateReplayMarker(sessionId, marker.id, status, conclusion.trim());
+      toast.success('Conclusión guardada como evidencia guiada');
+      await onChanged();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'No se pudo guardar la conclusión');
+    } finally {
+      setSaving(false);
+    }
+  }
+  return <article style={{ marginTop: '.65rem', padding: '.75rem', borderRadius: 8, background: 'rgba(255,255,255,.025)' }}>
+    <div style={{ display: 'flex', justifyContent: 'space-between', gap: '.6rem', flexWrap: 'wrap' }}><strong>{captureTime(marker.videoTime)} de vídeo · {marker.title}</strong><small style={{ color: marker.status === 'PENDING' ? '#fbbf24' : 'var(--accent-cyan)' }}>{REPLAY_STATUS_LABELS[marker.status]}</small></div>
+    <p style={{ margin: '.4rem 0' }}>{marker.question}</p>
+    <textarea value={conclusion} onChange={(event) => setConclusion(event.target.value)} maxLength={1600} rows={3} placeholder="Separa lo que ves, lo que interpretas y qué harías en una situación similar." style={{ ...button, width: '100%', boxSizing: 'border-box', resize: 'vertical', lineHeight: 1.45 }} />
+    <div style={{ display: 'flex', gap: '.4rem', flexWrap: 'wrap', marginTop: '.5rem' }}>{([
+      ['GOOD_DECISION', 'Buena decisión'],
+      ['CONFIRMED_MISTAKE', 'Decisión mejorable'],
+      ['INCONCLUSIVE', 'No puedo concluirlo'],
+    ] as const).map(([status, label]) => <button key={status} disabled={saving} onClick={() => void save(status)} style={{ ...button, opacity: saving ? .55 : 1, borderColor: marker.status === status ? 'var(--accent-cyan)' : 'var(--border-color)' }}>{label}</button>)}</div>
+  </article>;
+}
+
+function ReplaySessionReview({ session, onChanged }: { session: PlayerReplaySession; onChanged: () => Promise<void> }) {
+  const [recordingUrl, setRecordingUrl] = useState(session.recordingUrl ?? '');
+  const [offsetSeconds, setOffsetSeconds] = useState(session.offsetSeconds);
+  const [saving, setSaving] = useState(false);
+  async function saveRecording() {
+    setSaving(true);
+    try {
+      await apiClient.playerLearning.updateReplay(session.id, { recordingUrl: recordingUrl.trim() || null, offsetSeconds });
+      toast.success('Grabación y tiempos actualizados');
+      await onChanged();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'No se pudo actualizar la grabación');
+    } finally {
+      setSaving(false);
+    }
+  }
+  return <section style={card}>
+    <div style={{ display: 'flex', justifyContent: 'space-between', gap: '.6rem', flexWrap: 'wrap' }}><div><strong>{session.title}</strong><div style={{ color: 'var(--text-muted)', fontSize: '.75rem' }}>{session.status} · {session.markers.length} momentos</div></div>{session.recordingUrl && <a href={session.recordingUrl} target="_blank" rel="noreferrer">Abrir grabación</a>}</div>
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '.5rem', marginTop: '.7rem' }}><input value={recordingUrl} onChange={(event) => setRecordingUrl(event.target.value)} placeholder="URL privada o local servida por ti" style={{ ...button, minWidth: 0 }}/><input type="number" value={offsetSeconds} onChange={(event) => setOffsetSeconds(Number(event.target.value) || 0)} aria-label="Ajuste temporal en segundos" title="Segundos que separan el inicio de la captura y el inicio de la grabación" style={{ ...button, minWidth: 0 }}/><button disabled={saving} onClick={() => void saveRecording()} style={{ ...button, opacity: saving ? .55 : 1 }}>{saving ? 'Guardando…' : 'Guardar y alinear'}</button></div>
+    <p style={{ color: 'var(--text-muted)', fontSize: '.72rem' }}>El ajuste temporal desplaza todos los marcadores. Usa un valor positivo si el vídeo empieza antes que la captura y comprueba siempre el primer momento.</p>
+    {session.markers.length > 0 ? session.markers.map((marker) => <ReplayMarkerReview key={marker.id} sessionId={session.id} marker={marker} onChanged={onChanged}/>) : <p style={{ color: 'var(--text-muted)' }}>Añade una grabación o crea la revisión desde un informe para obtener momentos guiados.</p>}
+  </section>;
+}
+
 function ReplayReview() {
   const [sessions, setSessions] = useState<PlayerReplaySession[]>([]); const [title, setTitle] = useState('Mi revisión'); const [url, setUrl] = useState('');
-  const load = () => apiClient.playerLearning.replays().then((result) => setSessions(result.sessions)); useEffect(() => { load().catch(() => toast.error('No se pudieron cargar los replays')); }, []);
+  const load = async () => { const result = await apiClient.playerLearning.replays(); setSessions(result.sessions); };
+  useEffect(() => {
+    let cancelled = false;
+    void apiClient.playerLearning.replays().then((result) => { if (!cancelled) setSessions(result.sessions); }).catch(() => toast.error('No se pudieron cargar los replays'));
+    return () => { cancelled = true; };
+  }, []);
   async function create() { try { await apiClient.playerLearning.createReplay({ title, recordingUrl: url || null }); setUrl(''); await load(); toast.success('Revisión creada'); } catch (error) { toast.error(error instanceof Error ? error.message : 'No se pudo crear'); } }
-  return <div style={{ display: 'grid', gap: '1rem' }}><section style={card}><h3 style={{ marginTop: 0 }}>Revisa causas, no sólo resultados</h3><p style={{ color: 'var(--text-muted)' }}>La API puede señalar cuándo mirar. El vídeo permite confirmar visión disponible, movimiento, intención y alternativas. La grabación sigue siendo personal y no entra en las sesiones de equipo.</p><div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr auto', gap: '.5rem' }}><input value={title} onChange={(e) => setTitle(e.target.value)} style={button}/><input value={url} onChange={(e) => setUrl(e.target.value)} placeholder="URL privada o local servida por ti (opcional)" style={button}/><button onClick={() => void create()} style={button}>Crear revisión</button></div></section>{sessions.map((session) => <section key={session.id} style={card}><strong>{session.title}</strong><div style={{ color: 'var(--text-muted)', fontSize: '.75rem' }}>{session.status} · {session.markers.length} momentos</div>{session.recordingUrl && <a href={session.recordingUrl} target="_blank" rel="noreferrer">Abrir grabación</a>}{session.markers.map((marker) => <div key={marker.id} style={{ marginTop: '.6rem' }}><b>{Math.floor(marker.gameTime/60)}:{String(marker.gameTime%60).padStart(2,'0')} · {marker.title}</b><p>{marker.question}</p></div>)}</section>)}</div>;
+  return <div style={{ display: 'grid', gap: '1rem' }}><section style={card}><h3 style={{ marginTop: 0 }}>Revisa causas, no sólo resultados</h3><p style={{ color: 'var(--text-muted)' }}>La API y el acompañante señalan cuándo mirar. El vídeo permite confirmar visión, movimiento, intención y alternativas. Clasificar un momento exige una conclusión escrita; reconocer que la evidencia no basta también es una respuesta válida.</p><div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '.5rem' }}><input value={title} onChange={(e) => setTitle(e.target.value)} style={{ ...button, minWidth: 0 }}/><input value={url} onChange={(e) => setUrl(e.target.value)} placeholder="URL privada o local servida por ti (opcional)" style={{ ...button, minWidth: 0 }}/><button onClick={() => void create()} style={button}>Crear revisión</button></div></section>{sessions.length > 0 ? sessions.map((session) => <ReplaySessionReview key={session.id} session={session} onChanged={load}/>) : <section style={{ ...card, color: 'var(--text-muted)' }}><strong style={{ color: 'var(--text-primary)' }}>Todavía no hay revisiones</strong><p style={{ marginBottom: 0 }}>Puedes crear una manualmente o finalizar una captura verificada para importar automáticamente sus momentos.</p></section>}</div>;
 }
 
 async function finishLiveTrainingSession(sessionId: string): Promise<LiveTrainingReport> {
@@ -291,16 +360,6 @@ const LIVE_EVIDENCE_LABELS: Record<string, string> = {
   combat_state: 'estado de combate',
 };
 
-const LIVE_EVENT_LABELS: Record<string, string> = {
-  RECALL_WINDOW: 'Ventana de vuelta a base',
-  OBJECTIVE_PREPARATION: 'Preparación de objetivo',
-  VISION_OPPORTUNITY: 'Oportunidad de visión',
-  BUILD_ADAPTATION: 'Adaptación de build',
-  SKILL_LEVEL_AVAILABLE: 'Mejora de habilidad pendiente',
-  MINIMAP_INFORMATION: 'Información del minimapa',
-  DEATH_REVIEW: 'Momento de muerte',
-};
-
 function LiveEvidenceSummary({ evidence }: { evidence: Record<string, unknown> }) {
   const explanation = typeof evidence.explanation === 'string' ? evidence.explanation : null;
   const missingInputs = Array.isArray(evidence.missingInputs)
@@ -310,12 +369,45 @@ function LiveEvidenceSummary({ evidence }: { evidence: Record<string, unknown> }
   return <div style={{ marginTop: '.35rem', color: 'var(--text-muted)', fontSize: '.74rem' }}>{explanation && <p style={{ margin: 0 }}>{explanation}</p>}{missingInputs.length > 0 && <p style={{ margin: '.3rem 0 0' }}><strong>Confirma en el replay:</strong> {missingInputs.map((input) => LIVE_EVIDENCE_LABELS[input] ?? input).join(', ')}.</p>}</div>;
 }
 
-function LocalTraining() {
-  const videoRef = useRef<HTMLVideoElement>(null); const streamRef = useRef<MediaStream | null>(null); const liveSessionIdRef = useRef<string | null>(null); const sentSignalsRef = useRef(new Set<string>()); const liveCanAdviseRef = useRef(false); const recordedHudSignalsRef = useRef(new Map<string, string>()); const calibrationCanvasRef = useRef<HTMLCanvasElement | null>(null); const calibrationSurfaceRef = useRef<HTMLDivElement>(null); const selectionStartRef = useRef<{ x: number; y: number } | null>(null); const [mode, setMode] = useState('STANDARD'); const [status, setStatus] = useState('Sin iniciar'); const [capturing, setCapturing] = useState(false);
+function captureTime(seconds: number): string {
+  return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
+}
+
+function LiveTrainingReportReview({ report, busy, onCreateReplay }: { report: LiveTrainingReport; busy: boolean; onCreateReplay: () => void }) {
+  const primary = report.review.primaryFocus;
+  const eventsById = new Map(report.events.map((event) => [event.id, event]));
+  return <section style={card}>
+    <div style={{ display: 'flex', justifyContent: 'space-between', gap: '.7rem', flexWrap: 'wrap' }}>
+      <div><div style={{ color: 'var(--accent-cyan)', fontSize: '.7rem', fontWeight: 800 }}>INFORME DE LA ÚLTIMA CAPTURA</div><h3 style={{ margin: '.25rem 0' }}>{report.detectedGameMode ?? report.requestedGameMode} · {report.status}</h3></div>
+      <div style={{ display: 'flex', gap: '.4rem', flexWrap: 'wrap' }}><span style={{ ...button, cursor: 'default' }}>{report.summary.observations} observaciones</span><span style={{ ...button, cursor: 'default' }}>{report.summary.spoken} mostradas</span><span style={{ ...button, cursor: 'default' }}>{report.summary.silent} para revisión</span></div>
+    </div>
+    <p style={{ color: 'var(--text-muted)', fontSize: '.76rem' }}>{report.limitation}</p>
+    <div style={{ padding: '.7rem .8rem', borderRadius: 8, background: 'rgba(124,92,252,.055)', border: '1px solid rgba(124,92,252,.22)', marginBottom: '.7rem' }}><strong>Impacto en tu nivel</strong><p style={{ color: 'var(--text-muted)', fontSize: '.75rem', margin: '.25rem 0 0' }}>{report.review.learningImpact.explanation}</p></div>
+    {primary ? <article style={{ padding: '.85rem', borderRadius: 9, border: '1px solid rgba(56,212,200,.28)', background: 'rgba(56,212,200,.045)', marginBottom: '.75rem' }}>
+      <div style={{ color: 'var(--accent-cyan)', fontSize: '.68rem', fontWeight: 800 }}>FOCO PRINCIPAL · {captureTime(primary.captureTimeSeconds)} DE CAPTURA</div>
+      <h4 style={{ margin: '.3rem 0' }}>{primary.title}</h4>
+      <p style={{ margin: '.3rem 0' }}><strong>Hecho:</strong> {primary.observedFact}</p>
+      <p style={{ margin: '.3rem 0' }}><strong>Inferencia prudente:</strong> {primary.inference}</p>
+      <p style={{ margin: '.3rem 0', color: 'var(--text-muted)' }}><strong>Límite:</strong> {primary.limitation}</p>
+      <p style={{ margin: '.45rem 0 0' }}><strong>Pregunta para el replay:</strong> {primary.replayQuestion}</p>
+    </article> : null}
+    {report.review.reviewMoments.length > 0 ? <>
+      <div style={{ display: 'flex', justifyContent: 'space-between', gap: '.6rem', alignItems: 'center', flexWrap: 'wrap', marginBottom: '.55rem' }}><strong>Cronología para revisar</strong><button disabled={busy} onClick={onCreateReplay} style={{ ...button, opacity: busy ? .55 : 1 }}>{busy ? 'Creando revisión…' : 'Crear revisión con estos momentos'}</button></div>
+      <div style={{ display: 'grid', gap: '.45rem' }}>{report.review.reviewMoments.map((moment) => {
+        const event = eventsById.get(moment.eventId);
+        return <details key={moment.eventId} style={{ padding: '.65rem .75rem', borderRadius: 8, background: 'rgba(255,255,255,.025)' }}><summary style={{ cursor: 'pointer' }}><strong>{captureTime(moment.captureTimeSeconds)} · {moment.title}</strong><small style={{ marginLeft: '.55rem', color: 'var(--text-muted)' }}>{event?.advice ? 'Mostrada en overlay' : 'Guardada sin interrumpir'}</small></summary><p><strong>Observado:</strong> {moment.observedFact}</p><p><strong>Qué puede significar:</strong> {moment.inference}</p><p style={{ color: 'var(--text-muted)' }}>{moment.limitation}</p><p><strong>Revisa desde {captureTime(moment.suggestedClip.startSeconds)} hasta {captureTime(moment.suggestedClip.endSeconds)}:</strong> {moment.replayQuestion}</p>{event && <LiveEvidenceSummary evidence={event.evidence}/>}</details>;
+      })}</div>
+    </> : <p>No se registraron observaciones: es el resultado correcto cuando el modo o las señales no son suficientemente fiables.</p>}
+    <p style={{ color: 'var(--text-muted)', fontSize: '.72rem', marginBottom: 0 }}><strong>Fortalezas:</strong> {report.review.strengthsLimitation}</p>
+  </section>;
+}
+
+function LocalTraining({ onOpenReplay }: { onOpenReplay: () => void }) {
+  const videoRef = useRef<HTMLVideoElement>(null); const streamRef = useRef<MediaStream | null>(null); const liveSessionIdRef = useRef<string | null>(null); const captureStartedAtRef = useRef<number | null>(null); const sentSignalsRef = useRef(new Set<string>()); const liveCanAdviseRef = useRef(false); const recordedHudSignalsRef = useRef(new Map<string, string>()); const calibrationCanvasRef = useRef<HTMLCanvasElement | null>(null); const calibrationSurfaceRef = useRef<HTMLDivElement>(null); const selectionStartRef = useRef<{ x: number; y: number } | null>(null); const [mode, setMode] = useState('STANDARD'); const [status, setStatus] = useState('Sin iniciar'); const [capturing, setCapturing] = useState(false);
   const [companionEnvironment, setCompanionEnvironment] = useState<Awaited<ReturnType<RiftLineCompanionBridge['getEnvironment']>>>(null);
   const [gameWindows, setGameWindows] = useState<RiftLineGameWindow[]>([]); const [selectedSourceId, setSelectedSourceId] = useState<string | null>(null); const [scanning, setScanning] = useState(false);
   const [liveSessionId, setLiveSessionId] = useState<string | null>(null); const [modeVerification, setModeVerification] = useState('UNVERIFIED'); const [ocrStatus, setOcrStatus] = useState('OCR local pendiente');
-  const [lastReport, setLastReport] = useState<LiveTrainingReport | null>(null); const [silentObservationCount, setSilentObservationCount] = useState(0);
+  const [lastReport, setLastReport] = useState<LiveTrainingReport | null>(null); const [silentObservationCount, setSilentObservationCount] = useState(0); const [creatingReplayReview, setCreatingReplayReview] = useState(false);
   const [lastOcrSignal, setLastOcrSignal] = useState<OcrModeSignal | null>(null); const [modeTemplates, setModeTemplates] = useState<ModeTemplate[]>(() => loadModeTemplates()); const [calibrationFrameUrl, setCalibrationFrameUrl] = useState<string | null>(null); const [calibrationRect, setCalibrationRect] = useState<NormalizedRect | null>(null); const [calibrating, setCalibrating] = useState(false); const [calibrationStatus, setCalibrationStatus] = useState('');
   const companion = typeof window !== 'undefined' ? window.riftlineCompanion : undefined;
   const rankedSelected = mode === 'RANKED';
@@ -324,6 +416,7 @@ function LocalTraining() {
       const sessionId = liveSessionIdRef.current;
       liveSessionIdRef.current = null;
       liveCanAdviseRef.current = false;
+      captureStartedAtRef.current = null;
       if (sessionId) void apiClient.playerLearning.endLiveSession(sessionId).catch(() => undefined);
       streamRef.current?.getTracks().forEach((track) => track.stop());
     };
@@ -334,6 +427,7 @@ function LocalTraining() {
       const sessionId = liveSessionIdRef.current;
       liveSessionIdRef.current = null;
       liveCanAdviseRef.current = false;
+      captureStartedAtRef.current = null;
       if (sessionId) void finishLiveTrainingSession(sessionId).then(setLastReport).catch(() => undefined);
       streamRef.current?.getTracks().forEach((track) => track.stop());
       streamRef.current = null;
@@ -410,7 +504,11 @@ function LocalTraining() {
             if (!shouldRecordHudSignal(hudSignal, previousCapturedAt)) continue;
             recordedHudSignalsRef.current.set(hudSignal.eventType, hudSignal.capturedAt);
             try {
-              const result = await apiClient.playerLearning.submitLiveObservation(liveSessionId, buildSilentHudObservation(hudSignal));
+              const captureStart = captureStartedAtRef.current;
+              const result = await apiClient.playerLearning.submitLiveObservation(liveSessionId, {
+                ...buildSilentHudObservation(hudSignal),
+                gameTime: captureStart == null ? null : Math.max(0, Math.floor((Date.parse(hudSignal.capturedAt) - captureStart) / 1000)),
+              });
               if (!cancelled && result.delivery === 'SILENT_REVIEW') setSilentObservationCount((count) => count + 1);
             } catch {
               if (recordedHudSignalsRef.current.get(hudSignal.eventType) === hudSignal.capturedAt) recordedHudSignalsRef.current.delete(hudSignal.eventType);
@@ -473,6 +571,7 @@ function LocalTraining() {
       setOcrStatus(companion ? 'Esperando el primer fotograma legible…' : 'OCR disponible sólo en el acompañante de escritorio.');
       const stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
       streamRef.current = stream;
+      captureStartedAtRef.current = Date.now();
       if (videoRef.current) videoRef.current.srcObject = stream;
       setCapturing(true);
       setStatus(companion ? 'Ventana de Predecessor capturada. El coach sigue en silencio hasta verificar automáticamente el modo.' : 'Captura local activa. Consejos desactivados: el modo todavía no ha sido verificado automáticamente.');
@@ -480,6 +579,7 @@ function LocalTraining() {
         const sessionId = liveSessionIdRef.current;
         liveSessionIdRef.current = null;
         liveCanAdviseRef.current = false;
+        captureStartedAtRef.current = null;
         if (sessionId) void finishLiveTrainingSession(sessionId).then(setLastReport).catch(() => undefined);
         setLiveSessionId(null);
         setCapturing(false);
@@ -489,6 +589,7 @@ function LocalTraining() {
       const sessionId = liveSessionIdRef.current;
       liveSessionIdRef.current = null;
       liveCanAdviseRef.current = false;
+      captureStartedAtRef.current = null;
       if (sessionId) void apiClient.playerLearning.endLiveSession(sessionId).catch(() => undefined);
       setLiveSessionId(null);
       setStatus(error instanceof Error ? error.message : 'No se pudo iniciar la captura');
@@ -498,6 +599,7 @@ function LocalTraining() {
     const sessionId = liveSessionIdRef.current;
     liveSessionIdRef.current = null;
     liveCanAdviseRef.current = false;
+    captureStartedAtRef.current = null;
     if (sessionId) void finishLiveTrainingSession(sessionId).then(setLastReport).catch(() => undefined);
     streamRef.current?.getTracks().forEach((track) => track.stop());
     streamRef.current = null;
@@ -616,6 +718,28 @@ function LocalTraining() {
     saveModeTemplates(nextTemplates);
     setModeTemplates(nextTemplates);
   }
+  async function createReplayReviewFromReport() {
+    if (!lastReport?.review.reviewMoments.length) return;
+    setCreatingReplayReview(true);
+    try {
+      await apiClient.playerLearning.createReplay({
+        title: `Revisión del entrenamiento · ${lastReport.detectedGameMode ?? lastReport.requestedGameMode}`,
+        markers: lastReport.review.reviewMoments.map((moment) => ({
+          gameTime: moment.captureTimeSeconds,
+          sourceEventId: moment.eventId,
+          category: moment.category,
+          title: moment.title,
+          question: moment.replayQuestion,
+        })),
+      });
+      toast.success('Revisión creada con los momentos detectados. Añade o abre tu grabación para confirmar las causas.');
+      onOpenReplay();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'No se pudo crear la revisión');
+    } finally {
+      setCreatingReplayReview(false);
+    }
+  }
   const detectors = [
     ['HUD personal', 'Héroe, nivel, oro, vida, maná, inventario y habilidades visibles.'],
     ['Marcador', 'Última build visible de compañeros y rivales, con antigüedad de la lectura.'],
@@ -641,7 +765,7 @@ function LocalTraining() {
       </div>}
       {modeTemplates.length > 0 ? <div style={{ display: 'grid', gap: '.45rem', marginTop: '.8rem' }}>{modeTemplates.map((template) => <div key={template.id} style={{ display: 'flex', justifyContent: 'space-between', gap: '.7rem', alignItems: 'center', padding: '.55rem .65rem', borderRadius: 7, background: 'rgba(255,255,255,.025)' }}><div><strong>{template.mode}</strong><small style={{ display: 'block', color: 'var(--text-muted)' }}>{template.sourceWidth}×{template.sourceHeight} · OCR de calibración {Math.round(template.calibrationOcrConfidence * 100)}% · válida desde otra sesión</small></div><button onClick={() => removeModeTemplate(template.id)} style={{ ...button, color: 'var(--text-muted)' }}>Eliminar</button></div>)}</div> : <p style={{ color: 'var(--text-muted)', fontSize: '.76rem', marginBottom: 0 }}>Aún no hay plantillas. El coach seguirá en silencio aunque el OCR reconozca un modo permitido.</p>}
     </section>}
-    {lastReport && <section style={card}><div style={{ display: 'flex', justifyContent: 'space-between', gap: '.7rem', flexWrap: 'wrap' }}><div><div style={{ color: 'var(--accent-cyan)', fontSize: '.7rem', fontWeight: 800 }}>INFORME DE LA ÚLTIMA CAPTURA</div><h3 style={{ margin: '.25rem 0' }}>{lastReport.detectedGameMode ?? lastReport.requestedGameMode} · {lastReport.status}</h3></div><div style={{ display: 'flex', gap: '.4rem', flexWrap: 'wrap' }}><span style={{ ...button, cursor: 'default' }}>{lastReport.summary.observations} observaciones</span><span style={{ ...button, cursor: 'default' }}>{lastReport.summary.spoken} mostradas</span><span style={{ ...button, cursor: 'default' }}>{lastReport.summary.silent} para revisión</span></div></div><p style={{ color: 'var(--text-muted)', fontSize: '.76rem' }}>{lastReport.limitation}</p>{lastReport.events.length > 0 ? <div style={{ display: 'grid', gap: '.45rem' }}>{lastReport.events.slice(-6).map((event) => <article key={event.id} style={{ padding: '.65rem .75rem', borderRadius: 8, background: 'rgba(255,255,255,.025)' }}><div style={{ display: 'flex', justifyContent: 'space-between', gap: '.5rem', flexWrap: 'wrap' }}><strong>{LIVE_EVENT_LABELS[event.eventType] ?? event.eventType.replaceAll('_', ' ')}</strong><small style={{ color: 'var(--text-muted)' }}>{event.advice ? 'Mostrada en overlay' : 'Guardada sin interrumpir'}</small></div>{event.advice && <p style={{ margin: '.3rem 0 0' }}>{event.advice}</p>}<LiveEvidenceSummary evidence={event.evidence}/></article>)}</div> : <p>No se registraron observaciones: es el resultado correcto cuando el modo o las señales no son suficientemente fiables.</p>}</section>}
+    {lastReport && <LiveTrainingReportReview report={lastReport} busy={creatingReplayReview} onCreateReplay={() => void createReplayReviewFromReport()} />}
     <section style={card}><h3 style={{ marginTop: 0 }}>Qué observará la primera versión</h3><div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: '.6rem' }}>{detectors.map(([title, description]) => <article key={title} style={{ padding: '.75rem', border: '1px solid var(--border-color)', borderRadius: 8, background: 'rgba(255,255,255,.018)' }}><strong>{title}</strong><p style={{ color: 'var(--text-muted)', fontSize: '.74rem', lineHeight: 1.45, marginBottom: 0 }}>{description}</p></article>)}</div></section>
     <section style={card}><h3 style={{ marginTop: 0 }}>Cómo intervendrá el coach</h3><ul style={{ color: 'var(--text-secondary)', lineHeight: 1.55 }}><li>No habla durante un combate.</li><li>Como máximo cuatro intervenciones cada diez minutos y nunca repite el mismo concepto en cinco minutos.</li><li>Una observación dudosa se guarda para el informe, pero no interrumpe.</li><li>Cada consejo explica qué señales lo activaron y qué condición podría cambiarlo.</li></ul><p style={{ color: 'var(--text-muted)', fontSize: '.76rem', marginBottom: 0 }}>La Academia distingue las señales declaradas, guiadas y observadas: el overlay no podrá ascenderte por sí solo.</p></section>
   </div>;
