@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { detectHudSignalsFromOcrText, detectModeFromOcrText } from './liveModeOcr';
+import {
+  detectHudSignalsFromOcrText,
+  detectModeFromOcrText,
+  isFreshModeSignalForCalibration,
+  isModeSignalReliableForVerification,
+} from './liveModeOcr';
 
 describe('live mode OCR interpretation', () => {
   it('recognizes ranked labels before all allowed modes and raises a safe blocking signal', () => {
@@ -23,6 +28,20 @@ describe('live mode OCR interpretation', () => {
 
   it('returns no signal for unrelated HUD text', () => {
     expect(detectModeFromOcrText('LEVEL 7 GOLD 2150 FANGTOOTH', 96)).toBeNull();
+  });
+
+  it('allows a recent low-confidence allowed-mode reading to open the manual crop flow', () => {
+    const signal = detectModeFromOcrText('PRACTICE', 42, '2026-08-27T18:00:00.000Z');
+    expect(isFreshModeSignalForCalibration(signal, Date.parse('2026-08-27T18:00:10.000Z'))).toBe(true);
+    expect(isModeSignalReliableForVerification(signal!)).toBe(false);
+  });
+
+  it('does not offer calibration for stale or Ranked readings', () => {
+    const practice = detectModeFromOcrText('PRACTICE', 91, '2026-08-27T18:00:00.000Z');
+    const ranked = detectModeFromOcrText('RANKED', 91, '2026-08-27T18:00:19.000Z');
+    expect(isFreshModeSignalForCalibration(practice, Date.parse('2026-08-27T18:00:21.000Z'))).toBe(false);
+    expect(isFreshModeSignalForCalibration(ranked, Date.parse('2026-08-27T18:00:20.000Z'))).toBe(false);
+    expect(isModeSignalReliableForVerification(ranked!)).toBe(true);
   });
 
   it('extracts only conservative HUD observations without retaining OCR text', () => {

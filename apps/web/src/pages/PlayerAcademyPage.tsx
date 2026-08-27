@@ -19,7 +19,12 @@ import {
   type PlayerTrainingCycle,
 } from '../api/client';
 import { LearningProgressOverview } from '../components/LearningProgressOverview';
-import { createLiveModeOcr, type OcrModeSignal } from '../services/liveModeOcr';
+import {
+  createLiveModeOcr,
+  isFreshModeSignalForCalibration,
+  isModeSignalReliableForVerification,
+  type OcrModeSignal,
+} from '../services/liveModeOcr';
 import { buildSilentHudObservation, shouldRecordHudSignal } from '../services/liveHudObservation';
 import {
   captureFrame,
@@ -379,14 +384,6 @@ async function finishLiveTrainingSession(sessionId: string): Promise<LiveTrainin
   return (await apiClient.playerLearning.liveSessionReport(sessionId)).report;
 }
 
-const CALIBRATION_OCR_MAX_AGE_MS = 20_000;
-
-function isFreshCalibrationSignal(signal: OcrModeSignal | null): signal is OcrModeSignal {
-  if (!signal || signal.confidence < 0.85) return false;
-  const capturedAt = Date.parse(signal.capturedAt);
-  return Number.isFinite(capturedAt) && Date.now() - capturedAt <= CALIBRATION_OCR_MAX_AGE_MS;
-}
-
 const LIVE_EVIDENCE_LABELS: Record<string, string> = {
   positioning: 'posicionamiento',
   available_vision: 'visión disponible',
@@ -493,7 +490,7 @@ function LocalTraining({ onOpenReplay }: { onOpenReplay: () => void }) {
   const [liveSessionId, setLiveSessionId] = useState<string | null>(null); const [modeVerification, setModeVerification] = useState('UNVERIFIED'); const [ocrStatus, setOcrStatus] = useState('OCR local pendiente');
   const [lastReport, setLastReport] = useState<LiveTrainingReport | null>(null); const [silentObservationCount, setSilentObservationCount] = useState(0); const [creatingReplayReview, setCreatingReplayReview] = useState(false);
   const [detectorReadiness, setDetectorReadiness] = useState<LiveDetectorReadiness | null>(null);
-  const [lastOcrSignal, setLastOcrSignal] = useState<OcrModeSignal | null>(null); const [modeTemplates, setModeTemplates] = useState<ModeTemplate[]>(() => loadModeTemplates()); const [calibrationFrameUrl, setCalibrationFrameUrl] = useState<string | null>(null); const [calibrationRect, setCalibrationRect] = useState<NormalizedRect | null>(null); const [calibrating, setCalibrating] = useState(false); const [calibrationStatus, setCalibrationStatus] = useState('');
+  const [lastOcrSignal, setLastOcrSignal] = useState<OcrModeSignal | null>(null); const [modeTemplates, setModeTemplates] = useState<ModeTemplate[]>(() => loadModeTemplates()); const [calibrationFrameUrl, setCalibrationFrameUrl] = useState<string | null>(null); const [calibrationRect, setCalibrationRect] = useState<NormalizedRect | null>(null); const [calibrationSignal, setCalibrationSignal] = useState<OcrModeSignal | null>(null); const [calibrating, setCalibrating] = useState(false); const [calibrationStatus, setCalibrationStatus] = useState('');
   const companion = typeof window !== 'undefined' ? window.riftlineCompanion : undefined;
   const rankedSelected = mode === 'RANKED';
   function acceptLiveReport(report: LiveTrainingReport) {
@@ -553,15 +550,19 @@ function LocalTraining({ onOpenReplay }: { onOpenReplay: () => void }) {
       if (cancelled || running || !videoRef.current || videoRef.current.readyState < 2) return;
       running = true;
       try {
-        setOcrStatus('Preparando OCR local…');
-        detector ??= await createLiveModeOcr((progress) => setOcrStatus(`Leyendo rótulos del modo… ${Math.round(progress * 100)}%`));
+        if (!detector) {
+          setOcrStatus('Preparando OCR local…');
+          detector = await createLiveModeOcr((progress) => setOcrStatus((current) => current.startsWith('OCR:') || current.startsWith('Plantilla:') ? current : `Leyendo rótulos del modo… ${Math.round(progress * 100)}%`));
+        }
         if (cancelled) return;
         const inspection = await detector.inspect(videoRef.current);
         const signal = inspection.modeSignal;
         if (signal) {
           setLastOcrSignal(signal);
           const signalKey = `screen_ocr:${signal.detectedGameMode}`;
-          if (!sentSignalsRef.current.has(signalKey)) {
+          if (!isModeSignalReliableForVerification(signal)) {
+            setOcrStatus(`OCR: ${signal.detectedGameMode} · confianza ${Math.round(signal.confidence * 100)}%. Puedes preparar el recorte; para verificar la sesión necesita alcanzar el 85%.`);
+          } else if (!sentSignalsRef.current.has(signalKey)) {
             sentSignalsRef.current.add(signalKey);
             const verification = await apiClient.playerLearning.verifyLiveMode(liveSessionId, signal.detectedGameMode, { source: 'screen_ocr', confidence: signal.confidence, capturedAt: signal.capturedAt });
             liveCanAdviseRef.current = verification.canAdvise;
@@ -572,7 +573,7 @@ function LocalTraining({ onOpenReplay }: { onOpenReplay: () => void }) {
               return;
             }
           } else {
-            setOcrStatus(`OCR: ${signal.detectedGameMode} ya registrado; buscando una plantilla de otra sesión.`);
+            setOcrStatus(`OCR: ${signal.detectedGameMode} · confianza ${Math.round(signal.confidence * 100)}% · ya registrado; buscando una plantilla de otra sesión.`);
           }
         } else {
           setOcrStatus('No se encontró un rótulo de modo fiable. El coach permanece en silencio.');
@@ -660,6 +661,7 @@ function LocalTraining({ onOpenReplay }: { onOpenReplay: () => void }) {
       setLastOcrSignal(null);
       setCalibrationFrameUrl(null);
       setCalibrationRect(null);
+      setCalibrationSignal(null);
       setCalibrationStatus('');
       sentSignalsRef.current.clear();
       recordedHudSignalsRef.current.clear();
@@ -734,8 +736,8 @@ function LocalTraining({ onOpenReplay }: { onOpenReplay: () => void }) {
   }
   function beginTemplateCalibration() {
     const video = videoRef.current;
-    if (!isFreshCalibrationSignal(lastOcrSignal)) {
-      setCalibrationStatus('Espera a una lectura OCR reciente del modo con al menos 85% de confianza. La lectura caduca a los 20 segundos.');
+    if (!isFreshModeSignalForCalibration(lastOcrSignal)) {
+      setCalibrationStatus('Espera a una lectura OCR reciente de un modo permitido. El recorte se validará después con un mínimo del 75% de confianza.');
       return;
     }
     const frame = video ? captureFrame(video) : null;
@@ -744,6 +746,7 @@ function LocalTraining({ onOpenReplay }: { onOpenReplay: () => void }) {
       return;
     }
     calibrationCanvasRef.current = frame;
+    setCalibrationSignal(lastOcrSignal);
     setCalibrationFrameUrl(frame.toDataURL('image/jpeg', 0.88));
     setCalibrationRect(null);
     setCalibrationStatus(`Dibuja un rectángulo ajustado alrededor del texto ${lastOcrSignal.detectedGameMode}.`);
@@ -776,8 +779,8 @@ function LocalTraining({ onOpenReplay }: { onOpenReplay: () => void }) {
   async function saveModeTemplate() {
     const frame = calibrationCanvasRef.current;
     const sessionId = liveSessionIdRef.current;
-    if (!frame || !sessionId || !calibrationRect || !isUsableTemplateRect(calibrationRect) || !isFreshCalibrationSignal(lastOcrSignal)) {
-      setCalibrationStatus('Necesitas un recorte válido y una lectura OCR reciente del modo con al menos 85% de confianza.');
+    if (!frame || !sessionId || !calibrationRect || !isUsableTemplateRect(calibrationRect) || !calibrationSignal) {
+      setCalibrationStatus('Necesitas capturar primero un fotograma reconocido y dibujar un recorte válido alrededor del rótulo.');
       return;
     }
     const crop = cropFrame(frame, calibrationRect);
@@ -788,7 +791,7 @@ function LocalTraining({ onOpenReplay }: { onOpenReplay: () => void }) {
     try {
       detector = await createLiveModeOcr();
       const cropSignal = await detector.scan(crop);
-      if (!cropSignal || cropSignal.detectedGameMode !== lastOcrSignal.detectedGameMode || cropSignal.confidence < 0.75) {
+      if (!cropSignal || cropSignal.detectedGameMode !== calibrationSignal.detectedGameMode || cropSignal.confidence < 0.75) {
         setCalibrationStatus('El recorte no contiene el mismo rótulo de modo con suficiente claridad. Ajusta el rectángulo al texto y prueba de nuevo.');
         return;
       }
@@ -802,6 +805,7 @@ function LocalTraining({ onOpenReplay }: { onOpenReplay: () => void }) {
       setModeTemplates(nextTemplates);
       setCalibrationFrameUrl(null);
       setCalibrationRect(null);
+      setCalibrationSignal(null);
       setCalibrationStatus(`Plantilla ${template.mode} guardada. No puede validar esta sesión; se comprobará automáticamente en una captura posterior.`);
     } catch {
       setCalibrationStatus('No se pudo validar el recorte con OCR. La plantilla no se ha guardado.');
@@ -847,7 +851,7 @@ function LocalTraining({ onOpenReplay }: { onOpenReplay: () => void }) {
     {companion && <section style={card}>
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: '.75rem', flexWrap: 'wrap', alignItems: 'start' }}>
         <div><div style={{ color: 'var(--accent-violet)', fontSize: '.7rem', fontWeight: 800 }}>SEGUNDA SEÑAL AUTOMÁTICA</div><h3 style={{ margin: '.25rem 0' }}>Calibrar el rótulo del modo</h3><p style={{ color: 'var(--text-muted)', maxWidth: 760, fontSize: '.78rem' }}>Cuando el OCR reconozca un modo permitido, pausa visualmente en ese rótulo, captura el fotograma y dibuja un rectángulo ajustado alrededor del texto. RiftLine volverá a leer sólo ese recorte antes de guardarlo.</p></div>
-        <button disabled={!capturing || calibrating || !isFreshCalibrationSignal(lastOcrSignal)} onClick={beginTemplateCalibration} style={{ ...button, opacity: capturing && isFreshCalibrationSignal(lastOcrSignal) ? 1 : .45 }}>Capturar rótulo para calibrar</button>
+        <button disabled={!capturing || calibrating || !isFreshModeSignalForCalibration(lastOcrSignal)} onClick={beginTemplateCalibration} style={{ ...button, opacity: capturing && isFreshModeSignalForCalibration(lastOcrSignal) ? 1 : .45 }}>Capturar rótulo para calibrar</button>
       </div>
       {calibrationStatus && <p style={{ color: calibrationStatus.includes('guardada') ? 'var(--accent-cyan)' : '#fbbf24', fontSize: '.76rem' }}>{calibrationStatus}</p>}
       {calibrationFrameUrl && <div style={{ display: 'grid', gap: '.65rem' }}>
@@ -855,7 +859,7 @@ function LocalTraining({ onOpenReplay }: { onOpenReplay: () => void }) {
           <img src={calibrationFrameUrl} alt="Fotograma local para seleccionar el rótulo del modo" draggable={false} style={{ display: 'block', width: '100%', height: 'auto', pointerEvents: 'none' }} />
           {calibrationRect && <div aria-hidden style={{ position: 'absolute', left: `${calibrationRect.x * 100}%`, top: `${calibrationRect.y * 100}%`, width: `${calibrationRect.width * 100}%`, height: `${calibrationRect.height * 100}%`, border: '2px solid var(--accent-cyan)', background: 'rgba(56,212,200,.12)', boxShadow: '0 0 0 9999px rgba(0,0,0,.38)', pointerEvents: 'none' }} />}
         </div>
-        <div style={{ display: 'flex', gap: '.5rem', flexWrap: 'wrap' }}><button disabled={calibrating || !calibrationRect || !isUsableTemplateRect(calibrationRect)} onClick={() => void saveModeTemplate()} style={{ ...button, opacity: calibrating || !calibrationRect || !isUsableTemplateRect(calibrationRect) ? .45 : 1 }}>{calibrating ? 'Validando recorte…' : `Guardar plantilla ${lastOcrSignal?.detectedGameMode ?? ''}`}</button><button disabled={calibrating} onClick={() => { setCalibrationFrameUrl(null); setCalibrationRect(null); }} style={button}>Cancelar</button></div>
+        <div style={{ display: 'flex', gap: '.5rem', flexWrap: 'wrap' }}><button disabled={calibrating || !calibrationRect || !isUsableTemplateRect(calibrationRect)} onClick={() => void saveModeTemplate()} style={{ ...button, opacity: calibrating || !calibrationRect || !isUsableTemplateRect(calibrationRect) ? .45 : 1 }}>{calibrating ? 'Validando recorte…' : `Guardar plantilla ${calibrationSignal?.detectedGameMode ?? ''}`}</button><button disabled={calibrating} onClick={() => { setCalibrationFrameUrl(null); setCalibrationRect(null); setCalibrationSignal(null); }} style={button}>Cancelar</button></div>
       </div>}
       {modeTemplates.length > 0 ? <div style={{ display: 'grid', gap: '.45rem', marginTop: '.8rem' }}>{modeTemplates.map((template) => <div key={template.id} style={{ display: 'flex', justifyContent: 'space-between', gap: '.7rem', alignItems: 'center', padding: '.55rem .65rem', borderRadius: 7, background: 'rgba(255,255,255,.025)' }}><div><strong>{template.mode}</strong><small style={{ display: 'block', color: 'var(--text-muted)' }}>{template.sourceWidth}×{template.sourceHeight} · OCR de calibración {Math.round(template.calibrationOcrConfidence * 100)}% · válida desde otra sesión</small></div><button onClick={() => removeModeTemplate(template.id)} style={{ ...button, color: 'var(--text-muted)' }}>Eliminar</button></div>)}</div> : <p style={{ color: 'var(--text-muted)', fontSize: '.76rem', marginBottom: 0 }}>Aún no hay plantillas. El coach seguirá en silencio aunque el OCR reconozca un modo permitido.</p>}
     </section>}

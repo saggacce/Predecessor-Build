@@ -11,6 +11,23 @@ export type OcrHudSignal = {
   matchedLabel: 'respawn_indicator' | 'ability_point_available';
 };
 
+const ALLOWED_CALIBRATION_MODES = new Set<OcrModeSignal['detectedGameMode']>(['STANDARD', 'QUICK', 'ARAM', 'LABS', 'PRACTICE', 'AI', 'CUSTOM']);
+const ALLOWED_MODE_VERIFICATION_CONFIDENCE = 0.85;
+const RANKED_MODE_BLOCKING_CONFIDENCE = 0.7;
+
+export function isFreshModeSignalForCalibration(signal: OcrModeSignal | null, now = Date.now(), maxAgeMs = 20_000): signal is OcrModeSignal {
+  if (!signal || !ALLOWED_CALIBRATION_MODES.has(signal.detectedGameMode)) return false;
+  const capturedAt = Date.parse(signal.capturedAt);
+  const age = now - capturedAt;
+  return Number.isFinite(capturedAt) && age >= -5_000 && age <= maxAgeMs;
+}
+
+export function isModeSignalReliableForVerification(signal: OcrModeSignal): boolean {
+  return signal.confidence >= (signal.detectedGameMode === 'RANKED'
+    ? RANKED_MODE_BLOCKING_CONFIDENCE
+    : ALLOWED_MODE_VERIFICATION_CONFIDENCE);
+}
+
 const MODE_PATTERNS: Array<[OcrModeSignal['detectedGameMode'], RegExp]> = [
   ['RANKED', /\b(RANKED|COMPETITIVE|CLASIFICATORIA|COMPETITIVA)\b/],
   ['STANDARD', /\b(STANDARD|ESTANDAR|NORMAL)\b/],
