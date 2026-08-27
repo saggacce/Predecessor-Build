@@ -1779,7 +1779,7 @@ export const apiClient = {
   playerLearning: {
     profile: () => fetchApi<{ profile: PlayerLearningProfile; recommendation: MissionRecommendation }>('/player-learning/profile/me'),
     updateProfile: (activeRole: PlayerLearningProfile['activeRole']) => fetchApi<{ profile: PlayerLearningProfile }>('/player-learning/profile/me', { method: 'PATCH', body: JSON.stringify({ activeRole }) }),
-    placement: () => fetchApi<{ status: PlayerLearningProfile['placementStatus']; questions: LearningQuestionView[]; note: string }>('/player-learning/placement'),
+    placement: () => fetchApi<{ status: PlayerLearningProfile['placementStatus']; questions: LearningQuestionView[]; answered: number; note: string }>('/player-learning/placement'),
     answerQuestion: (questionKey: string, selectedOptionId: string, sourceType: 'PLACEMENT' | 'MATCH' | 'REPLAY' | 'REVIEW' | 'PROMOTION' = 'PLACEMENT', sourceMatchId?: string | null) =>
       fetchApi<{ result: { questionKey: string; competencyKey: string; competencyLabel: string; evaluation: string; score: number; feedback: string; principle: string; nextReviewAt: string | null } }>(`/player-learning/questions/${encodeURIComponent(questionKey)}/answer`, { method: 'POST', body: JSON.stringify({ selectedOptionId, sourceType, sourceMatchId }) }),
     recommendedMission: () => fetchApi<{ mission: MissionRecommendation; templates: MissionRecommendation[] }>('/player-learning/missions/recommended'),

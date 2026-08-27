@@ -68,11 +68,34 @@ export function selectPlacementQuestions(role?: string | null, count = 10) {
   const roleQuestions = normalizedRole
     ? LEARNING_QUESTIONS.filter((question) => question.roles?.includes(normalizedRole))
     : [];
-  const selected = [...general.slice(0, Math.max(0, count - roleQuestions.length)), ...roleQuestions].slice(0, count);
-  return selected.map(({ options, ...question }) => ({
-    ...question,
-    options: options.map(({ score: _score, evaluation: _evaluation, feedback: _feedback, ...option }) => option),
-  }));
+  const generalTarget = Math.max(0, count - roleQuestions.length);
+  const buckets = new Map(COMPETENCIES.map(({ key }) => [
+    key,
+    general.filter((question) => question.competencyKey === key),
+  ]));
+  const balanced: typeof general = [];
+  while (balanced.length < generalTarget) {
+    let added = false;
+    for (const { key } of COMPETENCIES) {
+      const next = buckets.get(key)?.shift();
+      if (!next) continue;
+      balanced.push(next);
+      added = true;
+      if (balanced.length >= generalTarget) break;
+    }
+    if (!added) break;
+  }
+  const selected = [...balanced, ...roleQuestions].slice(0, count);
+  const stableHash = (value: string) => [...value].reduce((hash, character) => ((hash * 31) + character.charCodeAt(0)) >>> 0, 7);
+  return selected.map(({ options, ...question }) => {
+    const answerOptions = options.filter((option) => option.id !== 'not_sure')
+      .sort((a, b) => stableHash(`${question.key}:${a.id}`) - stableHash(`${question.key}:${b.id}`));
+    const unsure = options.filter((option) => option.id === 'not_sure');
+    return {
+      ...question,
+      options: [...answerOptions, ...unsure].map(({ score: _score, evaluation: _evaluation, feedback: _feedback, ...option }) => option),
+    };
+  });
 }
 
 export async function recordQuestionAnswer(input: {
@@ -82,6 +105,7 @@ export async function recordQuestionAnswer(input: {
   sourceType: 'PLACEMENT' | 'MATCH' | 'REPLAY' | 'REVIEW' | 'PROMOTION';
   sourceMatchId?: string | null;
   evidence?: unknown;
+  placementRole?: string | null;
 }) {
   const question = LEARNING_QUESTIONS.find((item) => item.key === input.questionKey);
   if (!question) throw new Error('QUESTION_NOT_FOUND');
@@ -130,13 +154,60 @@ export async function recordQuestionAnswer(input: {
         nextReviewAt,
       },
     });
-    const all = await tx.playerCompetency.findMany({ where: { profileId: input.profileId } });
-    const overallLevel = Math.max(1, Math.min(5, Math.floor(all.reduce((sum, item) => sum + item.level, 0) / Math.max(1, all.length))));
+    let all = await tx.playerCompetency.findMany({ where: { profileId: input.profileId } });
+    let placementComplete = false;
+    let placementAverage = 0;
+    if (input.sourceType === 'PLACEMENT') {
+      const currentKeys = selectPlacementQuestions(input.placementRole, 10).map((item) => item.key);
+      const placementAttempts = await tx.coachQuestionAttempt.findMany({
+        where: { profileId: input.profileId, sourceType: 'PLACEMENT', questionKey: { in: currentKeys } },
+        select: { competencyKey: true, score: true },
+      });
+      placementComplete = placementAttempts.length >= currentKeys.length;
+      if (placementComplete) {
+        placementAverage = placementAttempts.reduce((sum, item) => sum + item.score, 0) / placementAttempts.length;
+        // Rebuild from the current placement revision plus genuine later
+        // evidence. This keeps immutable legacy answers for audit purposes but
+        // prevents an easier, superseded questionnaire from inflating mastery.
+        const nonPlacementAttempts = await tx.coachQuestionAttempt.findMany({
+          where: { profileId: input.profileId, sourceType: { not: 'PLACEMENT' } },
+          select: { competencyKey: true, score: true },
+        });
+        const scoresByCompetency = new Map<string, number[]>();
+        for (const scoredAttempt of [...placementAttempts, ...nonPlacementAttempts]) {
+          const scores = scoresByCompetency.get(scoredAttempt.competencyKey) ?? [];
+          scores.push(scoredAttempt.score);
+          scoresByCompetency.set(scoredAttempt.competencyKey, scores);
+        }
+        await Promise.all(all.map((item) => {
+          const scores = scoresByCompetency.get(item.competencyKey) ?? [];
+          const evidenceCount = scores.length + item.appliedCount;
+          if (evidenceCount === 0) return Promise.resolve(item);
+          const average = (scores.reduce((sum, score) => sum + score, 0) + (item.appliedCount * 0.65)) / evidenceCount;
+          const provisionalLevel = average >= 0.75 ? 2 : 1;
+          return tx.playerCompetency.update({
+            where: { id: item.id },
+            data: {
+              level: Math.max(item.level, provisionalLevel),
+              mastery: average,
+              confidence: Math.min(1, evidenceCount / 5),
+              evidenceCount,
+              correctCount: scores.filter((score) => score >= 0.8).length,
+              lastEvidenceAt: now,
+            },
+          });
+        }));
+        all = await tx.playerCompetency.findMany({ where: { profileId: input.profileId } });
+      }
+    }
+    const evidenceLevel = Math.floor(all.reduce((sum, item) => sum + item.level, 0) / Math.max(1, all.length));
+    const provisionalOverallLevel = placementComplete && placementAverage >= 0.7 ? 2 : 1;
+    const overallLevel = Math.max(1, Math.min(5, Math.max(evidenceLevel, provisionalOverallLevel)));
     const totalEvidence = all.reduce((sum, item) => sum + item.evidenceCount, 0);
     await tx.playerLearningProfile.update({
       where: { id: input.profileId },
       data: {
-        placementStatus: input.sourceType === 'PLACEMENT' && totalEvidence >= 10 ? 'PROVISIONAL' : undefined,
+        placementStatus: input.sourceType === 'PLACEMENT' && placementComplete ? 'PROVISIONAL' : undefined,
         overallLevel,
         explanationDepth: overallLevel <= 1 ? 'FOUNDATIONAL' : overallLevel >= 4 ? 'ADVANCED' : 'STANDARD',
         confidence: Math.min(1, totalEvidence / 35),

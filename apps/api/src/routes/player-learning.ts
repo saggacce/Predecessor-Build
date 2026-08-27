@@ -84,14 +84,17 @@ playerLearningRouter.patch('/profile/me', requireAuth, async (req, res, next) =>
 playerLearningRouter.get('/placement', requireAuth, async (req, res, next) => {
   try {
     let profile = await ownProfile(req.user!.userId);
-    if (profile.placementStatus === 'NOT_STARTED') {
+    const currentQuestions = selectPlacementQuestions(profile.activeRole, 10);
+    const currentKeys = currentQuestions.map((question) => question.key);
+    const answered = await db.coachQuestionAttempt.findMany({ where: { profileId: profile.id, sourceType: 'PLACEMENT', questionKey: { in: currentKeys } }, select: { questionKey: true } });
+    const answeredKeys = new Set(answered.map((attempt) => attempt.questionKey));
+    const questions = currentQuestions.filter((question) => !answeredKeys.has(question.key));
+    if (questions.length > 0 && profile.placementStatus !== 'IN_PROGRESS') {
       profile = await db.playerLearningProfile.update({ where: { id: profile.id }, data: { placementStatus: 'IN_PROGRESS' }, include: { competencies: true } });
     }
-    const answered = await db.coachQuestionAttempt.findMany({ where: { profileId: profile.id, sourceType: 'PLACEMENT' }, select: { questionKey: true } });
-    const answeredKeys = new Set(answered.map((attempt) => attempt.questionKey));
     res.json({
       status: profile.placementStatus,
-      questions: selectPlacementQuestions(profile.activeRole, 10).filter((question) => !answeredKeys.has(question.key)),
+      questions,
       answered: answeredKeys.size,
       note: 'El resultado inicial es provisional: las partidas, misiones y revisiones aportan evidencia adicional.',
     });
@@ -113,7 +116,7 @@ playerLearningRouter.post('/questions/:questionKey/answer', requireAuth, async (
       const existing = await db.coachQuestionAttempt.findFirst({ where: { profileId: profile.id, sourceType: 'PLACEMENT', questionKey: String(req.params.questionKey) }, select: { id: true } });
       if (existing) throw new AppError(409, 'This placement situation was already answered', 'QUESTION_ALREADY_ANSWERED');
     }
-    const result = await recordQuestionAnswer({ profileId: profile.id, questionKey: String(req.params.questionKey), ...body });
+    const result = await recordQuestionAnswer({ profileId: profile.id, questionKey: String(req.params.questionKey), placementRole: profile.activeRole, ...body });
     res.status(201).json({ result });
   } catch (error) {
     if (error instanceof Error && error.message === 'QUESTION_NOT_FOUND') return next(new AppError(404, 'Learning question not found', 'QUESTION_NOT_FOUND'));

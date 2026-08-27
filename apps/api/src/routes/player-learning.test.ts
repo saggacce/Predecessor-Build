@@ -13,6 +13,7 @@ vi.mock('../db.js', () => ({
     playerTrainingCycle: { findMany: vi.fn(), findFirst: vi.fn(), create: vi.fn(), update: vi.fn() },
     playerLearningProfile: { upsert: vi.fn(), findUniqueOrThrow: vi.fn(), update: vi.fn() },
     playerCompetency: { createMany: vi.fn(), updateMany: vi.fn() },
+    coachQuestionAttempt: { findMany: vi.fn(), findFirst: vi.fn() },
     playerReplaySession: { create: vi.fn(), findMany: vi.fn() },
     playerReplayMarker: { findFirst: vi.fn(), update: vi.fn() },
     liveTrainingSession: { create: vi.fn(), findFirst: vi.fn(), update: vi.fn() },
@@ -42,6 +43,7 @@ describe('personal learning persistence', () => {
         'moba_fundamentals', 'role_knowledge', 'macro', 'micro_concepts', 'builds', 'champion_pool', 'review_autonomy',
       ].map((competencyKey) => ({ competencyKey, level: 1, mastery: 0.25, confidence: 0, evidenceCount: 0 })),
     });
+    mockDb.coachQuestionAttempt.findMany.mockResolvedValue([]);
   });
 
   it('stores the player conclusion for a generated replay moment', async () => {
@@ -59,6 +61,25 @@ describe('personal learning persistence', () => {
     expect(mockDb.playerLearningMomentReview.upsert).toHaveBeenCalledWith(expect.objectContaining({
       where: { userId_matchId_momentId: { userId: 'user-1', matchId: 'match-1', momentId: 'death-review-300' } },
     }));
+  });
+
+  it('serves the current balanced placement revision and marks it in progress', async () => {
+    const profile = {
+      id: 'profile-1', userId: 'user-1', playerId: 'player-1', overallLevel: 1,
+      placementStatus: 'PROVISIONAL', activeRole: 'SUPPORT', explanationDepth: 'FOUNDATIONAL', confidence: 0,
+      competencies: [
+        'moba_fundamentals', 'role_knowledge', 'macro', 'micro_concepts', 'builds', 'champion_pool', 'review_autonomy',
+      ].map((competencyKey) => ({ competencyKey, level: 1, mastery: 0.25, confidence: 0, evidenceCount: 0 })),
+    };
+    mockDb.playerLearningProfile.upsert.mockResolvedValue(profile);
+    mockDb.playerLearningProfile.update.mockResolvedValue({ ...profile, placementStatus: 'IN_PROGRESS' });
+    const cookie = await authCookie({ userId: 'user-1', globalRole: 'PLAYER', memberships: [] });
+    const response = await request(app).get('/player-learning/placement').set('Cookie', cookie);
+    expect(response.status).toBe(200);
+    expect(response.body.status).toBe('IN_PROGRESS');
+    expect(response.body.questions).toHaveLength(10);
+    expect(response.body.questions.every((question: { key: string }) => question.key.startsWith('placement-v2-'))).toBe(true);
+    expect(new Set(response.body.questions.map((question: { competencyKey: string }) => question.competencyKey)).size).toBe(7);
   });
 
   it('rejects reviews for another player', async () => {
