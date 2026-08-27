@@ -1,0 +1,40 @@
+{
+  "name": "@predecessor/companion",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Private Windows capture and educational overlay client for RiftLine",
+  "author": "RiftLine",
+  "type": "module",
+  "main": "dist/main.js",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "build": "tsc && node scripts/copy-static.mjs",
+    "start": "npm run build && electron .",
+    "package:win": "npm run build && electron-builder --win nsis"
+  },
+  "devDependencies": {
+    "@types/node": "^25.6.0",
+    "electron": "44.0.0",
+    "electron-builder": "^26.15.3",
+    "typescript": "~6.0.2"
+  },
+  "build": {
+    "appId": "app.riftline.companion",
+    "productName": "RiftLine Companion",
+    "asar": true,
+    "directories": {
+      "output": "release"
+    },
+    "files": ["dist/**/*", "package.json"],
+    "win": {
+      "target": [{ "target": "nsis", "arch": ["x64"] }],
+      "artifactName": "RiftLine-Companion-${version}-${arch}.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true
+    }
+  }
+}

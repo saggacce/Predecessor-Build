@@ -254,10 +254,75 @@ function ReplayReview() {
 
 function LocalTraining() {
   const videoRef = useRef<HTMLVideoElement>(null); const streamRef = useRef<MediaStream | null>(null); const [mode, setMode] = useState('STANDARD'); const [status, setStatus] = useState('Sin iniciar'); const [capturing, setCapturing] = useState(false);
+  const [companionEnvironment, setCompanionEnvironment] = useState<Awaited<ReturnType<RiftLineCompanionBridge['getEnvironment']>>>(null);
+  const [gameWindows, setGameWindows] = useState<RiftLineGameWindow[]>([]); const [selectedSourceId, setSelectedSourceId] = useState<string | null>(null); const [scanning, setScanning] = useState(false);
+  const companion = typeof window !== 'undefined' ? window.riftlineCompanion : undefined;
   const rankedSelected = mode === 'RANKED';
-  useEffect(() => () => streamRef.current?.getTracks().forEach((track) => track.stop()), []);
-  async function start() { try { const result = await apiClient.playerLearning.startLiveSession(mode); if (result.session.status === 'BLOCKED') { setStatus(result.reason); return; } const stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false }); streamRef.current = stream; if (videoRef.current) videoRef.current.srcObject = stream; setCapturing(true); setStatus('Captura local activa. Consejos desactivados: el modo todavía no ha sido verificado automáticamente.'); stream.getVideoTracks()[0]?.addEventListener('ended', () => setCapturing(false)); } catch (error) { setStatus(error instanceof Error ? error.message : 'No se pudo iniciar la captura'); } }
-  function stop() { streamRef.current?.getTracks().forEach((track) => track.stop()); streamRef.current = null; setCapturing(false); setStatus('Captura detenida'); }
+  useEffect(() => {
+    if (!companion) return () => streamRef.current?.getTracks().forEach((track) => track.stop());
+    void companion.getEnvironment().then(setCompanionEnvironment);
+    void companion.scanGameWindows().then((sources) => { setGameWindows(sources); setSelectedSourceId(sources.find((source) => source.selected)?.id ?? sources[0]?.id ?? null); });
+    const removePanicListener = companion.onPanicStop(() => {
+      streamRef.current?.getTracks().forEach((track) => track.stop());
+      streamRef.current = null;
+      setCapturing(false);
+      setStatus('Captura y overlay detenidos mediante el atajo de emergencia.');
+    });
+    return () => { removePanicListener(); streamRef.current?.getTracks().forEach((track) => track.stop()); };
+  }, [companion]);
+  async function scanGame() {
+    if (!companion) return [];
+    setScanning(true);
+    try {
+      const sources = await companion.scanGameWindows();
+      setGameWindows(sources);
+      const selected = sources.find((source) => source.selected)?.id ?? sources[0]?.id ?? null;
+      setSelectedSourceId(selected);
+      if (!sources.length) setStatus('No se detecta Predecessor. Abre el juego y vuelve a buscar.');
+      return sources;
+    } finally { setScanning(false); }
+  }
+  async function selectSource(sourceId: string) {
+    if (!companion) return false;
+    const result = await companion.selectGameWindow(sourceId);
+    if (result.selected) {
+      setSelectedSourceId(sourceId);
+      setGameWindows((sources) => sources.map((source) => ({ ...source, selected: source.id === sourceId })));
+    }
+    return result.selected;
+  }
+  async function start() {
+    try {
+      if (companion) {
+        const sources = gameWindows.length ? gameWindows : await scanGame();
+        const sourceId = selectedSourceId ?? sources[0]?.id;
+        if (!sourceId || !(await selectSource(sourceId))) {
+          setStatus('No se puede iniciar: abre Predecessor y selecciona su ventana.');
+          return;
+        }
+      }
+      const result = await apiClient.playerLearning.startLiveSession(mode);
+      if (result.session.status === 'BLOCKED') { setStatus(result.reason); return; }
+      const stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
+      streamRef.current = stream;
+      if (videoRef.current) videoRef.current.srcObject = stream;
+      setCapturing(true);
+      setStatus(companion ? 'Ventana de Predecessor capturada. El coach sigue en silencio hasta verificar automáticamente el modo.' : 'Captura local activa. Consejos desactivados: el modo todavía no ha sido verificado automáticamente.');
+      stream.getVideoTracks()[0]?.addEventListener('ended', () => { setCapturing(false); setStatus('La ventana dejó de compartirse.'); });
+    } catch (error) { setStatus(error instanceof Error ? error.message : 'No se pudo iniciar la captura'); }
+  }
+  function stop() {
+    streamRef.current?.getTracks().forEach((track) => track.stop());
+    streamRef.current = null;
+    setCapturing(false);
+    setStatus('Captura detenida');
+    if (companion) void companion.clearAdvice();
+  }
+  async function previewOverlay() {
+    if (!companion) return;
+    const result = await companion.showAdvice({ title: 'Prueba visual del overlay', cue: 'Esta tarjeta no es un consejo de partida.', reason: 'Sirve para comprobar tamaño, posición y legibilidad sin analizar ni alterar el juego.', principle: 'El acompañante sólo mostrará consejos reales después de verificar un modo permitido y reunir evidencia suficiente.', priority: 'NORMAL', durationMs: 8_000 });
+    setStatus(result.shown ? 'Prueba visible durante ocho segundos. Ctrl+Shift+F10 la oculta y detiene la captura.' : 'No se pudo mostrar la prueba del overlay.');
+  }
   const detectors = [
     ['HUD personal', 'Héroe, nivel, oro, vida, maná, inventario y habilidades visibles.'],
     ['Marcador', 'Última build visible de compañeros y rivales, con antigüedad de la lectura.'],
@@ -266,7 +331,8 @@ function LocalTraining() {
   ];
   return <div style={{ display: 'grid', gap: '1rem' }}>
     <section style={{ ...card, borderColor: 'rgba(248,113,113,.35)' }}><div style={{ display: 'flex', gap: '.7rem', alignItems: 'center' }}><ShieldAlert color="#f87171"/><div><strong>Ranked nunca está permitido</strong><div style={{ color: 'var(--text-muted)', fontSize: '.78rem' }}>La sesión necesita dos señales automáticas coincidentes para reconocer un modo permitido. Una señal fiable de Ranked la bloquea de forma irreversible; ante cualquier duda, no hay consejos.</div></div></div></section>
-    <section style={card}><h3 style={{ marginTop: 0 }}>Prototipo de captura local</h3><p>Esta fase valida consentimiento y captura de pantalla. La selección manual sólo simula el inicio: nunca habilita coaching. Faltan los detectores locales y autorización de Omeda antes de distribuirlo.</p><label style={{ color: 'var(--text-muted)', fontSize: '.74rem' }}>Modo que esperas jugar</label><div style={{ display: 'flex', gap: '.5rem', flexWrap: 'wrap', marginTop: '.35rem' }}><select value={mode} onChange={(e) => { setMode(e.target.value); setStatus(e.target.value === 'RANKED' ? 'Bloqueado: RiftLine no inicia captura ni consejos en Ranked.' : 'Sin iniciar'); }} disabled={capturing} style={button}>{['STANDARD','QUICK','ARAM','LABS','PRACTICE','AI','CUSTOM','RANKED'].map((value) => <option key={value}>{value}</option>)}</select>{capturing ? <button onClick={stop} style={button}>Detener captura</button> : <button disabled={rankedSelected} onClick={() => void start()} style={{ ...button, opacity: rankedSelected ? .45 : 1, cursor: rankedSelected ? 'not-allowed' : 'pointer', display: 'inline-flex', alignItems: 'center', gap: '.35rem' }}><Crosshair size={14}/> {rankedSelected ? 'Bloqueado en Ranked' : 'Compartir pantalla'}</button>}</div><p style={{ color: rankedSelected || status.includes('desactivados') ? '#fbbf24' : 'var(--text-muted)' }}>{status}</p><video ref={videoRef} autoPlay muted style={{ width: '100%', maxHeight: 440, background: '#05070b', borderRadius: 8, display: capturing ? 'block' : 'none' }}/></section>
+    {companionEnvironment && <section style={{ ...card, borderColor: 'rgba(56,212,200,.34)' }}><div style={{ display: 'flex', justifyContent: 'space-between', gap: '.75rem', flexWrap: 'wrap' }}><div><div style={{ color: 'var(--accent-cyan)', fontSize: '.7rem', fontWeight: 800 }}>ACOMPAÑANTE WINDOWS CONECTADO · v{companionEnvironment.version}</div><strong>Captura limitada a una ventana de Predecessor</strong><p style={{ color: 'var(--text-muted)', fontSize: '.76rem', marginBottom: 0 }}>Atajo de emergencia: {companionEnvironment.panicShortcut}. El overlay ignora el ratón y el teclado; no envía acciones al juego.</p></div><button disabled={scanning || capturing} onClick={() => void scanGame()} style={button}>{scanning ? 'Buscando…' : 'Detectar Predecessor'}</button></div>{gameWindows.length > 0 ? <div style={{ display: 'flex', gap: '.45rem', flexWrap: 'wrap', marginTop: '.75rem' }}>{gameWindows.map((source) => <button key={source.id} disabled={capturing} onClick={() => void selectSource(source.id)} style={{ ...button, borderColor: selectedSourceId === source.id ? 'var(--accent-cyan)' : 'var(--border-color)', color: selectedSourceId === source.id ? 'var(--accent-cyan)' : 'var(--text-primary)' }}>{source.name}</button>)}</div> : <p style={{ color: 'var(--text-muted)', fontSize: '.76rem', marginBottom: 0 }}>Predecessor todavía no está abierto o no expone una ventana capturable.</p>}</section>}
+    <section style={card}><h3 style={{ marginTop: 0 }}>{companion ? 'Captura privada de Predecessor' : 'Prototipo de captura local'}</h3><p>La selección manual sólo expresa qué esperas jugar: nunca verifica el modo ni habilita coaching. Los detectores automáticos deben confirmarlo antes de que aparezca un consejo real.</p><label style={{ color: 'var(--text-muted)', fontSize: '.74rem' }}>Modo que esperas jugar</label><div style={{ display: 'flex', gap: '.5rem', flexWrap: 'wrap', marginTop: '.35rem' }}><select value={mode} onChange={(e) => { setMode(e.target.value); setStatus(e.target.value === 'RANKED' ? 'Bloqueado: RiftLine no inicia captura ni consejos en Ranked.' : 'Sin iniciar'); }} disabled={capturing} style={button}>{['STANDARD','QUICK','ARAM','LABS','PRACTICE','AI','CUSTOM','RANKED'].map((value) => <option key={value}>{value}</option>)}</select>{capturing ? <button onClick={stop} style={button}>Detener captura</button> : <button disabled={rankedSelected} onClick={() => void start()} style={{ ...button, opacity: rankedSelected ? .45 : 1, cursor: rankedSelected ? 'not-allowed' : 'pointer', display: 'inline-flex', alignItems: 'center', gap: '.35rem' }}><Crosshair size={14}/> {rankedSelected ? 'Bloqueado en Ranked' : companion ? 'Capturar Predecessor' : 'Compartir pantalla'}</button>}{companion && <button disabled={!capturing} onClick={() => void previewOverlay()} style={{ ...button, opacity: capturing ? 1 : .45 }}>Probar tarjeta del overlay</button>}</div><p style={{ color: rankedSelected || status.includes('silencio') || status.includes('desactivados') ? '#fbbf24' : 'var(--text-muted)' }}>{status}</p><video ref={videoRef} autoPlay muted style={{ width: '100%', maxHeight: 440, background: '#05070b', borderRadius: 8, display: capturing ? 'block' : 'none' }}/></section>
     <section style={card}><h3 style={{ marginTop: 0 }}>Qué observará la primera versión</h3><div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: '.6rem' }}>{detectors.map(([title, description]) => <article key={title} style={{ padding: '.75rem', border: '1px solid var(--border-color)', borderRadius: 8, background: 'rgba(255,255,255,.018)' }}><strong>{title}</strong><p style={{ color: 'var(--text-muted)', fontSize: '.74rem', lineHeight: 1.45, marginBottom: 0 }}>{description}</p></article>)}</div></section>
     <section style={card}><h3 style={{ marginTop: 0 }}>Cómo intervendrá el coach</h3><ul style={{ color: 'var(--text-secondary)', lineHeight: 1.55 }}><li>No habla durante un combate.</li><li>Como máximo cuatro intervenciones cada diez minutos y nunca repite el mismo concepto en cinco minutos.</li><li>Una observación dudosa se guarda para el informe, pero no interrumpe.</li><li>Cada consejo explica qué señales lo activaron y qué condición podría cambiarlo.</li></ul><p style={{ color: 'var(--text-muted)', fontSize: '.76rem', marginBottom: 0 }}>La Academia distingue las señales declaradas, guiadas y observadas: el overlay no podrá ascenderte por sí solo.</p></section>
   </div>;

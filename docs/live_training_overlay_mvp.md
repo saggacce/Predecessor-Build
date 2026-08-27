@@ -1,5 +1,7 @@
 # RiftLine Companion — contrato del MVP de entrenamiento local
 
+El cliente de escritorio y las instrucciones de prueba están documentados en [`windows_companion.md`](./windows_companion.md). Este documento define el contrato funcional y de datos; el cliente implementa la captura y presentación sin conceder al portal acceso genérico al sistema operativo.
+
 ## Objetivo
 
 El overlay es un acompañante educativo personal para modos no competitivos de Predecessor. Observa únicamente información que el jugador puede ver, interviene pocas veces y convierte la sesión en evidencias y momentos de revisión para la Academia.
