@@ -7,17 +7,18 @@ import { errorHandler } from '../middleware/error-handler.js';
 
 vi.mock('../db.js', () => ({
   db: {
+    $transaction: vi.fn(),
     user: { findUnique: vi.fn() },
     matchPlayer: { findFirst: vi.fn(), count: vi.fn() },
     playerLearningMomentReview: { findMany: vi.fn(), upsert: vi.fn() },
     playerTrainingCycle: { findMany: vi.fn(), findFirst: vi.fn(), create: vi.fn(), update: vi.fn() },
     playerLearningProfile: { upsert: vi.fn(), findUniqueOrThrow: vi.fn(), update: vi.fn() },
-    playerCompetency: { createMany: vi.fn(), updateMany: vi.fn() },
+    playerCompetency: { createMany: vi.fn(), updateMany: vi.fn(), findUnique: vi.fn(), update: vi.fn() },
     coachQuestionAttempt: { findMany: vi.fn(), findFirst: vi.fn() },
     playerReplaySession: { create: vi.fn(), findMany: vi.fn() },
-    playerReplayMarker: { findFirst: vi.fn(), update: vi.fn() },
+    playerReplayMarker: { findFirst: vi.fn(), findMany: vi.fn(), update: vi.fn() },
     liveTrainingSession: { create: vi.fn(), findFirst: vi.fn(), update: vi.fn() },
-    liveTrainingEvent: { create: vi.fn() },
+    liveTrainingEvent: { create: vi.fn(), findMany: vi.fn() },
   },
 }));
 
@@ -44,6 +45,9 @@ describe('personal learning persistence', () => {
       ].map((competencyKey) => ({ competencyKey, level: 1, mastery: 0.25, confidence: 0, evidenceCount: 0 })),
     });
     mockDb.coachQuestionAttempt.findMany.mockResolvedValue([]);
+    mockDb.playerReplayMarker.findMany.mockResolvedValue([]);
+    mockDb.liveTrainingEvent.findMany.mockResolvedValue([]);
+    mockDb.$transaction.mockImplementation(async (callback: (tx: typeof mockDb) => unknown) => callback(mockDb));
   });
 
   it('stores the player conclusion for a generated replay moment', async () => {
@@ -127,6 +131,47 @@ describe('personal learning persistence', () => {
     expect(response.body).toMatchObject({ canAdvise: false, session: { status: 'BLOCKED', modeVerification: 'BLOCKED_RANKED' } });
   });
 
+  it('keeps live advice disabled until two automatic mode sources agree', async () => {
+    const firstSignal = { source: 'screen_ocr', detectedGameMode: 'QUICK', confidence: 0.96, capturedAt: '2026-08-27T12:00:00.000Z' };
+    mockDb.liveTrainingSession.findFirst
+      .mockResolvedValueOnce({ id: 'live-1', profileId: 'profile-1', modeVerification: 'UNVERIFIED', status: 'PENDING', verificationSignals: null, rankedBlockedAt: null })
+      .mockResolvedValueOnce({ id: 'live-1', profileId: 'profile-1', modeVerification: 'UNVERIFIED', status: 'PENDING', verificationSignals: [firstSignal], rankedBlockedAt: null });
+    mockDb.liveTrainingSession.update.mockImplementation(async ({ data }: any) => ({ id: 'live-1', ...data }));
+    const cookie = await authCookie({ userId: 'user-1', globalRole: 'PLAYER', memberships: [] });
+    const first = await request(app).post('/player-learning/live/sessions/live-1/verify-mode').set('Cookie', cookie).send({
+      detectedGameMode: 'QUICK', signal: { source: 'screen_ocr', confidence: 0.96, capturedAt: firstSignal.capturedAt },
+    });
+    expect(first.body).toMatchObject({ canAdvise: false, session: { modeVerification: 'UNVERIFIED', status: 'PENDING' } });
+    const second = await request(app).post('/player-learning/live/sessions/live-1/verify-mode').set('Cookie', cookie).send({
+      detectedGameMode: 'QUICK', signal: { source: 'screen_template', confidence: 0.94, capturedAt: '2026-08-27T12:00:01.000Z' },
+    });
+    expect(second.body).toMatchObject({ canAdvise: true, session: { modeVerification: 'VERIFIED_ALLOWED', status: 'ACTIVE' } });
+  });
+
+  it('delivers a sparse educational cue only from a verified observation', async () => {
+    mockDb.liveTrainingSession.findFirst.mockResolvedValue({ id: 'live-1', profileId: 'profile-1', modeVerification: 'VERIFIED_ALLOWED', status: 'ACTIVE' });
+    mockDb.liveTrainingEvent.findMany.mockResolvedValue([]);
+    mockDb.liveTrainingEvent.create.mockImplementation(async ({ data }: any) => ({ id: 'event-1', ...data }));
+    const cookie = await authCookie({ userId: 'user-1', globalRole: 'PLAYER', memberships: [] });
+    const response = await request(app).post('/player-learning/live/sessions/live-1/observations').set('Cookie', cookie).send({
+      gameTime: 640,
+      eventType: 'RECALL_WINDOW',
+      confidence: 0.94,
+      observation: {
+        competencyKey: 'macro', learningScore: 0.8, rubricId: 'recall-window-v1',
+        explanation: 'Oro suficiente, oleada resuelta y sin objetivo inmediato.', detector: 'recall-window-v1',
+        inputs: ['gold', 'wave_state', 'objective_timer'], missingInputs: [], capturedAt: '2026-08-27T12:10:00.000Z', inCombat: false,
+      },
+      candidateAdvice: {
+        priority: 'NORMAL', title: 'Ventana de compra', cue: 'Puede ser un buen momento para volver a base.',
+        reason: 'Puedes completar una pieza sin abandonar una pelea inmediata.', principle: 'Convierte el oro cuando el coste de volver sea bajo.',
+      },
+    });
+    expect(response.status).toBe(201);
+    expect(response.body).toMatchObject({ delivery: 'SPEAK', advice: { title: 'Ventana de compra' } });
+    expect(mockDb.liveTrainingEvent.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ advice: 'Puede ser un buen momento para volver a base.' }) }));
+  });
+
   it('offers a promotion test only after practice and repeated evidence', async () => {
     mockDb.playerLearningProfile.upsert.mockResolvedValue({
       id: 'profile-1', userId: 'user-1', playerId: 'player-1', overallLevel: 1,
@@ -137,12 +182,43 @@ describe('personal learning persistence', () => {
           .map((competencyKey) => ({ competencyKey, level: 1, mastery: 0.25, confidence: 0, evidenceCount: 0 })),
       ],
     });
-    mockDb.playerTrainingCycle.findMany.mockResolvedValue([{ competencyKey: 'macro' }]);
+    mockDb.playerTrainingCycle.findMany.mockResolvedValue([{ competencyKey: 'macro', completedAt: new Date('2026-08-26T12:00:00Z') }]);
     const cookie = await authCookie({ userId: 'user-1', globalRole: 'PLAYER', memberships: [] });
     const response = await request(app).get('/player-learning/promotion').set('Cookie', cookie);
     expect(response.status).toBe(200);
     expect(response.body).toMatchObject({ eligible: true, competency: { key: 'macro', currentLevel: 1 } });
     expect(response.body.question.options[0]).not.toHaveProperty('score');
     expect(response.body.question.options[0]).not.toHaveProperty('evaluation');
+  });
+
+  it('returns a source-aware learning history for profile charts', async () => {
+    mockDb.coachQuestionAttempt.findMany.mockResolvedValue([{ id: 'a1', competencyKey: 'macro', sourceType: 'PLACEMENT', evaluation: 'ADEQUATE', score: 1, answeredAt: new Date('2026-08-20T12:00:00Z') }]);
+    mockDb.playerTrainingCycle.findMany.mockResolvedValue([]);
+    mockDb.playerReplayMarker.findMany.mockResolvedValue([]);
+    mockDb.liveTrainingEvent.findMany.mockResolvedValue([]);
+    const cookie = await authCookie({ userId: 'user-1', globalRole: 'PLAYER', memberships: [] });
+    const response = await request(app).get('/player-learning/progress/me').set('Cookie', cookie);
+    expect(response.status).toBe(200);
+    expect(response.body.summary.totalEvidence).toBe(1);
+    expect(response.body.timeline[0]).toMatchObject({ competencyKey: 'macro', source: 'PLACEMENT', confidence: 'DECLARED' });
+  });
+
+  it('requires enough practice and a reflection before a mission can count as applied evidence', async () => {
+    mockDb.playerTrainingCycle.findFirst.mockResolvedValue({
+      id: 'cycle-1', userId: 'user-1', playerId: 'player-1', profileId: 'profile-1', competencyKey: 'macro',
+      status: 'ACTIVE', targetMatches: 3, startedAt: new Date('2026-08-20T12:00:00Z'), completedAt: null,
+    });
+    mockDb.matchPlayer.count.mockResolvedValue(3);
+    mockDb.playerTrainingCycle.update.mockResolvedValue({ id: 'cycle-1', status: 'COMPLETED' });
+    mockDb.playerCompetency.findUnique.mockResolvedValue({ id: 'competency-1', mastery: 0.65, confidence: 0.6, evidenceCount: 4 });
+    mockDb.playerCompetency.update.mockResolvedValue({ id: 'competency-1' });
+    const cookie = await authCookie({ userId: 'user-1', globalRole: 'PLAYER', memberships: [] });
+    const response = await request(app).patch('/player-learning/cycles/cycle-1').set('Cookie', cookie).send({
+      status: 'COMPLETED', evaluation: { outcome: 'PARTIAL', reflection: 'Detecté las ventanas, pero reaccioné tarde en dos partidas.' },
+    });
+    expect(response.status).toBe(200);
+    expect(mockDb.playerCompetency.update).toHaveBeenCalledWith(expect.objectContaining({
+      where: { id: 'competency-1' }, data: expect.objectContaining({ appliedCount: { increment: 1 }, evidenceCount: { increment: 1 } }),
+    }));
   });
 });

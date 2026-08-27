@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { CSSProperties } from 'react';
 import { useSearchParams } from 'react-router';
-import { BookOpen, BrainCircuit, CheckCircle2, Crosshair, Film, Loader, MonitorPlay, Search, ShieldAlert, Target } from 'lucide-react';
+import { BookOpen, BrainCircuit, CheckCircle2, Crosshair, Film, Loader, MonitorPlay, Search, ShieldAlert, Target, TrendingUp } from 'lucide-react';
 import { toast } from 'sonner';
 import {
   apiClient,
@@ -9,12 +9,14 @@ import {
   type LearningQuestionView,
   type MissionRecommendation,
   type PlayerLearningProfile,
+  type PlayerLearningProgress,
   type PlacementSummary,
   type PlayerReplaySession,
   type PlayerTrainingCycle,
 } from '../api/client';
+import { LearningProgressOverview } from '../components/LearningProgressOverview';
 
-type AcademyTab = 'path' | 'diagnostic' | 'knowledge' | 'replay' | 'live';
+type AcademyTab = 'path' | 'diagnostic' | 'progress' | 'knowledge' | 'replay' | 'live';
 
 const card: CSSProperties = { padding: '1.1rem', border: '1px solid var(--border-color)', borderRadius: 12, background: 'var(--bg-card)' };
 const button: CSSProperties = { border: '1px solid var(--border-color)', borderRadius: 7, padding: '0.55rem 0.8rem', color: 'var(--text-primary)', background: 'rgba(255,255,255,.035)', cursor: 'pointer' };
@@ -27,19 +29,20 @@ export default function PlayerAcademyPage() {
   const [profile, setProfile] = useState<PlayerLearningProfile | null>(null);
   const [mission, setMission] = useState<MissionRecommendation | null>(null);
   const [cycles, setCycles] = useState<PlayerTrainingCycle[]>([]);
+  const [progress, setProgress] = useState<PlayerLearningProgress | null>(null);
   const [loading, setLoading] = useState(true);
 
   async function refresh() {
-    const [profileResult, cycleResult] = await Promise.all([apiClient.playerLearning.profile(), apiClient.playerLearning.cycles()]);
-    setProfile(profileResult.profile); setMission(profileResult.recommendation); setCycles(cycleResult.cycles);
+    const [profileResult, cycleResult, progressResult] = await Promise.all([apiClient.playerLearning.profile(), apiClient.playerLearning.cycles(), apiClient.playerLearning.progress()]);
+    setProfile(profileResult.profile); setMission(profileResult.recommendation); setCycles(cycleResult.cycles); setProgress(progressResult);
   }
 
   useEffect(() => {
     let cancelled = false;
-    void Promise.all([apiClient.playerLearning.profile(), apiClient.playerLearning.cycles()])
-      .then(([profileResult, cycleResult]) => {
+    void Promise.all([apiClient.playerLearning.profile(), apiClient.playerLearning.cycles(), apiClient.playerLearning.progress()])
+      .then(([profileResult, cycleResult, progressResult]) => {
         if (cancelled) return;
-        setProfile(profileResult.profile); setMission(profileResult.recommendation); setCycles(cycleResult.cycles);
+        setProfile(profileResult.profile); setMission(profileResult.recommendation); setCycles(cycleResult.cycles); setProgress(progressResult);
       })
       .catch((error) => toast.error(error instanceof Error ? error.message : 'No se pudo cargar la academia'))
       .finally(() => { if (!cancelled) setLoading(false); });
@@ -51,6 +54,7 @@ export default function PlayerAcademyPage() {
   const tabs: Array<{ id: AcademyTab; label: string; icon: React.ReactNode }> = [
     { id: 'path', label: 'Mi ruta', icon: <Target size={15} /> },
     { id: 'diagnostic', label: 'Diagnóstico', icon: <BrainCircuit size={15} /> },
+    { id: 'progress', label: 'Mi evolución', icon: <TrendingUp size={15} /> },
     { id: 'knowledge', label: 'Enciclopedia', icon: <BookOpen size={15} /> },
     { id: 'replay', label: 'Revisión de replay', icon: <Film size={15} /> },
     { id: 'live', label: 'Entrenamiento local', icon: <MonitorPlay size={15} /> },
@@ -67,6 +71,7 @@ export default function PlayerAcademyPage() {
       </div>
       {tab === 'path' && <LearningPath profile={profile} mission={mission} cycles={cycles} onChanged={refresh} />}
       {tab === 'diagnostic' && <Diagnostic profile={profile} onChanged={refresh} onFinished={() => { setSearchParams({}); setTab('path'); }} />}
+      {tab === 'progress' && progress && <LearningProgressOverview progress={progress} />}
       {tab === 'knowledge' && <Knowledge />}
       {tab === 'replay' && <ReplayReview />}
       {tab === 'live' && <LocalTraining />}
@@ -77,6 +82,9 @@ export default function PlayerAcademyPage() {
 function LearningPath({ profile, mission, cycles, onChanged }: { profile: PlayerLearningProfile; mission: MissionRecommendation | null; cycles: PlayerTrainingCycle[]; onChanged: () => Promise<void> }) {
   const active = cycles.find((cycle) => cycle.status === 'ACTIVE');
   const [placementSummary, setPlacementSummary] = useState<PlacementSummary | null>(null);
+  const [outcome, setOutcome] = useState<'ACHIEVED' | 'PARTIAL' | 'NOT_YET'>('ACHIEVED');
+  const [reflection, setReflection] = useState('');
+  const [closingMission, setClosingMission] = useState(false);
   useEffect(() => {
     if (!profile.activeRole) return;
     void apiClient.playerLearning.placement().then((placement) => setPlacementSummary(placement.summary)).catch(() => setPlacementSummary(null));
@@ -88,6 +96,26 @@ function LearningPath({ profile, mission, cycles, onChanged }: { profile: Player
       toast.success('Misión iniciada'); await onChanged();
     } catch (error) { toast.error(error instanceof Error ? error.message : 'No se pudo iniciar'); }
   }
+  async function closeMission(status: 'COMPLETED' | 'ARCHIVED') {
+    if (!active) return;
+    if (status === 'COMPLETED' && reflection.trim().length < 20) {
+      toast.error('Explica brevemente qué observaste antes de cerrar la misión.');
+      return;
+    }
+    setClosingMission(true);
+    try {
+      await apiClient.playerLearning.updateCycle(active.id, status, status === 'COMPLETED' ? { outcome, reflection: reflection.trim() } : undefined);
+      setReflection('');
+      toast.success(status === 'COMPLETED' ? 'Misión revisada. La evidencia ya forma parte de tu evolución.' : 'Misión archivada');
+      await onChanged();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'No se pudo cerrar la misión');
+    } finally {
+      setClosingMission(false);
+    }
+  }
+  const practiceComplete = active ? active.matchesPlayed >= active.targetMatches : false;
+  const closedCycles = cycles.filter((cycle) => cycle.status !== 'ACTIVE').slice(0, 4);
   return <div style={{ display: 'grid', gap: '1rem' }}>
     <section style={card}>
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem', flexWrap: 'wrap' }}>
@@ -95,8 +123,37 @@ function LearningPath({ profile, mission, cycles, onChanged }: { profile: Player
         <label style={{ fontSize: '.78rem', color: 'var(--text-muted)' }}>Rol principal<br/><select value={profile.activeRole ?? ''} onChange={async (event) => { await apiClient.playerLearning.updateProfile((event.target.value || null) as PlayerLearningProfile['activeRole']); await onChanged(); }} style={{ ...button, marginTop: '.3rem' }}><option value="">Aún no definido</option>{['CARRY','SUPPORT','MIDLANE','JUNGLE','OFFLANE'].map((role) => <option key={role}>{role}</option>)}</select></label>
       </div>
     </section>
-    <section style={{ ...card, display: 'grid', gap: '.7rem' }}><h3 style={{ margin: 0 }}>Competencias</h3>{profile.competencies.map((item) => <div key={item.key}><div style={{ display: 'flex', justifyContent: 'space-between', gap: '.6rem' }}><span>{item.label} <small style={{ color: 'var(--text-muted)' }}>· {item.levelLabel}</small></span><span style={{ color: 'var(--text-muted)', fontSize: '.75rem' }}>{item.evidenceCount} evidencias</span></div><div style={{ height: 7, background: 'rgba(255,255,255,.06)', borderRadius: 8, marginTop: 5 }}><div style={{ width: percent(item.mastery), height: '100%', background: 'var(--accent-cyan)', borderRadius: 8 }} /></div></div>)}</section>
-    <section style={card}><h3 style={{ marginTop: 0 }}>{active ? 'Misión activa' : 'Siguiente misión recomendada'}</h3>{active ? <><strong>{active.title}</strong><p>{active.cue}</p><div style={{ color: 'var(--text-muted)' }}>{active.matchesPlayed}/{active.targetMatches} partidas observadas. Completar partidas no aprueba por sí solo la misión: después debes revisar la evidencia.</div></> : mission ? <><div style={{ color: 'var(--accent-violet)', fontSize: '.75rem' }}>{mission.competencyLabel}</div><strong>{mission.title}</strong><p>{mission.cue}</p><ul>{mission.replayChecks.map((check) => <li key={check}>{check}</li>)}</ul><button style={button} onClick={startMission}>Iniciar misión de {mission.targetMatches} partidas</button></> : null}</section>
+    <section style={{ ...card, display: 'grid', gap: '.7rem' }}><h3 style={{ margin: 0 }}>Competencias</h3><p style={{ color: 'var(--text-muted)', fontSize: '.75rem', margin: 0 }}>La estimación se modera mientras hay pocas evidencias, para que una sola respuesta no parezca dominio demostrado.</p>{profile.competencies.map((item) => <div key={item.key}><div style={{ display: 'flex', justifyContent: 'space-between', gap: '.6rem' }}><span>{item.label} <small style={{ color: 'var(--text-muted)' }}>· {item.levelLabel}</small></span><span style={{ color: 'var(--text-muted)', fontSize: '.75rem' }}>{percent(item.estimatedMastery)} estimado · {item.evidenceCount} evidencias</span></div><div style={{ height: 7, background: 'rgba(255,255,255,.06)', borderRadius: 8, marginTop: 5 }}><div style={{ width: percent(item.estimatedMastery), height: '100%', background: 'var(--accent-cyan)', borderRadius: 8 }} /></div></div>)}</section>
+    <section style={card}><h3 style={{ marginTop: 0 }}>Ruta de aprendizaje</h3><p style={{ color: 'var(--text-muted)', fontSize: '.76rem' }}>El diagnóstico propone un punto de partida. Para ascender necesitas práctica, varias evidencias consistentes y una prueba; las partidas por sí solas no suben el nivel.</p><div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(145px, 1fr))', gap: '.55rem' }}>{profile.levels.map((level) => {
+      const current = level.level === profile.overallLevel; const completed = level.level < profile.overallLevel;
+      return <article key={level.key} style={{ padding: '.7rem', borderRadius: 8, border: `1px solid ${current ? 'var(--accent-cyan)' : 'var(--border-color)'}`, background: current ? 'rgba(56,212,200,.055)' : 'rgba(255,255,255,.018)', opacity: level.level > profile.overallLevel ? .7 : 1 }}><small style={{ color: current ? 'var(--accent-cyan)' : 'var(--text-muted)' }}>{completed ? 'SUPERADO' : current ? 'NIVEL ACTUAL' : `NIVEL ${level.level}`}</small><strong style={{ display: 'block', margin: '.2rem 0' }}>{level.label}</strong><span style={{ color: 'var(--text-muted)', fontSize: '.7rem', lineHeight: 1.4 }}>{level.description}</span></article>;
+    })}</div></section>
+    <section style={card}>
+      <h3 style={{ marginTop: 0 }}>{active ? 'Misión activa' : 'Siguiente misión recomendada'}</h3>
+      {active ? <div style={{ display: 'grid', gap: '.75rem' }}>
+        <div><div style={{ color: 'var(--accent-violet)', fontSize: '.72rem' }}>{active.competencyKey ? profile.competencies.find((item) => item.key === active.competencyKey)?.label : 'Práctica personal'}</div><strong>{active.title}</strong><p style={{ marginBottom: '.35rem' }}>{active.cue}</p></div>
+        <div><div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-muted)', fontSize: '.75rem' }}><span>Práctica observada</span><span>{active.matchesPlayed}/{active.targetMatches} partidas</span></div><div style={{ height: 7, background: 'rgba(255,255,255,.06)', borderRadius: 8, marginTop: 5 }}><div style={{ width: percent(active.progress), height: '100%', background: practiceComplete ? 'var(--accent-cyan)' : 'var(--accent-violet)', borderRadius: 8 }} /></div></div>
+        {!practiceComplete ? <p style={{ color: 'var(--text-muted)', fontSize: '.78rem', margin: 0 }}>El coach recopilará evidencias durante las partidas. Después tendrás que revisar el resultado: jugar las partidas no aprueba automáticamente la misión.</p> : <div style={{ padding: '.85rem', border: '1px solid rgba(56,212,200,.25)', borderRadius: 8, background: 'rgba(56,212,200,.04)' }}>
+          <strong>Revisa la práctica antes de cerrarla</strong>
+          <p style={{ color: 'var(--text-muted)', fontSize: '.78rem' }}>Valora el conjunto de partidas, no sólo la mejor. Esta reflexión cuenta como evidencia guiada; la prueba de ascenso confirmará el conocimiento.</p>
+          <div style={{ display: 'flex', gap: '.45rem', flexWrap: 'wrap', marginBottom: '.6rem' }}>{([
+            ['ACHIEVED', 'Lo apliqué con consistencia'],
+            ['PARTIAL', 'Lo detecté, pero fui irregular'],
+            ['NOT_YET', 'Todavía no lo apliqué'],
+          ] as const).map(([value, label]) => <button key={value} type="button" onClick={() => setOutcome(value)} style={{ ...button, borderColor: outcome === value ? 'var(--accent-cyan)' : 'var(--border-color)', color: outcome === value ? 'var(--accent-cyan)' : 'var(--text-primary)' }}>{label}</button>)}</div>
+          <textarea value={reflection} onChange={(event) => setReflection(event.target.value)} maxLength={1600} rows={4} placeholder="¿Qué observaste, qué cambió en tus decisiones y qué necesitas revisar todavía?" style={{ ...button, width: '100%', boxSizing: 'border-box', resize: 'vertical', lineHeight: 1.45 }} />
+          <button disabled={closingMission || reflection.trim().length < 20} onClick={() => void closeMission('COMPLETED')} style={{ ...button, marginTop: '.6rem', opacity: closingMission || reflection.trim().length < 20 ? .55 : 1 }}>Guardar revisión y cerrar misión</button>
+        </div>}
+        <button disabled={closingMission} onClick={() => void closeMission('ARCHIVED')} style={{ ...button, justifySelf: 'start', color: 'var(--text-muted)' }}>Archivar y elegir otro foco</button>
+      </div> : mission ? <>
+        <div style={{ color: 'var(--accent-violet)', fontSize: '.75rem' }}>{mission.competencyLabel}</div><strong>{mission.title}</strong><p>{mission.cue}</p><ul>{mission.replayChecks.map((check) => <li key={check}>{check}</li>)}</ul><button style={button} onClick={startMission}>Iniciar misión de {mission.targetMatches} partidas</button>
+      </> : null}
+    </section>
+    {closedCycles.length > 0 && <section style={card}><h3 style={{ marginTop: 0 }}>Misiones anteriores</h3><div style={{ display: 'grid', gap: '.5rem' }}>{closedCycles.map((cycle) => {
+      const evaluation = cycle.evaluation && typeof cycle.evaluation === 'object' ? cycle.evaluation as { outcome?: string; reflection?: string } : {};
+      const resultLabel = evaluation.outcome === 'ACHIEVED' ? 'Aplicada con consistencia' : evaluation.outcome === 'PARTIAL' ? 'Aplicación irregular' : evaluation.outcome === 'NOT_YET' ? 'Necesita más práctica' : cycle.status === 'ARCHIVED' ? 'Archivada' : 'Completada';
+      return <article key={cycle.id} style={{ padding: '.65rem .75rem', background: 'rgba(255,255,255,.02)', borderRadius: 8 }}><div style={{ display: 'flex', justifyContent: 'space-between', gap: '.6rem', flexWrap: 'wrap' }}><strong>{cycle.title}</strong><small style={{ color: 'var(--text-muted)' }}>{resultLabel}</small></div>{evaluation.reflection && <p style={{ color: 'var(--text-secondary)', fontSize: '.76rem', margin: '.35rem 0 0' }}>{evaluation.reflection}</p>}</article>;
+    })}</div></section>}
   </div>;
 }
 
@@ -104,7 +161,8 @@ function Diagnostic({ profile, onChanged, onFinished }: { profile: PlayerLearnin
   const [questions, setQuestions] = useState<LearningQuestionView[]>([]); const [index, setIndex] = useState(0); const [feedback, setFeedback] = useState<{ feedback: string; principle: string } | null>(null); const [busy, setBusy] = useState(false);
   const [answeredBeforeVisit, setAnsweredBeforeVisit] = useState(0);
   const [total, setTotal] = useState(20); const [summary, setSummary] = useState<PlacementSummary | null>(null);
-  const [promotion, setPromotion] = useState<{ eligible: boolean; reason?: string; competency?: { label: string }; question?: LearningQuestionView } | null>(null); const [promotionAnswered, setPromotionAnswered] = useState(false);
+  const [promotion, setPromotion] = useState<{ eligible: boolean; reason?: string; competency?: { label: string }; question?: LearningQuestionView } | null>(null);
+  const [promotionMode, setPromotionMode] = useState(false);
   useEffect(() => { if (!profile.activeRole) return; Promise.all([apiClient.playerLearning.placement(), apiClient.playerLearning.promotion()]).then(([placement, promotionResult]) => { setQuestions(placement.questions); setAnsweredBeforeVisit(placement.answered); setTotal(placement.total); setSummary(placement.summary); setPromotion(promotionResult); }).catch(() => toast.error('No se pudo cargar el diagnóstico')); }, [profile.activeRole]);
   async function chooseRole(activeRole: NonNullable<PlayerLearningProfile['activeRole']>) {
     setBusy(true);
@@ -119,7 +177,7 @@ function Diagnostic({ profile, onChanged, onFinished }: { profile: PlayerLearnin
     }
   }
   if (!profile.activeRole) return <section style={{ ...card, maxWidth: 760 }}><BrainCircuit color="var(--accent-violet)"/><div style={{ color: 'var(--accent-cyan)', fontSize: '.72rem', fontWeight: 800, marginTop: '.7rem' }}>PRIMER PASO · 1 DE 2</div><h2>¿Qué rol quieres aprender primero?</h2><p style={{ color: 'var(--text-secondary)', lineHeight: 1.5 }}>Tu diagnóstico combinará fundamentos generales con situaciones propias de este rol. Podrás cambiarlo más adelante; no afecta a tu rango ni bloquea el resto de la plataforma.</p><div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '.55rem', marginTop: '1rem' }}>{(['CARRY','SUPPORT','MIDLANE','JUNGLE','OFFLANE'] as const).map((role) => <button key={role} disabled={busy} onClick={() => void chooseRole(role)} style={{ ...button, padding: '.8rem', textAlign: 'center', opacity: busy ? .6 : 1 }}>{role}</button>)}</div></section>;
-  if (summary) return <section style={{ ...card, maxWidth: 860 }}>
+  if (summary && !promotionMode) return <section style={{ ...card, maxWidth: 860 }}>
     <CheckCircle2 color="var(--accent-cyan)"/>
     <div style={{ color: 'var(--accent-cyan)', fontSize: '.72rem', fontWeight: 800, marginTop: '.7rem' }}>DIAGNÓSTICO DE CONOCIMIENTO · {summary.answered} SITUACIONES</div>
     <h2 style={{ marginBottom: '.35rem' }}>{summary.band.label}</h2>
@@ -132,12 +190,13 @@ function Diagnostic({ profile, onChanged, onFinished }: { profile: PlayerLearnin
       {summary.priority && <div style={{ padding: '.8rem', borderLeft: '3px solid var(--accent-violet)', background: 'rgba(167,139,250,.06)' }}><small style={{ color: 'var(--text-muted)' }}>PRIMERA PRIORIDAD</small><div>{summary.priority.label}</div></div>}
     </div>
     <p style={{ color: 'var(--text-muted)', fontSize: '.8rem', lineHeight: 1.5 }}>{summary.limitation}</p>
-    <button style={button} onClick={onFinished}>Ver mi ruta personalizada</button>
+    <div style={{ display: 'flex', gap: '.55rem', alignItems: 'center', flexWrap: 'wrap' }}><button style={button} onClick={onFinished}>Ver mi ruta personalizada</button>{promotion?.eligible && promotion.question ? <button style={{ ...button, borderColor: 'var(--accent-cyan)', color: 'var(--accent-cyan)' }} onClick={() => { setFeedback(null); setPromotionMode(true); }}>Realizar prueba de ascenso · {promotion.competency?.label}</button> : <small style={{ color: 'var(--text-muted)' }}>Próximo ascenso: {promotion?.reason ?? 'completa una misión y reúne evidencias consistentes.'}</small>}</div>
   </section>;
-  const isPromotion = index >= questions.length && !!promotion?.eligible && !!promotion.question && !promotionAnswered;
-  const current = questions[index] ?? (isPromotion ? promotion?.question : undefined);
+  const isPromotion = promotionMode && !!promotion?.eligible && !!promotion.question;
+  const current = isPromotion ? promotion?.question : questions[index];
   if (!current) return <section style={card}><CheckCircle2 color="var(--accent-cyan)"/><h3>Diagnóstico recorrido</h3><p>Ya has contestado esta ronda. Es una estimación provisional; tu nivel se confirmará con misiones y revisiones reales.</p><p style={{ color: 'var(--text-muted)' }}><strong>Prueba de ascenso:</strong> {promotion?.reason ?? 'La siguiente prueba aparecerá cuando una misión y varias evidencias demuestren consistencia.'}</p><button style={button} onClick={onFinished}>Ver mi ruta personalizada</button></section>;
   async function answer(optionId: string) {
+    if (!current) return;
     setBusy(true);
     try {
       const { result } = await apiClient.playerLearning.answerQuestion(current.key, optionId, isPromotion ? 'PROMOTION' : 'PLACEMENT');
@@ -161,7 +220,7 @@ function Diagnostic({ profile, onChanged, onFinished }: { profile: PlayerLearnin
     <div style={{ display: 'flex', justifyContent: 'space-between', gap: '.75rem', color: 'var(--text-muted)', fontSize: '.75rem' }}><span>{isPromotion ? `Prueba de ascenso · ${promotion?.competency?.label}` : `Situación ${situationNumber} de ${total} · ${current.competencyLabel}`}</span>{!isPromotion && <span>{Math.round(((situationNumber - 1) / total) * 100)}%</span>}</div>
     {!isPromotion && <><div style={{ height: 5, background: 'rgba(255,255,255,.06)', borderRadius: 8, marginTop: '.45rem' }}><div style={{ width: percent((situationNumber - 1) / total), height: '100%', background: 'var(--accent-cyan)', borderRadius: 8 }} /></div>{situationNumber === 1 && <p style={{ color: 'var(--text-muted)', fontSize: '.78rem' }}>20 situaciones · unos 10–15 minutos. No mostraremos correcciones hasta terminar para no influir en tus respuestas posteriores.</p>}</>}
     <h2>{current.prompt}</h2><p style={{ color: 'var(--text-muted)', lineHeight: 1.5 }}>{current.context}</p>
-    {!feedback ? <div style={{ display: 'grid', gap: '.55rem' }}>{current.options.map((option) => <button disabled={busy} key={option.id} style={{ ...button, textAlign: 'left', lineHeight: 1.4, opacity: busy ? .65 : 1 }} onClick={() => void answer(option.id)}>{option.text}</button>)}</div> : <div style={{ padding: '1rem', borderLeft: '3px solid var(--accent-cyan)', background: 'rgba(56,212,200,.06)' }}><strong>Qué aprender de la respuesta</strong><p>{feedback.feedback}</p><p style={{ color: 'var(--accent-cyan)' }}>{feedback.principle}</p><button style={button} onClick={() => { setFeedback(null); setPromotionAnswered(true); }}>Finalizar prueba</button></div>}
+    {!feedback ? <div style={{ display: 'grid', gap: '.55rem' }}>{current.options.map((option) => <button disabled={busy} key={option.id} style={{ ...button, textAlign: 'left', lineHeight: 1.4, opacity: busy ? .65 : 1 }} onClick={() => void answer(option.id)}>{option.text}</button>)}</div> : <div style={{ padding: '1rem', borderLeft: '3px solid var(--accent-cyan)', background: 'rgba(56,212,200,.06)' }}><strong>Qué aprender de la respuesta</strong><p>{feedback.feedback}</p><p style={{ color: 'var(--accent-cyan)' }}>{feedback.principle}</p><button style={button} onClick={onFinished}>Finalizar prueba y volver a mi ruta</button></div>}
   </section>;
 }
 
@@ -199,5 +258,16 @@ function LocalTraining() {
   useEffect(() => () => streamRef.current?.getTracks().forEach((track) => track.stop()), []);
   async function start() { try { const result = await apiClient.playerLearning.startLiveSession(mode); if (result.session.status === 'BLOCKED') { setStatus(result.reason); return; } const stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false }); streamRef.current = stream; if (videoRef.current) videoRef.current.srcObject = stream; setCapturing(true); setStatus('Captura local activa. Consejos desactivados: el modo todavía no ha sido verificado automáticamente.'); stream.getVideoTracks()[0]?.addEventListener('ended', () => setCapturing(false)); } catch (error) { setStatus(error instanceof Error ? error.message : 'No se pudo iniciar la captura'); } }
   function stop() { streamRef.current?.getTracks().forEach((track) => track.stop()); streamRef.current = null; setCapturing(false); setStatus('Captura detenida'); }
-  return <div style={{ display: 'grid', gap: '1rem' }}><section style={{ ...card, borderColor: 'rgba(248,113,113,.35)' }}><div style={{ display: 'flex', gap: '.7rem', alignItems: 'center' }}><ShieldAlert color="#f87171"/><div><strong>Ranked nunca está permitido</strong><div style={{ color: 'var(--text-muted)', fontSize: '.78rem' }}>Herramienta personal, local, sin memoria del juego, inyección, automatización ni uso de equipo. Ante duda sobre el modo, falla cerrada y no da consejos.</div></div></div></section><section style={card}><h3 style={{ marginTop: 0 }}>Prototipo de captura local</h3><p>Esta fase demuestra permiso y captura de pantalla. No ofrece todavía coaching en vivo: falta un detector automático fiable del modo y autorización de Omeda antes de distribuirlo.</p><div style={{ display: 'flex', gap: '.5rem' }}><select value={mode} onChange={(e) => { setMode(e.target.value); setStatus(e.target.value === 'RANKED' ? 'Bloqueado: RiftLine no inicia captura ni consejos en Ranked.' : 'Sin iniciar'); }} disabled={capturing} style={button}>{['STANDARD','QUICK','ARAM','LABS','PRACTICE','AI','CUSTOM','RANKED'].map((value) => <option key={value}>{value}</option>)}</select>{capturing ? <button onClick={stop} style={button}>Detener captura</button> : <button disabled={rankedSelected} onClick={() => void start()} style={{ ...button, opacity: rankedSelected ? .45 : 1, cursor: rankedSelected ? 'not-allowed' : 'pointer' }}><Crosshair size={14}/> {rankedSelected ? 'Bloqueado en Ranked' : 'Compartir pantalla'}</button>}</div><p style={{ color: rankedSelected || status.includes('desactivados') ? '#fbbf24' : 'var(--text-muted)' }}>{status}</p><video ref={videoRef} autoPlay muted style={{ width: '100%', maxHeight: 440, background: '#05070b', borderRadius: 8, display: capturing ? 'block' : 'none' }}/></section></div>;
+  const detectors = [
+    ['HUD personal', 'Héroe, nivel, oro, vida, maná, inventario y habilidades visibles.'],
+    ['Marcador', 'Última build visible de compañeros y rivales, con antigüedad de la lectura.'],
+    ['Minimapa', 'Sólo señales visibles: héroes, estructuras, objetivos y wards mostrados.'],
+    ['Timeline local', 'Compras, muertes, objetivos y momentos que merecen revisión posterior.'],
+  ];
+  return <div style={{ display: 'grid', gap: '1rem' }}>
+    <section style={{ ...card, borderColor: 'rgba(248,113,113,.35)' }}><div style={{ display: 'flex', gap: '.7rem', alignItems: 'center' }}><ShieldAlert color="#f87171"/><div><strong>Ranked nunca está permitido</strong><div style={{ color: 'var(--text-muted)', fontSize: '.78rem' }}>La sesión necesita dos señales automáticas coincidentes para reconocer un modo permitido. Una señal fiable de Ranked la bloquea de forma irreversible; ante cualquier duda, no hay consejos.</div></div></div></section>
+    <section style={card}><h3 style={{ marginTop: 0 }}>Prototipo de captura local</h3><p>Esta fase valida consentimiento y captura de pantalla. La selección manual sólo simula el inicio: nunca habilita coaching. Faltan los detectores locales y autorización de Omeda antes de distribuirlo.</p><label style={{ color: 'var(--text-muted)', fontSize: '.74rem' }}>Modo que esperas jugar</label><div style={{ display: 'flex', gap: '.5rem', flexWrap: 'wrap', marginTop: '.35rem' }}><select value={mode} onChange={(e) => { setMode(e.target.value); setStatus(e.target.value === 'RANKED' ? 'Bloqueado: RiftLine no inicia captura ni consejos en Ranked.' : 'Sin iniciar'); }} disabled={capturing} style={button}>{['STANDARD','QUICK','ARAM','LABS','PRACTICE','AI','CUSTOM','RANKED'].map((value) => <option key={value}>{value}</option>)}</select>{capturing ? <button onClick={stop} style={button}>Detener captura</button> : <button disabled={rankedSelected} onClick={() => void start()} style={{ ...button, opacity: rankedSelected ? .45 : 1, cursor: rankedSelected ? 'not-allowed' : 'pointer', display: 'inline-flex', alignItems: 'center', gap: '.35rem' }}><Crosshair size={14}/> {rankedSelected ? 'Bloqueado en Ranked' : 'Compartir pantalla'}</button>}</div><p style={{ color: rankedSelected || status.includes('desactivados') ? '#fbbf24' : 'var(--text-muted)' }}>{status}</p><video ref={videoRef} autoPlay muted style={{ width: '100%', maxHeight: 440, background: '#05070b', borderRadius: 8, display: capturing ? 'block' : 'none' }}/></section>
+    <section style={card}><h3 style={{ marginTop: 0 }}>Qué observará la primera versión</h3><div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: '.6rem' }}>{detectors.map(([title, description]) => <article key={title} style={{ padding: '.75rem', border: '1px solid var(--border-color)', borderRadius: 8, background: 'rgba(255,255,255,.018)' }}><strong>{title}</strong><p style={{ color: 'var(--text-muted)', fontSize: '.74rem', lineHeight: 1.45, marginBottom: 0 }}>{description}</p></article>)}</div></section>
+    <section style={card}><h3 style={{ marginTop: 0 }}>Cómo intervendrá el coach</h3><ul style={{ color: 'var(--text-secondary)', lineHeight: 1.55 }}><li>No habla durante un combate.</li><li>Como máximo cuatro intervenciones cada diez minutos y nunca repite el mismo concepto en cinco minutos.</li><li>Una observación dudosa se guarda para el informe, pero no interrumpe.</li><li>Cada consejo explica qué señales lo activaron y qué condición podría cambiarlo.</li></ul><p style={{ color: 'var(--text-muted)', fontSize: '.76rem', marginBottom: 0 }}>La Academia distingue las señales declaradas, guiadas y observadas: el overlay no podrá ascenderte por sí solo.</p></section>
+  </div>;
 }

@@ -15,6 +15,8 @@ El nivel de Academia no es MMR ni rango competitivo. Representa conocimiento dem
 5. **Replay personal**: sesiones privadas separadas de los VOD de equipo, marcadores alineados con el tiempo de partida y conclusiones del jugador. Los momentos del análisis pueden convertirse en una revisión sin afirmar causas que la API no demuestra.
 6. **Entrenamiento local**: prototipo de permiso y captura de pantalla. Ranked y sus alias están bloqueados en servidor. Elegir manualmente un modo nunca activa consejos; sólo una detección automática de alta confianza de una lista explícita podría hacerlo. No hay lectura de memoria, inyección, automatización ni funcionalidad de equipo.
 
+La especificación cerrada del primer overlay, sus detectores y el contrato de evidencia con Academia están en [`live_training_overlay_mvp.md`](./live_training_overlay_mvp.md). El servidor exige dos fuentes automáticas coincidentes para habilitar un modo permitido y bloquea de forma irreversible una sesión cuando una señal fiable identifica Ranked.
+
 ## Reglas pedagógicas
 
 - Enseñar principio, evidencia, excepción y transferencia; evitar recetas rígidas.

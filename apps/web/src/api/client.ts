@@ -1472,7 +1472,43 @@ export interface PlayerLearningProfile {
   activeRole: 'CARRY' | 'SUPPORT' | 'MIDLANE' | 'JUNGLE' | 'OFFLANE' | null;
   explanationDepth: 'FOUNDATIONAL' | 'STANDARD' | 'ADVANCED';
   confidence: number;
-  competencies: Array<{ key: string; label: string; description: string; level: number; levelLabel: string; mastery: number; confidence: number; evidenceCount: number; nextReviewAt: string | null }>;
+  competencies: Array<{ key: string; label: string; description: string; level: number; levelLabel: string; mastery: number; estimatedMastery: number; confidence: number; evidenceCount: number; nextReviewAt: string | null }>;
+  levels: Array<{ level: number; key: string; label: string; description: string }>;
+}
+
+export interface PlayerLearningProgress {
+  profile: PlayerLearningProfile;
+  summary: {
+    totalEvidence: number;
+    completedMissions: number;
+    reviewedReplayMoments: number;
+    overlayObservations: number;
+    counts: Record<string, number>;
+  };
+  trends: Array<{
+    competencyKey: string;
+    competencyLabel: string;
+    evidenceCount: number;
+    previousAverage: number | null;
+    recentAverage: number | null;
+    delta: number | null;
+    direction: 'STABLE' | 'IMPROVING' | 'NEEDS_ATTENTION';
+    points: Array<{ score: number; occurredAt: string }>;
+  }>;
+  timeline: Array<{
+    id: string;
+    competencyKey: string;
+    competencyLabel: string;
+    source: 'PLACEMENT' | 'PROMOTION' | 'MATCH' | 'REPLAY' | 'REVIEW' | 'MISSION' | 'OVERLAY';
+    sourceLabel: string;
+    score: number | null;
+    evaluation: string | null;
+    title: string;
+    detail: string;
+    confidence: 'DECLARED' | 'GUIDED' | 'OBSERVED';
+    occurredAt: string;
+  }>;
+  note: string;
 }
 
 export interface LearningQuestionView {
@@ -1792,6 +1828,7 @@ export const apiClient = {
 
   playerLearning: {
     profile: () => fetchApi<{ profile: PlayerLearningProfile; recommendation: MissionRecommendation }>('/player-learning/profile/me'),
+    progress: () => fetchApi<PlayerLearningProgress>('/player-learning/progress/me'),
     updateProfile: (activeRole: PlayerLearningProfile['activeRole']) => fetchApi<{ profile: PlayerLearningProfile }>('/player-learning/profile/me', { method: 'PATCH', body: JSON.stringify({ activeRole }) }),
     placement: () => fetchApi<{ status: PlayerLearningProfile['placementStatus']; questions: LearningQuestionView[]; answered: number; total: number; summary: PlacementSummary | null; note: string }>('/player-learning/placement'),
     answerQuestion: (questionKey: string, selectedOptionId: string, sourceType: 'PLACEMENT' | 'MATCH' | 'REPLAY' | 'REVIEW' | 'PROMOTION' = 'PLACEMENT', sourceMatchId?: string | null) =>
@@ -1812,14 +1849,23 @@ export const apiClient = {
     cycles: () => fetchApi<{ cycles: PlayerTrainingCycle[] }>('/player-learning/cycles/me'),
     createCycle: (data: { focusKey: string; title: string; cue: string; targetMatches?: number; sourceMatchId?: string | null; sourceMomentId?: string | null; competencyKey?: string | null; learningLevel?: number | null; successCriteria?: Record<string, unknown> | null }) =>
       fetchApi<{ cycle: PlayerTrainingCycle }>('/player-learning/cycles', { method: 'POST', body: JSON.stringify(data) }),
-    updateCycle: (id: string, status: 'COMPLETED' | 'ARCHIVED') =>
-      fetchApi<{ cycle: PlayerTrainingCycle }>(`/player-learning/cycles/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify({ status }) }),
+    updateCycle: (id: string, status: 'COMPLETED' | 'ARCHIVED', evaluation?: { outcome: 'ACHIEVED' | 'PARTIAL' | 'NOT_YET'; reflection: string }) =>
+      fetchApi<{ cycle: PlayerTrainingCycle }>(`/player-learning/cycles/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify({ status, evaluation }) }),
     replays: () => fetchApi<{ sessions: PlayerReplaySession[] }>('/player-learning/replays'),
     createReplay: (data: { matchId?: string | null; matchPlayerId?: string | null; title: string; recordingUrl?: string | null; durationSeconds?: number | null; offsetSeconds?: number; markers?: Array<{ gameTime: number; sourceEventId?: string | null; category: string; title: string; question: string }> }) =>
       fetchApi<{ session: PlayerReplaySession }>('/player-learning/replays', { method: 'POST', body: JSON.stringify(data) }),
     updateReplayMarker: (sessionId: string, markerId: string, status: LearningReviewStatus, conclusion?: string | null) =>
       fetchApi<{ marker: ReplayMarker }>(`/player-learning/replays/${encodeURIComponent(sessionId)}/markers/${encodeURIComponent(markerId)}`, { method: 'PATCH', body: JSON.stringify({ status, conclusion }) }),
     startLiveSession: (requestedGameMode: string) => fetchApi<{ session: { id: string; requestedGameMode: string; modeVerification: string; status: string }; canAdvise: boolean; reason: string }>('/player-learning/live/sessions', { method: 'POST', body: JSON.stringify({ requestedGameMode, captureConsent: true }) }),
+    verifyLiveMode: (sessionId: string, detectedGameMode: string, signal: { source: 'screen_ocr' | 'screen_template' | 'match_api'; confidence: number; capturedAt: string }) =>
+      fetchApi<{ session: { id: string; detectedGameMode: string | null; modeVerification: string; status: string }; canAdvise: boolean; reason: string | null }>(`/player-learning/live/sessions/${encodeURIComponent(sessionId)}/verify-mode`, { method: 'POST', body: JSON.stringify({ detectedGameMode, signal }) }),
+    submitLiveObservation: (sessionId: string, data: {
+      gameTime?: number | null;
+      eventType: 'RECALL_WINDOW' | 'OBJECTIVE_PREPARATION' | 'VISION_OPPORTUNITY' | 'BUILD_ADAPTATION' | 'SKILL_LEVEL_AVAILABLE' | 'MINIMAP_INFORMATION' | 'DEATH_REVIEW';
+      confidence: number;
+      observation: { competencyKey: string; learningScore?: number; explanation: string; detector: string; rubricId?: string; inputs: string[]; missingInputs?: string[]; capturedAt: string; inCombat: boolean; state?: Record<string, unknown> };
+      candidateAdvice?: { priority: 'NORMAL' | 'HIGH'; title: string; cue: string; reason: string; principle: string } | null;
+    }) => fetchApi<{ event: { id: string }; delivery: 'SPEAK' | 'SILENT_REVIEW'; advice: { priority: 'NORMAL' | 'HIGH'; title: string; cue: string; reason: string; principle: string } | null; reason: string | null }>(`/player-learning/live/sessions/${encodeURIComponent(sessionId)}/observations`, { method: 'POST', body: JSON.stringify(data) }),
   },
 
   reports: {

@@ -13,7 +13,9 @@ import {
   selectPlacementQuestions,
   summarizePlacement,
 } from '../services/player-learning-service.js';
-import { evaluateLiveMode } from '../services/live-training-policy.js';
+import { evaluateLiveMode, evaluateLiveModeSignals, type LiveModeSignal } from '../services/live-training-policy.js';
+import { buildLearningProgress } from '../services/player-learning-progress-service.js';
+import { decideLiveCoachDelivery, LIVE_COACH_EVENT_TYPES } from '../services/live-coach-delivery-policy.js';
 
 export const playerLearningRouter = Router();
 
@@ -66,6 +68,41 @@ playerLearningRouter.get('/profile/me', requireAuth, async (req, res, next) => {
   try {
     const profile = await ownProfile(req.user!.userId);
     res.json({ profile: presentLearningProfile(profile), recommendation: recommendMission(profile.competencies) });
+  } catch (error) {
+    next(error);
+  }
+});
+
+playerLearningRouter.get('/progress/me', requireAuth, async (req, res, next) => {
+  try {
+    const profile = await ownProfile(req.user!.userId);
+    const [attempts, cycles, replayMarkers, liveEvents] = await Promise.all([
+      db.coachQuestionAttempt.findMany({
+        where: { profileId: profile.id },
+        select: { id: true, competencyKey: true, sourceType: true, evaluation: true, score: true, answeredAt: true },
+        orderBy: { answeredAt: 'asc' },
+        take: 240,
+      }),
+      db.playerTrainingCycle.findMany({
+        where: { profileId: profile.id, status: 'COMPLETED' },
+        select: { id: true, competencyKey: true, title: true, evaluation: true, completedAt: true },
+        orderBy: { completedAt: 'asc' },
+        take: 80,
+      }),
+      db.playerReplayMarker.findMany({
+        where: { session: { profileId: profile.id }, status: { not: 'PENDING' } },
+        select: { id: true, status: true, title: true, updatedAt: true },
+        orderBy: { updatedAt: 'asc' },
+        take: 160,
+      }),
+      db.liveTrainingEvent.findMany({
+        where: { session: { profileId: profile.id } },
+        select: { id: true, eventType: true, confidence: true, evidence: true, createdAt: true },
+        orderBy: { createdAt: 'asc' },
+        take: 240,
+      }),
+    ]);
+    res.json({ profile: presentLearningProfile(profile), ...buildLearningProgress({ attempts, cycles, replayMarkers, liveEvents }) });
   } catch (error) {
     next(error);
   }
@@ -140,20 +177,39 @@ playerLearningRouter.get('/missions/recommended', requireAuth, async (req, res, 
 playerLearningRouter.get('/promotion', requireAuth, async (req, res, next) => {
   try {
     const profile = await ownProfile(req.user!.userId);
-    const completedCycles = await db.playerTrainingCycle.findMany({
-      where: { profileId: profile.id, status: 'COMPLETED', competencyKey: { not: null } },
-      select: { competencyKey: true },
-    });
-    const completedKeys = new Set(completedCycles.map((cycle) => cycle.competencyKey).filter(Boolean));
+    const [completedCycles, promotionAttempts] = await Promise.all([
+      db.playerTrainingCycle.findMany({
+        where: { profileId: profile.id, status: 'COMPLETED', competencyKey: { not: null } },
+        select: { competencyKey: true, completedAt: true },
+      }),
+      db.coachQuestionAttempt.findMany({
+        where: { profileId: profile.id, sourceType: 'PROMOTION' },
+        select: { competencyKey: true, answeredAt: true },
+        orderBy: { answeredAt: 'desc' },
+      }),
+    ]);
+    const latestPromotion = new Map<string, Date>();
+    for (const attempt of promotionAttempts) {
+      if (!latestPromotion.has(attempt.competencyKey)) latestPromotion.set(attempt.competencyKey, attempt.answeredAt);
+    }
+    const completedAfterLatestTest = new Set(completedCycles.filter((cycle) => {
+      if (!cycle.competencyKey || !cycle.completedAt) return false;
+      const lastTest = latestPromotion.get(cycle.competencyKey);
+      return !lastTest || cycle.completedAt > lastTest;
+    }).map((cycle) => cycle.competencyKey).filter(Boolean));
     const competency = [...profile.competencies]
-      .filter((item) => item.level < 5 && item.evidenceCount >= 4 && item.mastery >= 0.65 && completedKeys.has(item.competencyKey))
+      .filter((item) => item.level < 5 && item.evidenceCount >= 4 && item.mastery >= 0.65 && completedAfterLatestTest.has(item.competencyKey))
       .sort((a, b) => b.mastery - a.mastery)[0];
     if (!competency) {
       res.json({ eligible: false, reason: 'Completa una misión y reúne al menos cuatro evidencias consistentes en esa competencia.' });
       return;
     }
-    const question = LEARNING_QUESTIONS.find((item) => item.competencyKey === competency.competencyKey && item.level >= competency.level)
-      ?? LEARNING_QUESTIONS.find((item) => item.competencyKey === competency.competencyKey);
+    const role = profile.activeRole?.toUpperCase();
+    const candidates = LEARNING_QUESTIONS.filter((item) => item.competencyKey === competency.competencyKey
+      && (!item.roles?.length || item.roles.includes(role ?? '')));
+    const question = candidates.find((item) => item.level > competency.level)
+      ?? candidates.find((item) => item.level >= competency.level)
+      ?? candidates[0];
     if (!question) {
       res.json({ eligible: false, reason: 'Aún no hay una prueba de ascenso revisada para esta competencia.' });
       return;
@@ -326,8 +382,11 @@ playerLearningRouter.patch('/replays/:sessionId/markers/:markerId', requireAuth,
       where: { id: String(req.params.markerId), sessionId: String(req.params.sessionId), session: { profileId: profile.id } },
     });
     if (!marker) throw new AppError(404, 'Replay marker not found', 'REPLAY_MARKER_NOT_FOUND');
+    if (marker.status !== 'PENDING' && body.status === 'PENDING') {
+      throw new AppError(409, 'A reviewed replay moment cannot be reset to pending', 'REPLAY_REVIEW_ALREADY_CREDITED');
+    }
     const updated = await db.playerReplayMarker.update({ where: { id: marker.id }, data: body });
-    if (body.status !== 'PENDING') {
+    if (marker.status === 'PENDING' && body.status !== 'PENDING') {
       await db.playerCompetency.updateMany({
         where: { profileId: profile.id, competencyKey: 'review_autonomy' },
         data: { appliedCount: { increment: 1 }, evidenceCount: { increment: 1 }, lastEvidenceAt: new Date() },
@@ -365,21 +424,26 @@ playerLearningRouter.post('/live/sessions/:id/verify-mode', requireAuth, async (
   try {
     const body = z.object({
       detectedGameMode: z.string().trim().min(1).max(40),
-      signal: z.object({ source: z.literal('screen_ocr'), confidence: z.number().min(0).max(1), capturedAt: z.string().datetime() }),
+      signal: z.object({ source: z.enum(['screen_ocr', 'screen_template', 'match_api']), confidence: z.number().min(0).max(1), capturedAt: z.string().datetime() }),
     }).parse(req.body);
     const profile = await ownProfile(req.user!.userId);
     const existing = await db.liveTrainingSession.findFirst({ where: { id: String(req.params.id), profileId: profile.id } });
     if (!existing) throw new AppError(404, 'Live training session not found', 'LIVE_SESSION_NOT_FOUND');
-    const policy = evaluateLiveMode(body.detectedGameMode, body.signal.confidence);
+    if (existing.modeVerification === 'BLOCKED_RANKED') throw new AppError(403, 'Ranked blocking is permanent for this session', 'LIVE_RANKED_BLOCK_PERMANENT');
+    const previousSignals = Array.isArray(existing.verificationSignals)
+      ? existing.verificationSignals.filter((signal): signal is LiveModeSignal => !!signal && typeof signal === 'object')
+      : [];
+    const signals: LiveModeSignal[] = [...previousSignals, { ...body.signal, detectedGameMode: body.detectedGameMode }].slice(-6);
+    const policy = evaluateLiveModeSignals(signals);
     const session = await db.liveTrainingSession.update({
       where: { id: existing.id },
       data: {
-        detectedGameMode: policy.normalized, verificationSignals: body.signal,
+        detectedGameMode: policy.normalized === 'UNKNOWN' ? null : policy.normalized, verificationSignals: signals,
         modeVerification: policy.verification, status: policy.status,
         rankedBlockedAt: policy.verification === 'BLOCKED_RANKED' ? new Date() : existing.rankedBlockedAt,
       },
     });
-    res.json({ session, canAdvise: policy.canAdvise, reason: policy.canAdvise ? null : policy.verification === 'BLOCKED_RANKED' ? 'Ranked está bloqueado.' : 'Modo no reconocido o confianza insuficiente.' });
+    res.json({ session, canAdvise: policy.canAdvise, reason: policy.canAdvise ? null : policy.verification === 'BLOCKED_RANKED' ? 'Ranked está bloqueado.' : policy.verification === 'UNVERIFIED' ? 'Esperando una segunda señal automática independiente.' : 'Las señales no permiten verificar un modo autorizado.' });
   } catch (error) {
     next(error);
   }
@@ -399,14 +463,128 @@ playerLearningRouter.post('/live/sessions/:id/events', requireAuth, async (req, 
   }
 });
 
+playerLearningRouter.post('/live/sessions/:id/observations', requireAuth, async (req, res, next) => {
+  try {
+    const observationSchema = z.object({
+      competencyKey: z.enum(['moba_fundamentals', 'role_knowledge', 'macro', 'micro_concepts', 'builds', 'champion_pool', 'review_autonomy']),
+      learningScore: z.number().min(0).max(1).optional(),
+      explanation: z.string().trim().min(10).max(1200),
+      detector: z.string().trim().min(1).max(100),
+      rubricId: z.string().trim().min(1).max(100).optional(),
+      inputs: z.array(z.string().trim().min(1).max(80)).max(20),
+      missingInputs: z.array(z.string().trim().min(1).max(80)).max(20).default([]),
+      capturedAt: z.string().datetime(),
+      inCombat: z.boolean(),
+      state: z.record(z.string(), z.unknown()).optional(),
+    }).superRefine((value, context) => {
+      if (value.learningScore !== undefined && !value.rubricId) {
+        context.addIssue({ code: z.ZodIssueCode.custom, path: ['rubricId'], message: 'A scored observation requires a reviewed rubric' });
+      }
+    });
+    const body = z.object({
+      gameTime: z.number().int().min(0).nullable().optional(),
+      eventType: z.enum(LIVE_COACH_EVENT_TYPES),
+      confidence: z.number().min(0).max(1),
+      observation: observationSchema,
+      candidateAdvice: z.object({
+        priority: z.enum(['NORMAL', 'HIGH']),
+        title: z.string().trim().min(1).max(120),
+        cue: z.string().trim().min(1).max(280),
+        reason: z.string().trim().min(10).max(600),
+        principle: z.string().trim().min(10).max(600),
+      }).nullable().optional(),
+    }).parse(req.body);
+    const profile = await ownProfile(req.user!.userId);
+    const session = await db.liveTrainingSession.findFirst({ where: { id: String(req.params.id), profileId: profile.id } });
+    if (!session) throw new AppError(404, 'Live training session not found', 'LIVE_SESSION_NOT_FOUND');
+    if (session.modeVerification !== 'VERIFIED_ALLOWED' || session.status !== 'ACTIVE') {
+      throw new AppError(403, 'Live coaching is disabled until an allowed mode is verified', 'LIVE_MODE_NOT_ALLOWED');
+    }
+    const recentAdvice = await db.liveTrainingEvent.findMany({
+      where: { sessionId: session.id, advice: { not: null } },
+      select: { eventType: true, createdAt: true },
+      orderBy: { createdAt: 'desc' },
+      take: 12,
+    });
+    const decision = decideLiveCoachDelivery({
+      eventType: body.eventType,
+      confidence: body.confidence,
+      inCombat: body.observation.inCombat,
+      candidateAdvice: body.candidateAdvice,
+      recentAdvice,
+    });
+    const event = await db.liveTrainingEvent.create({
+      data: {
+        sessionId: session.id,
+        gameTime: body.gameTime ?? null,
+        eventType: body.eventType,
+        confidence: body.confidence >= 0.93 ? 'high' : body.confidence >= 0.85 ? 'medium' : 'low',
+        evidence: { ...body.observation, confidence: body.confidence, candidateAdvice: body.candidateAdvice ?? null, delivery: decision.delivery, suppressionReason: decision.reason },
+        advice: decision.delivery === 'SPEAK' ? decision.advice.cue : null,
+      },
+    });
+    res.status(201).json({ event, delivery: decision.delivery, advice: decision.advice, reason: decision.reason });
+  } catch (error) {
+    next(error);
+  }
+});
+
 playerLearningRouter.patch('/cycles/:id', requireAuth, async (req, res, next) => {
   try {
-    const body = z.object({ status: z.enum(['COMPLETED', 'ARCHIVED']) }).parse(req.body);
+    const body = z.object({
+      status: z.enum(['COMPLETED', 'ARCHIVED']),
+      evaluation: z.object({
+        outcome: z.enum(['ACHIEVED', 'PARTIAL', 'NOT_YET']),
+        reflection: z.string().trim().min(20).max(1600),
+      }).optional(),
+    }).parse(req.body);
     const existing = await db.playerTrainingCycle.findFirst({ where: { id: String(req.params.id), userId: req.user!.userId } });
     if (!existing) throw new AppError(404, 'Training cycle not found', 'TRAINING_CYCLE_NOT_FOUND');
-    const cycle = await db.playerTrainingCycle.update({
-      where: { id: existing.id },
-      data: { status: body.status, completedAt: body.status === 'COMPLETED' ? new Date() : existing.completedAt },
+    if (existing.status !== 'ACTIVE') throw new AppError(409, 'This training cycle is already closed', 'TRAINING_CYCLE_ALREADY_CLOSED');
+    if (body.status === 'COMPLETED' && existing.competencyKey && !body.evaluation) {
+      throw new AppError(400, 'Review the mission result before completing it', 'MISSION_REVIEW_REQUIRED');
+    }
+    if (body.status === 'COMPLETED') {
+      const matchesPlayed = await db.matchPlayer.count({
+        where: { playerId: existing.playerId, match: { startTime: { gte: existing.startedAt } } },
+      });
+      if (matchesPlayed < existing.targetMatches) {
+        throw new AppError(409, `Complete ${existing.targetMatches} practice matches before reviewing this mission`, 'MISSION_PRACTICE_INCOMPLETE');
+      }
+    }
+    const now = new Date();
+    const cycle = await db.$transaction(async (tx) => {
+      const updated = await tx.playerTrainingCycle.update({
+        where: { id: existing.id },
+        data: {
+          status: body.status,
+          completedAt: body.status === 'COMPLETED' ? now : existing.completedAt,
+          evaluation: body.evaluation ? { ...body.evaluation, reviewedAt: now.toISOString(), evidenceType: 'PLAYER_REFLECTION' } : undefined,
+        },
+      });
+      if (body.status === 'COMPLETED' && body.evaluation && existing.profileId && existing.competencyKey) {
+        const competency = await tx.playerCompetency.findUnique({
+          where: { profileId_competencyKey: { profileId: existing.profileId, competencyKey: existing.competencyKey } },
+        });
+        if (competency) {
+          const outcomeScore = body.evaluation.outcome === 'ACHIEVED' ? 1 : body.evaluation.outcome === 'PARTIAL' ? 0.6 : 0.25;
+          const previousWeight = Math.min(competency.evidenceCount, 4);
+          const evidenceWeight = 0.6;
+          const mastery = ((competency.mastery * previousWeight) + (outcomeScore * evidenceWeight)) / (previousWeight + evidenceWeight);
+          await tx.playerCompetency.update({
+            where: { id: competency.id },
+            data: {
+              mastery: Math.max(0, Math.min(1, mastery)),
+              confidence: Math.min(1, (competency.evidenceCount + 1) / 5),
+              evidenceCount: { increment: 1 },
+              appliedCount: { increment: 1 },
+              lastEvidenceAt: now,
+              nextReviewAt: new Date(now.getTime() + (body.evaluation.outcome === 'ACHIEVED' ? 7 : 2) * 86_400_000),
+            },
+          });
+        }
+      }
+      return updated;
     });
     res.json({ cycle });
   } catch (error) {

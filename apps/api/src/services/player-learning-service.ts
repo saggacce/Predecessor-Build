@@ -43,12 +43,15 @@ export async function ensureLearningProfile(userId: string, playerId: string) {
 export function presentLearningProfile(profile: Awaited<ReturnType<typeof ensureLearningProfile>>) {
   const ordered = COMPETENCIES.map((definition) => {
     const state = profile.competencies.find((item) => item.competencyKey === definition.key);
+    const mastery = state?.mastery ?? DEFAULT_MASTERY;
+    const confidence = state?.confidence ?? 0;
     return {
       ...definition,
       level: state?.level ?? 1,
       levelLabel: levelLabel(state?.level ?? 1),
-      mastery: state?.mastery ?? DEFAULT_MASTERY,
-      confidence: state?.confidence ?? 0,
+      mastery,
+      estimatedMastery: DEFAULT_MASTERY + ((mastery - DEFAULT_MASTERY) * confidence),
+      confidence,
       evidenceCount: state?.evidenceCount ?? 0,
       nextReviewAt: state?.nextReviewAt ?? null,
     };
@@ -276,7 +279,11 @@ export async function recordQuestionAnswer(input: {
     await tx.playerLearningProfile.update({
       where: { id: input.profileId },
       data: {
-        placementStatus: input.sourceType === 'PLACEMENT' && placementComplete ? 'PROVISIONAL' : undefined,
+        placementStatus: input.sourceType === 'PROMOTION' && option.score >= 0.8
+          ? 'CONFIRMED'
+          : input.sourceType === 'PLACEMENT' && placementComplete
+            ? 'PROVISIONAL'
+            : undefined,
         overallLevel,
         explanationDepth: overallLevel <= 1 ? 'FOUNDATIONAL' : overallLevel >= 4 ? 'ADVANCED' : 'STANDARD',
         confidence: Math.min(1, totalEvidence / 35),
