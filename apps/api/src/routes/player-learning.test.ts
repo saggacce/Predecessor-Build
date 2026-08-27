@@ -160,6 +160,22 @@ describe('personal learning persistence', () => {
     }));
   });
 
+  it('returns an auditable report that separates delivered and silent observations', async () => {
+    mockDb.liveTrainingSession.findFirst.mockResolvedValue({
+      id: 'live-1', profileId: 'profile-1', requestedGameMode: 'QUICK', detectedGameMode: 'QUICK',
+      modeVerification: 'VERIFIED_ALLOWED', status: 'COMPLETED', startedAt: new Date('2026-08-27T12:00:00Z'), endedAt: new Date('2026-08-27T12:30:00Z'),
+      events: [
+        { id: 'e1', eventType: 'DEATH_REVIEW', gameTime: 500, confidence: 'high', advice: null, evidence: { detector: 'death-screen-v1' }, createdAt: new Date('2026-08-27T12:08:20Z') },
+        { id: 'e2', eventType: 'RECALL_WINDOW', gameTime: 700, confidence: 'high', advice: 'Vuelve a base.', evidence: { detector: 'recall-v1' }, createdAt: new Date('2026-08-27T12:11:40Z') },
+      ],
+    });
+    const cookie = await authCookie({ userId: 'user-1', globalRole: 'PLAYER', memberships: [] });
+    const response = await request(app).get('/player-learning/live/sessions/live-1/report').set('Cookie', cookie);
+    expect(response.status).toBe(200);
+    expect(response.body.report.summary).toEqual({ observations: 2, spoken: 1, silent: 1, byType: { DEATH_REVIEW: 1, RECALL_WINDOW: 1 } });
+    expect(response.body.report.limitation).toContain('replay');
+  });
+
   it('delivers a sparse educational cue only from a verified observation', async () => {
     mockDb.liveTrainingSession.findFirst.mockResolvedValue({ id: 'live-1', profileId: 'profile-1', modeVerification: 'VERIFIED_ALLOWED', status: 'ACTIVE' });
     mockDb.liveTrainingEvent.findMany.mockResolvedValue([]);

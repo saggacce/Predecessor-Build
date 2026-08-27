@@ -1511,6 +1511,27 @@ export interface PlayerLearningProgress {
   note: string;
 }
 
+export interface LiveTrainingReport {
+  id: string;
+  requestedGameMode: string;
+  detectedGameMode: string | null;
+  modeVerification: string;
+  status: string;
+  startedAt: string;
+  endedAt: string | null;
+  summary: { observations: number; spoken: number; silent: number; byType: Record<string, number> };
+  events: Array<{
+    id: string;
+    gameTime: number | null;
+    eventType: string;
+    confidence: string;
+    advice: string | null;
+    evidence: Record<string, unknown>;
+    createdAt: string;
+  }>;
+  limitation: string;
+}
+
 export interface LearningQuestionView {
   key: string;
   competencyKey: string;
@@ -1861,6 +1882,8 @@ export const apiClient = {
       fetchApi<{ session: { id: string; detectedGameMode: string | null; modeVerification: string; status: string }; canAdvise: boolean; reason: string | null }>(`/player-learning/live/sessions/${encodeURIComponent(sessionId)}/verify-mode`, { method: 'POST', body: JSON.stringify({ detectedGameMode, signal }) }),
     endLiveSession: (sessionId: string) =>
       fetchApi<{ session: { id: string; modeVerification: string; status: string; endedAt: string } }>(`/player-learning/live/sessions/${encodeURIComponent(sessionId)}/end`, { method: 'POST' }),
+    liveSessionReport: (sessionId: string) =>
+      fetchApi<{ report: LiveTrainingReport }>(`/player-learning/live/sessions/${encodeURIComponent(sessionId)}/report`),
     submitLiveObservation: (sessionId: string, data: {
       gameTime?: number | null;
       eventType: 'RECALL_WINDOW' | 'OBJECTIVE_PREPARATION' | 'VISION_OPPORTUNITY' | 'BUILD_ADAPTATION' | 'SKILL_LEVEL_AVAILABLE' | 'MINIMAP_INFORMATION' | 'DEATH_REVIEW';

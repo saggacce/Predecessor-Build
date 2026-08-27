@@ -471,6 +471,48 @@ playerLearningRouter.post('/live/sessions/:id/end', requireAuth, async (req, res
   }
 });
 
+playerLearningRouter.get('/live/sessions/:id/report', requireAuth, async (req, res, next) => {
+  try {
+    const profile = await ownProfile(req.user!.userId);
+    const session = await db.liveTrainingSession.findFirst({
+      where: { id: String(req.params.id), profileId: profile.id },
+      include: { events: { orderBy: { createdAt: 'asc' } } },
+    });
+    if (!session) throw new AppError(404, 'Live training session not found', 'LIVE_SESSION_NOT_FOUND');
+    const byType = session.events.reduce<Record<string, number>>((counts, event) => {
+      counts[event.eventType] = (counts[event.eventType] ?? 0) + 1;
+      return counts;
+    }, {});
+    const spoken = session.events.filter((event) => !!event.advice).length;
+    res.json({
+      report: {
+        id: session.id,
+        requestedGameMode: session.requestedGameMode,
+        detectedGameMode: session.detectedGameMode,
+        modeVerification: session.modeVerification,
+        status: session.status,
+        startedAt: session.startedAt,
+        endedAt: session.endedAt,
+        summary: { observations: session.events.length, spoken, silent: session.events.length - spoken, byType },
+        events: session.events.map((event) => ({
+          id: event.id,
+          gameTime: event.gameTime,
+          eventType: event.eventType,
+          confidence: event.confidence,
+          advice: event.advice,
+          evidence: event.evidence,
+          createdAt: event.createdAt,
+        })),
+        limitation: session.modeVerification === 'VERIFIED_ALLOWED'
+          ? 'Las observaciones proceden de señales visibles y no sustituyen la revisión del replay.'
+          : 'La sesión no reunió dos fuentes independientes; no se emitieron consejos ni se usa como evidencia observada.',
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
 playerLearningRouter.post('/live/sessions/:id/events', requireAuth, async (req, res, next) => {
   try {
     const body = z.object({ gameTime: z.number().int().min(0).nullable().optional(), eventType: z.string().max(80), evidence: z.record(z.string(), z.unknown()), advice: z.string().max(500).nullable().optional(), confidence: z.enum(['low', 'medium', 'high']) }).parse(req.body);

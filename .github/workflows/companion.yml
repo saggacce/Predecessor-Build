@@ -47,7 +47,7 @@ jobs:
         run: npm --workspace @predecessor/companion run package:win
 
       - name: Upload unsigned test installer
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: RiftLine-Companion-Windows-unsigned
           path: apps/companion/release/RiftLine-Companion-*.exe

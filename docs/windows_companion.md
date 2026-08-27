@@ -64,3 +64,5 @@ Para activar consejos reales hacen falta muestras propias de Predecessor en, com
 Las muestras deben evitar nombres, chat y cualquier dato personal que no sea necesario. Cada detector tendrá umbral de confianza, versión de plantilla y pruebas de regresión antes de poder producir una señal o recomendación.
 
 El botón **Guardar muestra local** descarga el fotograma en el propio equipo para esta calibración. RiftLine no lo sube automáticamente y el usuario debe revisarlo antes de compartirlo.
+
+Al detener una captura, la Academia cierra también su sesión de servidor y muestra un informe auditable: modo solicitado/detectado, estado de verificación, observaciones guardadas, intervenciones mostradas y observaciones que se reservaron para revisión. Una captura no verificada termina como `ABORTED`, no queda pendiente ni genera evidencia observada.
