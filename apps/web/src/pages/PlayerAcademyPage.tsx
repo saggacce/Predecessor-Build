@@ -16,7 +16,18 @@ import {
   type PlayerTrainingCycle,
 } from '../api/client';
 import { LearningProgressOverview } from '../components/LearningProgressOverview';
-import { createLiveModeOcr } from '../services/liveModeOcr';
+import { createLiveModeOcr, type OcrModeSignal } from '../services/liveModeOcr';
+import {
+  captureFrame,
+  createModeTemplate,
+  cropFrame,
+  findModeTemplateMatch,
+  isUsableTemplateRect,
+  loadModeTemplates,
+  saveModeTemplates,
+  type ModeTemplate,
+  type NormalizedRect,
+} from '../services/modeTemplateDetector';
 
 type AcademyTab = 'path' | 'diagnostic' | 'progress' | 'knowledge' | 'replay' | 'live';
 
@@ -259,12 +270,21 @@ async function finishLiveTrainingSession(sessionId: string): Promise<LiveTrainin
   return (await apiClient.playerLearning.liveSessionReport(sessionId)).report;
 }
 
+const CALIBRATION_OCR_MAX_AGE_MS = 20_000;
+
+function isFreshCalibrationSignal(signal: OcrModeSignal | null): signal is OcrModeSignal {
+  if (!signal || signal.confidence < 0.85) return false;
+  const capturedAt = Date.parse(signal.capturedAt);
+  return Number.isFinite(capturedAt) && Date.now() - capturedAt <= CALIBRATION_OCR_MAX_AGE_MS;
+}
+
 function LocalTraining() {
-  const videoRef = useRef<HTMLVideoElement>(null); const streamRef = useRef<MediaStream | null>(null); const liveSessionIdRef = useRef<string | null>(null); const sentSignalsRef = useRef(new Set<string>()); const [mode, setMode] = useState('STANDARD'); const [status, setStatus] = useState('Sin iniciar'); const [capturing, setCapturing] = useState(false);
+  const videoRef = useRef<HTMLVideoElement>(null); const streamRef = useRef<MediaStream | null>(null); const liveSessionIdRef = useRef<string | null>(null); const sentSignalsRef = useRef(new Set<string>()); const calibrationCanvasRef = useRef<HTMLCanvasElement | null>(null); const calibrationSurfaceRef = useRef<HTMLDivElement>(null); const selectionStartRef = useRef<{ x: number; y: number } | null>(null); const [mode, setMode] = useState('STANDARD'); const [status, setStatus] = useState('Sin iniciar'); const [capturing, setCapturing] = useState(false);
   const [companionEnvironment, setCompanionEnvironment] = useState<Awaited<ReturnType<RiftLineCompanionBridge['getEnvironment']>>>(null);
   const [gameWindows, setGameWindows] = useState<RiftLineGameWindow[]>([]); const [selectedSourceId, setSelectedSourceId] = useState<string | null>(null); const [scanning, setScanning] = useState(false);
   const [liveSessionId, setLiveSessionId] = useState<string | null>(null); const [modeVerification, setModeVerification] = useState('UNVERIFIED'); const [ocrStatus, setOcrStatus] = useState('OCR local pendiente');
   const [lastReport, setLastReport] = useState<LiveTrainingReport | null>(null);
+  const [lastOcrSignal, setLastOcrSignal] = useState<OcrModeSignal | null>(null); const [modeTemplates, setModeTemplates] = useState<ModeTemplate[]>(() => loadModeTemplates()); const [calibrationFrameUrl, setCalibrationFrameUrl] = useState<string | null>(null); const [calibrationRect, setCalibrationRect] = useState<NormalizedRect | null>(null); const [calibrating, setCalibrating] = useState(false); const [calibrationStatus, setCalibrationStatus] = useState('');
   const companion = typeof window !== 'undefined' ? window.riftlineCompanion : undefined;
   const rankedSelected = mode === 'RANKED';
   useEffect(() => {
@@ -294,6 +314,16 @@ function LocalTraining() {
     let cancelled = false;
     let running = false;
     let detector: Awaited<ReturnType<typeof createLiveModeOcr>> | null = null;
+    const blockCapture = (reason: string) => {
+      streamRef.current?.getTracks().forEach((track) => track.stop());
+      streamRef.current = null;
+      liveSessionIdRef.current = null;
+      setLiveSessionId(null);
+      setCapturing(false);
+      setStatus(reason);
+      void companion.clearAdvice();
+      void finishLiveTrainingSession(liveSessionId).then(setLastReport).catch(() => undefined);
+    };
     const scanMode = async () => {
       if (cancelled || running || !videoRef.current || videoRef.current.readyState < 2) return;
       running = true;
@@ -302,27 +332,39 @@ function LocalTraining() {
         detector ??= await createLiveModeOcr((progress) => setOcrStatus(`Leyendo rótulos del modo… ${Math.round(progress * 100)}%`));
         if (cancelled) return;
         const signal = await detector.scan(videoRef.current);
-        if (!signal) {
+        if (signal) {
+          setLastOcrSignal(signal);
+          const signalKey = `screen_ocr:${signal.detectedGameMode}`;
+          if (!sentSignalsRef.current.has(signalKey)) {
+            sentSignalsRef.current.add(signalKey);
+            const verification = await apiClient.playerLearning.verifyLiveMode(liveSessionId, signal.detectedGameMode, { source: 'screen_ocr', confidence: signal.confidence, capturedAt: signal.capturedAt });
+            setModeVerification(verification.session.modeVerification);
+            setOcrStatus(`OCR: ${signal.detectedGameMode} · confianza ${Math.round(signal.confidence * 100)}%. ${verification.reason ?? 'Modo permitido verificado.'}`);
+            if (verification.session.status === 'BLOCKED') {
+              blockCapture(verification.reason ?? 'Sesión bloqueada por seguridad.');
+              return;
+            }
+          } else {
+            setOcrStatus(`OCR: ${signal.detectedGameMode} ya registrado; buscando una plantilla de otra sesión.`);
+          }
+        } else {
           setOcrStatus('No se encontró un rótulo de modo fiable. El coach permanece en silencio.');
-          return;
         }
-        const signalKey = `screen_ocr:${signal.detectedGameMode}`;
-        if (sentSignalsRef.current.has(signalKey)) {
-          setOcrStatus(`OCR: ${signal.detectedGameMode} ya registrado; falta una segunda fuente independiente.`);
-          return;
-        }
-        sentSignalsRef.current.add(signalKey);
-        const verification = await apiClient.playerLearning.verifyLiveMode(liveSessionId, signal.detectedGameMode, { source: 'screen_ocr', confidence: signal.confidence, capturedAt: signal.capturedAt });
-        setModeVerification(verification.session.modeVerification);
-        setOcrStatus(`OCR: ${signal.detectedGameMode} · confianza ${Math.round(signal.confidence * 100)}%. ${verification.reason ?? 'Modo permitido verificado.'}`);
-        if (verification.session.status === 'BLOCKED') {
-          streamRef.current?.getTracks().forEach((track) => track.stop());
-          streamRef.current = null;
-          liveSessionIdRef.current = null;
-          setLiveSessionId(null);
-          setCapturing(false);
-          setStatus(verification.reason ?? 'Sesión bloqueada por seguridad.');
-          void companion.clearAdvice();
+        if (cancelled || !videoRef.current) return;
+        const templateMatch = findModeTemplateMatch(videoRef.current, liveSessionId, modeTemplates);
+        if (templateMatch) {
+          const templateKey = `screen_template:${templateMatch.template.mode}`;
+          if (!sentSignalsRef.current.has(templateKey)) {
+            sentSignalsRef.current.add(templateKey);
+            const verification = await apiClient.playerLearning.verifyLiveMode(liveSessionId, templateMatch.template.mode, { source: 'screen_template', confidence: templateMatch.confidence, capturedAt: new Date().toISOString() });
+            setModeVerification(verification.session.modeVerification);
+            setOcrStatus(`Plantilla: ${templateMatch.template.mode} · coincidencia ${Math.round(templateMatch.confidence * 100)}%. ${verification.reason ?? 'Modo permitido verificado por dos fuentes.'}`);
+            if (verification.session.status === 'BLOCKED') {
+              blockCapture(verification.reason ?? 'Las señales visuales son contradictorias; sesión bloqueada.');
+              return;
+            }
+            if (verification.canAdvise) setStatus(`Modo ${templateMatch.template.mode} verificado por OCR y plantilla. El coach ya puede registrar observaciones.`);
+          }
         }
       } catch {
         setOcrStatus('El OCR local no pudo completar la lectura. El coach permanece en silencio.');
@@ -331,7 +373,7 @@ function LocalTraining() {
     void scanMode();
     const interval = window.setInterval(() => void scanMode(), 8_000);
     return () => { cancelled = true; window.clearInterval(interval); if (detector) void detector.terminate(); };
-  }, [capturing, companion, liveSessionId]);
+  }, [capturing, companion, liveSessionId, modeTemplates]);
   async function scanGame() {
     if (!companion) return [];
     setScanning(true);
@@ -368,6 +410,10 @@ function LocalTraining() {
       liveSessionIdRef.current = result.session.id;
       setLiveSessionId(result.session.id);
       setLastReport(null);
+      setLastOcrSignal(null);
+      setCalibrationFrameUrl(null);
+      setCalibrationRect(null);
+      setCalibrationStatus('');
       sentSignalsRef.current.clear();
       setModeVerification(result.session.modeVerification);
       setOcrStatus(companion ? 'Esperando el primer fotograma legible…' : 'OCR disponible sólo en el acompañante de escritorio.');
@@ -430,6 +476,89 @@ function LocalTraining() {
       setStatus('Muestra guardada localmente. Revísala antes de compartirla: puede contener nombres o chat visibles.');
     }, 'image/jpeg', 0.9);
   }
+  function beginTemplateCalibration() {
+    const video = videoRef.current;
+    if (!isFreshCalibrationSignal(lastOcrSignal)) {
+      setCalibrationStatus('Espera a una lectura OCR reciente del modo con al menos 85% de confianza. La lectura caduca a los 20 segundos.');
+      return;
+    }
+    const frame = video ? captureFrame(video) : null;
+    if (!frame) {
+      setCalibrationStatus('Todavía no hay un fotograma nítido para calibrar.');
+      return;
+    }
+    calibrationCanvasRef.current = frame;
+    setCalibrationFrameUrl(frame.toDataURL('image/jpeg', 0.88));
+    setCalibrationRect(null);
+    setCalibrationStatus(`Dibuja un rectángulo ajustado alrededor del texto ${lastOcrSignal.detectedGameMode}.`);
+  }
+  function calibrationPoint(event: React.PointerEvent<HTMLDivElement>) {
+    const bounds = calibrationSurfaceRef.current?.getBoundingClientRect();
+    if (!bounds?.width || !bounds.height) return null;
+    return {
+      x: Math.max(0, Math.min(1, (event.clientX - bounds.left) / bounds.width)),
+      y: Math.max(0, Math.min(1, (event.clientY - bounds.top) / bounds.height)),
+    };
+  }
+  function startCalibrationSelection(event: React.PointerEvent<HTMLDivElement>) {
+    const point = calibrationPoint(event);
+    if (!point) return;
+    event.currentTarget.setPointerCapture(event.pointerId);
+    selectionStartRef.current = point;
+    setCalibrationRect({ ...point, width: 0, height: 0 });
+  }
+  function updateCalibrationSelection(event: React.PointerEvent<HTMLDivElement>) {
+    const startPoint = selectionStartRef.current;
+    const point = calibrationPoint(event);
+    if (!startPoint || !point) return;
+    setCalibrationRect({ x: Math.min(startPoint.x, point.x), y: Math.min(startPoint.y, point.y), width: Math.abs(point.x - startPoint.x), height: Math.abs(point.y - startPoint.y) });
+  }
+  function endCalibrationSelection(event: React.PointerEvent<HTMLDivElement>) {
+    updateCalibrationSelection(event);
+    selectionStartRef.current = null;
+  }
+  async function saveModeTemplate() {
+    const frame = calibrationCanvasRef.current;
+    const sessionId = liveSessionIdRef.current;
+    if (!frame || !sessionId || !calibrationRect || !isUsableTemplateRect(calibrationRect) || !isFreshCalibrationSignal(lastOcrSignal)) {
+      setCalibrationStatus('Necesitas un recorte válido y una lectura OCR reciente del modo con al menos 85% de confianza.');
+      return;
+    }
+    const crop = cropFrame(frame, calibrationRect);
+    if (!crop) return;
+    setCalibrating(true);
+    setCalibrationStatus('Comprobando que el recorte contiene realmente el modo…');
+    let detector: Awaited<ReturnType<typeof createLiveModeOcr>> | null = null;
+    try {
+      detector = await createLiveModeOcr();
+      const cropSignal = await detector.scan(crop);
+      if (!cropSignal || cropSignal.detectedGameMode !== lastOcrSignal.detectedGameMode || cropSignal.confidence < 0.75) {
+        setCalibrationStatus('El recorte no contiene el mismo rótulo de modo con suficiente claridad. Ajusta el rectángulo al texto y prueba de nuevo.');
+        return;
+      }
+      const template = createModeTemplate(frame, calibrationRect, cropSignal, sessionId);
+      if (!template) {
+        setCalibrationStatus('La región no tiene contraste suficiente para crear una plantilla fiable.');
+        return;
+      }
+      const nextTemplates = [...modeTemplates, template].slice(-20);
+      saveModeTemplates(nextTemplates);
+      setModeTemplates(nextTemplates);
+      setCalibrationFrameUrl(null);
+      setCalibrationRect(null);
+      setCalibrationStatus(`Plantilla ${template.mode} guardada. No puede validar esta sesión; se comprobará automáticamente en una captura posterior.`);
+    } catch {
+      setCalibrationStatus('No se pudo validar el recorte con OCR. La plantilla no se ha guardado.');
+    } finally {
+      if (detector) await detector.terminate();
+      setCalibrating(false);
+    }
+  }
+  function removeModeTemplate(templateId: string) {
+    const nextTemplates = modeTemplates.filter((template) => template.id !== templateId);
+    saveModeTemplates(nextTemplates);
+    setModeTemplates(nextTemplates);
+  }
   const detectors = [
     ['HUD personal', 'Héroe, nivel, oro, vida, maná, inventario y habilidades visibles.'],
     ['Marcador', 'Última build visible de compañeros y rivales, con antigüedad de la lectura.'],
@@ -440,6 +569,21 @@ function LocalTraining() {
     <section style={{ ...card, borderColor: 'rgba(248,113,113,.35)' }}><div style={{ display: 'flex', gap: '.7rem', alignItems: 'center' }}><ShieldAlert color="#f87171"/><div><strong>Ranked nunca está permitido</strong><div style={{ color: 'var(--text-muted)', fontSize: '.78rem' }}>La sesión necesita dos señales automáticas coincidentes para reconocer un modo permitido. Una señal fiable de Ranked la bloquea de forma irreversible; ante cualquier duda, no hay consejos.</div></div></div></section>
     {companionEnvironment && <section style={{ ...card, borderColor: 'rgba(56,212,200,.34)' }}><div style={{ display: 'flex', justifyContent: 'space-between', gap: '.75rem', flexWrap: 'wrap' }}><div><div style={{ color: 'var(--accent-cyan)', fontSize: '.7rem', fontWeight: 800 }}>ACOMPAÑANTE WINDOWS CONECTADO · v{companionEnvironment.version}</div><strong>Captura limitada a una ventana de Predecessor</strong><p style={{ color: 'var(--text-muted)', fontSize: '.76rem', marginBottom: 0 }}>Atajo de emergencia: {companionEnvironment.panicShortcut}. El overlay ignora el ratón y el teclado; no envía acciones al juego.</p></div><button disabled={scanning || capturing} onClick={() => void scanGame()} style={button}>{scanning ? 'Buscando…' : 'Detectar Predecessor'}</button></div>{gameWindows.length > 0 ? <div style={{ display: 'flex', gap: '.45rem', flexWrap: 'wrap', marginTop: '.75rem' }}>{gameWindows.map((source) => <button key={source.id} disabled={capturing} onClick={() => void selectSource(source.id)} style={{ ...button, borderColor: selectedSourceId === source.id ? 'var(--accent-cyan)' : 'var(--border-color)', color: selectedSourceId === source.id ? 'var(--accent-cyan)' : 'var(--text-primary)' }}>{source.name}</button>)}</div> : <p style={{ color: 'var(--text-muted)', fontSize: '.76rem', marginBottom: 0 }}>Predecessor todavía no está abierto o no expone una ventana capturable.</p>}</section>}
     <section style={card}><h3 style={{ marginTop: 0 }}>{companion ? 'Captura privada de Predecessor' : 'Prototipo de captura local'}</h3><p>La selección manual sólo expresa qué esperas jugar: nunca verifica el modo ni habilita coaching. Los detectores automáticos deben confirmarlo antes de que aparezca un consejo real.</p><label style={{ color: 'var(--text-muted)', fontSize: '.74rem' }}>Modo que esperas jugar</label><div style={{ display: 'flex', gap: '.5rem', flexWrap: 'wrap', marginTop: '.35rem' }}><select value={mode} onChange={(e) => { setMode(e.target.value); setStatus(e.target.value === 'RANKED' ? 'Bloqueado: RiftLine no inicia captura ni consejos en Ranked.' : 'Sin iniciar'); }} disabled={capturing} style={button}>{['STANDARD','QUICK','ARAM','LABS','PRACTICE','AI','CUSTOM','RANKED'].map((value) => <option key={value}>{value}</option>)}</select>{capturing ? <button onClick={stop} style={button}>Detener captura</button> : <button disabled={rankedSelected} onClick={() => void start()} style={{ ...button, opacity: rankedSelected ? .45 : 1, cursor: rankedSelected ? 'not-allowed' : 'pointer', display: 'inline-flex', alignItems: 'center', gap: '.35rem' }}><Crosshair size={14}/> {rankedSelected ? 'Bloqueado en Ranked' : companion ? 'Capturar Predecessor' : 'Compartir pantalla'}</button>}{companion && <button disabled={!capturing} onClick={() => void previewOverlay()} style={{ ...button, opacity: capturing ? 1 : .45 }}>Probar tarjeta del overlay</button>}{companion && <button disabled={!capturing} onClick={saveCalibrationFrame} style={{ ...button, opacity: capturing ? 1 : .45 }}>Guardar muestra local</button>}</div><p style={{ color: rankedSelected || status.includes('silencio') || status.includes('desactivados') ? '#fbbf24' : 'var(--text-muted)' }}>{status}</p>{capturing && companion && <div style={{ padding: '.65rem .75rem', marginBottom: '.65rem', borderRadius: 8, background: 'rgba(255,255,255,.025)', color: 'var(--text-muted)', fontSize: '.75rem' }}><strong style={{ color: modeVerification === 'VERIFIED_ALLOWED' ? 'var(--accent-cyan)' : '#fbbf24' }}>Verificación: {modeVerification}</strong><div>{ocrStatus}</div></div>}<video ref={videoRef} autoPlay muted style={{ width: '100%', maxHeight: 440, background: '#05070b', borderRadius: 8, display: capturing ? 'block' : 'none' }}/></section>
+    {companion && <section style={card}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', gap: '.75rem', flexWrap: 'wrap', alignItems: 'start' }}>
+        <div><div style={{ color: 'var(--accent-violet)', fontSize: '.7rem', fontWeight: 800 }}>SEGUNDA SEÑAL AUTOMÁTICA</div><h3 style={{ margin: '.25rem 0' }}>Calibrar el rótulo del modo</h3><p style={{ color: 'var(--text-muted)', maxWidth: 760, fontSize: '.78rem' }}>Cuando el OCR reconozca un modo permitido, pausa visualmente en ese rótulo, captura el fotograma y dibuja un rectángulo ajustado alrededor del texto. RiftLine volverá a leer sólo ese recorte antes de guardarlo.</p></div>
+        <button disabled={!capturing || calibrating || !isFreshCalibrationSignal(lastOcrSignal)} onClick={beginTemplateCalibration} style={{ ...button, opacity: capturing && isFreshCalibrationSignal(lastOcrSignal) ? 1 : .45 }}>Capturar rótulo para calibrar</button>
+      </div>
+      {calibrationStatus && <p style={{ color: calibrationStatus.includes('guardada') ? 'var(--accent-cyan)' : '#fbbf24', fontSize: '.76rem' }}>{calibrationStatus}</p>}
+      {calibrationFrameUrl && <div style={{ display: 'grid', gap: '.65rem' }}>
+        <div ref={calibrationSurfaceRef} onPointerDown={startCalibrationSelection} onPointerMove={updateCalibrationSelection} onPointerUp={endCalibrationSelection} onPointerCancel={() => { selectionStartRef.current = null; }} style={{ position: 'relative', width: '100%', cursor: 'crosshair', touchAction: 'none', userSelect: 'none', border: '1px solid var(--border-color)', borderRadius: 8, overflow: 'hidden', background: '#05070b' }}>
+          <img src={calibrationFrameUrl} alt="Fotograma local para seleccionar el rótulo del modo" draggable={false} style={{ display: 'block', width: '100%', height: 'auto', pointerEvents: 'none' }} />
+          {calibrationRect && <div aria-hidden style={{ position: 'absolute', left: `${calibrationRect.x * 100}%`, top: `${calibrationRect.y * 100}%`, width: `${calibrationRect.width * 100}%`, height: `${calibrationRect.height * 100}%`, border: '2px solid var(--accent-cyan)', background: 'rgba(56,212,200,.12)', boxShadow: '0 0 0 9999px rgba(0,0,0,.38)', pointerEvents: 'none' }} />}
+        </div>
+        <div style={{ display: 'flex', gap: '.5rem', flexWrap: 'wrap' }}><button disabled={calibrating || !calibrationRect || !isUsableTemplateRect(calibrationRect)} onClick={() => void saveModeTemplate()} style={{ ...button, opacity: calibrating || !calibrationRect || !isUsableTemplateRect(calibrationRect) ? .45 : 1 }}>{calibrating ? 'Validando recorte…' : `Guardar plantilla ${lastOcrSignal?.detectedGameMode ?? ''}`}</button><button disabled={calibrating} onClick={() => { setCalibrationFrameUrl(null); setCalibrationRect(null); }} style={button}>Cancelar</button></div>
+      </div>}
+      {modeTemplates.length > 0 ? <div style={{ display: 'grid', gap: '.45rem', marginTop: '.8rem' }}>{modeTemplates.map((template) => <div key={template.id} style={{ display: 'flex', justifyContent: 'space-between', gap: '.7rem', alignItems: 'center', padding: '.55rem .65rem', borderRadius: 7, background: 'rgba(255,255,255,.025)' }}><div><strong>{template.mode}</strong><small style={{ display: 'block', color: 'var(--text-muted)' }}>{template.sourceWidth}×{template.sourceHeight} · OCR de calibración {Math.round(template.calibrationOcrConfidence * 100)}% · válida desde otra sesión</small></div><button onClick={() => removeModeTemplate(template.id)} style={{ ...button, color: 'var(--text-muted)' }}>Eliminar</button></div>)}</div> : <p style={{ color: 'var(--text-muted)', fontSize: '.76rem', marginBottom: 0 }}>Aún no hay plantillas. El coach seguirá en silencio aunque el OCR reconozca un modo permitido.</p>}
+    </section>}
     {lastReport && <section style={card}><div style={{ display: 'flex', justifyContent: 'space-between', gap: '.7rem', flexWrap: 'wrap' }}><div><div style={{ color: 'var(--accent-cyan)', fontSize: '.7rem', fontWeight: 800 }}>INFORME DE LA ÚLTIMA CAPTURA</div><h3 style={{ margin: '.25rem 0' }}>{lastReport.detectedGameMode ?? lastReport.requestedGameMode} · {lastReport.status}</h3></div><div style={{ display: 'flex', gap: '.4rem', flexWrap: 'wrap' }}><span style={{ ...button, cursor: 'default' }}>{lastReport.summary.observations} observaciones</span><span style={{ ...button, cursor: 'default' }}>{lastReport.summary.spoken} mostradas</span><span style={{ ...button, cursor: 'default' }}>{lastReport.summary.silent} para revisión</span></div></div><p style={{ color: 'var(--text-muted)', fontSize: '.76rem' }}>{lastReport.limitation}</p>{lastReport.events.length > 0 ? <div style={{ display: 'grid', gap: '.45rem' }}>{lastReport.events.slice(-6).map((event) => <article key={event.id} style={{ padding: '.65rem .75rem', borderRadius: 8, background: 'rgba(255,255,255,.025)' }}><div style={{ display: 'flex', justifyContent: 'space-between', gap: '.5rem', flexWrap: 'wrap' }}><strong>{event.eventType.replaceAll('_', ' ')}</strong><small style={{ color: 'var(--text-muted)' }}>{event.advice ? 'Mostrada en overlay' : 'Guardada sin interrumpir'}</small></div>{event.advice && <p style={{ margin: '.3rem 0 0' }}>{event.advice}</p>}</article>)}</div> : <p>No se registraron observaciones: es el resultado correcto cuando el modo o las señales no son suficientemente fiables.</p>}</section>}
     <section style={card}><h3 style={{ marginTop: 0 }}>Qué observará la primera versión</h3><div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: '.6rem' }}>{detectors.map(([title, description]) => <article key={title} style={{ padding: '.75rem', border: '1px solid var(--border-color)', borderRadius: 8, background: 'rgba(255,255,255,.018)' }}><strong>{title}</strong><p style={{ color: 'var(--text-muted)', fontSize: '.74rem', lineHeight: 1.45, marginBottom: 0 }}>{description}</p></article>)}</div></section>
     <section style={card}><h3 style={{ marginTop: 0 }}>Cómo intervendrá el coach</h3><ul style={{ color: 'var(--text-secondary)', lineHeight: 1.55 }}><li>No habla durante un combate.</li><li>Como máximo cuatro intervenciones cada diez minutos y nunca repite el mismo concepto en cinco minutos.</li><li>Una observación dudosa se guarda para el informe, pero no interrumpe.</li><li>Cada consejo explica qué señales lo activaron y qué condición podría cambiarlo.</li></ul><p style={{ color: 'var(--text-muted)', fontSize: '.76rem', marginBottom: 0 }}>La Academia distingue las señales declaradas, guiadas y observadas: el overlay no podrá ascenderte por sí solo.</p></section>

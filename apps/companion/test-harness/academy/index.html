@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'" />
+    <title>RiftLine Companion Test Harness</title>
+    <link rel="stylesheet" href="/harness.css" />
+  </head>
+  <body>
+    <main>
+      <div class="eyebrow">RIFTLINE COMPANION · BANCO LOCAL</div>
+      <h1>Prueba del puente de escritorio</h1>
+      <p>Esta página sólo comprueba el shell, la detección de ventanas y la tarjeta transparente.</p>
+      <div class="actions">
+        <button id="environment">Leer entorno</button>
+        <button id="scan">Buscar Predecessor</button>
+        <button id="overlay">Mostrar overlay de prueba</button>
+        <button id="clear">Ocultar overlay</button>
+      </div>
+      <pre id="result" aria-live="polite">Esperando prueba…</pre>
+    </main>
+    <script src="/harness.js"></script>
+  </body>
+</html>

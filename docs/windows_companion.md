@@ -16,6 +16,17 @@ Este primer hito permite probar de extremo a extremo:
 
 El primer detector ya integrado ejecuta OCR dentro del renderer aislado. Sólo envía a la API el modo normalizado, la confianza y la hora; el fotograma y el texto completo no salen del equipo. Una lectura fiable de Ranked bloquea inmediatamente. Una lectura de un modo permitido cuenta como una sola fuente y no activa consejos por sí misma.
 
+La segunda fuente se calibra desde la propia Academia:
+
+1. el OCR debe identificar un modo permitido con al menos 85% de confianza;
+2. el usuario dibuja un recorte ajustado alrededor del rótulo visible;
+3. RiftLine vuelve a ejecutar OCR únicamente sobre el recorte y exige que confirme el mismo modo;
+4. se guarda localmente una firma visual normalizada, no el fotograma;
+5. esa plantilla queda excluida de la sesión donde se creó;
+6. en una sesión posterior debe superar 94% de similitud y coincidir con el OCR actual para habilitar el modo.
+
+Una plantilla creada para una resolución sólo se prueba contra capturas con una relación de aspecto equivalente. Las señales contradictorias bloquean la sesión en lugar de elegir la más conveniente.
+
 Todavía no se debe considerar un coach automático: los detectores visuales necesitan calibrarse con capturas reales de cada resolución y escala de interfaz. El botón de prueba sólo valida el overlay y está rotulado como prueba; no simula una decisión del coach.
 
 ## Ejecutar contra staging
@@ -27,6 +38,10 @@ RIFTLINE_COMPANION_URL=http://localhost:8080 npm --workspace @predecessor/compan
 ```
 
 Para que una ventana transparente pueda dibujarse encima del juego, Predecessor debe ejecutarse en modo **ventana sin bordes**. El fullscreen exclusivo puede impedir que Windows componga otras ventanas sobre el juego.
+
+## Banco de prueba local
+
+El directorio `apps/companion/test-harness` permite comprobar el puente aislado y la tarjeta real sin abrir una partida. Se sirve en local, se inicia Electron apuntando a ese origen y se ejecuta `check-cdp.mjs` contra el puerto de depuración elegido. La comprobación confirma el entorno expuesto, el filtrado de ventanas, el envío de una tarjeta y la ausencia de controles interactivos en el overlay. Este banco no se incluye en el instalador.
 
 ## Crear el instalador
 

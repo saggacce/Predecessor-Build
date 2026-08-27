@@ -35,16 +35,18 @@ export async function createLiveModeOcr(onProgress?: (progress: number) => void)
     },
   });
   return {
-    async scan(video: HTMLVideoElement): Promise<OcrModeSignal | null> {
-      if (!video.videoWidth || !video.videoHeight) return null;
-      const scale = Math.min(1, 1280 / video.videoWidth);
+    async scan(frame: HTMLVideoElement | HTMLCanvasElement): Promise<OcrModeSignal | null> {
+      const sourceWidth = frame instanceof HTMLVideoElement ? frame.videoWidth : frame.width;
+      const sourceHeight = frame instanceof HTMLVideoElement ? frame.videoHeight : frame.height;
+      if (!sourceWidth || !sourceHeight) return null;
+      const scale = Math.min(1, 1280 / sourceWidth);
       const canvas = document.createElement('canvas');
-      canvas.width = Math.max(1, Math.round(video.videoWidth * scale));
-      canvas.height = Math.max(1, Math.round(video.videoHeight * scale));
+      canvas.width = Math.max(1, Math.round(sourceWidth * scale));
+      canvas.height = Math.max(1, Math.round(sourceHeight * scale));
       const context = canvas.getContext('2d', { willReadFrequently: true });
       if (!context) return null;
       context.filter = 'grayscale(1) contrast(1.65)';
-      context.drawImage(video, 0, 0, canvas.width, canvas.height);
+      context.drawImage(frame, 0, 0, canvas.width, canvas.height);
       const result = await worker.recognize(canvas);
       return detectModeFromOcrText(result.data.text, result.data.confidence);
     },
