@@ -137,6 +137,23 @@ describe('personal learning persistence', () => {
     expect(mockDb.playerReplayMarker.update).toHaveBeenCalledWith({ where: { id: 'marker-1' }, data: { videoTime: 612 } });
   });
 
+  it('labels detector correctness separately from the player decision', async () => {
+    mockDb.playerReplayMarker.findFirst.mockResolvedValue({
+      id: 'marker-1', sessionId: 'replay-1', sourceEventId: 'event-1', status: 'PENDING', signalAssessment: 'UNREVIEWED',
+    });
+    mockDb.playerReplayMarker.update.mockResolvedValue({
+      id: 'marker-1', sourceEventId: 'event-1', status: 'PENDING', signalAssessment: 'FALSE_POSITIVE',
+    });
+    const cookie = await authCookie({ userId: 'user-1', globalRole: 'PLAYER', memberships: [] });
+    const response = await request(app).patch('/player-learning/replays/replay-1/markers/marker-1').set('Cookie', cookie).send({
+      signalAssessment: 'FALSE_POSITIVE',
+    });
+    expect(response.status).toBe(200);
+    expect(response.body.marker.signalAssessment).toBe('FALSE_POSITIVE');
+    expect(mockDb.playerReplayMarker.update).toHaveBeenCalledWith({ where: { id: 'marker-1' }, data: { signalAssessment: 'FALSE_POSITIVE' } });
+    expect(mockDb.playerCompetency.updateMany).not.toHaveBeenCalled();
+  });
+
   it('blocks ranked before any live capture can become active', async () => {
     mockDb.liveTrainingSession.create.mockImplementation(async ({ data }: any) => ({ id: 'live-1', ...data }));
     const cookie = await authCookie({ userId: 'user-1', globalRole: 'PLAYER', memberships: [] });

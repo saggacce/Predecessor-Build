@@ -99,3 +99,5 @@ La Academia no presenta una capacidad prevista como si ya estuviera disponible. 
 Cada área explica qué puede demostrar, qué no puede concluir y cuál es la siguiente validación. Inventario y orden de compra, marcador de ambos equipos y minimapa aparecen explícitamente como pendientes hasta que exista un detector real.
 
 El sistema no publica una precisión estimada, ni porcentajes de falsos positivos o falsos negativos, mientras no haya suficientes capturas reales etiquetadas. Un evento detectado prueba que el detector produjo una señal; no prueba por sí solo que dicha señal fuera correcta.
+
+Los marcadores importados desde una captura permiten validar la señal por separado de la decisión del jugador: **señal confirmada**, **falso positivo** o **no verificable**. Esta etiqueta no modifica competencias. A partir de veinte señales evaluables de un mismo detector puede mostrarse el porcentaje de señales emitidas que fueron confirmadas; esta cifra no mide eventos omitidos ni falsos negativos, que requieren revisar grabaciones completas con un protocolo específico.

@@ -60,4 +60,19 @@ describe('live training review report', () => {
     expect(readiness.observedThisSession).toBe(0);
     expect(readiness.detectors.slice(0, 3).every((detector) => detector.status === 'AVAILABLE_UNVALIDATED')).toBe(true);
   });
+
+  it('estimates only emitted-signal precision after the minimum labelled sample', () => {
+    const validations = [
+      ...Array.from({ length: 18 }, () => ({ eventType: 'DEATH_REVIEW', signalAssessment: 'CONFIRMED_SIGNAL' as const })),
+      ...Array.from({ length: 2 }, () => ({ eventType: 'DEATH_REVIEW', signalAssessment: 'FALSE_POSITIVE' as const })),
+      { eventType: 'DEATH_REVIEW', signalAssessment: 'NOT_VERIFIABLE' as const },
+    ];
+    const readiness = buildLiveDetectorReadiness('UNVERIFIED', [], [], validations);
+    const quality = readiness.detectors.find((detector) => detector.key === 'death_review')?.quality;
+    expect(quality).toEqual({
+      labelledSamples: 21, confirmedSignals: 18, falsePositives: 2, notVerifiable: 1,
+      minimumForEstimate: 20, estimatedSignalPrecision: 0.9, status: 'MINIMUM_REACHED',
+    });
+    expect(readiness.accuracyExplanation).toContain('eventos omitidos');
+  });
 });

@@ -36,6 +36,15 @@ export interface LiveDetectorReadinessItem {
   whatItCanProve: string;
   limitation: string;
   nextStep: string;
+  quality: {
+    labelledSamples: number;
+    confirmedSignals: number;
+    falsePositives: number;
+    notVerifiable: number;
+    minimumForEstimate: number;
+    estimatedSignalPrecision: number | null;
+    status: 'NO_SAMPLES' | 'COLLECTING' | 'MINIMUM_REACHED';
+  };
 }
 
 export interface LiveDetectorReadiness {
@@ -46,6 +55,11 @@ export interface LiveDetectorReadiness {
   canEstimateAccuracy: false;
   accuracyExplanation: string;
   detectors: LiveDetectorReadinessItem[];
+}
+
+export interface LiveDetectorValidationInput {
+  eventType: string;
+  signalAssessment: 'CONFIRMED_SIGNAL' | 'FALSE_POSITIVE' | 'NOT_VERIFIABLE';
 }
 
 function objectValue(value: unknown): Record<string, unknown> {
@@ -92,10 +106,30 @@ function eventCopy(eventType: string) {
   };
 }
 
+const DETECTOR_MINIMUM_LABELLED_SAMPLES = 20;
+
+function detectorQuality(eventTypes: string[], validations: LiveDetectorValidationInput[]): LiveDetectorReadinessItem['quality'] {
+  const relevant = validations.filter((validation) => eventTypes.includes(validation.eventType));
+  const confirmedSignals = relevant.filter((validation) => validation.signalAssessment === 'CONFIRMED_SIGNAL').length;
+  const falsePositives = relevant.filter((validation) => validation.signalAssessment === 'FALSE_POSITIVE').length;
+  const notVerifiable = relevant.filter((validation) => validation.signalAssessment === 'NOT_VERIFIABLE').length;
+  const evaluable = confirmedSignals + falsePositives;
+  return {
+    labelledSamples: relevant.length,
+    confirmedSignals,
+    falsePositives,
+    notVerifiable,
+    minimumForEstimate: DETECTOR_MINIMUM_LABELLED_SAMPLES,
+    estimatedSignalPrecision: evaluable >= DETECTOR_MINIMUM_LABELLED_SAMPLES ? confirmedSignals / evaluable : null,
+    status: relevant.length === 0 ? 'NO_SAMPLES' : evaluable >= DETECTOR_MINIMUM_LABELLED_SAMPLES ? 'MINIMUM_REACHED' : 'COLLECTING',
+  };
+}
+
 export function buildLiveDetectorReadiness(
   modeVerification: string,
   events: LiveTrainingReportEventInput[],
   verificationSignals: unknown = [],
+  validations: LiveDetectorValidationInput[] = [],
 ): LiveDetectorReadiness {
   const signalCount = Array.isArray(verificationSignals) ? verificationSignals.length : 0;
   const eventCount = (eventType: string) => events.filter((event) => event.eventType === eventType).length;
@@ -113,6 +147,7 @@ export function buildLiveDetectorReadiness(
       whatItCanProve: 'Reconoce el rótulo del modo mediante OCR y exige una segunda señal visual independiente antes de habilitar el coach.',
       limitation: 'No identifica por sí solo el estado de la partida ni sustituye una fuente oficial del modo.',
       nextStep: blocked ? 'La captura debe permanecer detenida.' : verified ? 'Mantener la regla de bloqueo ante cualquier señal contradictoria.' : 'Calibrar una plantilla en una sesión y verificarla en otra captura permitida.',
+      quality: detectorQuality([], validations),
     },
     {
       key: 'death_review',
@@ -123,6 +158,7 @@ export function buildLiveDetectorReadiness(
       whatItCanProve: 'Localiza un momento posterior a una muerte propia para abrir el replay en el intervalo anterior.',
       limitation: 'No demuestra la causa de la muerte, el posicionamiento ni qué alternativa era ejecutable.',
       nextStep: deathSignals > 0 ? 'Confirmar en el replay que el marcador coincide con una muerte propia.' : 'Probar una muerte propia en Práctica o contra IA y revisar el marcador generado.',
+      quality: detectorQuality(['DEATH_REVIEW'], validations),
     },
     {
       key: 'skill_point',
@@ -133,6 +169,7 @@ export function buildLiveDetectorReadiness(
       whatItCanProve: 'Detecta un aviso visible de punto de habilidad pendiente.',
       limitation: 'No sabe todavía cuánto tiempo estuvo pendiente ni qué habilidad convenía subir.',
       nextStep: skillSignals > 0 ? 'Comprobar en el replay la duración del aviso y el contexto de la subida.' : 'Provocar una subida de nivel en Práctica y comprobar si se registra una sola señal.',
+      quality: detectorQuality(['SKILL_LEVEL_AVAILABLE'], validations),
     },
     {
       key: 'inventory_build',
@@ -143,6 +180,7 @@ export function buildLiveDetectorReadiness(
       whatItCanProve: 'Todavía no aporta evidencia automática.',
       limitation: 'No se leen de forma fiable objetos propios, orden de compra, oro ni momento de regreso a base.',
       nextStep: 'Calibrar regiones del HUD e identificar objetos con datos versionados antes de emitir recomendaciones.',
+      quality: detectorQuality(['BUILD_ADAPTATION', 'RECALL_WINDOW'], validations),
     },
     {
       key: 'scoreboard_context',
@@ -153,6 +191,7 @@ export function buildLiveDetectorReadiness(
       whatItCanProve: 'Todavía no aporta evidencia automática.',
       limitation: 'No se conoce la build visible de aliados o rivales ni la antigüedad de esa lectura.',
       nextStep: 'Detectar cuándo está abierto el marcador y extraer una instantánea con sello temporal.',
+      quality: detectorQuality([], validations),
     },
     {
       key: 'minimap_context',
@@ -163,6 +202,7 @@ export function buildLiveDetectorReadiness(
       whatItCanProve: 'Todavía no aporta evidencia automática.',
       limitation: 'No se reconstruyen rutas, intención, niebla de guerra ni posiciones que no fueran visibles.',
       nextStep: 'Empezar por eventos discretos y verificables; no inferir pathing o posicionamiento desde una sola imagen.',
+      quality: detectorQuality(['MINIMAP_INFORMATION', 'VISION_OPPORTUNITY', 'OBJECTIVE_PREPARATION'], validations),
     },
   ];
   const observedThisSession = detectors.filter((detector) => detector.status === 'VERIFIED_THIS_SESSION' || detector.status === 'SIGNAL_CAPTURED').length;
@@ -172,7 +212,9 @@ export function buildLiveDetectorReadiness(
     totalCount: detectors.length,
     observedThisSession,
     canEstimateAccuracy: false,
-    accuracyExplanation: 'Aún no hay suficientes capturas reales etiquetadas para calcular precisión, falsos positivos o falsos negativos. Ver una señal no equivale a validar el detector.',
+    accuracyExplanation: detectors.some((detector) => detector.quality.estimatedSignalPrecision !== null)
+      ? 'La precisión mostrada sólo mide cuántas señales emitidas fueron confirmadas; todavía no permite medir eventos omitidos ni falsos negativos.'
+      : 'Aún no hay suficientes capturas reales etiquetadas para estimar el acierto de las señales. Ver una señal no equivale a validar el detector y los falsos negativos requieren un estudio separado.',
     detectors,
   };
 }

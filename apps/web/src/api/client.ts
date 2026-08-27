@@ -1558,6 +1558,15 @@ export interface LiveDetectorReadiness {
     whatItCanProve: string;
     limitation: string;
     nextStep: string;
+    quality: {
+      labelledSamples: number;
+      confirmedSignals: number;
+      falsePositives: number;
+      notVerifiable: number;
+      minimumForEstimate: number;
+      estimatedSignalPrecision: number | null;
+      status: 'NO_SAMPLES' | 'COLLECTING' | 'MINIMUM_REACHED';
+    };
   }>;
 }
 
@@ -1626,8 +1635,9 @@ export interface EncyclopediaEntry {
 }
 
 export interface ReplayMarker {
-  id: string; gameTime: number; videoTime: number; category: string; title: string; question: string;
+  id: string; gameTime: number; videoTime: number; sourceEventId: string | null; category: string; title: string; question: string;
   status: LearningReviewStatus; conclusion: string | null;
+  signalAssessment: 'UNREVIEWED' | 'CONFIRMED_SIGNAL' | 'FALSE_POSITIVE' | 'NOT_VERIFIABLE';
 }
 
 export interface PlayerReplaySession {
@@ -1919,8 +1929,8 @@ export const apiClient = {
       fetchApi<{ session: PlayerReplaySession }>('/player-learning/replays', { method: 'POST', body: JSON.stringify(data) }),
     updateReplay: (sessionId: string, data: { title?: string; recordingUrl?: string | null; offsetSeconds?: number }) =>
       fetchApi<{ session: PlayerReplaySession }>(`/player-learning/replays/${encodeURIComponent(sessionId)}`, { method: 'PATCH', body: JSON.stringify(data) }),
-    updateReplayMarker: (sessionId: string, markerId: string, status: LearningReviewStatus, conclusion?: string | null) =>
-      fetchApi<{ marker: ReplayMarker }>(`/player-learning/replays/${encodeURIComponent(sessionId)}/markers/${encodeURIComponent(markerId)}`, { method: 'PATCH', body: JSON.stringify({ status, conclusion }) }),
+    updateReplayMarker: (sessionId: string, markerId: string, data: { status?: LearningReviewStatus; conclusion?: string | null; signalAssessment?: ReplayMarker['signalAssessment'] }) =>
+      fetchApi<{ marker: ReplayMarker }>(`/player-learning/replays/${encodeURIComponent(sessionId)}/markers/${encodeURIComponent(markerId)}`, { method: 'PATCH', body: JSON.stringify(data) }),
     startLiveSession: (requestedGameMode: string) => fetchApi<{ session: { id: string; requestedGameMode: string; modeVerification: string; status: string }; canAdvise: boolean; reason: string }>('/player-learning/live/sessions', { method: 'POST', body: JSON.stringify({ requestedGameMode, captureConsent: true }) }),
     verifyLiveMode: (sessionId: string, detectedGameMode: string, signal: { source: 'screen_ocr' | 'screen_template' | 'match_api'; confidence: number; capturedAt: string }) =>
       fetchApi<{ session: { id: string; detectedGameMode: string | null; modeVerification: string; status: string }; canAdvise: boolean; reason: string | null }>(`/player-learning/live/sessions/${encodeURIComponent(sessionId)}/verify-mode`, { method: 'POST', body: JSON.stringify({ detectedGameMode, signal }) }),

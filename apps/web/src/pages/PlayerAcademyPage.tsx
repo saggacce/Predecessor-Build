@@ -279,7 +279,7 @@ function ReplayMarkerReview({ sessionId, marker, onChanged }: { sessionId: strin
     }
     setSaving(true);
     try {
-      await apiClient.playerLearning.updateReplayMarker(sessionId, marker.id, status, conclusion.trim());
+      await apiClient.playerLearning.updateReplayMarker(sessionId, marker.id, { status, conclusion: conclusion.trim() });
       toast.success('Conclusión guardada como evidencia guiada');
       await onChanged();
     } catch (error) {
@@ -288,9 +288,26 @@ function ReplayMarkerReview({ sessionId, marker, onChanged }: { sessionId: strin
       setSaving(false);
     }
   }
+  async function assessSignal(signalAssessment: Exclude<ReplayMarker['signalAssessment'], 'UNREVIEWED'>) {
+    setSaving(true);
+    try {
+      await apiClient.playerLearning.updateReplayMarker(sessionId, marker.id, { signalAssessment });
+      toast.success('Validación del detector guardada');
+      await onChanged();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'No se pudo validar la señal');
+    } finally {
+      setSaving(false);
+    }
+  }
   return <article style={{ marginTop: '.65rem', padding: '.75rem', borderRadius: 8, background: 'rgba(255,255,255,.025)' }}>
     <div style={{ display: 'flex', justifyContent: 'space-between', gap: '.6rem', flexWrap: 'wrap' }}><strong>{captureTime(marker.videoTime)} de vídeo · {marker.title}</strong><small style={{ color: marker.status === 'PENDING' ? '#fbbf24' : 'var(--accent-cyan)' }}>{REPLAY_STATUS_LABELS[marker.status]}</small></div>
     <p style={{ margin: '.4rem 0' }}>{marker.question}</p>
+    {marker.sourceEventId && <div style={{ margin: '.6rem 0', padding: '.65rem', border: '1px solid rgba(167,139,250,.25)', borderRadius: 7, background: 'rgba(124,92,252,.04)' }}><strong style={{ fontSize: '.76rem' }}>Primero valida el detector</strong><p style={{ color: 'var(--text-muted)', fontSize: '.72rem', margin: '.25rem 0 .45rem' }}>¿El vídeo muestra realmente el evento que RiftLine señaló? Esto no valora todavía si tu decisión fue buena o mala.</p><div style={{ display: 'flex', gap: '.35rem', flexWrap: 'wrap' }}>{([
+      ['CONFIRMED_SIGNAL', 'Sí, acertó'],
+      ['FALSE_POSITIVE', 'No, falso positivo'],
+      ['NOT_VERIFIABLE', 'No se puede comprobar'],
+    ] as const).map(([assessment, label]) => <button key={assessment} disabled={saving} onClick={() => void assessSignal(assessment)} style={{ ...button, opacity: saving ? .55 : 1, borderColor: marker.signalAssessment === assessment ? 'var(--accent-violet)' : 'var(--border-color)' }}>{label}</button>)}</div></div>}
     <textarea value={conclusion} onChange={(event) => setConclusion(event.target.value)} maxLength={1600} rows={3} placeholder="Separa lo que ves, lo que interpretas y qué harías en una situación similar." style={{ ...button, width: '100%', boxSizing: 'border-box', resize: 'vertical', lineHeight: 1.45 }} />
     <div style={{ display: 'flex', gap: '.4rem', flexWrap: 'wrap', marginTop: '.5rem' }}>{([
       ['GOOD_DECISION', 'Buena decisión'],
@@ -402,6 +419,11 @@ function DetectorReadinessPanel({ readiness }: { readiness: LiveDetectorReadines
           <summary style={{ cursor: 'pointer' }}><span style={{ display: 'block', color: 'var(--text-muted)', fontSize: '.65rem', textTransform: 'uppercase' }}>{detector.area}</span><strong>{detector.label}</strong><span style={{ display: 'block', color: status.color, fontSize: '.7rem', marginTop: '.2rem' }}>{status.label}{detector.sessionSignals > 0 ? ` · ${detector.sessionSignals} señales` : ''}</span></summary>
           <p style={{ color: 'var(--text-secondary)', fontSize: '.74rem' }}><strong>Puede demostrar:</strong> {detector.whatItCanProve}</p>
           <p style={{ color: 'var(--text-muted)', fontSize: '.74rem' }}><strong>No puede demostrar:</strong> {detector.limitation}</p>
+          <p style={{ color: 'var(--text-muted)', fontSize: '.74rem' }}><strong>Calibración:</strong> {detector.quality.status === 'NO_SAMPLES'
+            ? 'sin señales revisadas todavía.'
+            : detector.quality.estimatedSignalPrecision === null
+              ? `${detector.quality.labelledSamples} revisadas · ${detector.quality.confirmedSignals} confirmadas · ${detector.quality.falsePositives} falsos positivos · mínimo ${detector.quality.minimumForEstimate} señales evaluables para estimar acierto.`
+              : `${Math.round(detector.quality.estimatedSignalPrecision * 100)}% de las señales emitidas fueron confirmadas en ${detector.quality.confirmedSignals + detector.quality.falsePositives} casos evaluables; no mide eventos omitidos.`}</p>
           <p style={{ fontSize: '.74rem', marginBottom: 0 }}><strong>Siguiente validación:</strong> {detector.nextStep}</p>
         </details>;
       })}

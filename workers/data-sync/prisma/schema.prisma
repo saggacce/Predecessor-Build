@@ -1247,11 +1247,14 @@ model PlayerReplayMarker {
   /// "PENDING" | "CONFIRMED_MISTAKE" | "GOOD_DECISION" | "INCONCLUSIVE"
   status        String              @default("PENDING")
   conclusion    String?
+  /// "UNREVIEWED" | "CONFIRMED_SIGNAL" | "FALSE_POSITIVE" | "NOT_VERIFIABLE"
+  signalAssessment String           @default("UNREVIEWED")
   createdAt     DateTime            @default(now())
   updatedAt     DateTime            @updatedAt
   session       PlayerReplaySession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
 
   @@index([sessionId, gameTime])
+  @@index([signalAssessment, updatedAt(sort: Desc)])
 }
 
 /// Local personal training session. Live advice is fail-closed: only explicitly

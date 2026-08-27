@@ -16,11 +16,12 @@ import {
 import { evaluateLiveMode, evaluateLiveModeSignals, type LiveModeSignal } from '../services/live-training-policy.js';
 import { buildLearningProgress } from '../services/player-learning-progress-service.js';
 import { decideLiveCoachDelivery, LIVE_COACH_EVENT_TYPES } from '../services/live-coach-delivery-policy.js';
-import { buildLiveDetectorReadiness, buildLiveTrainingReview } from '../services/live-training-report-service.js';
+import { buildLiveDetectorReadiness, buildLiveTrainingReview, type LiveDetectorValidationInput } from '../services/live-training-report-service.js';
 
 export const playerLearningRouter = Router();
 
 const reviewStatus = z.enum(['PENDING', 'CONFIRMED_MISTAKE', 'GOOD_DECISION', 'INCONCLUSIVE']);
+const signalAssessment = z.enum(['UNREVIEWED', 'CONFIRMED_SIGNAL', 'FALSE_POSITIVE', 'NOT_VERIFIABLE']);
 
 async function ownPlayer(userId: string) {
   const user = await db.user.findUnique({ where: { id: userId }, select: { linkedPlayerId: true } });
@@ -41,6 +42,30 @@ async function assertOwnMatchPlayer(userId: string, matchId: string, matchPlayer
 async function ownProfile(userId: string) {
   const playerId = await ownPlayer(userId);
   return ensureLearningProfile(userId, playerId);
+}
+
+async function liveDetectorValidations(profileId: string): Promise<LiveDetectorValidationInput[]> {
+  const markers = await db.playerReplayMarker.findMany({
+    where: {
+      session: { profileId }, sourceEventId: { not: null },
+      signalAssessment: { in: ['CONFIRMED_SIGNAL', 'FALSE_POSITIVE', 'NOT_VERIFIABLE'] },
+    },
+    select: { sourceEventId: true, signalAssessment: true },
+    orderBy: { updatedAt: 'desc' },
+    take: 500,
+  });
+  const sourceEventIds = [...new Set(markers.flatMap((marker) => marker.sourceEventId ? [marker.sourceEventId] : []))];
+  if (!sourceEventIds.length) return [];
+  const events = await db.liveTrainingEvent.findMany({
+    where: { id: { in: sourceEventIds }, session: { profileId } },
+    select: { id: true, eventType: true },
+  });
+  const eventTypes = new Map(events.map((event) => [event.id, event.eventType]));
+  return markers.flatMap((marker) => {
+    const eventType = marker.sourceEventId ? eventTypes.get(marker.sourceEventId) : null;
+    if (!eventType || marker.signalAssessment === 'UNREVIEWED') return [];
+    return [{ eventType, signalAssessment: marker.signalAssessment as LiveDetectorValidationInput['signalAssessment'] }];
+  });
 }
 
 playerLearningRouter.get('/knowledge/coverage', requireAuth, async (_req, res, next) => {
@@ -65,8 +90,14 @@ playerLearningRouter.get('/knowledge', requireAuth, async (req, res, next) => {
   }
 });
 
-playerLearningRouter.get('/live/readiness', requireAuth, (_req, res) => {
-  res.json({ readiness: buildLiveDetectorReadiness('UNVERIFIED', []) });
+playerLearningRouter.get('/live/readiness', requireAuth, async (req, res, next) => {
+  try {
+    const profile = await ownProfile(req.user!.userId);
+    const validations = await liveDetectorValidations(profile.id);
+    res.json({ readiness: buildLiveDetectorReadiness('UNVERIFIED', [], [], validations) });
+  } catch (error) {
+    next(error);
+  }
 });
 
 playerLearningRouter.get('/profile/me', requireAuth, async (req, res, next) => {
@@ -415,7 +446,13 @@ playerLearningRouter.patch('/replays/:sessionId', requireAuth, async (req, res, 
 
 playerLearningRouter.patch('/replays/:sessionId/markers/:markerId', requireAuth, async (req, res, next) => {
   try {
-    const body = z.object({ status: reviewStatus, conclusion: z.string().trim().max(1600).nullable().optional() }).parse(req.body);
+    const body = z.object({
+      status: reviewStatus.optional(),
+      conclusion: z.string().trim().max(1600).nullable().optional(),
+      signalAssessment: signalAssessment.optional(),
+    }).refine((value) => value.status !== undefined || value.conclusion !== undefined || value.signalAssessment !== undefined, {
+      message: 'At least one replay marker field is required',
+    }).parse(req.body);
     const profile = await ownProfile(req.user!.userId);
     const marker = await db.playerReplayMarker.findFirst({
       where: { id: String(req.params.markerId), sessionId: String(req.params.sessionId), session: { profileId: profile.id } },
@@ -424,8 +461,11 @@ playerLearningRouter.patch('/replays/:sessionId/markers/:markerId', requireAuth,
     if (marker.status !== 'PENDING' && body.status === 'PENDING') {
       throw new AppError(409, 'A reviewed replay moment cannot be reset to pending', 'REPLAY_REVIEW_ALREADY_CREDITED');
     }
+    if (body.signalAssessment && !marker.sourceEventId) {
+      throw new AppError(409, 'Only an automatically detected moment can validate a detector signal', 'REPLAY_SIGNAL_NOT_DETECTED');
+    }
     const updated = await db.playerReplayMarker.update({ where: { id: marker.id }, data: body });
-    if (marker.status === 'PENDING' && body.status !== 'PENDING') {
+    if (marker.status === 'PENDING' && body.status && body.status !== 'PENDING') {
       await db.playerCompetency.updateMany({
         where: { profileId: profile.id, competencyKey: 'review_autonomy' },
         data: { appliedCount: { increment: 1 }, evidenceCount: { increment: 1 }, lastEvidenceAt: new Date() },
@@ -524,7 +564,8 @@ playerLearningRouter.get('/live/sessions/:id/report', requireAuth, async (req, r
     }, {});
     const spoken = session.events.filter((event) => !!event.advice).length;
     const review = buildLiveTrainingReview(session.startedAt, session.events);
-    const readiness = buildLiveDetectorReadiness(session.modeVerification, session.events, session.verificationSignals);
+    const validations = await liveDetectorValidations(profile.id);
+    const readiness = buildLiveDetectorReadiness(session.modeVerification, session.events, session.verificationSignals, validations);
     res.json({
       report: {
         id: session.id,
