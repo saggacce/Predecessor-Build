@@ -27,6 +27,8 @@ La segunda fuente se calibra desde la propia Academia:
 
 Una plantilla creada para una resolución sólo se prueba contra capturas con una relación de aspecto equivalente. Las señales contradictorias bloquean la sesión en lugar de elegir la más conveniente.
 
+Después de verificar un modo permitido, el mismo OCR puede registrar dos señales conservadoras del HUD: una pantalla propia de reaparición y un aviso explícito de punto de habilidad disponible. Ambas se guardan únicamente para el informe posterior, con las entradas que faltan y sin puntuación ni consejo en vivo. El sistema no deduce por qué murió el jugador ni qué habilidad debía subir; esas conclusiones requieren héroe, estado de la partida y replay.
+
 Todavía no se debe considerar un coach automático: los detectores visuales necesitan calibrarse con capturas reales de cada resolución y escala de interfaz. El botón de prueba sólo valida el overlay y está rotulado como prueba; no simula una decisión del coach.
 
 ## Ejecutar contra staging

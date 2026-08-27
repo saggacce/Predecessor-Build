@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { detectModeFromOcrText } from './liveModeOcr';
+import { detectHudSignalsFromOcrText, detectModeFromOcrText } from './liveModeOcr';
 
 describe('live mode OCR interpretation', () => {
   it('recognizes ranked labels before all allowed modes and raises a safe blocking signal', () => {
@@ -23,5 +23,13 @@ describe('live mode OCR interpretation', () => {
 
   it('returns no signal for unrelated HUD text', () => {
     expect(detectModeFromOcrText('LEVEL 7 GOLD 2150 FANGTOOTH', 96)).toBeNull();
+  });
+
+  it('extracts only conservative HUD observations without retaining OCR text', () => {
+    expect(detectHudSignalsFromOcrText('YOU HAVE BEEN SLAIN · RESPAWNING IN 18', 91, '2026-08-27T18:00:00.000Z')).toEqual([{
+      eventType: 'DEATH_REVIEW', confidence: 0.91, capturedAt: '2026-08-27T18:00:00.000Z', matchedLabel: 'respawn_indicator',
+    }]);
+    expect(detectHudSignalsFromOcrText('UPGRADE ABILITY', 88)[0]).toMatchObject({ eventType: 'SKILL_LEVEL_AVAILABLE', confidence: 0.88 });
+    expect(detectHudSignalsFromOcrText('RESPAWNING IN 12', 64)).toEqual([]);
   });
 });
