@@ -2,7 +2,7 @@
 
 ## Estado del prototipo
 
-El acompañante es una aplicación de escritorio separada de la web. Reutiliza la sección **Academia > Entrenamiento local**, captura exclusivamente una ventana cuyo nombre corresponda a Predecessor y muestra los consejos en una ventana transparente que ignora ratón y teclado.
+El acompañante es una aplicación de escritorio separada de la web. Reutiliza la sección **Academia > Entrenamiento local**, captura exclusivamente una ventana cuyo nombre corresponda a Predecessor y muestra los consejos en una ventana transparente que ignora ratón y teclado. La versión privada `0.1.x` abre staging local en `http://localhost:8080`; este valor deberá cambiar a `https://riftline.app` antes de una versión pública.
 
 Este primer hito permite probar de extremo a extremo:
 

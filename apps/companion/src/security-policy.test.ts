@@ -22,6 +22,10 @@ describe('companion security policy', () => {
     expect(isAllowedNavigation('https://riftline.app/academy', portal)).toBe(false);
   });
 
+  it('opens the local staging portal by default in the private 0.1 build', () => {
+    expect(resolvePortalUrl(['electron', '.'], {}).href).toBe('http://localhost:8080/academy?companion=1');
+  });
+
   it('matches only Predecessor game windows', () => {
     expect(isPredecessorWindowName('Predecessor')).toBe(true);
     expect(isPredecessorWindowName('PredecessorClient-Win64-Shipping')).toBe(true);

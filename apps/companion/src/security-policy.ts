@@ -1,10 +1,11 @@
 const PRODUCTION_ORIGIN = 'https://riftline.app';
+const PRIVATE_TEST_ORIGIN = 'http://localhost:8080';
 
 export function resolvePortalUrl(argv: string[], environment: NodeJS.ProcessEnv): URL {
   const argument = argv.find((value) => value.startsWith('--portal-url='));
   const candidate = argument?.slice('--portal-url='.length)
     ?? environment.RIFTLINE_COMPANION_URL
-    ?? `${PRODUCTION_ORIGIN}/academy?companion=1`;
+    ?? `${PRIVATE_TEST_ORIGIN}/academy?companion=1`;
   const url = new URL(candidate);
   if (!isTrustedPortalUrl(url)) {
     throw new Error('RiftLine Companion sólo acepta https://riftline.app o un servidor local explícito.');
