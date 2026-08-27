@@ -98,6 +98,8 @@ export interface RecentMatch {
   date: string;
   duration: number;
   gameMode: string;
+  version: string | null;
+  ratingDelta: number | null;
   heroName: string | null;
   heroImageUrl: string | null;
   wardsPlaced: number | null;
@@ -466,6 +468,7 @@ export interface MatchEventWard {
   gameTime: number;
   eventType: string;
   wardType: string;
+  playerId: string | null;
   team: string | null;
   locationX: number | null;
   locationY: number | null;
@@ -1219,6 +1222,12 @@ export interface ChampionPoolContext {
 }
 
 export interface MatchBuildAnalysis {
+  dataContext: {
+    matchPatch: string | null;
+    catalogPatch: string | null;
+    catalogFallback: boolean;
+    disclosure: string;
+  };
   matchId: string;
   matchPlayerId: string;
   heroSlug: string;
@@ -1407,6 +1416,38 @@ export interface LearningMoment {
   transferablePrinciple: string;
   confidence: { level: 'low' | 'medium' | 'high'; basis: string };
   limitation: string;
+}
+
+export type LearningReviewStatus = 'PENDING' | 'CONFIRMED_MISTAKE' | 'GOOD_DECISION' | 'INCONCLUSIVE';
+
+export interface LearningMomentReview {
+  id: string;
+  userId: string;
+  matchId: string;
+  matchPlayerId: string;
+  momentId: string;
+  status: LearningReviewStatus;
+  note: string | null;
+  reviewedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PlayerTrainingCycle {
+  id: string;
+  userId: string;
+  playerId: string;
+  focusKey: string;
+  title: string;
+  cue: string;
+  targetMatches: number;
+  status: 'ACTIVE' | 'COMPLETED' | 'ARCHIVED';
+  sourceMatchId: string | null;
+  sourceMomentId: string | null;
+  startedAt: string;
+  completedAt: string | null;
+  matchesPlayed: number;
+  progress: number;
 }
 
 export interface PlayerMatchCoachAnalysis {
@@ -1657,6 +1698,18 @@ export const apiClient = {
       fetchApi<PlayerMatchCoachAnalysis>(`/matches/${matchId}/coach-analysis/${matchPlayerId}`),
     liveCoachAnalysis: (predggUuid: string) =>
       fetchApi<PlayerMatchCoachAnalysis>(`/matches/live/${predggUuid}/coach-analysis`),
+  },
+
+  playerLearning: {
+    reviews: (matchId: string, matchPlayerId: string) =>
+      fetchApi<{ reviews: LearningMomentReview[] }>(`/player-learning/matches/${encodeURIComponent(matchId)}/reviews?matchPlayerId=${encodeURIComponent(matchPlayerId)}`),
+    saveReview: (matchId: string, momentId: string, data: { matchPlayerId: string; status: LearningReviewStatus; note?: string | null }) =>
+      fetchApi<{ review: LearningMomentReview }>(`/player-learning/matches/${encodeURIComponent(matchId)}/reviews/${encodeURIComponent(momentId)}`, { method: 'PUT', body: JSON.stringify(data) }),
+    cycles: () => fetchApi<{ cycles: PlayerTrainingCycle[] }>('/player-learning/cycles/me'),
+    createCycle: (data: { focusKey: string; title: string; cue: string; targetMatches?: number; sourceMatchId?: string | null; sourceMomentId?: string | null }) =>
+      fetchApi<{ cycle: PlayerTrainingCycle }>('/player-learning/cycles', { method: 'POST', body: JSON.stringify(data) }),
+    updateCycle: (id: string, status: 'COMPLETED' | 'ARCHIVED') =>
+      fetchApi<{ cycle: PlayerTrainingCycle }>(`/player-learning/cycles/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify({ status }) }),
   },
 
   reports: {

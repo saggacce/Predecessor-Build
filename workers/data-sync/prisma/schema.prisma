@@ -604,6 +604,8 @@ model User {
   scrimSchedules      ScrimSchedule[]
   playbookEntries     PlaybookEntry[]
   weeklyGoals         WeeklyGoal[]
+  learningMomentReviews PlayerLearningMomentReview[]
+  trainingCycles      PlayerTrainingCycle[]
   reviewSessions      ReviewSession[]
   actionItems         ActionItem[]
   addedRivalRosters   RivalRosterEntry[]
@@ -1075,6 +1077,53 @@ model WeeklyGoal {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
   user         User     @relation(fields: [userId], references: [id])
+}
+
+/// A player's own conclusion after reviewing a coach-suggested replay window.
+/// The generated moment remains deterministic; this record stores the human
+/// validation so later coaching can distinguish hypothesis from confirmed learning.
+model PlayerLearningMomentReview {
+  id            String    @id @default(cuid())
+  userId        String
+  matchId       String
+  matchPlayerId String
+  momentId      String
+  /// "PENDING" | "CONFIRMED_MISTAKE" | "GOOD_DECISION" | "INCONCLUSIVE"
+  status        String    @default("PENDING")
+  note          String?
+  reviewedAt    DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, matchId, momentId])
+  @@index([userId, status, updatedAt(sort: Desc)])
+  @@index([matchId, matchPlayerId])
+}
+
+/// A focused five-match learning cycle for soloQ. Team coaching remains in
+/// PlayerGoal/TeamGoal, so personal and coordinated contexts do not overwrite
+/// one another.
+model PlayerTrainingCycle {
+  id             String    @id @default(cuid())
+  userId         String
+  playerId       String
+  focusKey       String
+  title          String
+  cue            String
+  targetMatches  Int       @default(5)
+  /// "ACTIVE" | "COMPLETED" | "ARCHIVED"
+  status         String    @default("ACTIVE")
+  sourceMatchId  String?
+  sourceMomentId String?
+  startedAt      DateTime  @default(now())
+  completedAt    DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, status, startedAt(sort: Desc)])
+  @@index([playerId, startedAt(sort: Desc)])
 }
 
 /// Internal communication between team members.

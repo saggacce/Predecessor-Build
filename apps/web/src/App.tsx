@@ -43,6 +43,7 @@ import Playbook from './pages/Playbook';
 import ReviewSessions from './pages/ReviewSessions';
 import { useAuth } from './hooks/useAuth';
 import { ViewAsProvider, useViewAs, type ViewAsRole } from './hooks/useViewAs';
+import { WorkspaceModeProvider, useWorkspaceMode } from './hooks/useWorkspaceMode';
 import { apiClient } from './api/client';
 import { LanguageFirstTimeModal, shouldShowLanguageModal } from './components/LanguageSwitcher';
 import i18n, { isSupportedLanguage } from './i18n';
@@ -54,6 +55,7 @@ function WorkspaceHeader() {
   const { authenticated, user, refreshInternalSession } = useAuth();
   const { t } = useTranslation();
   const navigate = useNavigate();
+  const { mode, setMode } = useWorkspaceMode();
 
   async function handleInternalLogout() {
     try {
@@ -97,6 +99,12 @@ function WorkspaceHeader() {
       )}
 
       <div className="workspace-meta">
+        {user?.linkedPlayerId && (user.memberships?.length ?? 0) > 0 && user.globalRole !== 'PLATFORM_ADMIN' && (
+          <div role="group" aria-label="Espacio de trabajo" style={{ display: 'flex', gap: 2, padding: 2, borderRadius: 7, border: '1px solid var(--border-color)', background: 'rgba(255,255,255,0.025)' }}>
+            <button type="button" onClick={() => { setMode('player'); navigate('/'); }} style={{ padding: '0.24rem 0.5rem', border: 0, borderRadius: 5, background: mode === 'player' ? 'rgba(56,212,200,0.14)' : 'transparent', color: mode === 'player' ? 'var(--accent-cyan)' : 'var(--text-muted)', cursor: 'pointer', fontSize: '0.66rem', fontWeight: 750 }}>Jugador</button>
+            <button type="button" onClick={() => { setMode('team'); navigate('/'); }} style={{ padding: '0.24rem 0.5rem', border: 0, borderRadius: 5, background: mode !== 'player' ? 'rgba(167,139,250,0.14)' : 'transparent', color: mode !== 'player' ? 'var(--accent-violet)' : 'var(--text-muted)', cursor: 'pointer', fontSize: '0.66rem', fontWeight: 750 }}>Equipo</button>
+          </div>
+        )}
         {/* View As role selector — admin only */}
         {isAdmin && (
           <ViewAsSelector />
@@ -125,7 +133,7 @@ function WorkspaceHeader() {
         {latestPatch && (
           <div className="workspace-chip">
             <Zap size={13} />
-            {t('common.patch', { name: latestPatch.name })}
+            Catálogo v{latestPatch.name}
           </div>
         )}
 
@@ -250,11 +258,14 @@ function SidebarSectionEl({ section, isOpen, onToggle, badgeCount = 0 }: Sidebar
 function useSections(t: (key: string) => string): SidebarSection[] {
   const { user } = useAuth();
   const { viewAs } = useViewAs();
+  const { mode } = useWorkspaceMode();
   const effectiveRole = viewAs ?? user?.globalRole;
   const hasTeam = viewAs
     ? ['MANAGER', 'COACH', 'ANALISTA', 'JUGADOR'].includes(viewAs)
     : (user?.memberships?.length ?? 0) > 0;
   const isStandalonePlayer = !!user && (
+    (mode === 'player' && effectiveRole !== 'PLATFORM_ADMIN')
+    ||
     effectiveRole === 'PLAYER'
     || (!hasTeam && effectiveRole !== 'PLATFORM_ADMIN' && effectiveRole !== 'MANAGER')
   );
@@ -365,6 +376,7 @@ function useSections(t: (key: string) => string): SidebarSection[] {
 function Sidebar() {
   const { authenticated, loading, user, internalLoading } = useAuth();
   const { viewAs } = useViewAs();
+  const { mode } = useWorkspaceMode();
   const location = useLocation();
   const { t } = useTranslation();
   const sections = useSections(t);
@@ -428,7 +440,7 @@ function Sidebar() {
           </div>
           <div>
 <div className="logo-name">RiftLine</div>
-            <div className="sidebar-subtitle">Competitive Intel</div>
+            <div className="sidebar-subtitle">Aprendizaje competitivo</div>
           </div>
         </div>
       </div>
@@ -439,7 +451,7 @@ function Sidebar() {
             const effectiveRole = viewAs ?? user?.globalRole;
             const isPlayer = effectiveRole === 'PLAYER';
             const hasTeam = viewAs ? ['MANAGER','COACH','ANALISTA','JUGADOR'].includes(viewAs) : (user?.memberships?.length ?? 0) > 0;
-            const isStandalone = isPlayer || (!hasTeam && effectiveRole !== 'PLATFORM_ADMIN');
+            const isStandalone = (mode === 'player' && effectiveRole !== 'PLATFORM_ADMIN') || isPlayer || (!hasTeam && effectiveRole !== 'PLATFORM_ADMIN');
             if (section.id === 'admin') return !viewAs && user?.globalRole === 'PLATFORM_ADMIN';
             if (['tools', 'management'].includes(section.id) && isStandalone) return false;
             return true;
@@ -448,7 +460,7 @@ function Sidebar() {
             const effectiveRole = viewAs ?? user?.globalRole;
             const isPlayer = effectiveRole === 'PLAYER';
             const hasTeam = viewAs ? ['MANAGER','COACH','ANALISTA','JUGADOR'].includes(viewAs) : (user?.memberships?.length ?? 0) > 0;
-            const isStandalone = isPlayer || (!hasTeam && effectiveRole !== 'PLATFORM_ADMIN');
+            const isStandalone = (mode === 'player' && effectiveRole !== 'PLATFORM_ADMIN') || isPlayer || (!hasTeam && effectiveRole !== 'PLATFORM_ADMIN');
             const filteredSection = isStandalone && section.items ? {
               ...section,
               items: section.id === 'analysis'
@@ -471,7 +483,7 @@ function Sidebar() {
 
       <div style={{ padding: '0.75rem 1rem', borderTop: '1px solid var(--border-color)', marginTop: 'auto' }}>
         <p style={{ fontSize: '0.6rem', color: 'var(--text-muted)', lineHeight: 1.5, margin: 0 }}>
-          Match &amp; player data:{' '}
+          Datos de partidas y jugadores:{' '}
           <a href="https://pred.gg" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--text-muted)', textDecoration: 'underline' }}>pred.gg</a>
           {' '}·{' '}
           <a href="https://omeda.city" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--text-muted)', textDecoration: 'underline' }}>omeda.city</a>
@@ -486,8 +498,9 @@ function Sidebar() {
 function WeeklyReportsPage() {
   const { user } = useAuth();
   const { viewAs } = useViewAs();
+  const { mode } = useWorkspaceMode();
   const hasTeam = (user?.memberships?.length ?? 0) > 0;
-  const isStandalonePlayer = viewAs === 'PLAYER' || user?.globalRole === 'PLAYER' || (!hasTeam && user?.globalRole !== 'PLATFORM_ADMIN');
+  const isStandalonePlayer = (mode === 'player' && user?.globalRole !== 'PLATFORM_ADMIN') || viewAs === 'PLAYER' || user?.globalRole === 'PLAYER' || (!hasTeam && user?.globalRole !== 'PLATFORM_ADMIN');
 
   if (isStandalonePlayer) {
     return <PlayerWeeklyReportPage />;
@@ -550,8 +563,10 @@ export default function App() {
     <BrowserRouter>
       <PermissionsProvider>
         <ViewAsProvider>
-          <AppContent />
-          <Toaster position="bottom-right" theme="dark" richColors closeButton />
+          <WorkspaceModeProvider>
+            <AppContent />
+            <Toaster position="bottom-right" theme="dark" richColors closeButton />
+          </WorkspaceModeProvider>
         </ViewAsProvider>
       </PermissionsProvider>
     </BrowserRouter>

@@ -215,6 +215,11 @@ function BuildReviewCard({ entry, onOpen }: { entry: PlayerBuildReview['matches'
     : analysis.verdict.grade === 'poor'
       ? 'var(--accent-loss)'
       : 'var(--accent-prime)';
+  const adaptationLevel = analysis.verdict.score >= 80
+    ? 'Adaptación alta'
+    : analysis.verdict.score >= 60
+      ? 'Adaptación media'
+      : 'Adaptación baja';
 
   return (
     <article style={{ padding: '0.9rem', borderRadius: 9, background: 'rgba(15,23,42,0.5)', border: '1px solid var(--border-color)', minWidth: 0 }}>
@@ -228,7 +233,7 @@ function BuildReviewCard({ entry, onOpen }: { entry: PlayerBuildReview['matches'
         </div>
         <div style={{ textAlign: 'right' }}>
           <span style={{ display: 'block', color: analysis.result === 'win' ? 'var(--accent-win)' : 'var(--accent-loss)', fontSize: '0.62rem', fontWeight: 800, textTransform: 'uppercase' }}>{analysis.result === 'win' ? 'Victoria' : 'Derrota'}</span>
-          <span style={{ display: 'block', marginTop: '0.2rem', color: buildVerdictColor, fontSize: '0.58rem', fontWeight: 800 }}>{buildVerdictLabel} · {analysis.verdict.score}/100</span>
+          <span style={{ display: 'block', marginTop: '0.2rem', color: buildVerdictColor, fontSize: '0.58rem', fontWeight: 800 }}>{buildVerdictLabel} · {adaptationLevel}</span>
         </div>
       </div>
 
@@ -552,11 +557,20 @@ export default function PlayerWeeklyReportPage() {
         ) : buildReview && buildReview.matches.length > 0 ? (
           <>
             <WeeklyBuildLessons review={buildReview} />
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(285px, 1fr))', gap: '0.7rem', marginTop: '0.9rem' }}>
-              {buildReview.matches.map((entry) => (
-                <BuildReviewCard key={entry.match.id} entry={entry} onOpen={() => navigate(`/matches/${entry.match.id}?tab=analysis`)} />
-              ))}
+            <div style={{ marginTop: '0.9rem' }}>
+              <p style={{ margin: '0 0 0.45rem', color: 'var(--text-muted)', fontSize: '0.63rem', fontWeight: 800, textTransform: 'uppercase' }}>Ejemplo más reciente</p>
+              <BuildReviewCard entry={buildReview.matches[0]} onOpen={() => navigate(`/matches/${buildReview.matches[0].match.id}?tab=analysis`)} />
             </div>
+            {buildReview.matches.length > 1 && (
+              <details style={{ marginTop: '0.75rem' }}>
+                <summary style={{ cursor: 'pointer', color: 'var(--accent-cyan)', fontSize: '0.7rem', fontWeight: 750 }}>Ver las otras {buildReview.matches.length - 1} partidas analizadas</summary>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(285px, 1fr))', gap: '0.7rem', marginTop: '0.7rem' }}>
+                  {buildReview.matches.slice(1).map((entry) => (
+                    <BuildReviewCard key={entry.match.id} entry={entry} onOpen={() => navigate(`/matches/${entry.match.id}?tab=analysis`)} />
+                  ))}
+                </div>
+              </details>
+            )}
           </>
         ) : (
           <div style={{ marginTop: '0.85rem', padding: '0.9rem', borderRadius: 8, background: 'rgba(255,255,255,0.025)', color: 'var(--text-muted)', fontSize: '0.75rem' }}>

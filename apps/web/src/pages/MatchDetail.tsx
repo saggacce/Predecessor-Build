@@ -5,7 +5,7 @@ import { HeroAvatarWithTooltip } from '../components/HeroAvatar';
 import { useHeroMeta } from '../hooks/useHeroMeta';
 import { ArrowLeft, Trophy, Skull, Clock, RefreshCw, Pencil, Check, X, Monitor, Gamepad2, Swords } from 'lucide-react';
 import { toast } from 'sonner';
-import { apiClient, type EducationalCoachObservation, type MatchBuildAnalysis, type PlayerMatchCoachAnalysis, type MatchDetail as MatchDetailData, type MatchPlayerDetail, type MatchEvents, ApiErrorResponse } from '../api/client';
+import { apiClient, type EducationalCoachObservation, type LearningMomentReview, type LearningReviewStatus, type MatchBuildAnalysis, type PlayerMatchCoachAnalysis, type MatchDetail as MatchDetailData, type MatchPlayerDetail, type MatchEvents, ApiErrorResponse } from '../api/client';
 import { useAuth } from '../hooks/useAuth';
 
 export default function MatchDetail({ liveMode = false }: { liveMode?: boolean }) {
@@ -21,11 +21,12 @@ export default function MatchDetail({ liveMode = false }: { liveMode?: boolean }
   const [loadError, setLoadError] = useState<string | null>(null);
   const requestedTab = new URLSearchParams(location.search).get('tab');
   const [tab, setTab] = useState<'scoreboard' | 'statistics' | 'timeline' | 'analysis'>(
-    requestedTab === 'statistics' || requestedTab === 'timeline' || requestedTab === 'analysis' ? requestedTab : 'scoreboard',
+    requestedTab === 'scoreboard' || requestedTab === 'statistics' || requestedTab === 'timeline' ? requestedTab : 'analysis',
   );
   const [syncing, setSyncing] = useState(false);
   const [editingPlayerId, setEditingPlayerId] = useState<string | null>(null);
   const [editingValue, setEditingValue] = useState('');
+  const [timelineFocus, setTimelineFocus] = useState<{ gameTime: number; label: string } | null>(null);
 
   // Live mode: fetch ephemeral match directly from pred.gg, no DB
   useEffect(() => {
@@ -88,14 +89,14 @@ export default function MatchDetail({ liveMode = false }: { liveMode?: boolean }
       const updated = await apiClient.matches.getDetail(id!);
       setMatch(updated);
     } catch (err) {
-      toast.error(err instanceof ApiErrorResponse ? err.error.message : 'Failed to save name.');
+      toast.error(err instanceof ApiErrorResponse ? err.error.message : 'No se pudo guardar el nombre.');
     }
   }
 
   async function handleSyncPlayers() {
     if (!id) return;
     setSyncing(true);
-    const toastId = toast.loading('Syncing match data from pred.gg…');
+    const toastId = toast.loading('Sincronizando la partida con pred.gg…');
     try {
       const updated = await apiClient.matches.syncPlayers(id);
       setMatch(updated);
@@ -110,7 +111,7 @@ export default function MatchDetail({ liveMode = false }: { liveMode?: boolean }
         });
       }
     } catch (err) {
-      toast.error(err instanceof ApiErrorResponse ? err.error.message : 'Failed to sync match.', { id: toastId });
+      toast.error(err instanceof ApiErrorResponse ? err.error.message : 'No se pudo sincronizar la partida.', { id: toastId });
     } finally {
       setSyncing(false);
     }
@@ -119,7 +120,7 @@ export default function MatchDetail({ liveMode = false }: { liveMode?: boolean }
   if (loading) return (
     <div style={{ padding: '2rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
       <div style={{ width: 16, height: 16, border: '2px solid var(--border-color)', borderTopColor: 'var(--accent-blue)', borderRadius: '50%', animation: 'spin 0.8s linear infinite', flexShrink: 0 }} />
-      {liveMode ? 'Preparando informe…' : 'Loading match…'}
+      {liveMode ? 'Preparando informe…' : 'Cargando partida…'}
     </div>
   );
   if (!match) return (
@@ -141,11 +142,14 @@ export default function MatchDetail({ liveMode = false }: { liveMode?: boolean }
   const personalMatchPlayer = [...match.dusk, ...match.dawn].find((player) => player.playerId === user?.linkedPlayerId) ?? null;
 
   const tabs: { key: typeof tab; label: string; disabled?: boolean }[] = [
-    { key: 'scoreboard', label: 'Scoreboard' },
-    { key: 'statistics', label: 'Statistics' },
-    { key: 'timeline', label: 'Timeline' },
-    { key: 'analysis', label: 'Analysis' },
+    { key: 'analysis', label: 'Coach' },
+    { key: 'timeline', label: 'Cronología' },
+    { key: 'scoreboard', label: 'Marcador' },
+    { key: 'statistics', label: 'Estadísticas' },
   ];
+  const canManagePlayerNames = user?.globalRole === 'PLATFORM_ADMIN'
+    || user?.globalRole === 'SUPER_ADMIN'
+    || (user?.memberships?.some((membership) => ['MANAGER', 'COACH', 'ANALISTA'].includes(membership.role)) ?? false);
 
   return (
     <div>
@@ -158,11 +162,11 @@ export default function MatchDetail({ liveMode = false }: { liveMode?: boolean }
           style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: '0.875rem', marginBottom: '0.75rem', padding: 0 }}
         >
           <ArrowLeft size={16} />
-          {fromState?.fromPlayerName ? `Back to ${fromState.fromPlayerName}` : 'Back'}
+          {fromState?.fromPlayerName ? `Volver a ${fromState.fromPlayerName}` : 'Volver'}
         </button>
         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.5rem' }}>
           <div>
-            <h1 className="header-title" style={{ marginBottom: '0.25rem' }}>Match Detail</h1>
+            <h1 className="header-title" style={{ marginBottom: '0.25rem' }}>Detalle de la partida</h1>
             <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
               <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.72rem', color: 'var(--text-muted)', background: 'rgba(255,255,255,0.05)', border: '1px solid var(--border-color)', padding: '0.15rem 0.5rem', borderRadius: '4px' }}>
                 {match.predggUuid}
@@ -176,7 +180,7 @@ export default function MatchDetail({ liveMode = false }: { liveMode?: boolean }
                   style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.72rem', fontWeight: 600, padding: '0.2rem 0.6rem', borderRadius: '4px', cursor: syncing ? 'not-allowed' : 'pointer', border: '1px solid var(--accent-blue)', background: 'rgba(91,156,246,0.1)', color: 'var(--accent-blue)', opacity: syncing ? 0.6 : 1 }}
                 >
                   <RefreshCw size={11} style={{ animation: syncing ? 'spin 1s linear infinite' : 'none' }} />
-                  {syncing ? 'Syncing…' : hasHidden ? 'Fetch player names' : !match.rosterSynced ? 'Sync match' : 'Sync events'}
+                  {syncing ? 'Sincronizando…' : hasHidden ? 'Recuperar nombres' : !match.rosterSynced ? 'Sincronizar partida' : 'Sincronizar eventos'}
                 </button>
               )}
             </div>
@@ -188,7 +192,7 @@ export default function MatchDetail({ liveMode = false }: { liveMode?: boolean }
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', justifyContent: 'flex-end', marginTop: '0.2rem', color: 'var(--text-muted)', fontSize: '0.8rem' }}>
               <Clock size={13} /> <span style={{ fontFamily: 'var(--font-mono)' }}>{formatDuration(match.duration)}</span>
             </div>
-            {match.version && <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '0.15rem' }}>Patch {match.version}</div>}
+            {match.version && <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '0.15rem' }}>Parche {match.version}</div>}
           </div>
         </div>
       </header>
@@ -222,6 +226,8 @@ export default function MatchDetail({ liveMode = false }: { liveMode?: boolean }
           match={match} duskWon={duskWon} dawnWon={dawnWon} isAram={isAram}
           heroMeta={heroMeta}
           liveMode={liveMode}
+          canManagePlayerNames={canManagePlayerNames}
+          personalMatchPlayerId={personalMatchPlayer?.id ?? null}
           editingPlayerId={editingPlayerId} editingValue={editingValue}
           onStartEdit={(playerId, current) => { setEditingPlayerId(playerId); setEditingValue(current); }}
           onSaveEdit={handleSaveCustomName}
@@ -232,10 +238,11 @@ export default function MatchDetail({ liveMode = false }: { liveMode?: boolean }
       {tab === 'statistics' && (
         <StatisticsTab
           match={match} duskWon={duskWon} dawnWon={dawnWon} onResync={handleSyncPlayers} syncing={syncing}
+          personalMatchPlayerId={personalMatchPlayer?.id ?? null}
         />
       )}
       {tab === 'timeline' && (
-        <TimelineTab match={match} onResync={handleSyncPlayers} syncing={syncing} preloadedEvents={preloadedEvents ?? undefined} />
+        <TimelineTab match={match} onResync={handleSyncPlayers} syncing={syncing} preloadedEvents={preloadedEvents ?? undefined} focus={timelineFocus} personalPlayerId={personalMatchPlayer?.playerId ?? null} />
       )}
       {tab === 'analysis' && (
         <AnalysisTab
@@ -243,6 +250,7 @@ export default function MatchDetail({ liveMode = false }: { liveMode?: boolean }
           preloadedEvents={preloadedEvents ?? undefined}
           buildCoachPlayerId={!liveMode ? personalMatchPlayer?.id ?? null : null}
           liveMode={liveMode}
+          onOpenTimeline={(gameTime, label) => { setTimelineFocus({ gameTime, label }); setTab('timeline'); }}
         />
       )}
     </div>
@@ -262,10 +270,10 @@ function TeamScoreBanner({ match, duskWon, dawnWon }: { match: MatchDetailData; 
         <div style={{ width: 4, height: 36, borderRadius: 999, background: duskWon ? 'var(--accent-win)' : 'var(--accent-loss)', flexShrink: 0 }} />
         <div>
           <div style={{ fontWeight: 700, fontSize: '0.8rem', color: 'var(--accent-teal-bright)', letterSpacing: '0.08em' }}>DUSK</div>
-          <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>{(duskGold / 1000).toFixed(1)}k gold</div>
+          <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>{(duskGold / 1000).toFixed(1)}k de oro</div>
         </div>
         <div style={{ fontSize: '0.72rem', fontWeight: 700, color: duskWon ? 'var(--accent-win)' : 'var(--accent-loss)', fontFamily: 'var(--font-mono)', background: duskWon ? 'rgba(74,222,128,0.1)' : 'rgba(248,113,113,0.1)', border: `1px solid ${duskWon ? 'rgba(74,222,128,0.3)' : 'rgba(248,113,113,0.35)'}`, borderRadius: '4px', padding: '0.15rem 0.5rem' }}>
-          {duskWon ? 'VICTORY' : 'DEFEAT'}
+          {duskWon ? 'VICTORIA' : 'DERROTA'}
         </div>
       </div>
 
@@ -276,17 +284,17 @@ function TeamScoreBanner({ match, duskWon, dawnWon }: { match: MatchDetailData; 
           <span style={{ color: 'var(--text-muted)', margin: '0 0.5rem', fontSize: '1.4rem' }}>—</span>
           <span style={{ color: dawnWon ? 'var(--accent-win)' : 'var(--accent-loss)' }}>{dawnKills}</span>
         </div>
-        <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)', marginTop: '0.2rem', fontFamily: 'var(--font-mono)', letterSpacing: '0.05em' }}>KILLS</div>
+        <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)', marginTop: '0.2rem', fontFamily: 'var(--font-mono)', letterSpacing: '0.05em' }}>BAJAS</div>
       </div>
 
       {/* DAWN side */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flex: 1, justifyContent: 'flex-end' }}>
         <div style={{ fontSize: '0.72rem', fontWeight: 700, color: dawnWon ? 'var(--accent-win)' : 'var(--accent-loss)', fontFamily: 'var(--font-mono)', background: dawnWon ? 'rgba(74,222,128,0.1)' : 'rgba(248,113,113,0.1)', border: `1px solid ${dawnWon ? 'rgba(74,222,128,0.3)' : 'rgba(248,113,113,0.35)'}`, borderRadius: '4px', padding: '0.15rem 0.5rem' }}>
-          {dawnWon ? 'VICTORY' : 'DEFEAT'}
+          {dawnWon ? 'VICTORIA' : 'DERROTA'}
         </div>
         <div style={{ textAlign: 'right' }}>
           <div style={{ fontWeight: 700, fontSize: '0.8rem', color: 'var(--accent-loss)', letterSpacing: '0.08em' }}>DAWN</div>
-          <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>{(dawnGold / 1000).toFixed(1)}k gold</div>
+          <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>{(dawnGold / 1000).toFixed(1)}k de oro</div>
         </div>
         <div style={{ width: 4, height: 36, borderRadius: 999, background: dawnWon ? 'var(--accent-win)' : 'var(--accent-loss)', flexShrink: 0 }} />
       </div>
@@ -319,13 +327,15 @@ function HeaderTooltip({ label, tip, style }: { label: string; tip: string; styl
   );
 }
 
-function ScoreboardTab({ match, duskWon, dawnWon, isAram, heroMeta, liveMode, editingPlayerId, editingValue, onStartEdit, onSaveEdit, onCancelEdit, onEditValueChange }: {
+function ScoreboardTab({ match, duskWon, dawnWon, isAram, heroMeta, liveMode, canManagePlayerNames, personalMatchPlayerId, editingPlayerId, editingValue, onStartEdit, onSaveEdit, onCancelEdit, onEditValueChange }: {
   match: MatchDetailData;
   duskWon: boolean;
   dawnWon: boolean;
   isAram: boolean;
   heroMeta: Map<string, import('../api/client').HeroMeta>;
   liveMode: boolean;
+  canManagePlayerNames: boolean;
+  personalMatchPlayerId: string | null;
   editingPlayerId: string | null;
   editingValue: string;
   onStartEdit: (playerId: string, current: string) => void;
@@ -360,28 +370,28 @@ function ScoreboardTab({ match, duskWon, dawnWon, isAram, heroMeta, liveMode, ed
                 <div style={{ width: 4, height: 20, borderRadius: 999, background: key === 'dusk' ? 'var(--accent-teal-bright)' : 'var(--accent-loss)', flexShrink: 0 }} />
                 <span style={{ fontWeight: 700, fontSize: '0.9rem', color: key === 'dusk' ? 'var(--accent-teal-bright)' : 'var(--accent-loss)' }}>{label}</span>
                 {won
-                  ? <span style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', fontSize: '0.72rem', fontWeight: 700, color: 'var(--accent-win)', fontFamily: 'var(--font-mono)' }}><Trophy size={12} /> VICTORY</span>
-                  : <span style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', fontSize: '0.72rem', fontWeight: 700, color: 'var(--accent-loss)', fontFamily: 'var(--font-mono)' }}><Skull size={12} /> DEFEAT</span>
+                  ? <span style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', fontSize: '0.72rem', fontWeight: 700, color: 'var(--accent-win)', fontFamily: 'var(--font-mono)' }}><Trophy size={12} /> VICTORIA</span>
+                  : <span style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', fontSize: '0.72rem', fontWeight: 700, color: 'var(--accent-loss)', fontFamily: 'var(--font-mono)' }}><Skull size={12} /> DERROTA</span>
                 }
               </div>
               <div style={{ display: 'flex', gap: '1.5rem', fontFamily: 'var(--font-mono)', fontSize: '0.78rem', color: 'var(--text-muted)' }}>
-                <span><span style={{ color: 'var(--text-secondary)', fontWeight: 600 }}>{totalKills}</span> kills</span>
-                <span><span style={{ color: 'var(--text-secondary)', fontWeight: 600 }}>{(totalGold / 1000).toFixed(1)}k</span> gold total</span>
-                <span><span style={{ color: 'var(--text-secondary)', fontWeight: 600 }}>{(totalDamage / 1000).toFixed(1)}k</span> hero dmg</span>
+                <span><span style={{ color: 'var(--text-secondary)', fontWeight: 600 }}>{totalKills}</span> bajas</span>
+                <span><span style={{ color: 'var(--text-secondary)', fontWeight: 600 }}>{(totalGold / 1000).toFixed(1)}k</span> oro</span>
+                <span><span style={{ color: 'var(--text-secondary)', fontWeight: 600 }}>{(totalDamage / 1000).toFixed(1)}k</span> daño</span>
               </div>
             </div>
 
             {/* Column headers */}
             <div style={headerRowStyle}>
-              <span style={{ flex: '0 0 210px' }}>Player</span>
-              <span className="hide-mobile" style={{ flex: '0 0 52px', display: 'flex', justifyContent: 'center' }}><HeaderTooltip label="Role" tip="Rol desempeñado en la partida" /></span>
+              <span style={{ flex: '0 0 210px' }}>Jugador</span>
+              <span className="hide-mobile" style={{ flex: '0 0 52px', display: 'flex', justifyContent: 'center' }}><HeaderTooltip label="Rol" tip="Rol desempeñado en la partida" /></span>
               <HeaderTooltip label="K / D / A" tip="Kills / Deaths / Assists" style={{ flex: '0 0 110px', display: 'flex', justifyContent: 'center' }} />
-              <HeaderTooltip label="KP%" tip="Kill Participation — % de kills del equipo en que participó (kills + assists)" style={{ flex: '0 0 56px', display: 'flex', justifyContent: 'center' }} />
-              <HeaderTooltip label="DMG to heroes" tip="Daño total infligido a héroes rivales durante la partida" style={{ flex: '1 1 100px', display: 'flex', justifyContent: 'center' }} />
+              <HeaderTooltip label="PB%" tip="Participación en bajas: porcentaje de eliminaciones del equipo en las que participó (bajas + asistencias)" style={{ flex: '0 0 56px', display: 'flex', justifyContent: 'center' }} />
+              <HeaderTooltip label="Daño a héroes" tip="Daño total infligido a héroes rivales durante la partida" style={{ flex: '1 1 100px', display: 'flex', justifyContent: 'center' }} />
               <HeaderTooltip label="GPM" tip="Gold Per Minute — ritmo de farmeo y progresión económica" style={{ flex: '0 0 56px', display: 'flex', justifyContent: 'center' }} />
-              <HeaderTooltip label="Gold total" tip="Oro total acumulado al final de la partida" style={{ flex: '0 0 76px', display: 'flex', justifyContent: 'center' }} />
-              {!isAram && <span className="hide-mobile" style={{ flex: '0 0 80px', display: 'flex', justifyContent: 'center' }}><HeaderTooltip label="Wards" tip="Guardianes colocados / destruidos durante la partida" /></span>}
-              <span className="hide-mobile" style={{ flex: '0 0 196px', display: 'flex', justifyContent: 'center' }}><HeaderTooltip label="Items" tip="Inventario final del jugador" /></span>
+              <HeaderTooltip label="Oro total" tip="Oro total acumulado al final de la partida" style={{ flex: '0 0 76px', display: 'flex', justifyContent: 'center' }} />
+              {!isAram && <span className="hide-mobile" style={{ flex: '0 0 80px', display: 'flex', justifyContent: 'center' }}><HeaderTooltip label="Visión" tip="Guardianes colocados / destruidos durante la partida" /></span>}
+              <span className="hide-mobile" style={{ flex: '0 0 196px', display: 'flex', justifyContent: 'center' }}><HeaderTooltip label="Objetos" tip="Inventario final del jugador" /></span>
               <span className="hide-mobile" style={{ flex: '0 0 210px', display: 'flex', justifyContent: 'center' }}><HeaderTooltip label="Loadout" tip="Augmento de héroe, Eternal y bendiciones seleccionadas" /></span>
             </div>
 
@@ -395,6 +405,8 @@ function ScoreboardTab({ match, duskWon, dawnWon, isAram, heroMeta, liveMode, ed
                 matchDuration={match.duration}
                 heroMeta={heroMeta}
                 liveMode={liveMode}
+                canManagePlayerNames={canManagePlayerNames}
+                isPersonalPlayer={p.id === personalMatchPlayerId}
                 isEditing={editingPlayerId === p.playerId}
                 editingValue={editingValue}
                 onStartEdit={onStartEdit}
@@ -419,13 +431,20 @@ function perkSlotLabel(slot: string | null): string {
 }
 
 function stripPredggMarkup(value: string): string {
-  return value.replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim();
+  return value
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/\{[^}]+\}/g, ' ')
+    .replace(/\s+([.,;:])/g, '$1')
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 
-function PlayerRow({ player, isAram, teamColor, maxDamage, teamKills, matchDuration, heroMeta, liveMode, isEditing, editingValue, onStartEdit, onSaveEdit, onCancelEdit, onEditValueChange }: {
+function PlayerRow({ player, isAram, teamColor, maxDamage, teamKills, matchDuration, heroMeta, liveMode, canManagePlayerNames, isPersonalPlayer, isEditing, editingValue, onStartEdit, onSaveEdit, onCancelEdit, onEditValueChange }: {
   player: MatchPlayerDetail; isAram: boolean; teamColor: string; maxDamage: number; teamKills: number; matchDuration: number;
   heroMeta: Map<string, import('../api/client').HeroMeta>;
   liveMode: boolean;
+  canManagePlayerNames: boolean;
+  isPersonalPlayer: boolean;
   isEditing: boolean; editingValue: string;
   onStartEdit: (playerId: string, current: string) => void;
   onSaveEdit: (playerId: string) => void;
@@ -449,7 +468,9 @@ function PlayerRow({ player, isAram, teamColor, maxDamage, teamKills, matchDurat
     <div style={{
       display: 'flex', alignItems: 'center', gap: '0.75rem',
       padding: '0.6rem 1rem', borderBottom: '1px solid var(--border-color)',
-      background: 'rgba(255,255,255,0.01)', flexWrap: 'wrap',
+      background: isPersonalPlayer ? 'rgba(56,212,200,0.075)' : 'rgba(255,255,255,0.01)',
+      boxShadow: isPersonalPlayer ? 'inset 3px 0 0 var(--accent-cyan)' : 'none',
+      flexWrap: 'wrap',
     }}>
       {/* Player column: hero avatar + text */}
       <div
@@ -495,10 +516,10 @@ function PlayerRow({ player, isAram, teamColor, maxDamage, teamKills, matchDurat
                 : <Monitor size={11} style={{ flexShrink: 0, color: 'var(--text-muted)', opacity: 0.4 }} />
               }
               {player.customName && <span style={{ fontSize: '0.6rem', color: 'var(--accent-violet)', fontFamily: 'var(--font-mono)', flexShrink: 0 }}>custom</span>}
-              {!liveMode && player.playerId && (
+              {!liveMode && canManagePlayerNames && player.playerId && (
                 <button
                   onClick={(e) => { e.stopPropagation(); onStartEdit(player.playerId!, player.customName ?? ''); }}
-                  title="Set custom name"
+                  title="Definir nombre personalizado"
                   style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', display: 'flex', padding: 0, flexShrink: 0 }}
                 >
                   <Pencil size={10} />
@@ -671,10 +692,17 @@ function CoachObservationCard({ observation }: { observation: EducationalCoachOb
   );
 }
 
-function LearningMomentCard({ moment, index }: {
+function LearningMomentCard({ moment, index, review, onSaveReview, onOpenTimeline, onStartCycle }: {
   moment: PlayerMatchCoachAnalysis['learningMoments'][number];
   index: number;
+  review?: LearningMomentReview;
+  onSaveReview?: (status: LearningReviewStatus, note: string | null) => Promise<void>;
+  onOpenTimeline?: () => void;
+  onStartCycle?: () => Promise<void>;
 }) {
+  const [reviewNote, setReviewNote] = useState(review?.note ?? '');
+  const [savingReview, setSavingReview] = useState(false);
+  useEffect(() => setReviewNote(review?.note ?? ''), [review?.note]);
   const color = moment.tone === 'reinforce'
     ? 'var(--accent-win)'
     : moment.priority === 'high'
@@ -708,17 +736,42 @@ function LearningMomentCard({ moment, index }: {
             <p style={{ margin: '0.4rem 0 0', color: 'var(--accent-prime)', fontSize: '0.61rem', lineHeight: 1.4 }}><strong>Límite del dato:</strong> {moment.limitation}</p>
           </details>
           <div style={{ marginTop: '0.5rem', color: 'var(--text-muted)', fontSize: '0.58rem' }}>Confianza {confidenceLabel}: {moment.confidence.basis}</div>
+          <div style={{ display: 'flex', gap: '0.45rem', flexWrap: 'wrap', marginTop: '0.65rem' }}>
+            {onOpenTimeline && <button type="button" className="btn-secondary" onClick={onOpenTimeline} style={{ flex: 'unset', fontSize: '0.64rem', padding: '0.35rem 0.55rem' }}>Abrir en la cronología</button>}
+            {onStartCycle && <button type="button" className="btn-secondary" onClick={() => void onStartCycle()} style={{ flex: 'unset', fontSize: '0.64rem', padding: '0.35rem 0.55rem' }}>Entrenar durante 5 partidas</button>}
+          </div>
+          {onSaveReview && (
+            <details style={{ marginTop: '0.65rem', padding: '0.55rem 0.65rem', borderRadius: 7, background: 'rgba(56,212,200,0.035)', border: '1px solid rgba(56,212,200,0.16)' }}>
+              <summary style={{ cursor: 'pointer', color: 'var(--accent-cyan)', fontSize: '0.65rem', fontWeight: 750 }}>
+                {review && review.status !== 'PENDING' ? 'Revisión guardada · actualizar conclusión' : 'Guardar lo que descubriste en el replay'}
+              </summary>
+              <textarea value={reviewNote} onChange={(event) => setReviewNote(event.target.value)} placeholder="¿Qué ocurrió realmente y qué señal reconocerás la próxima vez?" maxLength={1200} style={{ width: '100%', minHeight: 72, marginTop: '0.55rem', padding: '0.55rem', resize: 'vertical', borderRadius: 6, border: '1px solid var(--border-color)', background: 'var(--bg-dark)', color: 'var(--text-primary)', font: 'inherit', fontSize: '0.67rem' }} />
+              <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap', marginTop: '0.45rem' }}>
+                {([
+                  ['CONFIRMED_MISTAKE', 'Confirmé un error'],
+                  ['GOOD_DECISION', 'Fue una buena decisión'],
+                  ['INCONCLUSIVE', 'No fue concluyente'],
+                ] as Array<[LearningReviewStatus, string]>).map(([status, label]) => (
+                  <button key={status} type="button" disabled={savingReview} onClick={() => { setSavingReview(true); void onSaveReview(status, reviewNote.trim() || null).finally(() => setSavingReview(false)); }} style={{ padding: '0.32rem 0.5rem', borderRadius: 6, border: `1px solid ${review?.status === status ? 'var(--accent-cyan)' : 'var(--border-color)'}`, background: review?.status === status ? 'rgba(56,212,200,0.1)' : 'transparent', color: review?.status === status ? 'var(--accent-cyan)' : 'var(--text-secondary)', cursor: savingReview ? 'wait' : 'pointer', fontSize: '0.62rem' }}>{label}</button>
+                ))}
+              </div>
+            </details>
+          )}
         </div>
       </div>
     </article>
   );
 }
 
-function PlayerCoachAnalysisPanel({ analysis, section, onSectionChange, buildCard }: {
+function PlayerCoachAnalysisPanel({ analysis, section, onSectionChange, buildCard, reviews, onSaveReview, onOpenTimeline, onStartCycle }: {
   analysis: PlayerMatchCoachAnalysis | null;
   section: PersonalCoachSection;
   onSectionChange: (section: PersonalCoachSection) => void;
   buildCard: ReactNode;
+  reviews: LearningMomentReview[];
+  onSaveReview?: (momentId: string, status: LearningReviewStatus, note: string | null) => Promise<void>;
+  onOpenTimeline: (gameTime: number, label: string) => void;
+  onStartCycle?: (moment: PlayerMatchCoachAnalysis['learningMoments'][number]) => Promise<void>;
 }) {
   const tabs: Array<{ key: PersonalCoachSection; label: string }> = [
     { key: 'overview', label: 'Resumen' },
@@ -732,6 +785,28 @@ function PlayerCoachAnalysisPanel({ analysis, section, onSectionChange, buildCar
   const observations = analysis && section !== 'overview' && section !== 'moments' && section !== 'build'
     ? analysis.sections[section]
     : [];
+  const emptyGuidance: Partial<Record<PersonalCoachSection, { title: string; explanation: string; checks: string[] }>> = {
+    abilities: {
+      title: 'El orden de habilidades no está disponible en esta partida',
+      explanation: 'RiftLine no puede valorarlo sin inventar. Utiliza el replay para comprobar la intención de cada punto y vuelve a compararlo cuando la API proporcione el orden.',
+      checks: ['¿El punto mejoró tu intercambio o tu capacidad de limpiar?', '¿Necesitabas control, daño o supervivencia en ese nivel?', '¿Cambió el matchup o seguiste un orden automático?'],
+    },
+    combat: {
+      title: 'Los eventos no demuestran tu posicionamiento continuo',
+      explanation: 'Las muertes y sus coordenadas señalan ventanas de revisión, pero la cámara, los enfriamientos, la visión disponible y tu intención requieren replay.',
+      checks: ['¿Qué amenaza debía gastar su movilidad antes de que entraras?', '¿Podías proteger a tu aliado prioritario desde una posición más segura?', '¿Tenías una ruta de salida y aliados capaces de continuar la jugada?'],
+    },
+    economy: {
+      title: 'No hay una comparación económica suficientemente completa',
+      explanation: 'Revisa el primer regreso a base y el momento en que completaste cada componente; en Support, recuperar tempo no significa apropiarse del farmeo del Carry.',
+      checks: ['¿Podías completar un componente útil antes del siguiente objetivo?', '¿Permaneciste dentro del rango de experiencia y de tu misión de Support?', '¿Cediste presión de forma consciente mientras esperabas tu siguiente pico?'],
+    },
+    objectives: {
+      title: 'No hay eventos suficientes para atribuir una contribución personal',
+      explanation: 'Puedes revisar manualmente preparación, llegada y salida sin convertir el resultado del objetivo en un juicio automático.',
+      checks: ['¿Llegaste con vida y recursos?', '¿La visión cubría una entrada que el equipo podía defender?', '¿Había una oleada que debía resolverse antes de empezar?'],
+    },
+  };
 
   return (
     <section aria-label="Análisis personal del coach">
@@ -777,7 +852,15 @@ function PlayerCoachAnalysisPanel({ analysis, section, onSectionChange, buildCar
             <p style={{ margin: '0.28rem 0 0', color: 'var(--text-secondary)', fontSize: '0.67rem', lineHeight: 1.45 }}>RiftLine señala ventanas con evidencia suficiente para volver al replay. Tú confirmas la causa observando información, oleadas, enfriamientos, aliados y beneficio esperado.</p>
           </div>
           {analysis.learningMoments.length > 0
-            ? analysis.learningMoments.map((moment, index) => <LearningMomentCard key={moment.id} moment={moment} index={index} />)
+            ? analysis.learningMoments.map((moment, index) => <LearningMomentCard
+              key={moment.id}
+              moment={moment}
+              index={index}
+              review={reviews.find((review) => review.momentId === moment.id)}
+              onSaveReview={onSaveReview ? (status, note) => onSaveReview(moment.id, status, note) : undefined}
+              onOpenTimeline={() => onOpenTimeline(moment.gameTime, moment.title)}
+              onStartCycle={onStartCycle ? () => onStartCycle(moment) : undefined}
+            />)
             : <div className="glass-card" style={{ padding: '1rem', color: 'var(--text-muted)', fontSize: '0.7rem' }}>No hay una ventana suficientemente clara para recomendar revisión sin forzar una conclusión.</div>}
         </div>
       ) : null}
@@ -786,7 +869,14 @@ function PlayerCoachAnalysisPanel({ analysis, section, onSectionChange, buildCar
         <div style={{ display: 'grid', gap: '0.7rem', marginTop: '0.8rem' }}>
           {observations.length > 0
             ? observations.map((observation) => <CoachObservationCard key={observation.id} observation={observation} />)
-            : <div className="glass-card" style={{ padding: '1rem', color: 'var(--text-muted)', fontSize: '0.7rem' }}>No hay evidencia suficiente para valorar este apartado sin inventar una conclusión. Se completará cuando haya datos compatibles.</div>}
+            : (() => {
+              const guidance = emptyGuidance[section];
+              return <div className="glass-card" style={{ padding: '1rem', color: 'var(--text-muted)', fontSize: '0.7rem' }}>
+                <strong style={{ display: 'block', color: 'var(--text-primary)', fontSize: '0.76rem' }}>{guidance?.title ?? 'No hay evidencia suficiente para valorar este apartado'}</strong>
+                <p style={{ margin: '0.4rem 0 0', lineHeight: 1.5 }}>{guidance?.explanation ?? 'El coach no generará una conclusión que los datos no puedan sostener.'}</p>
+                {guidance?.checks && <ul style={{ margin: '0.5rem 0 0', paddingLeft: '1.1rem', lineHeight: 1.55 }}>{guidance.checks.map((check) => <li key={check}>{check}</li>)}</ul>}
+              </div>;
+            })()}
         </div>
       ) : null}
       </div>
@@ -794,15 +884,17 @@ function PlayerCoachAnalysisPanel({ analysis, section, onSectionChange, buildCar
   );
 }
 
-function AnalysisTab({ match, duskWon, dawnWon: _dawnWon, onResync, syncing, preloadedEvents, buildCoachPlayerId, liveMode }: {
+function AnalysisTab({ match, duskWon, dawnWon: _dawnWon, onResync, syncing, preloadedEvents, buildCoachPlayerId, liveMode, onOpenTimeline }: {
   match: MatchDetailData; duskWon: boolean; dawnWon: boolean;
   onResync: () => void; syncing: boolean; preloadedEvents?: MatchEvents;
   buildCoachPlayerId: string | null; liveMode: boolean;
+  onOpenTimeline: (gameTime: number, label: string) => void;
 }) {
   const [events, setEvents] = useState<MatchEvents | null>(preloadedEvents ?? null);
   const [loadingEvents, setLoadingEvents] = useState(false);
   const [coachAnalysis, setCoachAnalysis] = useState<PlayerMatchCoachAnalysis | null>(null);
   const [coachSection, setCoachSection] = useState<PersonalCoachSection>('overview');
+  const [learningReviews, setLearningReviews] = useState<LearningMomentReview[]>([]);
 
   useEffect(() => {
     if (!liveMode && !buildCoachPlayerId) return;
@@ -812,10 +904,42 @@ function AnalysisTab({ match, duskWon, dawnWon: _dawnWon, onResync, syncing, pre
       ? apiClient.matches.liveCoachAnalysis(match.predggUuid)
       : apiClient.matches.coachAnalysis(match.id, buildCoachPlayerId!);
     void request
-      .then((result) => { if (!cancelled) setCoachAnalysis(result); })
+      .then(async (result) => {
+        if (cancelled) return;
+        setCoachAnalysis(result);
+        if (!liveMode && buildCoachPlayerId) {
+          const response = await apiClient.playerLearning.reviews(match.id, buildCoachPlayerId).catch(() => ({ reviews: [] }));
+          if (!cancelled) setLearningReviews(response.reviews);
+        }
+      })
       .catch(() => { if (!cancelled) setCoachAnalysis(null); });
     return () => { cancelled = true; };
   }, [buildCoachPlayerId, liveMode, match.id, match.predggUuid]);
+
+  async function saveLearningReview(momentId: string, status: LearningReviewStatus, note: string | null) {
+    if (!buildCoachPlayerId || liveMode) return;
+    const { review } = await apiClient.playerLearning.saveReview(match.id, momentId, { matchPlayerId: buildCoachPlayerId, status, note });
+    setLearningReviews((current) => [...current.filter((entry) => entry.momentId !== momentId), review]);
+    toast.success('Conclusión del replay guardada');
+  }
+
+  async function startTrainingCycle(moment: PlayerMatchCoachAnalysis['learningMoments'][number]) {
+    try {
+      await apiClient.playerLearning.createCycle({
+        focusKey: moment.type,
+        title: moment.transferablePrinciple,
+        cue: moment.reviewChecklist[0] ?? moment.whyItMatters,
+        targetMatches: 5,
+        sourceMatchId: match.id,
+        sourceMomentId: moment.id,
+      });
+      toast.success('Ciclo de entrenamiento de 5 partidas iniciado');
+    } catch (error) {
+      toast.error(error instanceof ApiErrorResponse && error.error.code === 'ACTIVE_CYCLE_EXISTS'
+        ? 'Ya tienes un ciclo activo. Complétalo desde Mi progreso antes de iniciar otro.'
+        : error instanceof ApiErrorResponse ? error.error.message : 'No se pudo iniciar el ciclo.');
+    }
+  }
 
   useEffect(() => {
     if (preloadedEvents) return;
@@ -823,7 +947,7 @@ function AnalysisTab({ match, duskWon, dawnWon: _dawnWon, onResync, syncing, pre
     setLoadingEvents(true);
     void apiClient.matches.getEvents(match.id)
       .then(setEvents)
-      .catch(() => toast.error('Failed to load analysis data.'))
+      .catch(() => toast.error('No se pudieron cargar los datos del análisis.'))
       .finally(() => setLoadingEvents(false));
   }, [match.id, match.eventStreamSynced, preloadedEvents]);
 
@@ -833,6 +957,10 @@ function AnalysisTab({ match, duskWon, dawnWon: _dawnWon, onResync, syncing, pre
       section={coachSection}
       onSectionChange={setCoachSection}
       buildCard={<BuildCoachCard matchId={liveMode ? match.predggUuid : match.id} matchPlayerId={buildCoachPlayerId} liveMode={liveMode} />}
+      reviews={learningReviews}
+      onSaveReview={!liveMode && buildCoachPlayerId ? saveLearningReview : undefined}
+      onOpenTimeline={onOpenTimeline}
+      onStartCycle={!liveMode && buildCoachPlayerId ? startTrainingCycle : undefined}
     />
   ) : null;
 
@@ -845,20 +973,20 @@ function AnalysisTab({ match, duskWon, dawnWon: _dawnWon, onResync, syncing, pre
       <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
         {personalCoach}
         <div className="glass-card" style={{ padding: '2.5rem', textAlign: 'center' }}>
-          <div style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', fontWeight: 600, marginBottom: '0.5rem' }}>Objective analysis not available</div>
+          <div style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', fontWeight: 600, marginBottom: '0.5rem' }}>Análisis de objetivos no disponible</div>
           <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', maxWidth: '380px', margin: '0 auto 1.5rem' }}>
-            Sync this match to load objective control, gold timeline and deaths before objectives. El análisis de build superior no depende de estos eventos.
+            Sincroniza la partida para cargar el control de objetivos, la curva de oro y las muertes previas a objetivos. El análisis de build superior no depende de estos eventos.
           </div>
           <button onClick={onResync} disabled={syncing} style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.8rem', fontWeight: 600, padding: '0.45rem 1rem', borderRadius: '6px', cursor: syncing ? 'not-allowed' : 'pointer', border: '1px solid var(--accent-blue)', background: 'rgba(91,156,246,0.1)', color: 'var(--accent-blue)', opacity: syncing ? 0.6 : 1 }}>
             <RefreshCw size={13} style={{ animation: syncing ? 'spin 1s linear infinite' : 'none' }} />
-            {syncing ? 'Syncing…' : 'Sync match'}
+            {syncing ? 'Sincronizando…' : 'Sincronizar partida'}
           </button>
         </div>
       </div>
     );
   }
 
-  if (loadingEvents) return <div className="glass-card" style={{ padding: '2rem', color: 'var(--text-muted)', fontSize: '0.85rem' }}>Loading analysis…</div>;
+  if (loadingEvents) return <div className="glass-card" style={{ padding: '2rem', color: 'var(--text-muted)', fontSize: '0.85rem' }}>Cargando análisis…</div>;
   if (!events) return null;
 
   const allPlayers = [...match.dusk, ...match.dawn];
@@ -912,11 +1040,15 @@ function AnalysisTab({ match, duskWon, dawnWon: _dawnWon, onResync, syncing, pre
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
       {personalCoach}
 
+      <details style={{ border: '1px solid rgba(167,139,250,0.22)', borderRadius: 9, padding: '0.8rem', background: 'rgba(167,139,250,0.025)' }}>
+        <summary style={{ cursor: 'pointer', color: 'var(--accent-violet)', fontSize: '0.72rem', fontWeight: 800 }}>Abrir contexto del equipo y evidencias avanzadas</summary>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', marginTop: '1rem' }}>
+
       {/* ── Objective Control ── */}
       <div>
         <div style={{ fontWeight: 700, fontSize: '0.88rem', color: 'var(--text-primary)', marginBottom: '0.75rem' }}>
-          Objective Control
-          {firstTower && <span style={{ fontWeight: 400, fontSize: '0.72rem', color: 'var(--text-muted)', marginLeft: '0.75rem' }}>First tower: <span style={{ color: firstTower.destructionTeam === 'DUSK' ? 'var(--accent-teal-bright)' : 'var(--accent-loss)', fontWeight: 600 }}>{firstTower.destructionTeam}</span> at {formatTime(firstTower.gameTime)}</span>}
+          Control de objetivos
+          {firstTower && <span style={{ fontWeight: 400, fontSize: '0.72rem', color: 'var(--text-muted)', marginLeft: '0.75rem' }}>Primera torre: <span style={{ color: firstTower.destructionTeam === 'DUSK' ? 'var(--accent-teal-bright)' : 'var(--accent-loss)', fontWeight: 600 }}>{firstTower.destructionTeam}</span> en {formatTime(firstTower.gameTime)}</span>}
         </div>
         <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
           {objStats.map((g) => (
@@ -939,7 +1071,7 @@ function AnalysisTab({ match, duskWon, dawnWon: _dawnWon, onResync, syncing, pre
               </div>
               {g.first && (
                 <div style={{ marginTop: '0.3rem', fontSize: '0.62rem', color: 'var(--text-muted)' }}>
-                  First: <span style={{ color: g.first.killerTeam === 'DUSK' ? 'var(--accent-teal-bright)' : 'var(--accent-loss)', fontWeight: 600 }}>{g.first.killerTeam}</span> at {formatTime(g.first.gameTime)}
+                  Primero: <span style={{ color: g.first.killerTeam === 'DUSK' ? 'var(--accent-teal-bright)' : 'var(--accent-loss)', fontWeight: 600 }}>{g.first.killerTeam}</span> en {formatTime(g.first.gameTime)}
                 </div>
               )}
             </div>
@@ -951,7 +1083,7 @@ function AnalysisTab({ match, duskWon, dawnWon: _dawnWon, onResync, syncing, pre
       {hasGold && goldDiff.length > 1 ? (
         <div>
           <div style={{ fontWeight: 700, fontSize: '0.88rem', color: 'var(--text-primary)', marginBottom: '0.75rem' }}>
-            Gold Difference (DUSK − DAWN)
+            Diferencia de oro (DUSK − DAWN)
           </div>
           <GoldDiffChart goldDiff={goldDiff} events={events} match={match} duskWon={duskWon} />
         </div>
@@ -970,16 +1102,16 @@ function AnalysisTab({ match, duskWon, dawnWon: _dawnWon, onResync, syncing, pre
       {dboRows.length > 0 && (
         <div>
           <div style={{ fontWeight: 700, fontSize: '0.88rem', color: 'var(--text-primary)', marginBottom: '0.75rem' }}>
-            Deaths Before Objectives
-            <span style={{ fontWeight: 400, fontSize: '0.72rem', color: 'var(--text-muted)', marginLeft: '0.5rem' }}>deaths in windows before each major objective</span>
+            Muertes antes de objetivos
+            <span style={{ fontWeight: 400, fontSize: '0.72rem', color: 'var(--text-muted)', marginLeft: '0.5rem' }}>ventanas previas a cada objetivo mayor</span>
           </div>
           <div className="glass-card" style={{ padding: 0, overflow: 'hidden' }}>
             <div style={{ display: 'flex', fontSize: '0.65rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', padding: '0.35rem 1rem', borderBottom: '1px solid var(--border-color)', background: 'rgba(255,255,255,0.015)', gap: '0.5rem' }}>
-              <span style={{ flex: '0 0 130px' }}>Objective</span>
-              <span style={{ flex: '0 0 56px', textAlign: 'center' }}>Time</span>
-              <span style={{ flex: '0 0 64px', textAlign: 'center' }}>Team</span>
+              <span style={{ flex: '0 0 130px' }}>Objetivo</span>
+              <span style={{ flex: '0 0 56px', textAlign: 'center' }}>Tiempo</span>
+              <span style={{ flex: '0 0 64px', textAlign: 'center' }}>Equipo</span>
               {WINDOWS.map((w) => (
-                <span key={w} style={{ flex: '1 1 80px', textAlign: 'center' }}>−{w}s deaths</span>
+                <span key={w} style={{ flex: '1 1 80px', textAlign: 'center' }}>Muertes −{w}s</span>
               ))}
             </div>
             {dboRows.map(({ obj, meta, windows }, i) => (
@@ -1000,15 +1132,18 @@ function AnalysisTab({ match, duskWon, dawnWon: _dawnWon, onResync, syncing, pre
               </div>
             ))}
           </div>
-          <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)', marginTop: '0.4rem' }}>DUSK · DAWN deaths in each pre-objective window</div>
+          <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)', marginTop: '0.4rem' }}>Muertes DUSK · DAWN en cada ventana previa</div>
         </div>
       )}
 
       {/* ── Kill Heatmap ── */}
       <div>
-        <div style={{ fontWeight: 700, fontSize: '0.88rem', color: 'var(--text-primary)', marginBottom: '0.75rem' }}>Match Heatmap</div>
+        <div style={{ fontWeight: 700, fontSize: '0.88rem', color: 'var(--text-primary)', marginBottom: '0.75rem' }}>Mapa de eventos del equipo</div>
         <AnalysisHeatmap events={events} match={match} />
       </div>
+
+        </div>
+      </details>
 
     </div>
   );
@@ -1089,7 +1224,7 @@ function GoldDiffChart({ goldDiff, events, match: _match, duskWon }: {
               fill={color} opacity={0.85} stroke="#000" strokeWidth={0.5}
               style={{ cursor: 'pointer' }}
               onMouseEnter={(e) => setTip({ x: e.clientX, y: e.clientY, content: (
-                <><TlTipTitle label={meta.label} color="#94a3b8" /><TlTipRow label="Time" value={formatTime(s.gameTime)} /><TlTipRow label="Destroyed by" value={s.destructionTeam ?? '?'} />{diff != null && <TlTipRow label="Gold diff" value={formatK(diff)} />}</>
+                <><TlTipTitle label={meta.label} color="#94a3b8" /><TlTipRow label="Tiempo" value={formatTime(s.gameTime)} /><TlTipRow label="Destruida por" value={s.destructionTeam ?? '?'} />{diff != null && <TlTipRow label="Diferencia de oro" value={formatK(diff)} />}</>
               )})}
               onMouseLeave={() => setTip(null)}
             />
@@ -1148,9 +1283,9 @@ function GoldDiffChart({ goldDiff, events, match: _match, duskWon }: {
 
       {/* Final diff */}
       <div style={{ display: 'flex', gap: '1.5rem', marginTop: '0.5rem', fontSize: '0.72rem', fontFamily: 'var(--font-mono)', color: 'var(--text-muted)' }}>
-        <span>Final diff: <span style={{ color: (goldDiff.at(-1) ?? 0) >= 0 ? 'var(--accent-teal-bright)' : 'var(--accent-loss)', fontWeight: 700 }}>{(goldDiff.at(-1) ?? 0) >= 0 ? '+' : ''}{formatK(goldDiff.at(-1) ?? 0)}</span> gold</span>
-        <span>Peak DUSK: <span style={{ color: 'var(--accent-teal-bright)', fontWeight: 700 }}>+{formatK(Math.max(...goldDiff))}</span></span>
-        <span>Peak DAWN: <span style={{ color: 'var(--accent-loss)', fontWeight: 700 }}>+{formatK(Math.abs(Math.min(...goldDiff)))}</span></span>
+        <span>Diferencia final: <span style={{ color: (goldDiff.at(-1) ?? 0) >= 0 ? 'var(--accent-teal-bright)' : 'var(--accent-loss)', fontWeight: 700 }}>{formatK(goldDiff.at(-1) ?? 0)}</span> de oro</span>
+        <span>Pico DUSK: <span style={{ color: 'var(--accent-teal-bright)', fontWeight: 700 }}>{formatK(Math.max(...goldDiff))}</span></span>
+        <span>Pico DAWN: <span style={{ color: 'var(--accent-loss)', fontWeight: 700 }}>{formatK(-Math.abs(Math.min(...goldDiff)))}</span></span>
         {!duskWon && Math.max(...goldDiff) > 3000 && <span style={{ color: '#f0b429', fontWeight: 700 }}>⚠ Possible throw</span>}
         {duskWon && Math.min(...goldDiff) < -3000 && <span style={{ color: '#f0b429', fontWeight: 700 }}>⚡ Comeback</span>}
       </div>
@@ -1374,14 +1509,15 @@ const WARD_LABELS: Record<string, string> = {
   SOLSTONE_DRONE: 'Solstone Drone',
 };
 
-type TimelineSection = 'kills' | 'objectives' | 'structures' | 'purchases' | 'wards';
+type TimelineSection = 'kills' | 'objectives' | 'resources' | 'structures' | 'purchases' | 'wards';
 
 const SECTION_CONFIG: Record<TimelineSection, { label: string; color: string }> = {
-  kills:      { label: 'Kills',       color: 'var(--accent-teal-bright)' },
-  objectives: { label: 'Objectives',  color: '#f0b429' },
-  structures: { label: 'Structures',  color: '#94a3b8' },
-  purchases:  { label: 'Purchases',   color: 'var(--accent-prime)' },
-  wards:      { label: 'Wards',       color: 'var(--accent-blue)' },
+  kills:      { label: 'Bajas',              color: 'var(--accent-teal-bright)' },
+  objectives: { label: 'Objetivos mayores',  color: '#f0b429' },
+  resources:  { label: 'Buffs y río',        color: '#38d4c8' },
+  structures: { label: 'Estructuras',        color: '#94a3b8' },
+  purchases:  { label: 'Compras',            color: 'var(--accent-prime)' },
+  wards:      { label: 'Visión',              color: 'var(--accent-blue)' },
 };
 
 function formatTime(seconds: number): string {
@@ -1394,8 +1530,10 @@ function teamColor(team: string | null) {
   return team === 'DUSK' ? 'var(--accent-teal-bright)' : team === 'DAWN' ? 'var(--accent-loss)' : 'var(--text-muted)';
 }
 
-function TimelineTab({ match, onResync, syncing, preloadedEvents }: {
+function TimelineTab({ match, onResync, syncing, preloadedEvents, focus, personalPlayerId }: {
   match: MatchDetailData; onResync: () => void; syncing: boolean; preloadedEvents?: MatchEvents;
+  focus: { gameTime: number; label: string } | null;
+  personalPlayerId: string | null;
 }) {
   const [events, setEvents] = useState<MatchEvents | null>(preloadedEvents ?? null);
   const [loadingEvents, setLoadingEvents] = useState(false);
@@ -1405,6 +1543,8 @@ function TimelineTab({ match, onResync, syncing, preloadedEvents }: {
   );
   const [hoveredDot, setHoveredDot] = useState<MapDot | null>(null);
   const [pinnedDots, setPinnedDots] = useState<MapDot[]>([]);
+  const [personalOnly, setPersonalOnly] = useState(false);
+  const timelineScrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (preloadedEvents) return;
@@ -1412,26 +1552,33 @@ function TimelineTab({ match, onResync, syncing, preloadedEvents }: {
     setLoadingEvents(true);
     void apiClient.matches.getEvents(match.id)
       .then(setEvents)
-      .catch(() => toast.error('Failed to load timeline events.'))
+      .catch(() => toast.error('No se pudieron cargar los eventos de la cronología.'))
       .finally(() => setLoadingEvents(false));
   }, [match.id, match.eventStreamSynced, preloadedEvents]);
+
+  useEffect(() => {
+    if (!focus || !timelineScrollRef.current || match.duration <= 0) return;
+    const element = timelineScrollRef.current;
+    const target = (focus.gameTime / match.duration) * element.scrollWidth;
+    element.scrollTo({ left: Math.max(0, target - element.clientWidth / 2), behavior: 'smooth' });
+  }, [focus, match.duration, zoomIdx, events]);
 
   if (!match.eventStreamSynced) {
     return (
       <div className="glass-card" style={{ padding: '2.5rem', textAlign: 'center' }}>
-        <div style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', fontWeight: 600, marginBottom: '0.5rem' }}>Timeline not available</div>
+        <div style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', fontWeight: 600, marginBottom: '0.5rem' }}>Cronología no disponible</div>
         <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', maxWidth: '380px', margin: '0 auto 1.5rem' }}>
-          Sync this match with your pred.gg account to load the full event timeline.
+          Sincroniza esta partida con tu cuenta de pred.gg para cargar los eventos disponibles.
         </div>
         <button onClick={onResync} disabled={syncing} style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.8rem', fontWeight: 600, padding: '0.45rem 1rem', borderRadius: '6px', cursor: syncing ? 'not-allowed' : 'pointer', border: '1px solid var(--accent-blue)', background: 'rgba(91,156,246,0.1)', color: 'var(--accent-blue)', opacity: syncing ? 0.6 : 1 }}>
           <RefreshCw size={13} style={{ animation: syncing ? 'spin 1s linear infinite' : 'none' }} />
-          {syncing ? 'Syncing…' : 'Sync match events'}
+          {syncing ? 'Sincronizando…' : 'Sincronizar eventos'}
         </button>
       </div>
     );
   }
 
-  if (loadingEvents) return <div className="glass-card" style={{ padding: '2rem', color: 'var(--text-muted)', fontSize: '0.85rem' }}>Loading timeline…</div>;
+  if (loadingEvents) return <div className="glass-card" style={{ padding: '2rem', color: 'var(--text-muted)', fontSize: '0.85rem' }}>Cargando cronología…</div>;
   if (!events) return null;
 
   const zoom = ZOOM_LEVELS[zoomIdx];
@@ -1455,12 +1602,24 @@ function TimelineTab({ match, onResync, syncing, preloadedEvents }: {
     }
   }
 
-  const duskKills = events.heroKills.filter((k) => k.killerTeam === 'DUSK');
-  const dawnKills = events.heroKills.filter((k) => k.killerTeam === 'DAWN');
-  const duskBuys  = events.transactions.filter((t) => t.team === 'DUSK' && t.transactionType === 'BUY');
-  const dawnBuys  = events.transactions.filter((t) => t.team === 'DAWN' && t.transactionType === 'BUY');
-  const wardsPlaced    = events.wardEvents.filter((w) => w.eventType === 'PLACEMENT');
-  const wardsDestroyed = events.wardEvents.filter((w) => w.eventType === 'DESTRUCTION');
+  const visibleKills = personalOnly && personalPlayerId
+    ? events.heroKills.filter((event) => event.killerPlayerId === personalPlayerId || event.killedPlayerId === personalPlayerId)
+    : events.heroKills;
+  const visibleTransactions = personalOnly && personalPlayerId
+    ? events.transactions.filter((event) => event.playerId === personalPlayerId)
+    : events.transactions;
+  const duskKills = visibleKills.filter((k) => k.killerTeam === 'DUSK');
+  const dawnKills = visibleKills.filter((k) => k.killerTeam === 'DAWN');
+  const duskBuys  = visibleTransactions.filter((t) => t.team === 'DUSK' && t.transactionType === 'BUY');
+  const dawnBuys  = visibleTransactions.filter((t) => t.team === 'DAWN' && t.transactionType === 'BUY');
+  const visibleWardEvents = personalOnly && personalPlayerId
+    ? events.wardEvents.filter((event) => event.playerId === personalPlayerId)
+    : events.wardEvents;
+  const wardsPlaced    = visibleWardEvents.filter((w) => w.eventType === 'PLACEMENT');
+  const wardsDestroyed = visibleWardEvents.filter((w) => w.eventType === 'DESTRUCTION');
+  const majorObjectiveTypes = new Set(['FANGTOOTH', 'PRIMAL_FANGTOOTH', 'ORB_PRIME', 'MINI_PRIME', 'SHAPER']);
+  const majorObjectiveEvents = events.objectiveKills.filter((event) => majorObjectiveTypes.has(event.entityType) && (!personalOnly || !personalPlayerId || event.killerPlayerId === personalPlayerId));
+  const resourceEvents = events.objectiveKills.filter((event) => !majorObjectiveTypes.has(event.entityType) && (!personalOnly || !personalPlayerId || event.killerPlayerId === personalPlayerId));
 
   const mapDots: MapDot[] = [...pinnedDots, ...(hoveredDot ? [hoveredDot] : [])];
 
@@ -1475,6 +1634,11 @@ function TimelineTab({ match, onResync, syncing, preloadedEvents }: {
 
   return (
     <div>
+      {focus && (
+        <div className="glass-card" style={{ marginBottom: '0.8rem', padding: '0.7rem 0.85rem', borderColor: 'rgba(240,180,41,0.28)', color: 'var(--text-secondary)', fontSize: '0.7rem' }}>
+          <strong style={{ color: 'var(--accent-prime)' }}>Momento de aprendizaje · {formatTime(focus.gameTime)}</strong> — {focus.label}
+        </div>
+      )}
       {/* Controls row */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1rem', flexWrap: 'wrap' }}>
         {/* Section toggles */}
@@ -1487,6 +1651,9 @@ function TimelineTab({ match, onResync, syncing, preloadedEvents }: {
               </button>
             );
           })}
+          {personalPlayerId && <button onClick={() => setPersonalOnly((current) => !current)} aria-pressed={personalOnly} style={{ fontSize: '0.7rem', fontWeight: 700, padding: '0.18rem 0.6rem', borderRadius: '4px', cursor: 'pointer', border: `1px solid ${personalOnly ? 'var(--accent-cyan)' : 'var(--border-color)'}`, background: personalOnly ? 'rgba(56,212,200,0.1)' : 'transparent', color: personalOnly ? 'var(--accent-cyan)' : 'var(--text-muted)' }}>
+            Solo mis eventos comprobables
+          </button>}
         </div>
 
         {/* Zoom controls */}
@@ -1499,7 +1666,7 @@ function TimelineTab({ match, onResync, syncing, preloadedEvents }: {
 
         {/* Stats summary */}
         <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
-          {events.heroKills.length}K · {events.objectiveKills.length}Obj · {events.structureDestructions.length}Str · {events.wardEvents.length}W
+          {visibleKills.length} bajas · {majorObjectiveEvents.length} objetivos mayores · {personalOnly ? `${visibleTransactions.length} compras · ${visibleWardEvents.length} eventos de visión propios` : `${events.structureDestructions.length} estructuras · ${events.wardEvents.length} eventos de visión`}
         </span>
       </div>
 
@@ -1508,7 +1675,7 @@ function TimelineTab({ match, onResync, syncing, preloadedEvents }: {
       <div style={{ flex: 1, minWidth: 0 }}>
       {/* Scrollable timeline */}
       <div className="glass-card" style={{ padding: 0, overflow: 'hidden' }}>
-        <div style={{ overflowX: 'auto', overflowY: 'visible' }}>
+        <div ref={timelineScrollRef} style={{ overflowX: 'auto', overflowY: 'visible' }}>
           <div style={{ position: 'relative', width: totalWidth, minWidth: '100%' }}>
 
             {/* Minute gridlines (behind everything) */}
@@ -1519,9 +1686,11 @@ function TimelineTab({ match, onResync, syncing, preloadedEvents }: {
             {/* Time axis */}
             <TlAxis durationMins={durationMins} numMinutes={numMinutes} />
 
+            {focus && <div aria-label={`Momento de aprendizaje en ${formatTime(focus.gameTime)}`} style={{ position: 'absolute', top: 0, bottom: 0, left: pos(focus.gameTime), width: 2, background: 'var(--accent-prime)', boxShadow: '0 0 12px rgba(240,180,41,0.7)', zIndex: 30, pointerEvents: 'none' }} />}
+
             {/* ── KILLS ── */}
             {visible.has('kills') && <>
-              <TlSectionHeader label={`Kills — DUSK ${duskKills.length} / DAWN ${dawnKills.length}`} color="var(--accent-teal-bright)" />
+              <TlSectionHeader label={`Bajas — DUSK ${duskKills.length} / DAWN ${dawnKills.length}`} color="var(--accent-teal-bright)" />
               <TlLane label="DUSK" labelColor="var(--accent-teal-bright)">
                 {duskKills.map((k, i) => {
                   const dot = k.locationX != null && k.locationY != null
@@ -1566,9 +1735,9 @@ function TimelineTab({ match, onResync, syncing, preloadedEvents }: {
 
             {/* ── OBJECTIVES ── */}
             {visible.has('objectives') && <>
-              <TlSectionHeader label={`Objectives — ${events.objectiveKills.length} events`} color="#f0b429" />
-              <TlLane label="All" labelColor="#f0b429">
-                {events.objectiveKills.map((o, i) => {
+              <TlSectionHeader label={`Objetivos mayores — ${majorObjectiveEvents.length} eventos`} color="#f0b429" />
+              <TlLane label="Todos" labelColor="#f0b429">
+                {majorObjectiveEvents.map((o, i) => {
                   const meta = OBJECTIVE_META[o.entityType] ?? { label: o.entityType, color: '#64748b', abbr: o.entityType.slice(0, 3) };
                   const dot = o.locationX != null && o.locationY != null
                     ? { x: o.locationX, y: o.locationY, color: meta.color, label: meta.abbr, pinned: false }
@@ -1582,7 +1751,7 @@ function TimelineTab({ match, onResync, syncing, preloadedEvents }: {
                           <TlTipTitle label={meta.label} color={meta.color} />
                           <TlTipTime time={formatTime(o.gameTime)} />
                         </div>
-                        <TlTipRow label="Team" value={o.killerTeam ?? '?'} />
+                        <TlTipRow label="Equipo" value={o.killerTeam ?? '?'} />
                         {killer && (
                           <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginTop: '0.35rem' }}>
                             {killer.heroSlug && (
@@ -1604,10 +1773,20 @@ function TimelineTab({ match, onResync, syncing, preloadedEvents }: {
               </TlLane>
             </>}
 
+            {visible.has('resources') && resourceEvents.length > 0 && <>
+              <TlSectionHeader label={`Buffs y río — ${resourceEvents.length} eventos`} color="#38d4c8" />
+              <TlLane label="Todos" labelColor="#38d4c8">
+                {resourceEvents.map((event, index) => {
+                  const meta = OBJECTIVE_META[event.entityType] ?? { label: event.entityType, color: '#38d4c8', abbr: event.entityType.slice(0, 3) };
+                  return <TlEvent key={index} left={pos(event.gameTime)} color={meta.color} size={18} tooltipContent={<><TlTipTitle label={meta.label} color={meta.color} /><TlTipTime time={formatTime(event.gameTime)} /></>}><span style={{ fontSize: '0.38rem', fontWeight: 800 }}>{meta.abbr}</span></TlEvent>;
+                })}
+              </TlLane>
+            </>}
+
             {/* ── STRUCTURES ── */}
-            {visible.has('structures') && <>
-              <TlSectionHeader label={`Structures — ${events.structureDestructions.length} destroyed`} color="#94a3b8" />
-              <TlLane label="All" labelColor="#94a3b8">
+            {visible.has('structures') && !personalOnly && <>
+              <TlSectionHeader label={`Estructuras — ${events.structureDestructions.length} destruidas`} color="#94a3b8" />
+              <TlLane label="Todas" labelColor="#94a3b8">
                 {events.structureDestructions.map((s, i) => {
                   const meta = STRUCTURE_META[s.structureType] ?? { label: s.structureType, abbr: s.structureType.slice(0, 3) };
                   const tc = teamColor(s.destructionTeam);
@@ -1622,7 +1801,7 @@ function TimelineTab({ match, onResync, syncing, preloadedEvents }: {
                           <TlTipTitle label={meta.label} color="#94a3b8" />
                           <TlTipTime time={formatTime(s.gameTime)} />
                         </div>
-                        <TlTipRow label="Destroyed by" value={s.destructionTeam ?? '?'} />
+                        <TlTipRow label="Destruida por" value={s.destructionTeam ?? '?'} />
                       </>}
                     >
                       <span style={{ fontSize: '0.38rem', fontWeight: 800, fontFamily: 'var(--font-mono)', lineHeight: 1, pointerEvents: 'none' }}>{meta.abbr}</span>
@@ -1634,18 +1813,18 @@ function TimelineTab({ match, onResync, syncing, preloadedEvents }: {
 
             {/* ── PURCHASES ── */}
             {visible.has('purchases') && (duskBuys.length > 0 || dawnBuys.length > 0) && <>
-              <TlSectionHeader label={`Purchases — ${duskBuys.length + dawnBuys.length} items bought`} color="var(--accent-prime)" />
+              <TlSectionHeader label={`Compras — ${duskBuys.length + dawnBuys.length} objetos`} color="var(--accent-prime)" />
               {duskBuys.length > 0 && (
                 <TlLane label="DUSK" labelColor="var(--accent-teal-bright)">
                   {duskBuys.map((t, i) => (
                     <TlEvent key={i} left={pos(t.gameTime)} color="var(--accent-teal-bright)" size={16}
                       tooltipContent={<>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '0.4rem' }}>
-                          <TlTipTitle label="Item Purchased" color="var(--accent-prime)" />
+                          <TlTipTitle label="Objeto comprado" color="var(--accent-prime)" />
                           <TlTipTime time={formatTime(t.gameTime)} />
                         </div>
                         <TlTipItemRow itemName={t.itemName} />
-                        <div style={{ marginTop: '0.4rem' }}><TlTipRow label="Team" value="DUSK" /></div>
+                        <div style={{ marginTop: '0.4rem' }}><TlTipRow label="Equipo" value="DUSK" /></div>
                       </>}
                     >
                       {t.itemName && <img src={`/items/${t.itemName.toLowerCase()}.webp`} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />}
@@ -1659,11 +1838,11 @@ function TimelineTab({ match, onResync, syncing, preloadedEvents }: {
                     <TlEvent key={i} left={pos(t.gameTime)} color="var(--accent-loss)" size={16}
                       tooltipContent={<>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '0.4rem' }}>
-                          <TlTipTitle label="Item Purchased" color="var(--accent-prime)" />
+                          <TlTipTitle label="Objeto comprado" color="var(--accent-prime)" />
                           <TlTipTime time={formatTime(t.gameTime)} />
                         </div>
                         <TlTipItemRow itemName={t.itemName} />
-                        <div style={{ marginTop: '0.4rem' }}><TlTipRow label="Team" value="DAWN" /></div>
+                        <div style={{ marginTop: '0.4rem' }}><TlTipRow label="Equipo" value="DAWN" /></div>
                       </>}
                     >
                       {t.itemName && <img src={`/items/${t.itemName.toLowerCase()}.webp`} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />}
@@ -1674,7 +1853,7 @@ function TimelineTab({ match, onResync, syncing, preloadedEvents }: {
             </>}
 
             {/* ── WARDS ── */}
-            {visible.has('wards') && events.wardEvents.length > 0 && <>
+            {visible.has('wards') && visibleWardEvents.length > 0 && <>
               <TlSectionHeader label={`Wards — ${wardsPlaced.length} placed · ${wardsDestroyed.length} cleared`} color="var(--accent-blue)" />
               {wardsPlaced.length > 0 && (
                 <TlLane label="Placed" labelColor="var(--accent-blue)">
@@ -1691,7 +1870,7 @@ function TimelineTab({ match, onResync, syncing, preloadedEvents }: {
                           <TlTipTime time={formatTime(w.gameTime)} />
                         </div>
                         <TlTipRow label="Type" value={WARD_LABELS[w.wardType] ?? w.wardType} />
-                        <TlTipRow label="Team" value={w.team ?? '?'} />
+                        <TlTipRow label="Equipo" value={w.team ?? '?'} />
                       </>}
                     />
                   );})}
@@ -1712,7 +1891,7 @@ function TimelineTab({ match, onResync, syncing, preloadedEvents }: {
                           <TlTipTime time={formatTime(w.gameTime)} />
                         </div>
                         <TlTipRow label="Type" value={WARD_LABELS[w.wardType] ?? w.wardType} />
-                        <TlTipRow label="Team" value={w.team ?? '?'} />
+                        <TlTipRow label="Equipo" value={w.team ?? '?'} />
                       </>}
                     />
                   );})}
@@ -1988,6 +2167,18 @@ function BuildCoachCard({ matchId, matchPlayerId, liveMode }: { matchId: string;
     : analysis.verdict.grade === 'poor'
       ? 'var(--accent-loss)'
       : 'var(--accent-prime)';
+  const adaptationLevel = analysis.verdict.grade === 'correct'
+    ? 'Adaptación alta'
+    : analysis.verdict.grade === 'mostly_correct'
+      ? 'Adaptación media-alta'
+      : analysis.verdict.grade === 'mixed'
+        ? 'Adaptación media'
+        : 'Adaptación baja';
+  const coherenceLevel = analysis.globalAnalysis.coherence.score >= 80
+    ? 'Coherencia alta'
+    : analysis.globalAnalysis.coherence.score >= 60
+      ? 'Coherencia media'
+      : 'Coherencia baja';
   return (
     <section className="glass-card" style={{ padding: '1rem', borderColor: 'rgba(240,180,41,0.3)' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.75rem', flexWrap: 'wrap' }}>
@@ -2000,10 +2191,14 @@ function BuildCoachCard({ matchId, matchPlayerId, liveMode }: { matchId: string;
         </div>
       </div>
 
+      <div style={{ marginTop: '0.7rem', padding: '0.6rem 0.7rem', borderRadius: 7, background: analysis.dataContext.catalogFallback ? 'rgba(240,180,41,0.07)' : 'rgba(56,212,200,0.045)', border: `1px solid ${analysis.dataContext.catalogFallback ? 'rgba(240,180,41,0.24)' : 'rgba(56,212,200,0.18)'}`, color: 'var(--text-secondary)', fontSize: '0.64rem', lineHeight: 1.45 }}>
+        <strong style={{ color: analysis.dataContext.catalogFallback ? 'var(--accent-prime)' : 'var(--accent-cyan)' }}>Contexto del dato:</strong> {analysis.dataContext.disclosure}
+      </div>
+
       <div style={{ marginTop: '0.85rem', padding: '0.85rem', borderRadius: 9, background: `color-mix(in srgb, ${gradeColor} 7%, rgba(15,23,42,0.6))`, border: `1px solid color-mix(in srgb, ${gradeColor} 30%, transparent)` }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.7rem', alignItems: 'center', flexWrap: 'wrap' }}>
           <strong style={{ color: gradeColor, fontSize: '0.84rem' }}>{gradeLabel}</strong>
-          <span style={{ fontFamily: 'var(--font-mono)', color: gradeColor, fontSize: '0.72rem', fontWeight: 800 }}>{analysis.verdict.score}/100 adaptación</span>
+          <span style={{ color: gradeColor, fontSize: '0.7rem', fontWeight: 800 }}>{adaptationLevel}</span>
         </div>
         <p style={{ margin: '0.4rem 0 0', color: 'var(--text-secondary)', fontSize: '0.72rem', lineHeight: 1.5 }}>{analysis.verdict.summary}</p>
         {(analysis.localBenchmark.exactBuild || analysis.localBenchmark.laneMatchup) && <div style={{ display: 'flex', gap: '0.45rem', flexWrap: 'wrap', marginTop: '0.55rem' }}>
@@ -2016,6 +2211,8 @@ function BuildCoachCard({ matchId, matchPlayerId, liveMode }: { matchId: string;
         </div>}
       </div>
 
+      <details style={{ marginTop: '0.85rem', border: '1px solid var(--border-color)', borderRadius: 8, padding: '0.7rem' }}>
+        <summary style={{ cursor: 'pointer', color: 'var(--accent-cyan)', fontSize: '0.7rem', fontWeight: 800 }}>Ver evidencia completa: rival, plan del héroe y evaluación de cada objeto</summary>
       <div style={{ marginTop: '0.9rem' }}>
         <p style={{ margin: '0 0 0.45rem', color: 'var(--text-muted)', fontSize: '0.61rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Qué tenía el equipo rival</p>
         <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
@@ -2040,7 +2237,7 @@ function BuildCoachCard({ matchId, matchPlayerId, liveMode }: { matchId: string;
             </div>
           </article>
           <article style={{ padding: '0.7rem', borderRadius: 8, background: 'rgba(15,23,42,0.5)', border: '1px solid var(--border-color)' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.5rem' }}><strong style={{ color: 'var(--text-primary)', fontSize: '0.72rem' }}>Qué priorizó tu build</strong><span style={{ color: 'var(--accent-cyan)', fontSize: '0.64rem', fontWeight: 800 }}>{analysis.globalAnalysis.coherence.score}% coherencia</span></div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.5rem' }}><strong style={{ color: 'var(--text-primary)', fontSize: '0.72rem' }}>Qué priorizó tu build</strong><span style={{ color: 'var(--accent-cyan)', fontSize: '0.64rem', fontWeight: 800 }}>{coherenceLevel}</span></div>
             <p style={{ margin: '0.35rem 0 0', color: 'var(--text-secondary)', fontSize: '0.64rem', lineHeight: 1.45 }}>{analysis.globalAnalysis.coherence.summary}</p>
             <div style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap', marginTop: '0.45rem' }}>
               {analysis.globalAnalysis.buildProfile.slice(0, 6).map((concept) => <CoachHover key={concept.key} label={`Ver objetos de ${concept.label}`} content={<div><strong style={{ display: 'block', color: 'var(--accent-cyan)', marginBottom: '0.25rem' }}>{concept.label}</strong>{concept.description}<span style={{ display: 'block', marginTop: '0.35rem', color: 'var(--text-muted)' }}>Objetos: {concept.items.join(', ')}</span></div>}>
@@ -2135,6 +2332,8 @@ function BuildCoachCard({ matchId, matchPlayerId, liveMode }: { matchId: string;
           );
         })}
       </div>
+
+      </details>
 
       <div style={{ marginTop: '1rem', padding: '0.85rem', borderRadius: 9, background: 'rgba(56,212,200,0.035)', border: '1px solid rgba(56,212,200,0.18)' }}>
         <p style={{ margin: 0, color: 'var(--accent-cyan)', fontSize: '0.62rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Build recomendada contra este equipo</p>
@@ -2254,9 +2453,9 @@ function BuildCoachCard({ matchId, matchPlayerId, liveMode }: { matchId: string;
   );
 }
 
-function StatisticsTab({ match, duskWon, dawnWon, onResync, syncing }: {
+function StatisticsTab({ match, duskWon, dawnWon, onResync, syncing, personalMatchPlayerId }: {
   match: MatchDetailData; duskWon: boolean; dawnWon: boolean;
-  onResync: () => void; syncing: boolean;
+  onResync: () => void; syncing: boolean; personalMatchPlayerId: string | null;
 }) {
   const allPlayers = [...match.dusk, ...match.dawn];
   const hasExtendedStats = allPlayers.some((p) => p.physicalDamageDealtToHeroes !== null);
@@ -2265,10 +2464,10 @@ function StatisticsTab({ match, duskWon, dawnWon, onResync, syncing }: {
     return (
       <div className="glass-card" style={{ padding: '2.5rem', textAlign: 'center' }}>
         <div style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', marginBottom: '0.5rem', fontWeight: 600 }}>
-          Extended statistics not available
+          Estadísticas ampliadas no disponibles
         </div>
         <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '1.5rem', maxWidth: '380px', margin: '0 auto 1.5rem' }}>
-          Sync this match from pred.gg to load detailed combat stats, CS, healing, and objective damage.
+          Sincroniza esta partida con pred.gg para cargar combate detallado, súbditos, curación y daño a objetivos.
         </div>
         <button
           onClick={onResync}
@@ -2276,15 +2475,17 @@ function StatisticsTab({ match, duskWon, dawnWon, onResync, syncing }: {
           style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.8rem', fontWeight: 600, padding: '0.45rem 1rem', borderRadius: '6px', cursor: syncing ? 'not-allowed' : 'pointer', border: '1px solid var(--accent-blue)', background: 'rgba(91,156,246,0.1)', color: 'var(--accent-blue)', opacity: syncing ? 0.6 : 1 }}
         >
           <RefreshCw size={13} style={{ animation: syncing ? 'spin 1s linear infinite' : 'none' }} />
-          {syncing ? 'Syncing…' : 'Sync match stats'}
+          {syncing ? 'Sincronizando…' : 'Sincronizar estadísticas'}
         </button>
       </div>
     );
   }
 
+  const prioritizePersonal = (players: MatchPlayerDetail[]) => [...players].sort((a, b) =>
+    Number(b.id === personalMatchPlayerId) - Number(a.id === personalMatchPlayerId));
   const teams: Array<{ key: 'dusk' | 'dawn'; label: string; players: MatchPlayerDetail[]; won: boolean }> = [
-    { key: 'dusk', label: 'Dusk', players: match.dusk, won: duskWon },
-    { key: 'dawn', label: 'Dawn', players: match.dawn, won: dawnWon },
+    { key: 'dusk', label: 'Dusk', players: prioritizePersonal(match.dusk), won: duskWon },
+    { key: 'dawn', label: 'Dawn', players: prioritizePersonal(match.dawn), won: dawnWon },
   ];
 
   // Global max values for relative bars across both teams
@@ -2296,15 +2497,15 @@ function StatisticsTab({ match, duskWon, dawnWon, onResync, syncing }: {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
       {/* Section 1 — Damage Output */}
-      <StatSection title="Damage Output" description="Hero damage breakdown (physical · magic · true) and total dealt">
+      <StatSection title="Daño infligido" description="Daño a héroes por tipo (físico · mágico · verdadero) y daño total">
         {teams.map(({ key, label, players, won }) => (
           <StatTeamBlock key={key} teamKey={key} label={label} won={won}>
             <div style={statHeaderRowStyle}>
-              <span style={{ flex: '0 0 200px' }}>Player</span>
-              <span style={{ flex: '1 1 160px' }}>Hero DMG breakdown</span>
-              <span style={{ flex: '0 0 88px', textAlign: 'right' }}>Total DMG</span>
-              <span style={{ flex: '0 0 76px', textAlign: 'right' }}>Struct /m</span>
-              <span style={{ flex: '0 0 76px', textAlign: 'right' }}>Obj /m</span>
+              <span style={{ flex: '0 0 200px' }}>Jugador</span>
+              <span style={{ flex: '1 1 160px' }}>Daño a héroes</span>
+              <span style={{ flex: '0 0 88px', textAlign: 'right' }}>Daño total</span>
+              <span style={{ flex: '0 0 76px', textAlign: 'right' }}>Estruc. /min</span>
+              <span style={{ flex: '0 0 76px', textAlign: 'right' }}>Objet. /min</span>
             </div>
             {players.map((p) => {
               const phys = p.physicalDamageDealtToHeroes ?? 0;
@@ -2313,7 +2514,7 @@ function StatisticsTab({ match, duskWon, dawnWon, onResync, syncing }: {
               const heroTotal = (phys + magic + trueD) || (p.heroDamage ?? 0);
               const barW = heroTotal / maxHeroDmg;
               return (
-                <div key={p.id} style={statRowStyle}>
+                <div key={p.id} style={getStatRowStyle(p.id === personalMatchPlayerId)}>
                   <StatPlayerCell player={p} teamColor={key === 'dusk' ? 'var(--accent-teal-bright)' : 'var(--accent-loss)'} />
                   <div style={{ flex: '1 1 160px', minWidth: 0 }}>
                     <div style={{ display: 'flex', gap: '0.5rem', fontSize: '0.7rem', fontFamily: 'var(--font-mono)', marginBottom: '0.25rem', color: 'var(--text-muted)' }}>
@@ -2344,19 +2545,19 @@ function StatisticsTab({ match, duskWon, dawnWon, onResync, syncing }: {
       </StatSection>
 
       {/* Section 2 — Survivability */}
-      <StatSection title="Survivability" description="Damage received from heroes, taken per minute, and healing per minute">
+      <StatSection title="Supervivencia" description="Daño recibido de héroes, daño recibido por minuto y curación por minuto">
         {teams.map(({ key, label, players, won }) => (
           <StatTeamBlock key={key} teamKey={key} label={label} won={won}>
             <div style={statHeaderRowStyle}>
-              <span style={{ flex: '0 0 200px' }}>Player</span>
-              <span style={{ flex: '1 1 120px' }}>Hero DMG taken</span>
-              <span style={{ flex: '0 0 76px', textAlign: 'right' }}>Taken /m</span>
-              <span style={{ flex: '0 0 80px', textAlign: 'right' }}>Total taken</span>
-              <span style={{ flex: '0 0 72px', textAlign: 'right' }}>Heal /m</span>
-              <span style={{ flex: '0 0 76px', textAlign: 'right' }}>Largest crit</span>
+              <span style={{ flex: '0 0 200px' }}>Jugador</span>
+              <span style={{ flex: '1 1 120px' }}>Daño de héroes recibido</span>
+              <span style={{ flex: '0 0 76px', textAlign: 'right' }}>Recibido /min</span>
+              <span style={{ flex: '0 0 80px', textAlign: 'right' }}>Recibido total</span>
+              <span style={{ flex: '0 0 72px', textAlign: 'right' }}>Curación /min</span>
+              <span style={{ flex: '0 0 76px', textAlign: 'right' }}>Crítico máx.</span>
             </div>
             {players.map((p) => (
-              <div key={p.id} style={statRowStyle}>
+              <div key={p.id} style={getStatRowStyle(p.id === personalMatchPlayerId)}>
                 <StatPlayerCell player={p} teamColor={key === 'dusk' ? 'var(--accent-teal-bright)' : 'var(--accent-loss)'} />
                 <div style={{ flex: '1 1 120px', minWidth: 0 }}>
                   <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.72rem', marginBottom: '0.25rem', color: 'var(--text-secondary)' }}>
@@ -2386,19 +2587,19 @@ function StatisticsTab({ match, duskWon, dawnWon, onResync, syncing }: {
       </StatSection>
 
       {/* Section 3 — Farm & Highlights */}
-      <StatSection title="Farm & Highlights" description="Creep score, gold efficiency, ward activity per minute, and multi-kill performance">
+      <StatSection title="Economía y momentos destacados" description="Súbditos, gasto de oro, visión por minuto y rachas de eliminaciones">
         {teams.map(({ key, label, players, won }) => (
           <StatTeamBlock key={key} teamKey={key} label={label} won={won}>
             <div style={statHeaderRowStyle}>
-              <span style={{ flex: '0 0 200px' }}>Player</span>
-              <span style={{ flex: '1 1 120px' }}>CS</span>
-              <span style={{ flex: '0 0 80px', textAlign: 'right' }}>Gold spent</span>
-              <span style={{ flex: '0 0 76px', textAlign: 'right' }}>Kill spree</span>
-              <span style={{ flex: '0 0 72px', textAlign: 'right' }}>Multi-kill</span>
-              <span style={{ flex: '0 0 84px', textAlign: 'right' }}>Wards P/D /m</span>
+              <span style={{ flex: '0 0 200px' }}>Jugador</span>
+              <span style={{ flex: '1 1 120px' }}>Súbditos</span>
+              <span style={{ flex: '0 0 80px', textAlign: 'right' }}>Oro gastado</span>
+              <span style={{ flex: '0 0 76px', textAlign: 'right' }}>Racha</span>
+              <span style={{ flex: '0 0 72px', textAlign: 'right' }}>Multibaja</span>
+              <span style={{ flex: '0 0 84px', textAlign: 'right' }}>Visión C/E /min</span>
             </div>
             {players.map((p) => (
-              <div key={p.id} style={statRowStyle}>
+              <div key={p.id} style={getStatRowStyle(p.id === personalMatchPlayerId)}>
                 <StatPlayerCell player={p} teamColor={key === 'dusk' ? 'var(--accent-teal-bright)' : 'var(--accent-loss)'} />
                 <div style={{ flex: '1 1 120px', minWidth: 0 }}>
                   <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.72rem', marginBottom: '0.25rem', color: 'var(--text-secondary)' }}>
@@ -2433,7 +2634,7 @@ function StatisticsTab({ match, duskWon, dawnWon, onResync, syncing }: {
         ))}
       </StatSection>
       {/* Section 4 — Participation */}
-      <StatSection title="Participation" description="Kill share, death share, and damage share within the team">
+      <StatSection title="Participación" description="Porcentaje de bajas, muertes y daño dentro del equipo">
         {teams.map(({ key, label, players, won }) => {
           const teamKills = Math.max(players.reduce((s, p) => s + p.kills, 0), 1);
           const teamDeaths = Math.max(players.reduce((s, p) => s + p.deaths, 0), 1);
@@ -2441,17 +2642,17 @@ function StatisticsTab({ match, duskWon, dawnWon, onResync, syncing }: {
           return (
             <StatTeamBlock key={key} teamKey={key} label={label} won={won}>
               <div style={statHeaderRowStyle}>
-                <span style={{ flex: '0 0 200px' }}>Player</span>
-                <span style={{ flex: '1 1 100px' }}>Kill Share %</span>
-                <span style={{ flex: '0 0 88px', textAlign: 'right' }}>Death Share %</span>
-                <span style={{ flex: '0 0 88px', textAlign: 'right' }}>Dmg Share %</span>
+                <span style={{ flex: '0 0 200px' }}>Jugador</span>
+                <span style={{ flex: '1 1 100px' }}>% de bajas</span>
+                <span style={{ flex: '0 0 88px', textAlign: 'right' }}>% de muertes</span>
+                <span style={{ flex: '0 0 88px', textAlign: 'right' }}>% de daño</span>
               </div>
               {players.map((p) => {
                 const ks = Math.round((p.kills / teamKills) * 100);
                 const ds = Math.round((p.deaths / teamDeaths) * 100);
                 const dms = p.heroDamage !== null ? Math.round((p.heroDamage / teamHeroDmg) * 100) : null;
                 return (
-                  <div key={p.id} style={statRowStyle}>
+                  <div key={p.id} style={getStatRowStyle(p.id === personalMatchPlayerId)}>
                     <StatPlayerCell player={p} teamColor={key === 'dusk' ? 'var(--accent-teal-bright)' : 'var(--accent-loss)'} />
                     <div style={{ flex: '1 1 100px', minWidth: 0 }}>
                       <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.72rem', marginBottom: '0.25rem', color: 'var(--accent-win)' }}>{ks}%</div>
@@ -2502,8 +2703,8 @@ function StatTeamBlock({ teamKey, label, won, children }: { teamKey: 'dusk' | 'd
         <div style={{ width: 3, height: 16, borderRadius: 999, background: teamKey === 'dusk' ? 'var(--accent-teal-bright)' : 'var(--accent-loss)', flexShrink: 0 }} />
         <span style={{ fontWeight: 700, fontSize: '0.8rem', color: teamKey === 'dusk' ? 'var(--accent-teal-bright)' : 'var(--accent-loss)' }}>{label}</span>
         {won
-          ? <span style={{ fontSize: '0.68rem', fontWeight: 700, color: 'var(--accent-win)', fontFamily: 'var(--font-mono)' }}>VICTORY</span>
-          : <span style={{ fontSize: '0.68rem', fontWeight: 700, color: 'var(--accent-loss)', fontFamily: 'var(--font-mono)' }}>DEFEAT</span>
+          ? <span style={{ fontSize: '0.68rem', fontWeight: 700, color: 'var(--accent-win)', fontFamily: 'var(--font-mono)' }}>VICTORIA</span>
+          : <span style={{ fontSize: '0.68rem', fontWeight: 700, color: 'var(--accent-loss)', fontFamily: 'var(--font-mono)' }}>DERROTA</span>
         }
       </div>
       {children}
@@ -2556,6 +2757,12 @@ const statRowStyle: React.CSSProperties = {
   padding: '0.55rem 1rem',
   borderBottom: '1px solid var(--border-color)',
 };
+
+function getStatRowStyle(isPersonal: boolean): React.CSSProperties {
+  return isPersonal
+    ? { ...statRowStyle, background: 'rgba(56,212,200,0.08)', boxShadow: 'inset 3px 0 0 var(--accent-teal-bright)' }
+    : statRowStyle;
+}
 
 // ── Scoreboard helpers ────────────────────────────────────────────────────────
 

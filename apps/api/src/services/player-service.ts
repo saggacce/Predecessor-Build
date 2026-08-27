@@ -39,6 +39,8 @@ export interface PlayerProfile {
     date: Date;
     duration: number;
     gameMode: string;
+    version: string | null;
+    ratingDelta: number | null;
     heroName: string | null;
     heroImageUrl: string | null;
     wardsPlaced: number | null;
@@ -79,7 +81,7 @@ export async function getPlayerProfile(playerId: string): Promise<PlayerProfile>
       },
       matchPlayers: {
         include: {
-          match: true,
+          match: { include: { version: true } },
         },
         orderBy: { match: { startTime: 'desc' } },
         take: 50,
@@ -134,6 +136,8 @@ export async function getPlayerProfile(playerId: string): Promise<PlayerProfile>
       date: mp.match.startTime,
       duration: mp.match.duration,
       gameMode: mp.match.gameMode,
+      version: mp.match.version?.name ?? null,
+      ratingDelta: mp.ratingDelta,
       heroName: hero?.name ?? null,
       heroImageUrl: hero?.imageUrl ?? null,
       wardsPlaced: mp.wardsPlaced,

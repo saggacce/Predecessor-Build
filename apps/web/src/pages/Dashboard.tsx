@@ -3,9 +3,10 @@ import { Link, useNavigate } from 'react-router';
 import { Server, Zap, RefreshCw, CheckCircle, XCircle, ArrowRight, Users, Sparkles, ThumbsUp, ThumbsDown, Send, Download, Target, BookOpen, Shield, Star, TrendingUp, BarChart2, MessageSquare, PlusCircle, Calendar, Bell, Search, ChevronRight, Trophy, AlertTriangle, Clock, CheckCircle2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useTranslation } from 'react-i18next';
-import { apiClient, ApiErrorResponse, type TeamProfile, type TeamAnalysis, type PlayerProfile, type Insight, type HeroStat, type ScrimScheduleItem, type TeamCommItem, type WeeklyGoalItem, type PlayerAnalysisStat, type PostMatchTask, type MissionItem } from '../api/client';
+import { apiClient, ApiErrorResponse, type TeamProfile, type TeamAnalysis, type PlayerProfile, type Insight, type HeroStat, type ScrimScheduleItem, type TeamCommItem, type WeeklyGoalItem, type PlayerAnalysisStat, type PlayerTrainingCycle, type PostMatchTask, type MissionItem } from '../api/client';
 import { useAuth } from '../hooks/useAuth';
 import { useViewAs } from '../hooks/useViewAs';
+import { useWorkspaceMode } from '../hooks/useWorkspaceMode';
 import { LinkPlayerModal } from '../components/LinkPlayerModal';
 import { WelcomeModal } from '../components/WelcomeModal';
 import type { VersionRecord } from '@predecessor/data-model';
@@ -155,6 +156,7 @@ export default function Dashboard() {
   const { t, i18n } = useTranslation();
   const { user, internalAuthenticated } = useAuth();
   const { viewAs } = useViewAs();
+  const { mode } = useWorkspaceMode();
   const [healthStatus, setHealthStatus] = useState<'checking' | 'ok' | 'error'>('checking');
   const [latestPatch, setLatestPatch] = useState<VersionRecord | null>(null);
   const [syncState, setSyncState] = useState<SyncState>({ tag: 'idle' });
@@ -195,7 +197,8 @@ export default function Dashboard() {
     user?.globalRole === 'MANAGER' ||
     (user?.memberships?.some((m) => m.role === 'MANAGER') ?? false)
   );
-  const isStandalonePlayerView = viewAs === 'PLAYER'
+  const isStandalonePlayerView = (mode === 'player' && user?.globalRole !== 'PLATFORM_ADMIN')
+    || viewAs === 'PLAYER'
     || user?.globalRole === 'PLAYER'
     || (teamsLoaded && !ownTeam && user?.globalRole !== 'PLATFORM_ADMIN' && user?.globalRole !== 'MANAGER');
 
@@ -416,7 +419,7 @@ export default function Dashboard() {
           {isStandalonePlayerView ? t('dashboard.playerSpace') : ownTeam ? ownTeam.name : t('dashboard.noTeam')}
           {latestPatch && (
             <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem', background: 'rgba(107,170,248,0.12)', border: '1px solid rgba(107,170,248,0.25)', borderRadius: 4, padding: '1px 7px', fontFamily: 'var(--font-mono)', fontSize: '0.7rem', fontWeight: 700, color: 'var(--accent-blue)' }}>
-              Patch {latestPatch.name}
+              Catálogo {latestPatch.name}
             </span>
           )}
         </p>
@@ -815,7 +818,7 @@ function PlayerStatSummary({ profile }: { profile: PlayerProfile }) {
   const kda = profile.generalStats?.kda as number | undefined;
 
   const chips = [
-    { label: t('dashboard.winRate'), value: wr != null ? `${Math.round(wr)}%` : '—', color: wr != null && wr >= 50 ? 'var(--accent-win)' : wr != null ? 'var(--accent-loss)' : 'var(--text-muted)' },
+    { label: 'Tasa de victorias', value: wr != null ? `${Math.round(wr)}%` : '—', color: wr != null && wr >= 50 ? 'var(--accent-win)' : wr != null ? 'var(--accent-loss)' : 'var(--text-muted)' },
     { label: t('playerScouting.kda'), value: kda != null ? kda.toFixed(2) : '—', color: 'var(--accent-teal-bright)' },
     { label: t('playerScouting.cs'), value: csPerMin != null ? csPerMin.toFixed(1) : '—', color: 'var(--text-primary)' },
     { label: 'GPM', value: gpm != null ? Math.round(gpm).toString() : '—', color: 'var(--text-primary)' },
@@ -844,7 +847,7 @@ function PlayerHeroPool({ heroStats }: { heroStats: HeroStat[] }) {
   if (top3.length === 0) return null;
   return (
     <div className="glass-card" style={{ padding: '1rem 1.25rem' }}>
-      <div style={{ fontSize: '0.68rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '0.75rem' }}>{t('playerScouting.heroPool')}</div>
+      <div style={{ fontSize: '0.68rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '0.75rem' }}>Pool de héroes</div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
         {top3.map((h) => {
           const games = h.matches ?? h.wins + h.losses;
@@ -852,7 +855,7 @@ function PlayerHeroPool({ heroStats }: { heroStats: HeroStat[] }) {
           return (
             <div key={h.heroData.slug} style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
               <span style={{ fontWeight: 700, fontSize: '0.82rem', color: 'var(--text-primary)', minWidth: 90, textTransform: 'capitalize' }}>{h.heroData.name ?? h.heroData.slug}</span>
-              <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.78rem', color: 'var(--text-muted)' }}>{games}g</span>
+              <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.78rem', color: 'var(--text-muted)' }}>{games} partidas</span>
               {wr != null && (
                 <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.82rem', fontWeight: 700, color: wr >= 55 ? 'var(--accent-win)' : wr < 45 ? 'var(--accent-loss)' : 'var(--text-primary)', marginLeft: 'auto' }}>{wr}%</span>
               )}
@@ -1556,6 +1559,42 @@ function PostMatchTasksPanel({ tasks, role, onDismissed }: {
   );
 }
 
+function TrainingCycleWidget({ cycles, onChange }: { cycles: PlayerTrainingCycle[]; onChange: (cycles: PlayerTrainingCycle[]) => void }) {
+  const active = cycles.find((cycle) => cycle.status === 'ACTIVE');
+  if (!active) return (
+    <section className="glass-card" style={{ padding: '1rem 1.15rem' }}>
+      <strong style={{ display: 'block', fontSize: '0.8rem' }}>Ciclo de entrenamiento</strong>
+      <p style={{ margin: '0.35rem 0 0', color: 'var(--text-muted)', fontSize: '0.7rem', lineHeight: 1.45 }}>Abre un Momento clave de una partida y convierte ese aprendizaje en un foco para tus próximas cinco partidas.</p>
+    </section>
+  );
+  const percent = Math.round(active.progress * 100);
+  async function finish(status: 'COMPLETED' | 'ARCHIVED') {
+    try {
+      const response = await apiClient.playerLearning.updateCycle(active!.id, status);
+      onChange(cycles.map((cycle) => cycle.id === active!.id ? { ...cycle, ...response.cycle } : cycle));
+      toast.success(status === 'COMPLETED' ? 'Ciclo completado' : 'Ciclo archivado');
+    } catch (error) {
+      toast.error(error instanceof ApiErrorResponse ? error.error.message : 'No se pudo actualizar el ciclo.');
+    }
+  }
+  return (
+    <section className="glass-card" style={{ padding: '1rem 1.15rem', borderColor: 'rgba(56,212,200,0.28)' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.8rem', flexWrap: 'wrap' }}>
+        <div>
+          <span style={{ color: 'var(--accent-cyan)', fontSize: '0.62rem', fontWeight: 850, textTransform: 'uppercase' }}>Ciclo activo · {active.matchesPlayed}/{active.targetMatches} partidas</span>
+          <strong style={{ display: 'block', marginTop: '0.3rem', fontSize: '0.84rem' }}>{active.title}</strong>
+          <p style={{ margin: '0.3rem 0 0', color: 'var(--text-secondary)', fontSize: '0.69rem', lineHeight: 1.45 }}><strong>Señal:</strong> {active.cue}</p>
+        </div>
+        <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'flex-start' }}>
+          <button type="button" className="btn-secondary" onClick={() => void finish('ARCHIVED')} style={{ flex: 'unset', fontSize: '0.63rem' }}>Archivar</button>
+          <button type="button" className="btn-primary" onClick={() => void finish('COMPLETED')} disabled={active.matchesPlayed < active.targetMatches} title={active.matchesPlayed < active.targetMatches ? 'Completa las partidas del ciclo antes de cerrarlo' : undefined} style={{ flex: 'unset', fontSize: '0.63rem' }}>Completar</button>
+        </div>
+      </div>
+      <div style={{ marginTop: '0.65rem', height: 7, borderRadius: 999, background: 'rgba(255,255,255,0.06)', overflow: 'hidden' }}><div style={{ width: `${percent}%`, height: '100%', borderRadius: 999, background: 'var(--accent-cyan)' }} /></div>
+    </section>
+  );
+}
+
 // ── Standalone Player view (PLAYER globalRole, no team) ───────────────────────
 function PlayerStandaloneView() {
   const { t } = useTranslation();
@@ -1568,6 +1607,7 @@ function PlayerStandaloneView() {
   const [showLinkModal, setShowLinkModal] = useState(false);
   const [linkedIdState, setLinkedIdState] = useState(linkedId);
   const [myGoals, setMyGoals] = useState<WeeklyGoalItem[]>([]);
+  const [trainingCycles, setTrainingCycles] = useState<PlayerTrainingCycle[]>([]);
 
   // Sync linkedIdState when auth state updates (e.g. after refreshInternalSession)
   useEffect(() => {
@@ -1587,6 +1627,7 @@ function PlayerStandaloneView() {
 
   useEffect(() => {
     apiClient.weeklyGoals.mine().then((r) => setMyGoals(r.goals)).catch(() => null);
+    apiClient.playerLearning.cycles().then((response) => setTrainingCycles(response.cycles)).catch(() => null);
   }, []);
 
   if (!linkedIdState) {
@@ -1675,6 +1716,7 @@ function PlayerStandaloneView() {
       )}
 
       {/* Weekly goal */}
+      <TrainingCycleWidget cycles={trainingCycles} onChange={setTrainingCycles} />
       <WeeklyGoalWidget goals={myGoals} onGoalsChange={setMyGoals} />
 
       {/* Player quick links */}

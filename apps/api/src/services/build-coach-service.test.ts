@@ -72,7 +72,7 @@ describe('contextual build coach', () => {
     expect(result.signals.find((signal) => signal.key === 'physical-defense')?.suggestedItems?.[0]).toMatchObject({ slug: 'physical-guard' });
     expect(result.context.damageReceived.physical).toBe(18_000);
     expect(result.verdict.grade).toBe('poor');
-    expect(result.recommendedBuild.changes.find((change) => change.signalKey === 'anti-heal')?.why).toContain('narbash');
+    expect(result.recommendedBuild.changes.find((change) => change.signalKey === 'anti-heal')?.why.toLowerCase()).toContain('narbash');
     expect(result.signals.find((signal) => signal.key === 'anti-heal')).toMatchObject({
       whyItMatters: expect.stringContaining('Heridas Graves'),
       sources: [expect.objectContaining({ heroSlug: 'narbash', name: 'Song of My People' })],

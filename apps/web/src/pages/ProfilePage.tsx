@@ -392,7 +392,7 @@ export default function ProfilePage() {
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.6rem' }}>
               {([
-                { tier: 'FREE',    label: 'Free',    color: 'var(--text-muted)',    features: ['Últimas 20 partidas', 'Stats básicos', 'Hero pool propio'] },
+                { tier: 'FREE',    label: 'Free',    color: 'var(--text-muted)',    features: ['Historial reciente disponible', 'Estadísticas básicas', 'Pool de héroes propio'] },
                 { tier: 'PRO',     label: 'Pro',     color: 'var(--accent-blue)',   features: ['Historial completo', 'GPM, DPM, KP', 'Insights personales', 'Player Goals'] },
                 { tier: 'PREMIUM', label: 'Premium', color: 'var(--accent-prime)',  features: ['Todo Pro', 'LLM Coach personal', 'Focus of the Day', 'Análisis de tendencias'] },
               ] as const).map(({ tier: t, label, color, features }) => {
@@ -416,7 +416,7 @@ export default function ProfilePage() {
               Acceso a funciones colectivas: análisis de equipo, Scrim Report, Review Queue, Discord Bot. Lo gestiona el responsable del equipo.
             </p>
             {profile.memberships.filter((m) => m.team.type === 'OWN').length === 0 ? (
-              <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>No perteneces a ningún equipo OWN actualmente.</p>
+              <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Actualmente no perteneces a ningún equipo propio.</p>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
                 {profile.memberships.filter((m) => m.team.type === 'OWN').map((m) => {

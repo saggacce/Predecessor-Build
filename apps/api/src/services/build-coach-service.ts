@@ -137,7 +137,7 @@ function formatHeroList(players: Array<{ heroSlug: string; value: number }>): st
     .filter((player) => player.value > 0)
     .sort((a, b) => b.value - a.value)
     .slice(0, 3)
-    .map((player) => `${player.heroSlug} (${player.value.toLocaleString()})`)
+    .map((player) => `${player.heroSlug.split('-').map((part) => part.charAt(0).toUpperCase() + part.slice(1)).join(' ')} (${player.value.toLocaleString()})`)
     .join(', ');
 }
 
@@ -169,7 +169,12 @@ function normalizeCatalogKey(value: string): string {
 }
 
 function plainText(value: string): string {
-  return value.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+  return value
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/\{[^}]+\}/g, ' ')
+    .replace(/\s+([.,;:])/g, '$1')
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 
 function educationalExplanation(key: string): { whyItMatters: string; appliesAgainst: string[] } | null {
@@ -339,6 +344,8 @@ export async function getMatchBuildAnalysis(matchId: string, matchPlayerId: stri
       match: {
         select: {
           versionId: true,
+          version: { select: { name: true, releaseDate: true } },
+          startTime: true,
           winningTeam: true,
           matchPlayers: {
             select: {
@@ -358,6 +365,8 @@ export async function getMatchBuildAnalysis(matchId: string, matchPlayerId: stri
   const enemyInventorySlugs = enemies.flatMap((enemy) => jsonArray<string>(enemy.inventoryItems)).filter(Boolean);
   const catalogSlugs = [...new Set([...inventorySlugs, ...enemyInventorySlugs])];
   let catalogVersionId = row.match.versionId;
+  let catalogPatch = row.match.version?.name ?? null;
+  let catalogFallback = false;
   let catalogItems = catalogVersionId && catalogSlugs.length > 0
     ? await db.gameItem.findMany({
       where: { slug: { in: catalogSlugs } },
@@ -365,14 +374,19 @@ export async function getMatchBuildAnalysis(matchId: string, matchPlayerId: stri
     })
     : [];
   if (catalogVersionId && catalogSlugs.length > 0 && catalogItems.every((item) => item.versions.length === 0)) {
-    const matchVersion = await db.version.findUnique({ where: { id: catalogVersionId }, select: { releaseDate: true } });
-    const fallback = matchVersion ? await db.version.findFirst({
-      where: { releaseDate: { lte: matchVersion.releaseDate }, itemVersions: { some: {} } },
+    const fallback = await db.version.findFirst({
+      where: {
+        releaseDate: { lte: row.match.startTime },
+        name: { not: 'Unknown' },
+        itemVersions: { some: {} },
+      },
       orderBy: { releaseDate: 'desc' },
-      select: { id: true },
-    }) : null;
+      select: { id: true, name: true },
+    });
     if (fallback) {
       catalogVersionId = fallback.id;
+      catalogPatch = fallback.name;
+      catalogFallback = fallback.id !== row.match.versionId;
       catalogItems = await db.gameItem.findMany({
         where: { slug: { in: catalogSlugs } },
         include: { versions: { where: { versionId: catalogVersionId }, take: 1 } },
@@ -994,6 +1008,14 @@ export async function getMatchBuildAnalysis(matchId: string, matchPlayerId: stri
   return {
     matchId,
     matchPlayerId,
+    dataContext: {
+      matchPatch: row.match.version?.name ?? null,
+      catalogPatch,
+      catalogFallback,
+      disclosure: catalogFallback
+        ? `La partida pertenece al parche ${row.match.version?.name ?? 'desconocido'}, pero el catálogo comparable más próximo disponible es ${catalogPatch ?? 'desconocido'}. Las recomendaciones se muestran con confianza limitada.`
+        : `Objetos, Augmentos y Eternals se comparan con el catálogo del parche ${catalogPatch ?? 'registrado para la partida'}.`,
+    },
     heroSlug: row.heroSlug,
     role: row.role,
     result: row.match.winningTeam === row.team ? 'win' : 'loss',

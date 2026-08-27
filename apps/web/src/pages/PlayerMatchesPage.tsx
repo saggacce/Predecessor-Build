@@ -25,6 +25,11 @@ export default function PlayerMatchesPage() {
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [coverageRefresh, setCoverageRefresh] = useState(0);
+  const [heroFilter, setHeroFilter] = useState('ALL');
+  const [roleFilter, setRoleFilter] = useState('ALL');
+  const [resultFilter, setResultFilter] = useState('ALL');
+  const [modeFilter, setModeFilter] = useState('ALL');
+  const [page, setPage] = useState(1);
 
   const linkedPlayerId = user?.linkedPlayerId;
 
@@ -80,6 +85,19 @@ export default function PlayerMatchesPage() {
   }
 
   const matches = profile?.recentMatches ?? [];
+  const heroOptions = [...new Set(matches.map((match) => match.heroSlug))].sort();
+  const roleOptions = [...new Set(matches.flatMap((match) => match.role ? [match.role] : []))].sort();
+  const modeOptions = [...new Set(matches.map((match) => match.gameMode))].sort();
+  const filteredMatches = matches.filter((match) =>
+    (heroFilter === 'ALL' || match.heroSlug === heroFilter)
+    && (roleFilter === 'ALL' || match.role === roleFilter)
+    && (resultFilter === 'ALL' || match.result === resultFilter)
+    && (modeFilter === 'ALL' || match.gameMode === modeFilter));
+  const pageSize = 12;
+  const pageCount = Math.max(1, Math.ceil(filteredMatches.length / pageSize));
+  const safePage = Math.min(page, pageCount);
+  const visibleMatches = filteredMatches.slice((safePage - 1) * pageSize, safePage * pageSize);
+  const updateFilter = (setter: (value: string) => void, value: string) => { setter(value); setPage(1); };
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
@@ -109,6 +127,33 @@ export default function PlayerMatchesPage() {
         onCompleted={loadProfile}
       />
 
+      {matches.length > 0 && (
+        <section className="glass-card" aria-label="Filtros de partidas" style={{ padding: '0.8rem 1rem', display: 'flex', gap: '0.65rem', flexWrap: 'wrap', alignItems: 'end' }}>
+          {[
+            { label: 'Héroe', value: heroFilter, set: setHeroFilter, options: heroOptions },
+            { label: 'Rol', value: roleFilter, set: setRoleFilter, options: roleOptions },
+            { label: 'Modo', value: modeFilter, set: setModeFilter, options: modeOptions },
+          ].map((filter) => (
+            <label key={filter.label} style={{ display: 'grid', gap: '0.25rem', color: 'var(--text-muted)', fontSize: '0.64rem' }}>
+              {filter.label}
+              <select value={filter.value} onChange={(event) => updateFilter(filter.set, event.target.value)} style={{ minWidth: 130, padding: '0.4rem 0.5rem', borderRadius: 6, border: '1px solid var(--border-color)', background: 'var(--bg-dark)', color: 'var(--text-primary)' }}>
+                <option value="ALL">Todos</option>
+                {filter.options.map((option) => <option key={option} value={option}>{option.replaceAll('_', ' ')}</option>)}
+              </select>
+            </label>
+          ))}
+          <label style={{ display: 'grid', gap: '0.25rem', color: 'var(--text-muted)', fontSize: '0.64rem' }}>
+            Resultado
+            <select value={resultFilter} onChange={(event) => updateFilter(setResultFilter, event.target.value)} style={{ minWidth: 130, padding: '0.4rem 0.5rem', borderRadius: 6, border: '1px solid var(--border-color)', background: 'var(--bg-dark)', color: 'var(--text-primary)' }}>
+              <option value="ALL">Todos</option>
+              <option value="win">Victorias</option>
+              <option value="loss">Derrotas</option>
+            </select>
+          </label>
+          <span style={{ marginLeft: 'auto', color: 'var(--text-muted)', fontSize: '0.7rem' }}>{filteredMatches.length} partidas</span>
+        </section>
+      )}
+
       {matches.length === 0 ? (
         <div className="glass-card" style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>
           No se encontraron partidas recientes.
@@ -116,18 +161,19 @@ export default function PlayerMatchesPage() {
       ) : (
         <div className="glass-card" style={{ padding: 0, overflow: 'hidden' }}>
           {/* Header row */}
-          <div style={{ display: 'grid', gridTemplateColumns: '200px 80px 90px 100px 100px 80px 80px 36px', gap: '0.75rem', padding: '0.45rem 1.25rem', fontSize: '0.62rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', borderBottom: '1px solid var(--border-color)' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '200px 80px 90px 80px 80px 80px 90px 70px 36px', gap: '0.75rem', padding: '0.45rem 1.25rem', fontSize: '0.62rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', borderBottom: '1px solid var(--border-color)' }}>
             <span>Héroe</span>
             <span>Resultado</span>
             <span>KDA</span>
-            <span>Daño</span>
-            <span>Oro</span>
+            <span>DPM</span>
+            <span>GPM</span>
             <span>Duración</span>
             <span>Fecha</span>
+            <span>Parche</span>
             <span />
           </div>
 
-          {matches.map((match) => {
+          {visibleMatches.map((match) => {
             const isWin = match.result === 'win';
             const kdaVal = parseFloat(kda(match));
             const kdaColor = kdaVal >= 3 ? 'var(--accent-win)' : kdaVal >= 1.5 ? 'var(--text-primary)' : 'var(--accent-loss)';
@@ -135,9 +181,12 @@ export default function PlayerMatchesPage() {
             return (
               <div
                 key={match.matchId}
+                role="link"
+                tabIndex={0}
+                aria-label={`Abrir ${match.heroName ?? match.heroSlug}, ${isWin ? 'victoria' : 'derrota'}, ${new Date(match.date).toLocaleDateString()}`}
                 style={{
                   display: 'grid',
-                  gridTemplateColumns: '200px 80px 90px 100px 100px 80px 80px 36px',
+                  gridTemplateColumns: '200px 80px 90px 80px 80px 80px 90px 70px 36px',
                   gap: '0.75rem',
                   alignItems: 'center',
                   padding: '0.6rem 1.25rem',
@@ -148,6 +197,7 @@ export default function PlayerMatchesPage() {
                   transition: 'background 0.15s',
                 }}
                 onClick={() => navigate(`/matches/${match.matchId}`)}
+                onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') navigate(`/matches/${match.matchId}`); }}
                 onMouseEnter={(e) => (e.currentTarget.style.background = isWin ? 'rgba(52,211,153,0.07)' : 'rgba(248,113,113,0.07)')}
                 onMouseLeave={(e) => (e.currentTarget.style.background = isWin ? 'rgba(52,211,153,0.03)' : 'rgba(248,113,113,0.03)')}
               >
@@ -184,14 +234,14 @@ export default function PlayerMatchesPage() {
                   <p style={{ margin: 0, fontSize: '0.68rem', color: 'var(--text-muted)' }}>{match.kills}/{match.deaths}/{match.assists}</p>
                 </div>
 
-                {/* Damage */}
+                {/* DPM */}
                 <span className="mono" style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>
-                  {match.heroDamage != null ? Math.round(match.heroDamage).toLocaleString() : '—'}
+                  {match.heroDamage != null && match.duration > 0 ? Math.round(match.heroDamage / (match.duration / 60)).toLocaleString() : '—'}
                 </span>
 
-                {/* Gold */}
+                {/* GPM */}
                 <span className="mono" style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>
-                  {match.gold != null ? Math.round(match.gold).toLocaleString() : '—'}
+                  {match.gold != null && match.duration > 0 ? Math.round(match.gold / (match.duration / 60)).toLocaleString() : '—'}
                 </span>
 
                 {/* Duration */}
@@ -201,14 +251,24 @@ export default function PlayerMatchesPage() {
 
                 {/* Date */}
                 <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
-                  {new Date(match.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+                  {new Date(match.date).toLocaleDateString(undefined, { year: '2-digit', month: 'short', day: 'numeric' })}
                 </span>
+
+                <span className="mono" style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>{match.version ?? '—'}</span>
 
                 {/* Arrow */}
                 <ChevronRight size={15} style={{ color: 'var(--text-muted)' }} />
               </div>
             );
           })}
+        </div>
+      )}
+
+      {filteredMatches.length > pageSize && (
+        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '0.7rem' }}>
+          <button className="btn-secondary" disabled={safePage === 1} onClick={() => setPage((value) => Math.max(1, value - 1))} style={{ flex: 'unset' }}>Anterior</button>
+          <span style={{ color: 'var(--text-muted)', fontSize: '0.72rem' }}>Página {safePage} de {pageCount}</span>
+          <button className="btn-secondary" disabled={safePage === pageCount} onClick={() => setPage((value) => Math.min(pageCount, value + 1))} style={{ flex: 'unset' }}>Siguiente</button>
         </div>
       )}
     </div>

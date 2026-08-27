@@ -252,10 +252,12 @@ export async function getPlayerMatchCoachAnalysis(matchId: string, matchPlayerId
       title: 'El primer déficit económico redujo tus opciones posteriores',
       evidence: `En torno al minuto ${goldMinute + 1} estabas ${Math.abs(laneGoldDelta).toLocaleString()} de oro por detrás del rival de ${roleLabel(player.role)}.`,
       interpretation: 'Un déficit temprano cambia qué intercambios son razonables y cuándo puedes completar una pieza; intentar jugar como si ambos tuvierais el mismo pico amplifica el problema.',
-      action: 'Cuando pierdas el primer tempo de compra, identifica si debes recuperar una oleada segura, aceptar un componente intermedio o ceder presión hasta tu siguiente pico.',
+      action: player.role === 'SUPPORT'
+        ? 'Cuando pierdas el primer tempo de compra, protege el acceso del Carry a la oleada, avanza tu misión y valora un componente intermedio; no intentes cerrar el déficit apropiándote de su farmeo.'
+        : 'Cuando pierdas el primer tempo de compra, identifica si debes recuperar una oleada segura, aceptar un componente intermedio o ceder presión hasta tu siguiente pico.',
       exception: 'Un Support puede ir por detrás en oro y estar cumpliendo su función si el Carry y el control de mapa reciben ese valor.',
       transferExamples: ['Carry que prioriza la oleada antes de rotar', 'Midlane que compra un componente barato para estabilizar', 'Support que no compite por el farmeo del Carry'],
-      confidence: confidence('high', 'Comparación directa de curvas de oro por minuto y rol enfrentado.'), limitation: null,
+      confidence: confidence('medium', 'La diferencia de oro es directa; su causa y la mejor recuperación dependen del rol, las oleadas y el replay.'), limitation: null,
     });
   }
 

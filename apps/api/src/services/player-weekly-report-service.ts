@@ -700,6 +700,11 @@ export async function generatePlayerWeeklyReport(playerId: string, now = new Dat
   if (!player) throw new AppError(404, 'Player not found', 'PLAYER_NOT_FOUND');
 
   const typedRows = rows as MatchRow[];
+  // A player's most recent match is the authoritative patch for personal
+  // comparisons. The global catalog can lag or contain future-dated metadata.
+  const currentPlayerPatch = typedRows.find((row) => row.match.version?.name)?.match.version?.name
+    ?? latestVersion?.name
+    ?? null;
   const weeklyRows = typedRows.filter((row) => row.match.startTime >= weeklyFrom);
   const weekly = aggregate(weeklyRows);
   const baseline30d = aggregate(typedRows);
@@ -722,6 +727,6 @@ export async function generatePlayerWeeklyReport(playerId: string, now = new Dat
     topHero: hero,
     focusOfWeek: chooseFocus(weekly, baseline30d, hero),
     roleCoach: buildRoleCoach(weeklyRows, typedRows),
-    championPool: buildChampionPool(typedRows, latestVersion?.name ?? null),
+    championPool: buildChampionPool(typedRows, currentPlayerPatch),
   };
 }

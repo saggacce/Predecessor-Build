@@ -61,6 +61,7 @@ export interface MatchEventWard {
   eventType: string;
   /** "STEALTH" | "ORACLE" | "SENTRY" | "SONAR_DRONE" | "SOLSTONE_DRONE" */
   wardType: string;
+  playerId: string | null;
   team: string | null;
   locationX: number | null;
   locationY: number | null;
@@ -139,6 +140,7 @@ export async function getMatchEvents(matchId: string): Promise<MatchEvents> {
       gameTime: w.gameTime,
       eventType: w.eventType,
       wardType: w.wardType,
+      playerId: w.playerId,
       team: w.team,
       locationX: w.locationX,
       locationY: w.locationY,
