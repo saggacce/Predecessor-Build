@@ -60,6 +60,20 @@ export function detectModeFromOcrText(text: string, ocrConfidence: number, captu
   };
 }
 
+export function detectModeFromOcrRegions(
+  text: string,
+  documentConfidence: number,
+  regions: Array<{ text: string; confidence: number }>,
+  capturedAt = new Date().toISOString(),
+): OcrModeSignal | null {
+  const documentSignal = detectModeFromOcrText(text, documentConfidence, capturedAt);
+  if (!documentSignal) return null;
+  return regions
+    .map((region) => detectModeFromOcrText(region.text, region.confidence, capturedAt))
+    .filter((signal): signal is OcrModeSignal => signal?.detectedGameMode === documentSignal.detectedGameMode)
+    .reduce((best, signal) => signal.confidence > best.confidence ? signal : best, documentSignal);
+}
+
 export function detectHudSignalsFromOcrText(text: string, ocrConfidence: number, capturedAt = new Date().toISOString()): OcrHudSignal[] {
   const confidence = Math.max(0, Math.min(1, ocrConfidence / 100));
   if (confidence < 0.75) return [];
@@ -88,10 +102,14 @@ export async function createLiveModeOcr(onProgress?: (progress: number) => void)
     if (!context) return { modeSignal: null, hudSignals: [] as OcrHudSignal[] };
     context.filter = 'grayscale(1) contrast(1.65)';
     context.drawImage(frame, 0, 0, canvas.width, canvas.height);
-    const result = await worker.recognize(canvas);
+    const result = await worker.recognize(canvas, {}, { text: true, blocks: true });
     const capturedAt = new Date().toISOString();
+    const textRegions = result.data.blocks?.flatMap((block) => block.paragraphs.flatMap((paragraph) => paragraph.lines.flatMap((line) => [
+      { text: line.text, confidence: line.confidence },
+      ...line.words.map((word) => ({ text: word.text, confidence: word.confidence })),
+    ]))) ?? [];
     return {
-      modeSignal: detectModeFromOcrText(result.data.text, result.data.confidence, capturedAt),
+      modeSignal: detectModeFromOcrRegions(result.data.text, result.data.confidence, textRegions, capturedAt),
       hudSignals: detectHudSignalsFromOcrText(result.data.text, result.data.confidence, capturedAt),
     };
   }

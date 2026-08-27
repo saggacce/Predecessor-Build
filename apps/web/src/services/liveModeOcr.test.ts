@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   detectHudSignalsFromOcrText,
+  detectModeFromOcrRegions,
   detectModeFromOcrText,
   isFreshModeSignalForCalibration,
   isModeSignalReliableForVerification,
@@ -28,6 +29,20 @@ describe('live mode OCR interpretation', () => {
 
   it('returns no signal for unrelated HUD text', () => {
     expect(detectModeFromOcrText('LEVEL 7 GOLD 2150 FANGTOOTH', 96)).toBeNull();
+  });
+
+  it('uses the confidence of the matched mode region instead of the noisy full screen average', () => {
+    expect(detectModeFromOcrRegions('PLAY COLLECTION PRACTICE CELESTIAL DAWN', 40, [
+      { text: 'PLAY', confidence: 99 },
+      { text: 'PRACTICE', confidence: 95 },
+      { text: 'CELESTIAL DAWN', confidence: 91 },
+    ], '2026-08-27T18:00:00.000Z')).toEqual({
+      detectedGameMode: 'PRACTICE', confidence: 0.95, capturedAt: '2026-08-27T18:00:00.000Z',
+    });
+  });
+
+  it('does not borrow confidence from an unrelated high-confidence label', () => {
+    expect(detectModeFromOcrRegions('PLAY PRACTICE', 40, [{ text: 'PLAY', confidence: 99 }])?.confidence).toBe(0.4);
   });
 
   it('allows a recent low-confidence allowed-mode reading to open the manual crop flow', () => {
