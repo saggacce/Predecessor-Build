@@ -122,6 +122,26 @@ export function createModeTemplate(frame: HTMLCanvasElement, rect: NormalizedRec
   };
 }
 
+export function modeTemplateRectCandidates(template: ModeTemplate, targetWidth: number, targetHeight: number): NormalizedRect[] {
+  if (!targetWidth || !targetHeight) return [];
+  const candidates: NormalizedRect[] = [template.rect];
+  const heightScale = targetHeight / template.sourceHeight;
+  const heightAnchored = {
+    x: (template.rect.x * template.sourceWidth * heightScale) / targetWidth,
+    y: template.rect.y,
+    width: (template.rect.width * template.sourceWidth * heightScale) / targetWidth,
+    height: template.rect.height,
+  };
+  if (isUsableTemplateRect(heightAnchored)) {
+    const duplicate = candidates.some((rect) => Math.abs(rect.x - heightAnchored.x) < 0.001
+      && Math.abs(rect.y - heightAnchored.y) < 0.001
+      && Math.abs(rect.width - heightAnchored.width) < 0.001
+      && Math.abs(rect.height - heightAnchored.height) < 0.001);
+    if (!duplicate) candidates.push(heightAnchored);
+  }
+  return candidates;
+}
+
 function isModeTemplate(value: unknown): value is ModeTemplate {
   if (!value || typeof value !== 'object') return false;
   const item = value as Partial<ModeTemplate>;
@@ -148,20 +168,19 @@ export function saveModeTemplates(templates: ModeTemplate[], storage: Pick<Stora
   storage.setItem(STORAGE_KEY, JSON.stringify(templates.filter(isModeTemplate).slice(-20)));
 }
 
-export function findModeTemplateMatch(video: HTMLVideoElement, sessionId: string, templates: ModeTemplate[]): { template: ModeTemplate; confidence: number } | null {
-  const dimensions = frameDimensions(video);
+export function findModeTemplateMatch(frame: HTMLVideoElement | HTMLCanvasElement, sessionId: string, templates: ModeTemplate[]): { template: ModeTemplate; confidence: number; rect: NormalizedRect } | null {
+  const dimensions = frameDimensions(frame);
   if (!dimensions.width || !dimensions.height) return null;
-  const aspect = dimensions.width / dimensions.height;
-  let best: { template: ModeTemplate; confidence: number } | null = null;
-  for (const template of templates) {
+  let best: { template: ModeTemplate; confidence: number; rect: NormalizedRect } | null = null;
+  for (const template of [...templates].reverse()) {
     if (template.createdSessionId === sessionId) continue;
-    const templateAspect = template.sourceWidth / template.sourceHeight;
-    if (Math.abs(aspect - templateAspect) / templateAspect > 0.035) continue;
-    const crop = cropFrame(video, template.rect);
-    if (!crop) continue;
-    const signature = signatureFromCrop(crop, template.signatureWidth, template.signatureHeight);
-    const confidence = compareModeSignatures(template.signature, signature);
-    if (confidence >= 0.94 && (!best || confidence > best.confidence)) best = { template, confidence };
+    for (const rect of modeTemplateRectCandidates(template, dimensions.width, dimensions.height)) {
+      const crop = cropFrame(frame, rect);
+      if (!crop) continue;
+      const signature = signatureFromCrop(crop, template.signatureWidth, template.signatureHeight);
+      const confidence = compareModeSignatures(template.signature, signature);
+      if (confidence >= 0.94 && (!best || confidence > best.confidence)) best = { template, confidence, rect };
+    }
   }
   return best;
 }

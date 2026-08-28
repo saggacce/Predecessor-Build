@@ -1,3 +1,5 @@
+import type { NormalizedRect } from './modeTemplateDetector';
+
 export type OcrModeSignal = {
   detectedGameMode: 'RANKED' | 'STANDARD' | 'QUICK' | 'ARAM' | 'LABS' | 'PRACTICE' | 'AI' | 'CUSTOM';
   confidence: number;
@@ -90,7 +92,34 @@ export async function createLiveModeOcr(onProgress?: (progress: number) => void)
       if (message.status === 'recognizing text' && typeof message.progress === 'number') onProgress?.(message.progress);
     },
   });
-  async function inspect(frame: HTMLVideoElement | HTMLCanvasElement) {
+  async function recognize(canvas: HTMLCanvasElement) {
+    const result = await worker.recognize(canvas, {}, { text: true, blocks: true });
+    const regions = result.data.blocks?.flatMap((block) => block.paragraphs.flatMap((paragraph) => paragraph.lines.flatMap((line) => [
+      { text: line.text, confidence: line.confidence },
+      ...line.words.map((word) => ({ text: word.text, confidence: word.confidence })),
+    ]))) ?? [];
+    return { text: result.data.text, confidence: result.data.confidence, regions };
+  }
+  function modeCrop(frame: HTMLVideoElement | HTMLCanvasElement, rect: NormalizedRect) {
+    const sourceWidth = frame instanceof HTMLVideoElement ? frame.videoWidth : frame.width;
+    const sourceHeight = frame instanceof HTMLVideoElement ? frame.videoHeight : frame.height;
+    const sourceX = Math.round(sourceWidth * rect.x);
+    const sourceY = Math.round(sourceHeight * rect.y);
+    const cropWidth = Math.max(1, Math.round(sourceWidth * rect.width));
+    const cropHeight = Math.max(1, Math.round(sourceHeight * rect.height));
+    const upscale = Math.max(1, Math.min(4, 96 / cropHeight));
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.max(1, Math.round(cropWidth * upscale));
+    canvas.height = Math.max(1, Math.round(cropHeight * upscale));
+    const context = canvas.getContext('2d', { willReadFrequently: true });
+    if (!context) return null;
+    context.imageSmoothingEnabled = true;
+    context.imageSmoothingQuality = 'high';
+    context.filter = 'grayscale(1) contrast(1.9)';
+    context.drawImage(frame, sourceX, sourceY, cropWidth, cropHeight, 0, 0, canvas.width, canvas.height);
+    return canvas;
+  }
+  async function inspect(frame: HTMLVideoElement | HTMLCanvasElement, modeRegions: NormalizedRect[] = []) {
     const sourceWidth = frame instanceof HTMLVideoElement ? frame.videoWidth : frame.width;
     const sourceHeight = frame instanceof HTMLVideoElement ? frame.videoHeight : frame.height;
     if (!sourceWidth || !sourceHeight) return { modeSignal: null, hudSignals: [] as OcrHudSignal[] };
@@ -102,15 +131,21 @@ export async function createLiveModeOcr(onProgress?: (progress: number) => void)
     if (!context) return { modeSignal: null, hudSignals: [] as OcrHudSignal[] };
     context.filter = 'grayscale(1) contrast(1.65)';
     context.drawImage(frame, 0, 0, canvas.width, canvas.height);
-    const result = await worker.recognize(canvas, {}, { text: true, blocks: true });
+    const fullScreen = await recognize(canvas);
     const capturedAt = new Date().toISOString();
-    const textRegions = result.data.blocks?.flatMap((block) => block.paragraphs.flatMap((paragraph) => paragraph.lines.flatMap((line) => [
-      { text: line.text, confidence: line.confidence },
-      ...line.words.map((word) => ({ text: word.text, confidence: word.confidence })),
-    ]))) ?? [];
+    let modeSignal = modeRegions.length
+      ? null
+      : detectModeFromOcrRegions(fullScreen.text, fullScreen.confidence, fullScreen.regions, capturedAt);
+    for (const rect of modeRegions.slice(0, 2)) {
+      const crop = modeCrop(frame, rect);
+      if (!crop) continue;
+      const localized = await recognize(crop);
+      const localizedSignal = detectModeFromOcrRegions(localized.text, localized.confidence, localized.regions, capturedAt);
+      if (localizedSignal && (!modeSignal || localizedSignal.confidence > modeSignal.confidence)) modeSignal = localizedSignal;
+    }
     return {
-      modeSignal: detectModeFromOcrRegions(result.data.text, result.data.confidence, textRegions, capturedAt),
-      hudSignals: detectHudSignalsFromOcrText(result.data.text, result.data.confidence, capturedAt),
+      modeSignal,
+      hudSignals: detectHudSignalsFromOcrText(fullScreen.text, fullScreen.confidence, capturedAt),
     };
   }
   return {

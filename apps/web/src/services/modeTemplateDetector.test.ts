@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { compareModeSignatures, isUsableTemplateRect, loadModeTemplates, saveModeTemplates, type ModeTemplate } from './modeTemplateDetector';
+import { compareModeSignatures, isUsableTemplateRect, loadModeTemplates, modeTemplateRectCandidates, saveModeTemplates, type ModeTemplate } from './modeTemplateDetector';
 
 function template(overrides: Partial<ModeTemplate> = {}): ModeTemplate {
   return {
@@ -29,5 +29,23 @@ describe('mode template detector', () => {
     const storage = { getItem: () => stored || null, setItem: (_key: string, value: string) => { stored = value; } };
     saveModeTemplates([template(), template({ id: 'unsafe', reviewedByOcr: false as true })], storage);
     expect(loadModeTemplates(storage)).toEqual([template()]);
+  });
+
+  it('reuses the same normalized region at another resolution with the same aspect ratio', () => {
+    expect(modeTemplateRectCandidates(template(), 2560, 1440)).toEqual([
+      { x: 0.35, y: 0.08, width: 0.3, height: 0.08 },
+    ]);
+  });
+
+  it('adds a height-anchored candidate for an ultrawide capture', () => {
+    const candidates = modeTemplateRectCandidates(template(), 3440, 1440);
+    expect(candidates).toHaveLength(2);
+    expect(candidates[0]).toEqual({ x: 0.35, y: 0.08, width: 0.3, height: 0.08 });
+    expect(candidates[1]).toEqual({
+      x: expect.closeTo(0.26047, 4),
+      y: 0.08,
+      width: expect.closeTo(0.22326, 4),
+      height: 0.08,
+    });
   });
 });
