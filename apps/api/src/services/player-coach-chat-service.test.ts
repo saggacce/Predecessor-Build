@@ -13,6 +13,12 @@ vi.mock('../db.js', () => ({
     syncLog: { create: vi.fn().mockResolvedValue({}) },
   },
 }));
+vi.mock('./player-coach-knowledge-service.js', () => ({
+  getPlayerCoachKnowledge: vi.fn().mockResolvedValue([{
+    id: 'K1', kind: 'fundamental', label: 'Visión e información', value: 'Un ward debe habilitar una decisión.',
+    source: 'Currículo RiftLine revisado · fundamentos MOBA v1', patch: null,
+  }]),
+}));
 vi.mock('./llm-service.js', () => ({
   getLlmConfig: vi.fn().mockResolvedValue({ enabled: true, apiKey: 'key', baseUrl: 'https://llm.test', model: 'test-model', maxTokens: 400 }),
 }));
@@ -32,6 +38,7 @@ vi.mock('./weekly-goal-evaluation-service.js', () => ({
 
 import { db } from '../db.js';
 import { getLlmConfig } from './llm-service.js';
+import { getPlayerCoachKnowledge } from './player-coach-knowledge-service.js';
 import { answerPlayerCoachQuestion } from './player-coach-chat-service.js';
 
 describe('player coach chat', () => {
@@ -43,16 +50,22 @@ describe('player coach chat', () => {
       heroDamage: 8_000, gold: 9_000, wardsPlaced: 10, laneMinionsKilled: 50,
       match: { predggUuid: 'match-1', startTime: new Date(), winningTeam: 'DAWN', duration: 1_800 },
     }]);
-    mocks.completionCreate.mockResolvedValue({ choices: [{ message: { content: 'Prioriza estar presente en objetivos [E2] y mantén Dekker como principal [E4].' } }] });
+    mocks.completionCreate.mockResolvedValue({ choices: [{ message: { content: 'Prioriza estar presente en objetivos [E2] y usa la visión para decidir [K1].' } }] });
   });
 
   it('returns only evidence cited by the model and exposes sample coverage', async () => {
     const response = await answerPlayerCoachQuestion('player-1', 'user-1', '¿Qué debo mejorar?');
 
     expect(response.answer).toContain('[E2]');
-    expect(response.evidence.map((item) => item.id)).toEqual(['E2', 'E4']);
+    expect(response.evidence.map((item) => item.id)).toEqual(['E2']);
+    expect(response.knowledge.map((item) => item.id)).toEqual(['K1']);
     expect(response.coverage).toEqual({ complete: 8, total: 8, percent: 100 });
     expect(mocks.completionCreate).toHaveBeenCalledWith(expect.objectContaining({ temperature: 0.2 }));
+    expect(getPlayerCoachKnowledge).toHaveBeenCalledWith('¿Qué debo mejorar?', expect.any(Array));
+    const request = mocks.completionCreate.mock.calls[0][0];
+    const context = JSON.parse(request.messages.at(-1).content);
+    expect(context.matchEvidence[0].id).toBe('E1');
+    expect(context.gameKnowledge[0].id).toBe('K1');
   });
 
   it('fails clearly without an enabled provider instead of fabricating an answer', async () => {

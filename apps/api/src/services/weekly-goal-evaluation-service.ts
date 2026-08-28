@@ -157,13 +157,28 @@ export async function evaluateWeeklyGoals(
     const rows = await loadMetricRows(db, playerId, goal.createdAt);
     const metricValue = calculateGoalMetric(goal.metricKey, rows.current);
     const baselineValue = calculateGoalMetric(goal.metricKey, rows.baseline);
+    const outcome = outcomeFor(goal, rows.current.length, metricValue, baselineValue);
+    let evaluatedGoal = goal;
+    if (metricValue !== null) {
+      const completed = rows.current.length >= TARGET_MATCHES;
+      const successful = outcome === 'target_achieved' || outcome === 'improved';
+      const nextStatus = completed && goal.status === 'ACTIVE'
+        ? successful ? 'ACHIEVED' : 'FAILED'
+        : goal.status;
+      if (goal.currentValue !== metricValue || goal.status !== nextStatus) {
+        evaluatedGoal = await db.weeklyGoal.update({
+          where: { id: goal.id },
+          data: { currentValue: metricValue, status: nextStatus },
+        }) as GoalRow;
+      }
+    }
     return {
-      goal,
+      goal: evaluatedGoal,
       targetMatches: TARGET_MATCHES,
       matchesTracked: rows.current.length,
       metricValue,
       baselineValue,
-      outcome: outcomeFor(goal, rows.current.length, metricValue, baselineValue),
+      outcome,
     };
   }));
 }

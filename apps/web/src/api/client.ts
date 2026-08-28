@@ -98,6 +98,8 @@ export interface RecentMatch {
   date: string;
   duration: number;
   gameMode: string;
+  version: string | null;
+  ratingDelta: number | null;
   heroName: string | null;
   heroImageUrl: string | null;
   wardsPlaced: number | null;
@@ -220,6 +222,14 @@ export interface PlayerMatchEnrichmentStatus {
 export interface PlayerCoachChatResponse {
   answer: string;
   evidence: Array<{ id: string; label: string; value: string; scope: string }>;
+  knowledge: Array<{
+    id: string;
+    kind: 'fundamental' | 'hero' | 'item' | 'loadout';
+    label: string;
+    value: string;
+    source: string;
+    patch: string | null;
+  }>;
   coverage: { complete: number; total: number; percent: number };
   model: string;
 }
@@ -387,7 +397,12 @@ export interface MatchPlayerDetail {
   level: number | null;
   inventoryItems: string[];
   perkSlug: string | null;
-  perks: Array<{ id: string; name: string; displayName: string; slot: string | null }> | null;
+  perks: Array<{
+    id: string; name: string; displayName: string; slot: string | null;
+    icon?: string | null; simpleDescription?: string | null; description?: string | null;
+    unlockLevel?: number | null; eternalCategory?: { id: string; name: string } | null;
+  }> | null;
+  abilityOrder: Array<{ ability: string; gameTime: number }> | null;
   rankLabel: string | null;
   ratingPoints: number | null;
   physicalDamageDealtToHeroes: number | null;
@@ -396,16 +411,35 @@ export interface MatchPlayerDetail {
   heroDamageTaken: number | null;
   totalDamageTaken: number | null;
   totalHealingDone: number | null;
+  crestHealingDone: number | null;
+  itemHealingDone: number | null;
+  utilityHealingDone: number | null;
+  totalShieldingReceived: number | null;
+  totalDamageMitigated: number | null;
+  physicalDamageTaken: number | null;
+  magicalDamageTaken: number | null;
+  trueDamageTaken: number | null;
+  physicalDamageTakenFromHeroes: number | null;
+  magicalDamageTakenFromHeroes: number | null;
+  trueDamageTakenFromHeroes: number | null;
   totalDamageDealtToStructures: number | null;
   totalDamageDealtToObjectives: number | null;
   largestCriticalStrike: number | null;
   laneMinionsKilled: number | null;
+  minionsKilled: number | null;
+  neutralMinionsKilled: number | null;
+  neutralMinionsTeamJungle: number | null;
+  neutralMinionsEnemyJungle: number | null;
   goldSpent: number | null;
   largestKillingSpree: number | null;
   multiKill: number | null;
   physicalDamageDealt: number | null;
   magicalDamageDealt: number | null;
   trueDamageDealt: number | null;
+  matchRating: {
+    ratingId: string | null; points: number | null; newPoints: number | null; delta: number | null;
+    rankName: string | null; tierName: string | null; isRankup: boolean | null;
+  } | null;
   goldEarnedAtInterval: number[] | null;
 }
 
@@ -442,6 +476,7 @@ export interface MatchEventWard {
   gameTime: number;
   eventType: string;
   wardType: string;
+  playerId: string | null;
   team: string | null;
   locationX: number | null;
   locationY: number | null;
@@ -467,10 +502,13 @@ export interface MatchDetail {
   id: string;
   predggUuid: string;
   startTime: string;
+  endTime: string | null;
   duration: number;
   gameMode: string;
   region: string | null;
   winningTeam: string | null;
+  endReason: string | null;
+  spoilerBlockedUntil: string | null;
   version: string | null;
   rosterSynced: boolean;
   eventStreamSynced: boolean;
@@ -1164,6 +1202,554 @@ export interface LiveMatchResponse {
   events: MatchEvents;
 }
 
+export interface ChampionPoolContextRow {
+  heroSlug: string;
+  matches: number;
+  wins: number;
+  kills: number;
+  deaths: number;
+  assists: number;
+  winRate: number;
+  kda: number;
+}
+
+export interface ChampionPoolContext {
+  period: { days: number; from: string; to: string };
+  filters: {
+    role: string | null;
+    gameMode: string | null;
+    heroSlug: string | null;
+    available: { roles: string[]; gameModes: string[]; heroes: string[] };
+  };
+  sampleSize: number;
+  heroes: ChampionPoolContextRow[];
+  matchups: ChampionPoolContextRow[];
+  synergies: ChampionPoolContextRow[];
+  strongestMatchup: ChampionPoolContextRow | null;
+  hardestMatchup: ChampionPoolContextRow | null;
+}
+
+export interface MatchBuildAnalysis {
+  dataContext: {
+    matchPatch: string | null;
+    catalogPatch: string | null;
+    catalogFallback: boolean;
+    disclosure: string;
+  };
+  matchId: string;
+  matchPlayerId: string;
+  heroSlug: string;
+  role: string | null;
+  result: 'win' | 'loss';
+  context: {
+    catalogVersionId: string | null;
+    deaths: number;
+    damageReceived: { physical: number; magical: number; true: number; total: number };
+    enemyHealing: number;
+    enemyShielding: number;
+    enemyMitigation: number;
+    enemyHeroes: Array<{
+      heroSlug: string;
+      role: string | null;
+      playerName: string;
+      healing: number;
+      shieldingReceived: number;
+      damageMitigated: number;
+    }>;
+  };
+  globalAnalysis: {
+    playerIdentity: Array<{ key: string; label: string; description: string; evidence: string[] }>;
+    enemyThreats: Array<{
+      key: string;
+      label: string;
+      description: string;
+      severity: 'warning' | 'critical';
+      evidence: string;
+      response: string;
+      sources: Array<{ heroSlug: string; sourceType: 'ability' | 'item'; name: string; description: string }>;
+    }>;
+    buildProfile: Array<{ key: string; label: string; description: string; items: string[] }>;
+    coherence: { score: number; summary: string };
+    strengths: string[];
+    tradeoffs: string[];
+  };
+  inventory: Array<{
+    slug: string;
+    displayName: string;
+    aggressionType: string | null;
+    rarity: string | null;
+    slotType: string | null;
+    isEvolved: boolean;
+    isHidden: boolean;
+    stats: Array<{ stat: string; value: number; showPercent?: boolean }>;
+    effects: Array<{ name: string; text: string; condition?: string | null; cooldown?: string | null }>;
+  }>;
+  inventoryAssessments: Array<{
+    slug: string;
+    displayName: string;
+    verdict: 'correct' | 'neutral';
+    purpose: string[];
+    functions: Array<{ key: string; label: string; description: string }>;
+    roleFit: string;
+    matchupFit: string;
+    tradeoff: string;
+    explanation: string;
+  }>;
+  verdict: {
+    grade: 'correct' | 'mostly_correct' | 'mixed' | 'poor';
+    summary: string;
+    score: number;
+  };
+  recommendedBuild: {
+    principle: string;
+    changes: Array<{
+      signalKey: string;
+      action: 'add' | 'replace';
+      item: {
+        slug: string; displayName: string; aggressionType: string | null; reason: string; totalPrice: number;
+        stats: Array<{ stat: string; value: number; showPercent?: boolean }>;
+        effects: Array<{ name: string; text: string; condition?: string | null; cooldown?: string | null }>;
+      };
+      insteadOf: { slug: string; displayName: string } | null;
+      timing: string;
+      why: string;
+    }>;
+    sequence: Array<{
+      position: number;
+      slug: string;
+      displayName: string;
+      phase: string;
+      reason: string;
+      replaces: { slug: string; displayName: string } | null;
+      stats: Array<{ stat: string; value: number; showPercent?: boolean }>;
+      effects: Array<{ name: string; text: string; condition?: string | null; cooldown?: string | null }>;
+    }>;
+  };
+  purchaseTimeline: {
+    available: boolean;
+    ownPurchases: Array<{ gameTime: number; minute: string; itemName: string; itemSlug: string }>;
+    opponentResponses: Array<{
+      gameTime: number;
+      minute: string;
+      heroSlug: string;
+      playerName: string;
+      itemName: string;
+      itemSlug: string;
+      explanation: string;
+    }>;
+    lesson: string;
+  };
+  eternalLoadout: Array<{
+    id: string;
+    displayName: string;
+    slot: string;
+    verdict: 'correct' | 'conditional' | 'questionable';
+    why: string;
+    effect: string | null;
+    icon?: string | null;
+  }>;
+  recommendedLoadout: {
+    augment: {
+      id: string; slug: string; displayName: string; slot: string; icon: string | null; effect: string; reason: string;
+      replaces: { id: string; displayName: string } | null;
+    } | null;
+    eternal: {
+      id: string; slug: string; displayName: string; slot: string; icon: string | null; effect: string; reason: string;
+      replaces: { id: string; displayName: string } | null;
+    } | null;
+    blessings: Array<{
+      id: string; slug: string; displayName: string; slot: string; icon: string | null; effect: string; reason: string;
+      replaces: { id: string; displayName: string } | null;
+    }>;
+    explanation: string;
+    confidence: { level: 'low' | 'medium' | 'high'; basis: string };
+    limitation: string;
+  };
+  localBenchmark: {
+    source: 'riftline_local';
+    disclosure: string;
+    exactBuild: { matches: number; wins: number; winRate: number; confidence: 'low' | 'medium' | 'high' } | null;
+    laneMatchup: { opponentHeroSlug: string; matches: number; wins: number; winRate: number; confidence: 'low' | 'medium' | 'high' } | null;
+  };
+  abilityOrder: Array<{ ability: string; gameTime: number }>;
+  signals: Array<{
+    key: string;
+    severity: 'info' | 'warning' | 'critical';
+    title: string;
+    evidence: string;
+    recommendation: string;
+    whyItMatters?: string;
+    learningPrompt?: string;
+    whenNotToApply?: string;
+    confidence?: { level: 'low' | 'medium' | 'high'; basis: string };
+    sources?: Array<{ heroSlug: string; sourceType: 'ability' | 'item'; name: string; description: string }>;
+    appliesAgainst?: string[];
+    suggestedItems?: Array<{
+      slug: string; displayName: string; aggressionType: string | null; reason: string; totalPrice: number;
+      stats: Array<{ stat: string; value: number; showPercent?: boolean }>;
+      effects: Array<{ name: string; text: string; condition?: string | null; cooldown?: string | null }>;
+    }>;
+  }>;
+}
+
+export interface EducationalCoachObservation {
+  id: string;
+  category: 'abilities' | 'economy' | 'combat' | 'objectives';
+  priority: 'primary' | 'secondary' | 'reference';
+  tone: 'strength' | 'development' | 'context';
+  title: string;
+  evidence: string;
+  interpretation: string;
+  action: string;
+  exception: string;
+  transferExamples: string[];
+  confidence: { level: 'low' | 'medium' | 'high'; basis: string };
+  limitation: string | null;
+}
+
+export interface LearningMoment {
+  id: string;
+  scope: 'personal';
+  context: 'soloq';
+  type: 'pre_objective_death' | 'gold_swing' | 'death_review' | 'vision_preparation';
+  tone: 'review' | 'reinforce';
+  priority: 'high' | 'medium' | 'low';
+  gameTime: number;
+  reviewWindow: { start: number; end: number };
+  title: string;
+  fact: string;
+  inference: string;
+  whyItMatters: string;
+  reviewChecklist: string[];
+  transferablePrinciple: string;
+  confidence: { level: 'low' | 'medium' | 'high'; basis: string };
+  limitation: string;
+}
+
+export type LearningReviewStatus = 'PENDING' | 'CONFIRMED_MISTAKE' | 'GOOD_DECISION' | 'INCONCLUSIVE';
+
+export interface LearningMomentReview {
+  id: string;
+  userId: string;
+  matchId: string;
+  matchPlayerId: string;
+  momentId: string;
+  status: LearningReviewStatus;
+  note: string | null;
+  reviewedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PlayerTrainingCycle {
+  id: string;
+  userId: string;
+  playerId: string;
+  focusKey: string;
+  title: string;
+  cue: string;
+  targetMatches: number;
+  status: 'ACTIVE' | 'COMPLETED' | 'ARCHIVED';
+  sourceMatchId: string | null;
+  sourceMomentId: string | null;
+  profileId?: string | null;
+  competencyKey?: string | null;
+  learningLevel?: number | null;
+  successCriteria?: Record<string, unknown> | null;
+  evaluation?: Record<string, unknown> | null;
+  startedAt: string;
+  completedAt: string | null;
+  matchesPlayed: number;
+  progress: number;
+}
+
+export interface PlayerLearningProfile {
+  id: string;
+  playerId: string;
+  overallLevel: number;
+  overallLevelLabel: string;
+  placementStatus: 'NOT_STARTED' | 'IN_PROGRESS' | 'PROVISIONAL' | 'CONFIRMED';
+  activeRole: 'CARRY' | 'SUPPORT' | 'MIDLANE' | 'JUNGLE' | 'OFFLANE' | null;
+  explanationDepth: 'FOUNDATIONAL' | 'STANDARD' | 'ADVANCED';
+  confidence: number;
+  competencies: Array<{ key: string; label: string; description: string; level: number; levelLabel: string; mastery: number; estimatedMastery: number; confidence: number; evidenceCount: number; nextReviewAt: string | null }>;
+  levels: Array<{ level: number; key: string; label: string; description: string }>;
+}
+
+export interface PlayerLearningProgress {
+  profile: PlayerLearningProfile;
+  summary: {
+    totalEvidence: number;
+    completedMissions: number;
+    reviewedReplayMoments: number;
+    overlayObservations: number;
+    counts: Record<string, number>;
+  };
+  trends: Array<{
+    competencyKey: string;
+    competencyLabel: string;
+    evidenceCount: number;
+    previousAverage: number | null;
+    recentAverage: number | null;
+    delta: number | null;
+    direction: 'STABLE' | 'IMPROVING' | 'NEEDS_ATTENTION';
+    points: Array<{ score: number; occurredAt: string }>;
+  }>;
+  timeline: Array<{
+    id: string;
+    competencyKey: string;
+    competencyLabel: string;
+    source: 'PLACEMENT' | 'PROMOTION' | 'MATCH' | 'REPLAY' | 'REVIEW' | 'MISSION' | 'OVERLAY';
+    sourceLabel: string;
+    score: number | null;
+    evaluation: string | null;
+    title: string;
+    detail: string;
+    confidence: 'DECLARED' | 'GUIDED' | 'OBSERVED';
+    occurredAt: string;
+  }>;
+  note: string;
+}
+
+export interface LiveTrainingReport {
+  id: string;
+  requestedGameMode: string;
+  detectedGameMode: string | null;
+  modeVerification: string;
+  status: string;
+  startedAt: string;
+  endedAt: string | null;
+  summary: { observations: number; spoken: number; silent: number; byType: Record<string, number> };
+  readiness: LiveDetectorReadiness;
+  review: {
+    primaryFocus: LiveTrainingReviewMoment | null;
+    secondaryFocus: LiveTrainingReviewMoment[];
+    reviewMoments: LiveTrainingReviewMoment[];
+    strengths: Array<{ title: string; explanation: string }>;
+    strengthsLimitation: string;
+    learningImpact: { scoredObservations: number; unscoredObservations: number; canPromote: false; explanation: string };
+    nextPractice: { title: string; cue: string } | null;
+  };
+  events: Array<{
+    id: string;
+    gameTime: number | null;
+    eventType: string;
+    confidence: string;
+    advice: string | null;
+    evidence: Record<string, unknown>;
+    createdAt: string;
+  }>;
+  limitation: string;
+}
+
+export interface LiveDetectorReadiness {
+  overallStatus: 'SAFETY_BLOCKED' | 'NEEDS_MODE_CALIBRATION' | 'MODE_ONLY' | 'PARTIAL_EVIDENCE';
+  implementedCount: number;
+  totalCount: number;
+  observedThisSession: number;
+  canEstimateAccuracy: false;
+  accuracyExplanation: string;
+  detectors: Array<{
+    key: string;
+    label: string;
+    area: string;
+    status: 'VERIFIED_THIS_SESSION' | 'SIGNAL_CAPTURED' | 'AVAILABLE_UNVALIDATED' | 'PENDING_IMPLEMENTATION' | 'SAFETY_BLOCKED';
+    sessionSignals: number;
+    whatItCanProve: string;
+    limitation: string;
+    nextStep: string;
+    quality: {
+      labelledSamples: number;
+      confirmedSignals: number;
+      falsePositives: number;
+      notVerifiable: number;
+      minimumForEstimate: number;
+      estimatedSignalPrecision: number | null;
+      status: 'NO_SAMPLES' | 'COLLECTING' | 'MINIMUM_REACHED';
+      fullyReviewedReplays: number;
+      expectedEvents: number;
+      missedEvents: number;
+      minimumExpectedForRecall: number;
+      estimatedRecall: number | null;
+      recallStatus: 'NO_REPLAYS' | 'COLLECTING' | 'MINIMUM_REACHED';
+    };
+  }>;
+}
+
+export interface LiveTrainingReviewMoment {
+  eventId: string;
+  eventType: string;
+  title: string;
+  category: string;
+  captureTimeSeconds: number;
+  observedFact: string;
+  inference: string;
+  limitation: string;
+  replayQuestion: string;
+  suggestedClip: { startSeconds: number; endSeconds: number };
+}
+
+export interface LearningQuestionView {
+  key: string;
+  competencyKey: string;
+  competencyLabel: string;
+  level: number;
+  prompt: string;
+  context: string;
+  principle: string;
+  knowledgeKeys: string[];
+  options: Array<{ id: string; text: string }>;
+}
+
+export interface PlacementSummary {
+  band: { key: string; label: string; description: string };
+  overallScore: number;
+  generalScore: number;
+  roleScore: number;
+  answered: number;
+  total: number;
+  strongest: { key: string; label: string; score: number; evidenceCount: number } | null;
+  priority: { key: string; label: string; score: number; evidenceCount: number } | null;
+  competencies: Array<{ key: string; label: string; score: number; evidenceCount: number }>;
+  limitation: string;
+}
+
+export interface MissionRecommendation {
+  key: string;
+  competencyKey: string;
+  competencyLabel: string;
+  minLevel: number;
+  title: string;
+  cue: string;
+  targetMatches: number;
+  observable: boolean;
+  successCriteria: Record<string, unknown>;
+  replayChecks: string[];
+}
+
+export interface EncyclopediaEntry {
+  key: string;
+  kind: 'concept' | 'hero' | 'item' | 'loadout' | 'eternal_category';
+  title: string;
+  summary: string;
+  details: unknown;
+  competencyKey: string | null;
+  roles: string[];
+  patch: string | null;
+  source: string;
+  confidence: 'high' | 'medium' | 'low';
+}
+
+export interface ReplayMarker {
+  id: string; gameTime: number; videoTime: number; sourceEventId: string | null; category: string; title: string; question: string;
+  status: LearningReviewStatus; conclusion: string | null;
+  signalAssessment: 'UNREVIEWED' | 'CONFIRMED_SIGNAL' | 'FALSE_POSITIVE' | 'NOT_VERIFIABLE';
+}
+
+export interface ReplayDetectorCalibration {
+  version: number;
+  fullRecordingReviewed: true;
+  reviewedAt: string;
+  byEventType: Record<'DEATH_REVIEW' | 'SKILL_LEVEL_AVAILABLE', {
+    expectedEvents: number;
+    confirmedSignals: number;
+    falsePositives: number;
+    notVerifiable: number;
+    unreviewed: number;
+    missedEvents: number;
+    eligible: boolean;
+  }>;
+}
+
+export interface PlayerReplaySession {
+  id: string; matchId: string | null; matchPlayerId: string | null; liveTrainingSessionId: string | null; title: string; recordingUrl: string | null;
+  durationSeconds: number | null; offsetSeconds: number; status: string; detectorCalibration: ReplayDetectorCalibration | null; markers: ReplayMarker[]; updatedAt: string;
+}
+
+export interface PlayerMatchCoachAnalysis {
+  matchId: string;
+  matchPlayerId: string;
+  heroSlug: string;
+  role: string | null;
+  result: 'win' | 'loss';
+  learningContext: {
+    profile: { overallLevel: number; levelLabel: string; explanationDepth: string };
+    checkpoint: { key: string; competencyKey: string; competencyLabel: string; prompt: string; context: string; principle: string; options: Array<{ id: string; text: string }> };
+  } | null;
+  summary: {
+    headline: string;
+    explanation: string;
+    nextMatchCue: string;
+    positive: { title: string; evidence: string };
+    secondaryInsights: Array<{ id: string; title: string; evidence: string }>;
+    confidence: { level: 'low' | 'medium' | 'high'; basis: string };
+  };
+  metrics: {
+    killParticipation: number;
+    teamKillParticipationAverage: number;
+    gpm: number | null;
+    dpm: number | null;
+    csPerMinute: number | null;
+    laneGoldDelta: number | null;
+    laneGoldMinute: number | null;
+    deathsBeforeObjectives: number;
+    positionedDeaths: number;
+    wardsPlaced: number;
+    wardEvents: number;
+    objectiveSecures: number;
+  };
+  coverage: {
+    scoreboard: boolean;
+    goldTimeline: boolean;
+    abilityOrder: boolean;
+    eventPositions: boolean;
+    wardEvents: boolean;
+    objectiveEvents: boolean;
+    disclaimer: string;
+  };
+  learningMoments: LearningMoment[];
+  sections: {
+    abilities: EducationalCoachObservation[];
+    economy: EducationalCoachObservation[];
+    combat: EducationalCoachObservation[];
+    objectives: EducationalCoachObservation[];
+  };
+}
+
+export interface PlayerBuildReview {
+  playerId: string;
+  period: { days: number; from: string; to: string };
+  matches: Array<{
+    match: {
+      id: string;
+      predggUuid: string;
+      startTime: string;
+      duration: number;
+      gameMode: string;
+      version: string | null;
+    };
+    analysis: MatchBuildAnalysis;
+  }>;
+}
+
+export interface PlayerBenchmarkResponse {
+  heroSlug: string;
+  role: string | null;
+  gameMode: string | null;
+  oauth: { grantedScopes: string[]; missingScopes: string[] };
+  benchmark: {
+    available: boolean;
+    reason: string | null;
+    player?: Record<string, number> | null;
+    population?: Record<string, number> | null;
+    comparison?: Array<{ key: string; player: number; population: number; delta: number }>;
+    rating?: { points: number; percentile: number | null; rating: { id: string; name: string; startTime: string; endTime: string | null }; rank: { name: string; tierName: string } | null } | null;
+  };
+  specialists: { available: boolean; reason: string | null; results: Array<{ player: { id: string; name: string }; matchesPlayed: number; matchesWon: number; winrate: number }> };
+  matchups: { available: boolean; reason: string | null; results: unknown[] };
+  ratingDistribution: { available: boolean; reason: string | null; results: unknown[] };
+}
+
 // ── Fetch helper ─────────────────────────────────────────────────────────────
 
 async function fetchApi<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
@@ -1209,6 +1795,20 @@ export const apiClient = {
       }),
     getProfile: (id: string) => fetchApi<PlayerProfile>(`/players/${id}`),
     scout: (id: string) => fetchApi<ScoutingProfile>(`/players/${id}/scout`),
+    championPoolContext: (id: string, filters: { days?: number; role?: string; gameMode?: string; heroSlug?: string }) => {
+      const params = new URLSearchParams();
+      if (filters.days) params.set('days', String(filters.days));
+      if (filters.role) params.set('role', filters.role);
+      if (filters.gameMode) params.set('gameMode', filters.gameMode);
+      if (filters.heroSlug) params.set('heroSlug', filters.heroSlug);
+      return fetchApi<ChampionPoolContext>(`/players/${id}/champion-pool-context?${params}`);
+    },
+    benchmarks: (id: string, filters: { heroSlug: string; role?: string; gameMode?: string }) => {
+      const params = new URLSearchParams({ heroSlug: filters.heroSlug });
+      if (filters.role) params.set('role', filters.role);
+      if (filters.gameMode) params.set('gameMode', filters.gameMode);
+      return fetchApi<PlayerBenchmarkResponse>(`/players/${id}/benchmarks?${params}`);
+    },
     compare: (playerIdA: string, playerIdB: string) =>
       fetchApi<{ players: [PlayerProfile, PlayerProfile]; deltas: unknown[] }>('/players/compare', {
         method: 'POST',
@@ -1310,6 +1910,63 @@ export const apiClient = {
     syncPlayers: (id: string) => fetchApi<MatchDetail>(`/matches/${id}/sync`, { method: 'POST' }),
     getEvents: (id: string) => fetchApi<MatchEvents>(`/matches/${id}/events`),
     getLive: (predggUuid: string) => fetchApi<LiveMatchResponse>(`/matches/live/${predggUuid}`),
+    buildAnalysis: (matchId: string, matchPlayerId: string) =>
+      fetchApi<MatchBuildAnalysis>(`/matches/${matchId}/build-analysis/${matchPlayerId}`),
+    liveBuildAnalysis: (predggUuid: string) =>
+      fetchApi<MatchBuildAnalysis>(`/matches/live/${predggUuid}/build-analysis`),
+    coachAnalysis: (matchId: string, matchPlayerId: string) =>
+      fetchApi<PlayerMatchCoachAnalysis>(`/matches/${matchId}/coach-analysis/${matchPlayerId}`),
+    liveCoachAnalysis: (predggUuid: string) =>
+      fetchApi<PlayerMatchCoachAnalysis>(`/matches/live/${predggUuid}/coach-analysis`),
+  },
+
+  playerLearning: {
+    profile: () => fetchApi<{ profile: PlayerLearningProfile; recommendation: MissionRecommendation }>('/player-learning/profile/me'),
+    progress: () => fetchApi<PlayerLearningProgress>('/player-learning/progress/me'),
+    updateProfile: (activeRole: PlayerLearningProfile['activeRole']) => fetchApi<{ profile: PlayerLearningProfile }>('/player-learning/profile/me', { method: 'PATCH', body: JSON.stringify({ activeRole }) }),
+    placement: () => fetchApi<{ status: PlayerLearningProfile['placementStatus']; questions: LearningQuestionView[]; answered: number; total: number; summary: PlacementSummary | null; note: string }>('/player-learning/placement'),
+    answerQuestion: (questionKey: string, selectedOptionId: string, sourceType: 'PLACEMENT' | 'MATCH' | 'REPLAY' | 'REVIEW' | 'PROMOTION' = 'PLACEMENT', sourceMatchId?: string | null) =>
+      fetchApi<{ result: { questionKey: string; competencyKey: string; competencyLabel: string; evaluation: string; score: number; feedback: string; principle: string; nextReviewAt: string | null } }>(`/player-learning/questions/${encodeURIComponent(questionKey)}/answer`, { method: 'POST', body: JSON.stringify({ selectedOptionId, sourceType, sourceMatchId }) }),
+    recommendedMission: () => fetchApi<{ mission: MissionRecommendation; templates: MissionRecommendation[] }>('/player-learning/missions/recommended'),
+    promotion: () => fetchApi<{ eligible: boolean; reason?: string; competency?: { key: string; label: string; currentLevel: number }; question?: LearningQuestionView }>('/player-learning/promotion'),
+    knowledgeCoverage: () => fetchApi<{ status: 'ready' | 'partial'; patch: { name: string } | null; lastKnowledgeSync: string | null; domains: Record<string, { total: number; complete: number; percent: number }>; gaps: string[]; disclaimer: string }>('/player-learning/knowledge/coverage'),
+    searchKnowledge: (query: string, kind?: EncyclopediaEntry['kind']) => {
+      const params = new URLSearchParams();
+      if (query) params.set('q', query);
+      if (kind) params.set('kind', kind);
+      return fetchApi<{ entries: EncyclopediaEntry[]; patch: string | null }>(`/player-learning/knowledge?${params}`);
+    },
+    reviews: (matchId: string, matchPlayerId: string) =>
+      fetchApi<{ reviews: LearningMomentReview[] }>(`/player-learning/matches/${encodeURIComponent(matchId)}/reviews?matchPlayerId=${encodeURIComponent(matchPlayerId)}`),
+    saveReview: (matchId: string, momentId: string, data: { matchPlayerId: string; status: LearningReviewStatus; note?: string | null }) =>
+      fetchApi<{ review: LearningMomentReview }>(`/player-learning/matches/${encodeURIComponent(matchId)}/reviews/${encodeURIComponent(momentId)}`, { method: 'PUT', body: JSON.stringify(data) }),
+    cycles: () => fetchApi<{ cycles: PlayerTrainingCycle[] }>('/player-learning/cycles/me'),
+    createCycle: (data: { focusKey: string; title: string; cue: string; targetMatches?: number; sourceMatchId?: string | null; sourceMomentId?: string | null; competencyKey?: string | null; learningLevel?: number | null; successCriteria?: Record<string, unknown> | null }) =>
+      fetchApi<{ cycle: PlayerTrainingCycle }>('/player-learning/cycles', { method: 'POST', body: JSON.stringify(data) }),
+    updateCycle: (id: string, status: 'COMPLETED' | 'ARCHIVED', evaluation?: { outcome: 'ACHIEVED' | 'PARTIAL' | 'NOT_YET'; reflection: string }) =>
+      fetchApi<{ cycle: PlayerTrainingCycle }>(`/player-learning/cycles/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify({ status, evaluation }) }),
+    replays: () => fetchApi<{ sessions: PlayerReplaySession[] }>('/player-learning/replays'),
+    createReplay: (data: { matchId?: string | null; matchPlayerId?: string | null; liveTrainingSessionId?: string | null; title: string; recordingUrl?: string | null; durationSeconds?: number | null; offsetSeconds?: number; markers?: Array<{ gameTime: number; sourceEventId?: string | null; category: string; title: string; question: string }> }) =>
+      fetchApi<{ session: PlayerReplaySession }>('/player-learning/replays', { method: 'POST', body: JSON.stringify(data) }),
+    updateReplay: (sessionId: string, data: { title?: string; recordingUrl?: string | null; offsetSeconds?: number; detectorCalibration?: { fullRecordingReviewed: true; expectedDeathReviews: number; expectedSkillAlerts: number } }) =>
+      fetchApi<{ session: PlayerReplaySession }>(`/player-learning/replays/${encodeURIComponent(sessionId)}`, { method: 'PATCH', body: JSON.stringify(data) }),
+    updateReplayMarker: (sessionId: string, markerId: string, data: { status?: LearningReviewStatus; conclusion?: string | null; signalAssessment?: ReplayMarker['signalAssessment'] }) =>
+      fetchApi<{ marker: ReplayMarker }>(`/player-learning/replays/${encodeURIComponent(sessionId)}/markers/${encodeURIComponent(markerId)}`, { method: 'PATCH', body: JSON.stringify(data) }),
+    startLiveSession: (requestedGameMode: string) => fetchApi<{ session: { id: string; requestedGameMode: string; modeVerification: string; status: string }; canAdvise: boolean; reason: string }>('/player-learning/live/sessions', { method: 'POST', body: JSON.stringify({ requestedGameMode, captureConsent: true }) }),
+    verifyLiveMode: (sessionId: string, detectedGameMode: string, signal: { source: 'screen_ocr' | 'screen_template' | 'match_api'; confidence: number; capturedAt: string }) =>
+      fetchApi<{ session: { id: string; detectedGameMode: string | null; modeVerification: string; status: string }; canAdvise: boolean; reason: string | null }>(`/player-learning/live/sessions/${encodeURIComponent(sessionId)}/verify-mode`, { method: 'POST', body: JSON.stringify({ detectedGameMode, signal }) }),
+    endLiveSession: (sessionId: string) =>
+      fetchApi<{ session: { id: string; modeVerification: string; status: string; endedAt: string } }>(`/player-learning/live/sessions/${encodeURIComponent(sessionId)}/end`, { method: 'POST' }),
+    liveReadiness: () => fetchApi<{ readiness: LiveDetectorReadiness }>('/player-learning/live/readiness'),
+    liveSessionReport: (sessionId: string) =>
+      fetchApi<{ report: LiveTrainingReport }>(`/player-learning/live/sessions/${encodeURIComponent(sessionId)}/report`),
+    submitLiveObservation: (sessionId: string, data: {
+      gameTime?: number | null;
+      eventType: 'RECALL_WINDOW' | 'OBJECTIVE_PREPARATION' | 'VISION_OPPORTUNITY' | 'BUILD_ADAPTATION' | 'SKILL_LEVEL_AVAILABLE' | 'MINIMAP_INFORMATION' | 'DEATH_REVIEW';
+      confidence: number;
+      observation: { competencyKey: string; learningScore?: number; explanation: string; detector: string; rubricId?: string; inputs: string[]; missingInputs?: string[]; capturedAt: string; inCombat: boolean; state?: Record<string, unknown> };
+      candidateAdvice?: { priority: 'NORMAL' | 'HIGH'; title: string; cue: string; reason: string; principle: string } | null;
+    }) => fetchApi<{ event: { id: string }; delivery: 'SPEAK' | 'SILENT_REVIEW'; advice: { priority: 'NORMAL' | 'HIGH'; title: string; cue: string; reason: string; principle: string } | null; reason: string | null }>(`/player-learning/live/sessions/${encodeURIComponent(sessionId)}/observations`, { method: 'POST', body: JSON.stringify(data) }),
   },
 
   reports: {
@@ -1320,6 +1977,12 @@ export const apiClient = {
       }),
     playerWeekly: (playerId: string) =>
       fetchApi<PlayerWeeklyReport>(`/reports/player-weekly/${encodeURIComponent(playerId)}`),
+    playerBuilds: (playerId: string, options: { days?: number; limit?: number } = {}) => {
+      const params = new URLSearchParams();
+      if (options.days) params.set('days', String(options.days));
+      if (options.limit) params.set('limit', String(options.limit));
+      return fetchApi<PlayerBuildReview>(`/reports/player-builds/${encodeURIComponent(playerId)}${params.size ? `?${params}` : ''}`);
+    },
     playerCoachChat: (playerId: string, question: string, history: Array<{ role: 'user' | 'assistant'; content: string }>) =>
       fetchApi<PlayerCoachChatResponse>(`/reports/player-coach/${encodeURIComponent(playerId)}/chat`, {
         method: 'POST',
@@ -1437,6 +2100,8 @@ export const apiClient = {
   admin: {
     syncHeroes: () =>
       fetchApi<{ ok: boolean; synced: number; errors: number }>('/admin/sync-heroes', { method: 'POST' }),
+    syncGameCatalog: (versionId?: string) =>
+      fetchApi<{ ok: boolean; version: string; items: number; perks: number; eternalCategories: number }>('/admin/sync-game-catalog', { method: 'POST', body: JSON.stringify({ versionId }) }),
     syncVersions: () =>
       fetchApi<AdminSyncVersionsResult>('/admin/sync-versions', { method: 'POST' }),
     syncStaleAll: () =>

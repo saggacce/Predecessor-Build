@@ -55,7 +55,7 @@ export async function getValidToken(req: Request, res: Response): Promise<string
     return platformToken.accessToken;
   }
 
-  logger.warn({ error: result.data.error }, 'silent refresh failed — user must re-login');
+  logger.warn('silent refresh failed — user must re-login');
   // Clear stale cookies so /auth/me returns unauthenticated
   res.clearCookie(COOKIE_TOKEN);
   res.clearCookie(COOKIE_EXPIRES_AT);

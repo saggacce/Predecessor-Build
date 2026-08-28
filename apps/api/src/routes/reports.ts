@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { generateScrimReport } from '../services/report-service.js';
 import { generatePlayerWeeklyReport } from '../services/player-weekly-report-service.js';
 import { answerPlayerCoachQuestion } from '../services/player-coach-chat-service.js';
+import { getPlayerBuildReview } from '../services/player-build-review-service.js';
 import { requireAuth } from '../middleware/require-auth.js';
 import { requireRole } from '../middleware/require-role.js';
 import { db } from '../db.js';
@@ -71,6 +72,24 @@ reportsRouter.get('/player-weekly/:playerId', requireAuth, async (req, res, next
     }
 
     res.json(await generatePlayerWeeklyReport(playerId));
+  } catch (err) {
+    next(err);
+  }
+});
+
+/** GET /reports/player-builds/:playerId — recent builds, Ancestors and contextual recommendations. */
+reportsRouter.get('/player-builds/:playerId', requireAuth, async (req, res, next) => {
+  try {
+    const playerId = z.string().min(1).parse(req.params.playerId);
+    if (!await canAccessPlayer(req, playerId)) {
+      res.status(403).json({ error: { message: 'You can only view your own build review', code: 'FORBIDDEN' } });
+      return;
+    }
+    const options = z.object({
+      days: z.coerce.number().int().min(7).max(90).default(30),
+      limit: z.coerce.number().int().min(1).max(10).default(5),
+    }).parse(req.query);
+    res.json(await getPlayerBuildReview(playerId, options));
   } catch (err) {
     next(err);
   }

@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react';
-import { Camera, Key, Link2, Link2Off, RefreshCw, Save, Shield, Star, User } from 'lucide-react';
+import { Camera, GraduationCap, Key, Link2, Link2Off, RefreshCw, Save, Shield, Star, User } from 'lucide-react';
 import { toast } from 'sonner';
-import { useTranslation } from 'react-i18next';
-import { ApiErrorResponse, apiClient, type UserProfile } from '../api/client';
+import { Link } from 'react-router';
+import { ApiErrorResponse, apiClient, type PlayerLearningProgress, type UserProfile } from '../api/client';
 import { useAuth } from '../hooks/useAuth';
 import { LanguageSwitcher } from '../components/LanguageSwitcher';
 import { LinkPlayerModal } from '../components/LinkPlayerModal';
+import { LearningProgressOverview } from '../components/LearningProgressOverview';
 
 const PLAYER_TIER_CONFIG = {
   FREE:    { label: 'Free',    color: 'var(--text-muted)',        bg: 'rgba(100,116,139,0.1)' },
@@ -29,7 +30,9 @@ const TIMEZONES = [
 export default function ProfilePage() {
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
-  const [tab, setTab] = useState<'info' | 'security' | 'social' | 'membership'>('info');
+  const [tab, setTab] = useState<'info' | 'learning' | 'security' | 'social' | 'membership'>('info');
+  const [learningProgress, setLearningProgress] = useState<PlayerLearningProgress | null>(null);
+  const [learningLoading, setLearningLoading] = useState(true);
 
   // Profile form state
   const [name, setName] = useState('');
@@ -64,6 +67,14 @@ export default function ProfilePage() {
       })
       .catch(() => { toast.error('Error cargando perfil'); setLoading(false); });
   }, []);
+
+  useEffect(() => {
+    if (tab !== 'learning' || !profile?.linkedPlayerId || learningProgress) return;
+    void apiClient.playerLearning.progress()
+      .then(setLearningProgress)
+      .catch(() => toast.error('No se pudo cargar tu evolución de aprendizaje'))
+      .finally(() => setLearningLoading(false));
+  }, [tab, profile?.linkedPlayerId, learningProgress]);
 
   async function saveProfile() {
     setSavingProfile(true);
@@ -147,6 +158,7 @@ export default function ProfilePage() {
 
   const TABS = [
     { id: 'info' as const, label: 'Información', icon: <User size={14} /> },
+    { id: 'learning' as const, label: 'Aprendizaje', icon: <GraduationCap size={14} /> },
     { id: 'security' as const, label: 'Seguridad', icon: <Key size={14} /> },
     { id: 'social' as const, label: 'Conexiones', icon: <Link2 size={14} /> },
     { id: 'membership' as const, label: 'Membresía', icon: <Star size={14} /> },
@@ -180,7 +192,7 @@ export default function ProfilePage() {
       </div>
 
       {/* Tabs */}
-      <div style={{ display: 'flex', gap: '0.25rem', marginBottom: '1.25rem', borderBottom: '1px solid var(--border-color)' }}>
+      <div style={{ display: 'flex', gap: '0.25rem', flexWrap: 'wrap', marginBottom: '1.25rem', borderBottom: '1px solid var(--border-color)' }}>
         {TABS.map((t) => (
           <button key={t.id} onClick={() => setTab(t.id)}
             style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', padding: '0.5rem 0.9rem', border: 'none', background: 'transparent', cursor: 'pointer', fontSize: '0.8rem', fontWeight: tab === t.id ? 700 : 400, color: tab === t.id ? 'var(--accent-blue)' : 'var(--text-muted)', borderBottom: tab === t.id ? '2px solid var(--accent-blue)' : '2px solid transparent' }}
@@ -233,6 +245,15 @@ export default function ProfilePage() {
           <button onClick={saveProfile} disabled={savingProfile} className="btn-primary" style={{ alignSelf: 'flex-start', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
             <Save size={13} /> {savingProfile ? 'Guardando…' : 'Guardar cambios'}
           </button>
+        </div>
+      )}
+
+      {tab === 'learning' && (
+        <div style={{ display: 'grid', gap: '1rem' }}>
+          {!profile.linkedPlayerId ? <div className="glass-card" style={{ padding: '1.25rem', color: 'var(--text-muted)' }}>Vincula tu perfil de Predecessor para comenzar el diagnóstico y registrar tu evolución.</div> : learningLoading ? <div className="glass-card" style={{ padding: '1.25rem', color: 'var(--text-muted)' }}>Preparando tu mapa de competencias…</div> : learningProgress ? <>
+            <LearningProgressOverview progress={learningProgress} compact />
+            <Link to="/academy" className="btn-primary" style={{ justifySelf: 'start', textDecoration: 'none' }}>Abrir mi ruta completa en Academia</Link>
+          </> : <div className="glass-card" style={{ padding: '1.25rem', color: 'var(--text-muted)' }}>Todavía no hay datos de aprendizaje disponibles.</div>}
         </div>
       )}
 
@@ -392,7 +413,7 @@ export default function ProfilePage() {
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.6rem' }}>
               {([
-                { tier: 'FREE',    label: 'Free',    color: 'var(--text-muted)',    features: ['Últimas 20 partidas', 'Stats básicos', 'Hero pool propio'] },
+                { tier: 'FREE',    label: 'Free',    color: 'var(--text-muted)',    features: ['Historial reciente disponible', 'Estadísticas básicas', 'Pool de héroes propio'] },
                 { tier: 'PRO',     label: 'Pro',     color: 'var(--accent-blue)',   features: ['Historial completo', 'GPM, DPM, KP', 'Insights personales', 'Player Goals'] },
                 { tier: 'PREMIUM', label: 'Premium', color: 'var(--accent-prime)',  features: ['Todo Pro', 'LLM Coach personal', 'Focus of the Day', 'Análisis de tendencias'] },
               ] as const).map(({ tier: t, label, color, features }) => {
@@ -416,7 +437,7 @@ export default function ProfilePage() {
               Acceso a funciones colectivas: análisis de equipo, Scrim Report, Review Queue, Discord Bot. Lo gestiona el responsable del equipo.
             </p>
             {profile.memberships.filter((m) => m.team.type === 'OWN').length === 0 ? (
-              <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>No perteneces a ningún equipo OWN actualmente.</p>
+              <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Actualmente no perteneces a ningún equipo propio.</p>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
                 {profile.memberships.filter((m) => m.team.type === 'OWN').map((m) => {

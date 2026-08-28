@@ -21,6 +21,37 @@ Tablero de tareas generales y subtareas.
 - **Patch-aware** — filtrar por parche; avisar cuando la muestra mezcla versiones distintas
 - **Muestra mínima** — no destacar WR/pocket picks sin suficientes partidas
 - **Bajo ruido** — dashboards y bot solo muestran eventos críticos, no todo
+- **La IA no es la fuente de verdad** — explica conocimiento versionado y evidencias trazables; no rellena huecos
+
+## Tarea 32 — Coach adaptativo y progresión educativa
+*Diseño detallado: `docs/adaptive_coach_knowledge_architecture.md`.*
+
+### P0 — Conocimiento experto trazable
+- [x] Separar evidencias personales (`E`) y conocimiento del juego (`K`) en el coach IA
+- [x] Recuperar fundamentos MOBA por intención y rol
+- [x] Añadir contexto sincronizado de héroes, objetos, Augmentos, Eternos y bendiciones
+- [x] Mostrar fuentes y parche del conocimiento citado
+- [ ] Banco de pruebas doradas sobre exactitud, límites y carga cognitiva
+- [ ] Estado de cobertura/frescura del conocimiento en administración
+
+### P1 — Diagnóstico y perfil pedagógico
+- [ ] Competencias, nivel provisional, confianza e historial de evidencias
+- [ ] Banco revisado de preguntas situacionales
+- [ ] Diagnóstico inicial adaptativo de diez preguntas
+- [ ] Profundidad y vocabulario del coach según nivel
+
+### P2 — Aprendizaje activo
+- [ ] Preguntas contextuales dentro del análisis de partida
+- [ ] Respuestas con rúbrica contextual: adecuada, defendible, arriesgada o no evaluable
+- [ ] Misiones personalizadas de tres a cinco partidas
+- [ ] Replay y reflexión para decisiones no observables
+- [ ] Repetición espaciada y validación de transferencia
+
+### P3 — Ascensos y mejora del coach
+- [ ] Prueba de ascenso combinando conocimiento, aplicación y reflexión
+- [ ] Progresión independiente por competencia y resumen global educativo
+- [ ] Panel de calidad del coach y dataset corregido/anonimizado
+- [ ] Evaluar fine-tuning sólo si recuperación, reglas y prompt no resuelven errores repetidos
 
 ## Los tres pilares estratégicos
 1. **Objective Intelligence** — control, setup, conversión, muertes antes de objetivo
@@ -52,7 +83,7 @@ Tablero de tareas generales y subtareas.
 
 ## [x] Tarea 4 — Calidad y operación
 - [x] Logs/errores: Pino, logging JSON estructurado
-- [x] 114 tests en Vitest + Supertest (cobertura: players, teams, admin, auth, sync personal, reports, map-zones, domain-engine)
+- [x] 151 tests en Vitest + Supertest (cobertura: players, teams, admin, auth, sync personal, reports, coaching, aggregates, map-zones, domain-engine)
 - [x] CI/CD GitHub Actions + branch protection en main
 - [x] Tests de agregación de métricas de jugador (PR #47)
 - [x] Tests de filtros por parche/ventana temporal (PR #47)
@@ -235,6 +266,21 @@ Para jugadores individuales (PLAYER standalone).
 - [x] `GET /reports/player-weekly/:playerId` — KDA semanal vs histórico, héroe más jugado, WR 7d vs 30d
 - [x] Página `/reports/weekly` exclusiva para PLAYER standalone, con actualización manual de partidas
 - [x] Player Development autogenerado desde métricas históricas (actividad, supervivencia, hero pool, momentum y consistencia)
+
+## [x] Tarea 27 — Coach educativo de SoloQ
+Primera iteración centrada en enseñar criterios transferibles sin convertir el análisis en una lista rígida ni en una pared de datos.
+
+- [x] Historial personal independiente de la retención general y preservación de jugadores vinculados
+- [x] TimescaleDB reproducible, compresión e índices para eventos temporales
+- [x] Agregados propios de build, matchup e intervalos personales con muestra, fuente y confianza
+- [x] Contrato educativo: evidencia, interpretación, práctica, excepción, ejemplos y límite del dato
+- [x] Resumen de una prioridad, hasta dos focos secundarios y una fortaleza que conservar
+- [x] Analysis dividido en resumen, build/loadout, habilidades, economía, combate/posición y objetivos/visión
+- [x] Build, orden de compra, augment, Eternal y Blessings explicados en el contexto de la partida
+- [x] Objetivo semanal evaluado al completar un ciclo de cinco partidas
+- [x] Validación inicial con cinco partidas Ranked reales y degradación honesta cuando faltan datos
+- [x] Momentos clave de replay: máximo tres ventanas con hecho, hipótesis, checklist, principio transferible y límite del dato
+- [ ] Persistir la causa confirmada por el jugador y convertir patrones repetidos en objetivos personales
 
 ---
 
