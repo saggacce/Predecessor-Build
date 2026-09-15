@@ -6,6 +6,9 @@
     "packages/*",
     "workers/*"
   ],
+  "engines": {
+    "node": "24.x"
+  },
   "scripts": {
     "test": "vitest run",
     "typecheck": "tsc --noEmit"
