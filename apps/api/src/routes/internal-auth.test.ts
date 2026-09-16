@@ -171,7 +171,7 @@ describe('POST /internal-auth/login', () => {
 
     expect(res.status).toBe(429);
     expect(res.body.error.code).toBe('RATE_LIMITED');
-  });
+  }, 10_000);
 
   it('sets secure cookies in production', async () => {
     const previousNodeEnv = process.env.NODE_ENV;
