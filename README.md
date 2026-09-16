@@ -10,10 +10,10 @@ Private competitive intelligence platform for the MOBA [Predecessor](https://www
 |-------|------|
 | Frontend | React 19 + TypeScript + Vite |
 | Backend | Express + Node.js + TypeScript |
-| Database | PostgreSQL + Prisma ORM |
+| Database | PostgreSQL 16 + TimescaleDB 2.27 + Prisma ORM |
 | Auth | Internal (bcrypt + JWT + HTTP-only cookies) + OAuth2 PKCE (pred.gg) |
 | Logging | Pino (structured JSON) |
-| Tests | Vitest + Supertest (114 tests) |
+| Tests | Vitest + Supertest (151 tests) |
 | CI/CD | GitHub Actions + branch protection on main |
 | Hosting | Hetzner VPS (Nginx + PM2; API + frontend static build) |
 
@@ -38,7 +38,7 @@ Private competitive intelligence platform for the MOBA [Predecessor](https://www
 - **View As Role** — admins preview UI as any role (sessionStorage, no DB change)
 - **Player self-linking** — players link their pred.gg profile from the Dashboard
 - **Platform Admin panel** — Staff management, Data Controls, Audit Logs
-- **Data retention** — configurable rolling window (default 3 months), monthly auto-cleanup cron
+- **Data retention** — configurable global window with permanent preservation for linked players and team rosters
 - **Landing page** — hero showcase with Predecessor characters
 - **Login fullscreen** — internal email/password; social logins (coming soon)
 
@@ -48,7 +48,7 @@ Private competitive intelligence platform for the MOBA [Predecessor](https://www
 
 ### Prerequisites
 - Node.js 20.12+
-- PostgreSQL 15+
+- Docker with Compose, or PostgreSQL 16 with TimescaleDB 2.27+
 - npm 10+
 
 ### Install
@@ -66,9 +66,9 @@ cp .env.example .env
 
 ### Database
 ```bash
-cd workers/data-sync
-npx prisma db push                          # create tables
-cd ../..
+docker compose -f docker-compose.database.yml up -d
+npx prisma migrate deploy --schema workers/data-sync/prisma/schema.prisma
+npx prisma generate --schema workers/data-sync/prisma/schema.prisma
 npx tsx scripts/seed-config.ts             # seed platform config
 ```
 
@@ -81,7 +81,7 @@ npx tsx scripts/seed-config.ts             # seed platform config
 
 ### Tests
 ```bash
-npm test                    # 114 tests across API routes + domain engine
+npm test                    # 151 tests across API routes + domain engine
 npm run typecheck           # TypeScript strict check
 ```
 
@@ -123,6 +123,6 @@ assets/         Static assets (heroes, items, icons, ranks, maps)
 
 ## Data retention
 
-Event stream data (kills, wards, transactions) is retained for **3 months** by default. A cron job runs on the 1st of each month at 03:00 AM. Configurable via `DATA_RETENTION_MONTHS` env var. Manual trigger: `POST /admin/cleanup-old-data`.
+Unowned match data is retained for **3 months** by default. Matches involving a player linked to a user account or team roster are preserved for longitudinal coaching. Personal imports use a separate **60-month** window by default. Configure these with `DATA_RETENTION_MONTHS` and `PERSONAL_HISTORY_MONTHS`. A cleanup job runs on the 1st of each month at 03:00 AM; manual trigger: `POST /admin/cleanup-old-data`.
 
-Planned next step: TimescaleDB migration for 5-10x compression of event data.
+Kills, objectives, structures, wards, and transactions are stored as hypertables with seven-day chunks and automatic compression after 30 days. Local build, matchup, and personal interval aggregates refresh daily and can be rebuilt with `POST /admin/refresh-coach-aggregates`.

@@ -197,6 +197,23 @@ button, input, select, textarea {
   font-family: inherit;
 }
 
+/* Keep native dropdown menus readable in the dark theme. On Windows the
+   expanded list can otherwise use the system's light background while the
+   options inherit RiftLine's near-white text. */
+select {
+  color-scheme: dark;
+}
+
+select option,
+select optgroup {
+  background-color: var(--bg-elevated);
+  color: var(--text-primary);
+}
+
+select option:disabled {
+  color: var(--text-secondary);
+}
+
 button {
   -webkit-tap-highlight-color: transparent;
 }

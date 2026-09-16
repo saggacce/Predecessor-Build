@@ -35,6 +35,10 @@ describe('weekly goal evaluation', () => {
           id: 'goal-1', playerId: null, title: 'Morir menos', metricKey: 'deaths_per_match',
           targetValue: 4, currentValue: 0, status: 'ACTIVE', createdAt,
         }]),
+        update: vi.fn().mockImplementation(({ data }: any) => Promise.resolve({
+          id: 'goal-1', playerId: null, title: 'Morir menos', metricKey: 'deaths_per_match',
+          targetValue: 4, currentValue: data.currentValue, status: data.status, createdAt,
+        })),
       },
       matchPlayer: {
         findMany: vi.fn().mockImplementation(({ where }: any) =>
@@ -54,5 +58,9 @@ describe('weekly goal evaluation', () => {
     expect(db.weeklyGoal.findMany).toHaveBeenCalledWith(expect.objectContaining({
       where: { userId: 'user-1', weekStart: expect.any(Date) },
     }));
+    expect(db.weeklyGoal.update).toHaveBeenCalledWith({
+      where: { id: 'goal-1' },
+      data: { currentValue: 3, status: 'ACHIEVED' },
+    });
   });
 });

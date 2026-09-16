@@ -1,7 +1,7 @@
 import { logger } from '../logger.js';
 
 const DEFAULT_AUTHORIZE_URL = 'https://pred.gg/oauth2/authorize';
-const DEFAULT_SCOPES = 'offline_access profile player:read:interval hero_leaderboard:read matchup_statistic:read';
+export const DEFAULT_PREDGG_SCOPES = 'offline_access profile player:read:interval hero_leaderboard:read matchup_statistic:read';
 
 function resolveAuthorizeUrl(value: string | undefined): string {
   if (!value) return DEFAULT_AUTHORIZE_URL;
@@ -15,8 +15,8 @@ function resolveAuthorizeUrl(value: string | undefined): string {
 }
 
 function resolveScopes(value: string | undefined): string {
-  const scopes = (value ?? DEFAULT_SCOPES).trim().split(/\s+/).filter(Boolean);
-  return scopes.length > 0 ? scopes.join(' ') : DEFAULT_SCOPES;
+  const scopes = (value ?? DEFAULT_PREDGG_SCOPES).trim().split(/\s+/).filter(Boolean);
+  return scopes.length > 0 ? scopes.join(' ') : DEFAULT_PREDGG_SCOPES;
 }
 
 export type ClientAuthMethod = 'none' | 'body' | 'basic';

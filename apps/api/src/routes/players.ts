@@ -7,6 +7,9 @@ import { requireAuth } from '../middleware/require-auth.js';
 import { db } from '../db.js';
 import { getValidToken } from './auth.js';
 import { getPlatformAccessToken } from '../services/predgg-token-service.js';
+import { getPlayerChampionPoolContext } from '../services/player-champion-pool-service.js';
+import { getPlayerPredggBenchmarks } from '../services/predgg-benchmark-service.js';
+import { getCoachAggregates } from '../services/coach-aggregate-service.js';
 
 export const playersRouter = Router();
 
@@ -315,6 +318,55 @@ playersRouter.get('/:id/scout', requireAuth, async (req, res, next) => {
 });
 
 /**
+ * GET /players/:id/champion-pool-context
+ * Local, patch-safe champion pool cohorts with enemy matchups and ally synergies.
+ */
+playersRouter.get('/:id/champion-pool-context', requireAuth, async (req, res, next) => {
+  try {
+    const filters = z.object({
+      days: z.coerce.number().int().min(7).max(365).default(90),
+      role: z.enum(['CARRY', 'JUNGLE', 'MIDLANE', 'OFFLANE', 'SUPPORT']).optional(),
+      gameMode: z.string().trim().min(1).max(40).optional(),
+      heroSlug: z.string().trim().min(1).max(80).toLowerCase().optional(),
+    }).parse(req.query);
+    res.json(await getPlayerChampionPoolContext(String(req.params.id), filters));
+  } catch (err) {
+    next(err);
+  }
+});
+
+/** GET /players/:id/benchmarks — personal metrics against pred.gg population data. */
+playersRouter.get('/:id/benchmarks', requireAuth, async (req, res, next) => {
+  try {
+    const options = z.object({
+      heroSlug: z.string().trim().min(1).max(80).toLowerCase(),
+      role: z.enum(['CARRY', 'JUNGLE', 'MIDLANE', 'OFFLANE', 'SUPPORT']).optional(),
+      gameMode: z.enum(['RANKED', 'STANDARD', 'ARAM', 'RUSH', 'DAYBREAK']).optional(),
+    }).parse(req.query);
+    res.json(await getPlayerPredggBenchmarks(String(req.params.id), options));
+  } catch (err) {
+    next(err);
+  }
+});
+
+/** GET /players/:id/coach-aggregates — RiftLine-owned build, matchup and weekly cohorts. */
+playersRouter.get('/:id/coach-aggregates', requireAuth, async (req, res, next) => {
+  try {
+    const filters = z.object({
+      heroSlug: z.string().trim().min(1).max(80).toLowerCase().optional(),
+      role: z.enum(['CARRY', 'JUNGLE', 'MIDLANE', 'OFFLANE', 'SUPPORT']).optional(),
+      gameMode: z.enum(['RANKED', 'STANDARD', 'ARAM', 'RUSH', 'DAYBREAK']).default('RANKED'),
+      versionId: z.string().trim().min(1).max(100).optional(),
+      minSample: z.coerce.number().int().min(1).max(100).default(3),
+      limit: z.coerce.number().int().min(1).max(50).default(12),
+    }).parse(req.query);
+    res.json(await getCoachAggregates(db, String(req.params.id), filters));
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
  * POST /players/sync
  * Body: { name: string }
  * Fetches a player from pred.gg and saves them to the local database.
@@ -486,4 +538,3 @@ playersRouter.post('/compare', async (req, res, next) => {
     next(err);
   }
 });
-

@@ -2,8 +2,8 @@ import { describe, it, expect, vi } from 'vitest';
 import request from 'supertest';
 import express from 'express';
 import cookieParser from 'cookie-parser';
-import { authRouter } from './auth.js';
-import { savePlatformOAuthTokens } from '../services/predgg-token-service.js';
+import { authRouter, getValidToken } from './auth.js';
+import { getPlatformAccessToken, savePlatformOAuthTokens } from '../services/predgg-token-service.js';
 
 vi.hoisted(() => {
   process.env.PRED_GG_CLIENT_ID = 'test-client-id';
@@ -22,9 +22,28 @@ vi.mock('../services/predgg-token-service.js', () => ({
 
 const app = express();
 app.use(cookieParser());
+app.get('/token-probe', async (req, res) => {
+  const token = await getValidToken(req, res);
+  res.json({ token: token ?? null });
+});
 app.use('/auth', authRouter);
 
 describe('GET /auth/predgg', () => {
+  it('clears an expired browser session when silent refresh is unavailable', async () => {
+    vi.mocked(getPlatformAccessToken).mockResolvedValueOnce(null);
+
+    const res = await request(app)
+      .get('/token-probe')
+      .set('Cookie', ['predgg_expires_at=1']);
+
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ token: null });
+    expect(res.headers['set-cookie']).toEqual(expect.arrayContaining([
+      expect.stringContaining('predgg_token='),
+      expect.stringContaining('predgg_expires_at='),
+    ]));
+  });
+
   it('redirects to the pred.gg OAuth SPA authorize route with PKCE', async () => {
     const res = await request(app).get('/auth/predgg');
 

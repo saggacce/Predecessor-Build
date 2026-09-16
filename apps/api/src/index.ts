@@ -39,11 +39,13 @@ import { commsRouter } from './routes/comms.js';
 import { playbookRouter } from './routes/playbook.js';
 import { reviewSessionsRouter } from './routes/review-sessions.js';
 import { missionsRouter } from './routes/missions.js';
+import { playerLearningRouter } from './routes/player-learning.js';
 import { errorHandler } from './middleware/error-handler.js';
 import { db, disconnectDb } from './db.js';
 import { logger } from './logger.js';
 import cron from 'node-cron';
 import { cleanupOldData } from './services/sync-service.js';
+import { refreshCoachAggregates } from './services/coach-aggregate-service.js';
 
 const app = express();
 const PORT = parseInt(process.env.PORT ?? '3001', 10);
@@ -107,6 +109,7 @@ app.use('/comms', commsRouter);
 app.use('/playbook', playbookRouter);
 app.use('/review-sessions', reviewSessionsRouter);
 app.use('/missions', missionsRouter);
+app.use('/player-learning', playerLearningRouter);
 
 app.use(errorHandler);
 
@@ -128,6 +131,17 @@ if (process.env.NODE_ENV !== 'test') {
       logger.info(result, 'cron: monthly cleanup complete');
     } catch (err) {
       logger.error({ err }, 'cron: monthly cleanup failed');
+    }
+  });
+
+  // Keep local build, matchup and player-interval cohorts fresh without
+  // depending on pred.gg's restricted population-statistics scopes.
+  cron.schedule('15 4 * * *', async () => {
+    try {
+      const result = await refreshCoachAggregates(db);
+      logger.info(result, 'cron: coaching aggregates refreshed');
+    } catch (err) {
+      logger.error({ err }, 'cron: coaching aggregate refresh failed');
     }
   });
 }

@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:" />
+    <title>RiftLine Coach Overlay</title>
+    <link rel="stylesheet" href="overlay.css" />
+  </head>
+  <body>
+    <main id="coach-card" class="coach-card" aria-live="polite" hidden>
+      <div class="coach-card__head">
+        <span class="coach-card__brand">RIFTLINE COACH</span>
+        <span id="priority" class="coach-card__priority"></span>
+      </div>
+      <h1 id="title"></h1>
+      <p id="cue" class="coach-card__cue"></p>
+      <p id="reason" class="coach-card__reason"></p>
+      <p id="principle" class="coach-card__principle"></p>
+    </main>
+    <script src="overlay.js"></script>
+  </body>
+</html>

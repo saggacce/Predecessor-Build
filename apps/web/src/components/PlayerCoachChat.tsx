@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { FormEvent } from 'react';
-import { Bot, Send, Sparkles, UserRound } from 'lucide-react';
+import { BookOpen, Bot, Send, Sparkles, UserRound } from 'lucide-react';
 import { toast } from 'sonner';
 import { ApiErrorResponse, apiClient, type PlayerCoachChatResponse } from '../api/client';
 
@@ -8,6 +8,7 @@ type ChatMessage = {
   role: 'user' | 'assistant';
   content: string;
   evidence?: PlayerCoachChatResponse['evidence'];
+  knowledge?: PlayerCoachChatResponse['knowledge'];
 };
 
 const SUGGESTIONS = [
@@ -40,7 +41,12 @@ export function PlayerCoachChat({ playerId }: { playerId: string }) {
     setSending(true);
     try {
       const response = await apiClient.reports.playerCoachChat(playerId, clean, history);
-      setMessages((current) => [...current, { role: 'assistant', content: response.answer, evidence: response.evidence }]);
+      setMessages((current) => [...current, {
+        role: 'assistant',
+        content: response.answer,
+        evidence: response.evidence,
+        knowledge: response.knowledge,
+      }]);
     } catch (error) {
       toast.error(error instanceof ApiErrorResponse ? error.error.message : 'El coach IA no pudo responder.');
     } finally {
@@ -63,7 +69,7 @@ export function PlayerCoachChat({ playerId }: { playerId: string }) {
         </div>
         <div>
           <h2 id="ai-coach-title" style={{ margin: 0, fontSize: '1.05rem' }}>Pregunta a tu coach IA</h2>
-          <p style={{ margin: '0.2rem 0 0', color: 'var(--text-muted)', fontSize: '0.72rem' }}>Respuestas basadas únicamente en tus métricas y partidas sincronizadas.</p>
+          <p style={{ margin: '0.2rem 0 0', color: 'var(--text-muted)', fontSize: '0.72rem' }}>Tus partidas explicadas con conocimiento trazable y adaptado al parche.</p>
         </div>
       </div>
 
@@ -96,6 +102,23 @@ export function PlayerCoachChat({ playerId }: { playerId: string }) {
                           <div key={item.id} style={{ padding: '0.45rem 0.55rem', borderRadius: 6, background: 'rgba(15,23,42,0.5)', fontSize: '0.67rem', lineHeight: 1.4 }}>
                             <strong>{item.id} · {item.label}</strong> <span style={{ color: 'var(--text-muted)' }}>({item.scope})</span>
                             <div style={{ color: 'var(--text-secondary)', marginTop: '0.15rem' }}>{item.value}</div>
+                          </div>
+                        ))}
+                      </div>
+                    </details>
+                  ) : null}
+                  {message.knowledge?.length ? (
+                    <details style={{ marginTop: '0.45rem' }}>
+                      <summary style={{ cursor: 'pointer', color: 'var(--text-muted)', fontSize: '0.67rem', display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+                        <BookOpen size={12} /> Ver conocimiento utilizado ({message.knowledge.length})
+                      </summary>
+                      <div style={{ display: 'grid', gap: '0.4rem', marginTop: '0.45rem' }}>
+                        {message.knowledge.map((item) => (
+                          <div key={item.id} style={{ padding: '0.45rem 0.55rem', borderRadius: 6, background: 'rgba(15,23,42,0.5)', fontSize: '0.67rem', lineHeight: 1.4 }}>
+                            <strong>{item.id} · {item.label}</strong>
+                            {item.patch ? <span style={{ color: 'var(--text-muted)' }}> · parche {item.patch}</span> : null}
+                            <div style={{ color: 'var(--text-secondary)', marginTop: '0.15rem' }}>{item.value}</div>
+                            <div style={{ color: 'var(--text-muted)', marginTop: '0.15rem' }}>{item.source}</div>
                           </div>
                         ))}
                       </div>

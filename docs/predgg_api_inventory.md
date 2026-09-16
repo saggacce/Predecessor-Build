@@ -1,6 +1,7 @@
 # pred.gg GraphQL API — Full Inventory
 
 **Generated:** 2026-05-02 23:22:06  
+**Coach integration review:** 2026-08-26
 **Endpoint:** `https://pred.gg/gql`  
 **Token:** ✅ provided
 
@@ -22,6 +23,14 @@ These are the queries and mutations the app actively calls. For auth details see
 | `heroes` | Hero catalog | No |
 | `items` | Item catalog | No |
 | `ratings` | Ranked seasons | No |
+| `currentAuth` | Verificación de scopes realmente concedidos | **Yes** |
+| `match(by: {id})` | Telemetría completa, loadout, habilidad y rating de una partida | Parcial: algunos campos |
+| `version.itemData` / `version.perkData` | Catálogo versionado de items, Eternals y bendiciones | No |
+| `eternalCategories` | Categorías y relaciones de Eternals | No |
+| `hero.generalStatistic` | Benchmark global por héroe, rol, modo y parche | No |
+| `hero.leaderboard` | Especialistas del héroe | Scope específico |
+| `hero.matchupStatistic` | Matchups globales | Scope específico |
+| `ratingDistribution` | Distribución poblacional de rating | Acceso restringido observado |
 
 ### Mutations in use
 
@@ -36,8 +45,10 @@ These are the queries and mutations the app actively calls. For auth details see
 ---
 
 ## Schema overview
-- **Queries:** 35
-- **Mutations:** 63
+- **Inventory baseline (2026-05-02):** 35 queries / 63 mutations.
+- **Latest introspection reviewed (2026-08-26):** 39 queries / 65 mutations.
+
+The schema is not static. Code must degrade per capability rather than assuming that a valid OAuth token grants every root field. The implementation notes and the seven coach-facing integrations are documented in `docs/predgg_coach_data_integration.md`.
 
 ## Queries
 

@@ -6,8 +6,76 @@ import { db } from '../db.js';
 import { AppError } from '../middleware/error-handler.js';
 import { requireAuth } from '../middleware/require-auth.js';
 import { logger } from '../logger.js';
+import { getMatchBuildAnalysis } from '../services/build-coach-service.js';
+import { getPlayerMatchCoachAnalysis } from '../services/player-match-coach-service.js';
+import { getMatchLearningCheckpoint } from '../services/player-learning-service.js';
 
 export const matchesRouter = Router();
+
+matchesRouter.get('/live/:predggUuid/build-analysis', requireAuth, async (req, res, next) => {
+  try {
+    const account = await db.user.findUnique({
+      where: { id: req.user!.userId },
+      select: { linkedPlayerId: true },
+    });
+    if (!account?.linkedPlayerId) throw new AppError(400, 'No player linked to this account', 'NO_PLAYER_LINKED');
+    const matchPlayer = await db.matchPlayer.findFirst({
+      where: {
+        playerId: account.linkedPlayerId,
+        match: { predggUuid: String(req.params.predggUuid) },
+      },
+      select: { id: true, matchId: true },
+    });
+    if (!matchPlayer) throw new AppError(404, 'Linked player not found in this match', 'MATCH_PLAYER_NOT_FOUND');
+    res.set('Cache-Control', 'no-store');
+    res.json(await getMatchBuildAnalysis(matchPlayer.matchId, matchPlayer.id));
+  } catch (err) {
+    next(err);
+  }
+});
+
+matchesRouter.get('/live/:predggUuid/coach-analysis', requireAuth, async (req, res, next) => {
+  try {
+    const account = await db.user.findUnique({
+      where: { id: req.user!.userId },
+      select: { linkedPlayerId: true },
+    });
+    if (!account?.linkedPlayerId) throw new AppError(400, 'No player linked to this account', 'NO_PLAYER_LINKED');
+    const matchPlayer = await db.matchPlayer.findFirst({
+      where: { playerId: account.linkedPlayerId, match: { predggUuid: String(req.params.predggUuid) } },
+      select: { id: true, matchId: true },
+    });
+    if (!matchPlayer) throw new AppError(404, 'Linked player not found in this match', 'MATCH_PLAYER_NOT_FOUND');
+    res.set('Cache-Control', 'no-store');
+    const analysis = await getPlayerMatchCoachAnalysis(matchPlayer.matchId, matchPlayer.id);
+    const learningContext = await getMatchLearningCheckpoint(req.user!.userId, matchPlayer.matchId, matchPlayer.id, analysis.role);
+    res.json({ ...analysis, learningContext });
+  } catch (err) {
+    next(err);
+  }
+});
+
+matchesRouter.get('/:id/build-analysis/:matchPlayerId', requireAuth, async (req, res, next) => {
+  try {
+    res.set('Cache-Control', 'no-store');
+    res.json(await getMatchBuildAnalysis(String(req.params.id), String(req.params.matchPlayerId)));
+  } catch (err) {
+    next(err);
+  }
+});
+
+matchesRouter.get('/:id/coach-analysis/:matchPlayerId', requireAuth, async (req, res, next) => {
+  try {
+    res.set('Cache-Control', 'no-store');
+    const matchId = String(req.params.id);
+    const matchPlayerId = String(req.params.matchPlayerId);
+    const analysis = await getPlayerMatchCoachAnalysis(matchId, matchPlayerId);
+    const learningContext = await getMatchLearningCheckpoint(req.user!.userId, matchId, matchPlayerId, analysis.role);
+    res.json({ ...analysis, learningContext });
+  } catch (err) {
+    next(err);
+  }
+});
 
 const GQL_URL = process.env.PRED_GG_GQL_URL ?? 'https://pred.gg/gql';
 const API_KEY = process.env.PRED_GG_CLIENT_SECRET;
@@ -30,10 +98,13 @@ const LIVE_MATCH_QUERY = `
       id
       uuid
       startTime
+      endTime
       duration
       gameMode
       region
       winningTeam
+      endReason
+      spoilerBlockedUntil
       version { name }
       matchPlayers {
         player { id name }
@@ -52,9 +123,24 @@ const LIVE_MATCH_QUERY = `
         trueDamageDealtToHeroes
         totalDamageTaken
         totalHealingDone
+        crestHealingDone
+        itemHealingDone
+        utilityHealingDone
+        totalShieldingReceived
+        totalDamageMitigated
+        physicalDamageTaken
+        magicalDamageTaken
+        trueDamageTaken
+        physicalDamageTakenFromHeroes
+        magicalDamageTakenFromHeroes
+        trueDamageTakenFromHeroes
         totalDamageDealtToStructures
         totalDamageDealtToObjectives
         laneMinionsKilled
+        minionsKilled
+        neutralMinionsKilled
+        neutralMinionsTeamJungle
+        neutralMinionsEnemyJungle
         wardsPlaced
         wardsDestroyed
         level
@@ -67,6 +153,19 @@ const LIVE_MATCH_QUERY = `
           data { displayName icon promoIcon defaultSkin { icon portrait smallPortrait } }
         }
         inventoryItemData { item { slug } }
+        perks {
+          id name
+          data {
+            displayName slot icon simpleDescription description unlockLevel
+            eternalCategory { id name }
+          }
+        }
+        abilityOrder { ability gameTime }
+        rating {
+          points newPoints isRankup
+          rating { id name }
+          rank { name tierName }
+        }
         wardPlacements { gameTime type location { x y z } }
         wardDestructions { gameTime type location { x y z } }
         transactions { gameTime transactionType itemData { name } }
@@ -108,12 +207,24 @@ type LiveMatchPlayer = {
   totalDamageDealt?: number;
   physicalDamageDealtToHeroes?: number; magicalDamageDealtToHeroes?: number; trueDamageDealtToHeroes?: number;
   totalDamageTaken?: number; totalHealingDone?: number;
+  crestHealingDone?: number; itemHealingDone?: number; utilityHealingDone?: number;
+  totalShieldingReceived?: number; totalDamageMitigated?: number;
+  physicalDamageTaken?: number; magicalDamageTaken?: number; trueDamageTaken?: number;
+  physicalDamageTakenFromHeroes?: number; magicalDamageTakenFromHeroes?: number; trueDamageTakenFromHeroes?: number;
   totalDamageDealtToStructures?: number; totalDamageDealtToObjectives?: number;
-  laneMinionsKilled?: number; wardsPlaced?: number; wardsDestroyed?: number;
+  laneMinionsKilled?: number; minionsKilled?: number; neutralMinionsKilled?: number;
+  neutralMinionsTeamJungle?: number; neutralMinionsEnemyJungle?: number;
+  wardsPlaced?: number; wardsDestroyed?: number;
   level?: number; largestCriticalStrike?: number; largestKillingSpree?: number; multiKill?: number;
   goldEarnedAtInterval?: number[] | null;
   hero?: { slug?: string; data?: { displayName?: string; icon?: string; promoIcon?: string; defaultSkin?: { icon?: string; portrait?: string; smallPortrait?: string } | null } | null } | null;
   inventoryItemData?: Array<{ item?: { slug?: string } | null } | null> | null;
+  perks?: Array<{ id: string; name: string; data?: {
+    displayName?: string; slot?: string; icon?: string; simpleDescription?: string; description?: string;
+    unlockLevel?: number; eternalCategory?: { id: string; name: string } | null;
+  } | null }> | null;
+  abilityOrder?: Array<{ ability: string; gameTime: number }> | null;
+  rating?: { points?: number | null; newPoints?: number | null; isRankup?: boolean | null; rating?: { id?: string } | null; rank?: { name?: string; tierName?: string } | null } | null;
   wardPlacements?: Array<{ gameTime: number; type?: string | null; location?: { x?: number; y?: number } | null }> | null;
   wardDestructions?: Array<{ gameTime: number; type?: string | null; location?: { x?: number; y?: number } | null }> | null;
   transactions?: Array<{ gameTime: number; transactionType?: string | null; itemData?: { name?: string | null } | null }> | null;
@@ -121,8 +232,9 @@ type LiveMatchPlayer = {
 
 type LiveMatchData = {
   match?: {
-    id?: string; uuid?: string; startTime?: string; duration?: number; gameMode?: string;
+    id?: string; uuid?: string; startTime?: string; endTime?: string | null; duration?: number; gameMode?: string;
     region?: string | null; winningTeam?: string | null; version?: { name?: string } | null;
+    endReason?: string | null; spoilerBlockedUntil?: string | null;
     matchPlayers?: LiveMatchPlayer[];
     heroKills?: Array<{ gameTime: number; killerTeam?: string | null; killedTeam?: string | null; killerHero?: { slug?: string } | null; killedHero?: { slug?: string } | null; killerPlayer?: { id?: string } | null; killedPlayer?: { id?: string } | null; location?: { x?: number; y?: number } | null }>;
     objectiveKills?: Array<{ gameTime: number; killedEntityType?: string | null; killerTeam?: string | null; killerPlayer?: { id?: string } | null; location?: { x?: number; y?: number } | null }>;
@@ -173,7 +285,18 @@ export function buildLiveDetail(raw: LiveMatchData) {
       level: mp.level ?? null,
       inventoryItems,
       perkSlug: null as null,
-      perks: null as null,
+      perks: mp.perks?.map((perk) => ({
+        id: perk.id,
+        name: perk.name,
+        displayName: perk.data?.displayName ?? perk.name,
+        slot: perk.data?.slot ?? null,
+        icon: perk.data?.icon ?? null,
+        simpleDescription: perk.data?.simpleDescription ?? null,
+        description: perk.data?.description ?? null,
+        unlockLevel: perk.data?.unlockLevel ?? null,
+        eternalCategory: perk.data?.eternalCategory ?? null,
+      })) ?? null,
+      abilityOrder: mp.abilityOrder ?? null,
       rankLabel: null as null,
       ratingPoints: null as null,
       physicalDamageDealtToHeroes: mp.physicalDamageDealtToHeroes ?? null,
@@ -182,16 +305,40 @@ export function buildLiveDetail(raw: LiveMatchData) {
       heroDamageTaken: mp.heroDamageTaken ?? null,
       totalDamageTaken: mp.totalDamageTaken ?? null,
       totalHealingDone: mp.totalHealingDone ?? null,
+      crestHealingDone: mp.crestHealingDone ?? null,
+      itemHealingDone: mp.itemHealingDone ?? null,
+      utilityHealingDone: mp.utilityHealingDone ?? null,
+      totalShieldingReceived: mp.totalShieldingReceived ?? null,
+      totalDamageMitigated: mp.totalDamageMitigated ?? null,
+      physicalDamageTaken: mp.physicalDamageTaken ?? null,
+      magicalDamageTaken: mp.magicalDamageTaken ?? null,
+      trueDamageTaken: mp.trueDamageTaken ?? null,
+      physicalDamageTakenFromHeroes: mp.physicalDamageTakenFromHeroes ?? null,
+      magicalDamageTakenFromHeroes: mp.magicalDamageTakenFromHeroes ?? null,
+      trueDamageTakenFromHeroes: mp.trueDamageTakenFromHeroes ?? null,
       totalDamageDealtToStructures: mp.totalDamageDealtToStructures ?? null,
       totalDamageDealtToObjectives: mp.totalDamageDealtToObjectives ?? null,
       largestCriticalStrike: mp.largestCriticalStrike ?? null,
       laneMinionsKilled: mp.laneMinionsKilled ?? null,
+      minionsKilled: mp.minionsKilled ?? null,
+      neutralMinionsKilled: mp.neutralMinionsKilled ?? null,
+      neutralMinionsTeamJungle: mp.neutralMinionsTeamJungle ?? null,
+      neutralMinionsEnemyJungle: mp.neutralMinionsEnemyJungle ?? null,
       goldSpent: mp.goldSpent ?? null,
       largestKillingSpree: mp.largestKillingSpree ?? null,
       multiKill: mp.multiKill ?? null,
       physicalDamageDealt: null as null,
       magicalDamageDealt: null as null,
       trueDamageDealt: null as null,
+      matchRating: mp.rating ? {
+        ratingId: mp.rating.rating?.id ?? null,
+        points: mp.rating.points ?? null,
+        newPoints: mp.rating.newPoints ?? null,
+        delta: mp.rating.points != null && mp.rating.newPoints != null ? mp.rating.newPoints - mp.rating.points : null,
+        rankName: mp.rating.rank?.name ?? null,
+        tierName: mp.rating.rank?.tierName ?? null,
+        isRankup: mp.rating.isRankup ?? null,
+      } : null,
       goldEarnedAtInterval: mp.goldEarnedAtInterval ?? null,
       // Keep ward/tx data for event stream construction
       _wardPlacements: mp.wardPlacements ?? [],
@@ -207,10 +354,13 @@ export function buildLiveDetail(raw: LiveMatchData) {
     id: m.uuid ?? m.id ?? '',
     predggUuid: m.uuid ?? m.id ?? '',
     startTime: m.startTime ?? new Date().toISOString(),
+    endTime: m.endTime ?? null,
     duration: m.duration ?? 0,
     gameMode: m.gameMode ?? 'UNKNOWN',
     region: typeof m.region === 'string' ? m.region : null,
     winningTeam: m.winningTeam ?? null,
+    endReason: m.endReason ?? null,
+    spoilerBlockedUntil: m.spoilerBlockedUntil ?? null,
     version: m.version?.name ?? null,
     rosterSynced: true,
     eventStreamSynced: true,
@@ -318,6 +468,24 @@ matchesRouter.get('/:id/events', async (req, res, next) => {
 matchesRouter.get('/live/:predggUuid', requireAuth, async (req, res, next) => {
   try {
     const { predggUuid } = req.params;
+    res.set('Cache-Control', 'no-store');
+
+    // Player match history is persisted locally. Prefer that enriched copy so
+    // opening a known match never depends on browser OAuth scopes or pred.gg
+    // availability. The live query remains as a fallback for unknown matches.
+    const storedMatch = await db.match.findUnique({
+      where: { predggUuid },
+      select: { id: true },
+    });
+    if (storedMatch) {
+      const [detail, events] = await Promise.all([
+        getMatchDetail(storedMatch.id),
+        getMatchEvents(storedMatch.id),
+      ]);
+      res.json({ detail, events });
+      return;
+    }
+
     const userToken = await getValidToken(req, res);
     logger.info({ predggUuid }, 'live match fetch');
 
@@ -335,22 +503,17 @@ matchesRouter.get('/live/:predggUuid', requireAuth, async (req, res, next) => {
 
 /**
  * POST /matches/:id/sync
- * Re-fetches this match from pred.gg using the user's Bearer token.
- * Reveals player names that appear as HIDDEN without auth.
+ * Re-fetches this match from pred.gg. A user's Bearer token enriches private
+ * player data when available, but the event stream can also be refreshed via
+ * the public/API-key path.
  */
 matchesRouter.post('/:id/sync', async (req, res, next) => {
   try {
     const match = await db.match.findUnique({ where: { id: req.params.id } });
     if (!match) throw new AppError(404, 'Match not found', 'MATCH_NOT_FOUND');
     const userToken = await getValidToken(req, res);
-    // Force full re-sync when user explicitly requests it
+    // Force both roster and event-stream refresh when the user requests it.
     await resyncMatch(db, match.predggUuid, userToken ?? undefined, true);
-    // Also force event stream re-sync to get goldEarnedAtInterval and latest events
-    if (userToken) {
-      await (await import('../services/sync-service.js')).syncMatchEventStream(
-        db, match.id, match.predggUuid, userToken, true
-      );
-    }
     const detail = await getMatchDetail(req.params.id);
     res.json(detail);
   } catch (err) {
