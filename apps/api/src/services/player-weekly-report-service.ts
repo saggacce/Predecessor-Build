@@ -18,6 +18,8 @@ type MatchRow = {
   totalDamageDealtToStructures: number | null;
   totalDamageTaken: number | null;
   totalHealingDone: number | null;
+  totalShieldingReceived: number | null;
+  totalDamageMitigated: number | null;
   match: {
     startTime: Date;
     winningTeam: string | null;
@@ -40,7 +42,9 @@ type RoleMetricKey =
   | 'objectiveDamagePerMinute'
   | 'structureDamagePerMinute'
   | 'damageTakenPerMinute'
-  | 'healingPerMinute';
+  | 'healingPerMinute'
+  | 'shieldingPerMinute'
+  | 'mitigationPerMinute';
 
 export type PlayerRoleCoach = {
   role: PlayerRole;
@@ -191,6 +195,8 @@ function aggregateRole(rows: MatchRow[]): RoleMetricValues {
     structureDamagePerMinute: metricPerMinute((row) => row.totalDamageDealtToStructures),
     damageTakenPerMinute: metricPerMinute((row) => row.totalDamageTaken),
     healingPerMinute: metricPerMinute((row) => row.totalHealingDone),
+    shieldingPerMinute: metricPerMinute((row) => row.totalShieldingReceived),
+    mitigationPerMinute: metricPerMinute((row) => row.totalDamageMitigated),
   };
 }
 
@@ -214,14 +220,16 @@ const METRIC_LABELS: Record<RoleMetricKey, string> = {
   structureDamagePerMinute: 'Daño a estructuras / min',
   damageTakenPerMinute: 'Daño recibido / min',
   healingPerMinute: 'Curación / min',
+  shieldingPerMinute: 'Escudos recibidos / min',
+  mitigationPerMinute: 'Daño mitigado / min',
 };
 
 const ROLE_METRICS: Record<PlayerRole, RoleMetricKey[]> = {
   CARRY: ['csPerMinute', 'goldPerMinute', 'damagePerMinute', 'deathsPerMatch'],
-  SUPPORT: ['killParticipation', 'wardsPerMinute', 'deathsPerMatch', 'healingPerMinute'],
+  SUPPORT: ['killParticipation', 'wardsPerMinute', 'healingPerMinute', 'shieldingPerMinute'],
   MIDLANE: ['damagePerMinute', 'csPerMinute', 'killParticipation', 'deathsPerMatch'],
   JUNGLE: ['objectiveDamagePerMinute', 'killParticipation', 'damagePerMinute', 'deathsPerMatch'],
-  OFFLANE: ['damageTakenPerMinute', 'structureDamagePerMinute', 'csPerMinute', 'deathsPerMatch'],
+  OFFLANE: ['damageTakenPerMinute', 'mitigationPerMinute', 'structureDamagePerMinute', 'deathsPerMatch'],
 };
 
 function lowerThanBaseline(current: number | null, baseline: number | null, ratio = 0.9): boolean {
@@ -669,6 +677,8 @@ export async function generatePlayerWeeklyReport(playerId: string, now = new Dat
         totalDamageDealtToStructures: true,
         totalDamageTaken: true,
         totalHealingDone: true,
+        totalShieldingReceived: true,
+        totalDamageMitigated: true,
         match: {
           select: {
             startTime: true,

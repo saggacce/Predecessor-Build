@@ -1,4 +1,4 @@
-import type { PrismaClient } from '@prisma/client';
+import { Prisma, type PrismaClient } from '@prisma/client';
 import { logger } from '../logger.js';
 import { resyncMatch, syncMatchEventStream } from './sync-service.js';
 
@@ -40,6 +40,8 @@ interface EnrichmentCandidate {
   rosterSynced: boolean;
   eventStreamSynced: boolean;
   eventStreamFailed: boolean;
+  needsRosterRefresh?: boolean;
+  needsGoldRefresh?: boolean;
 }
 
 interface EnrichmentOptions {
@@ -73,6 +75,11 @@ export async function getPlayerMatchEnrichmentCoverage(
       eventStreamSynced: true,
       eventStreamFailed: true,
       syncedAt: true,
+      matchPlayers: {
+        where: { playerId },
+        take: 1,
+        select: { goldEarnedAtInterval: true },
+      },
     },
   });
 
@@ -85,7 +92,9 @@ export async function getPlayerMatchEnrichmentCoverage(
   for (const match of matches) {
     if (match.rosterSynced) rosterSynced++;
     if (match.eventStreamSynced) eventStreamSynced++;
-    if (match.rosterSynced && match.eventStreamSynced) fullyEnriched++;
+    const goldTimeline = match.matchPlayers[0]?.goldEarnedAtInterval;
+    const hasGoldTimeline = Array.isArray(goldTimeline) && goldTimeline.length > 0;
+    if (match.rosterSynced && match.eventStreamSynced && hasGoldTimeline) fullyEnriched++;
     if (match.eventStreamFailed && !match.eventStreamSynced) failed++;
     if (!lastMatchSyncedAt || match.syncedAt > lastMatchSyncedAt) lastMatchSyncedAt = match.syncedAt;
   }
@@ -119,6 +128,8 @@ async function loadCandidates(
       matchPlayers: { some: { playerId } },
       OR: [
         { rosterSynced: false },
+        { matchPlayers: { some: { playerId, physicalDamageTaken: null } } },
+        { matchPlayers: { some: { playerId, goldEarnedAtInterval: { equals: Prisma.DbNull } } } },
         {
           eventStreamSynced: false,
           ...(retryFailed ? {} : { eventStreamFailed: false }),
@@ -133,10 +144,27 @@ async function loadCandidates(
       rosterSynced: true,
       eventStreamSynced: true,
       eventStreamFailed: true,
+      matchPlayers: {
+        where: { playerId },
+        take: 1,
+        select: { physicalDamageTaken: true, goldEarnedAtInterval: true },
+      },
     },
   });
 
-  return matches;
+  return matches.map((match) => {
+    const playerMatch = match.matchPlayers?.[0];
+    const goldTimeline = playerMatch?.goldEarnedAtInterval;
+    return {
+      id: match.id,
+      predggUuid: match.predggUuid,
+      rosterSynced: match.rosterSynced,
+      eventStreamSynced: match.eventStreamSynced,
+      eventStreamFailed: match.eventStreamFailed,
+      needsRosterRefresh: playerMatch?.physicalDamageTaken === null,
+      needsGoldRefresh: Boolean(playerMatch) && (!Array.isArray(goldTimeline) || goldTimeline.length === 0),
+    };
+  });
 }
 
 export async function enrichPlayerMatches(
@@ -155,17 +183,34 @@ export async function enrichPlayerMatches(
   const processCandidate = async (match: EnrichmentCandidate) => {
     let success = false;
     try {
-      if (!match.rosterSynced) {
+      if (!match.rosterSynced || match.needsRosterRefresh) {
         await resyncMatch(db, match.predggUuid, accessToken, true);
-      } else if (!match.eventStreamSynced) {
-        await syncMatchEventStream(db, match.id, match.predggUuid, accessToken, options.retryFailed ?? false);
+      } else if (!match.eventStreamSynced || match.needsGoldRefresh) {
+        await syncMatchEventStream(
+          db,
+          match.id,
+          match.predggUuid,
+          accessToken,
+          Boolean(options.retryFailed || match.needsGoldRefresh),
+        );
       }
 
       const refreshed = await db.match.findUnique({
         where: { id: match.id },
-        select: { rosterSynced: true, eventStreamSynced: true },
+        select: {
+          rosterSynced: true,
+          eventStreamSynced: true,
+          matchPlayers: {
+            where: { playerId },
+            take: 1,
+            select: { goldEarnedAtInterval: true },
+          },
+        },
       });
-      success = Boolean(refreshed?.rosterSynced && refreshed.eventStreamSynced);
+      const refreshedGold = refreshed?.matchPlayers[0]?.goldEarnedAtInterval;
+      const hasRefreshedGold = Array.isArray(refreshedGold) && refreshedGold.length > 0;
+      success = Boolean(refreshed?.rosterSynced && refreshed.eventStreamSynced
+        && (!match.needsGoldRefresh || hasRefreshedGold));
       if (!success) throw new Error('La partida no quedó completamente enriquecida.');
       succeeded++;
     } catch (error) {

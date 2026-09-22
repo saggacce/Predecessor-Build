@@ -25,7 +25,7 @@ const PLAYER_COACH_SYSTEM_PROMPT = `Eres el coach personal de RiftLine para juga
 
 REGLAS OBLIGATORIAS:
 1. Responde en español claro, directo y respetuoso.
-2. Usa únicamente las evidencias E1-E6 entregadas en el contexto. No inventes estadísticas, eventos, builds, timings ni causas.
+2. Usa únicamente las evidencias E1-E7 entregadas en el contexto. No inventes estadísticas, eventos, builds, timings ni causas.
 3. Cita cada afirmación cuantitativa o diagnóstico con el identificador correspondiente, por ejemplo [E2].
 4. Distingue correlación de causa: si los datos no explican por qué ocurrió algo, dilo explícitamente.
 5. Prioriza una o dos acciones practicables para las próximas partidas; evita listas genéricas.
@@ -77,6 +77,18 @@ export async function answerPlayerCoachQuestion(
         gold: true,
         wardsPlaced: true,
         laneMinionsKilled: true,
+        inventoryItems: true,
+        perks: true,
+        abilityOrder: true,
+        crestHealingDone: true,
+        itemHealingDone: true,
+        utilityHealingDone: true,
+        totalShieldingReceived: true,
+        totalDamageMitigated: true,
+        physicalDamageTakenFromHeroes: true,
+        magicalDamageTakenFromHeroes: true,
+        trueDamageTakenFromHeroes: true,
+        ratingDelta: true,
         match: { select: { predggUuid: true, startTime: true, winningTeam: true, duration: true } },
       },
     }),
@@ -111,6 +123,19 @@ export async function answerPlayerCoachQuestion(
         return `${row.match.predggUuid}: ${row.heroSlug} ${row.role ?? 'sin rol'}, ${result}, ${row.kills}/${row.deaths}/${row.assists}, daño ${row.heroDamage ?? 'sin dato'}, oro ${row.gold ?? 'sin dato'}, wards ${row.wardsPlaced ?? 'sin dato'}, CS ${row.laneMinionsKilled ?? 'sin dato'}`;
       }).join(' | ') || 'Sin partidas recientes.',
     },
+    {
+      id: 'E7', label: 'Builds, Eternals y adaptación', scope: 'últimas 5',
+      value: recentMatches.map((row) => {
+        const items = Array.isArray(row.inventoryItems) ? (row.inventoryItems as string[]).join(', ') : 'sin inventario';
+        const perks = Array.isArray(row.perks)
+          ? (row.perks as Array<{ displayName?: string; name?: string; slot?: string }>).map((perk) => `${perk.slot ?? 'mejora'}:${perk.displayName ?? perk.name ?? '?'}`).join(', ')
+          : 'sin loadout';
+        const physical = row.physicalDamageTakenFromHeroes ?? 0;
+        const magical = row.magicalDamageTakenFromHeroes ?? 0;
+        const trueDamage = row.trueDamageTakenFromHeroes ?? 0;
+        return `${row.match.predggUuid}: objetos [${items}]; loadout [${perks}]; recibido P/M/T ${physical}/${magical}/${trueDamage}; mitigado ${row.totalDamageMitigated ?? 'sin dato'}; curación crest/item/utilidad ${row.crestHealingDone ?? 'sin dato'}/${row.itemHealingDone ?? 'sin dato'}/${row.utilityHealingDone ?? 'sin dato'}; escudo ${row.totalShieldingReceived ?? 'sin dato'}; rating ${row.ratingDelta == null ? 'sin dato' : row.ratingDelta >= 0 ? `+${row.ratingDelta}` : row.ratingDelta}.`;
+      }).join(' | ') || 'Sin partidas recientes.',
+    },
   ];
 
   const client = new OpenAI({ apiKey: cfg.apiKey, baseURL: cfg.baseUrl });
@@ -134,7 +159,7 @@ export async function answerPlayerCoachQuestion(
     const answer = completion.choices[0]?.message?.content?.trim();
     if (!answer) throw new Error('Empty LLM response');
 
-    const citedIds = [...answer.matchAll(/\[(E[1-6])\]/g)].map((match) => match[1]);
+    const citedIds = [...answer.matchAll(/\[(E[1-7])\]/g)].map((match) => match[1]);
     const citedEvidence = evidence.filter((item) => citedIds.includes(item.id));
     await db.syncLog.create({
       data: { entity: 'player-coach', entityId: playerId, operation: 'chat', status: 'ok', source: 'user' },

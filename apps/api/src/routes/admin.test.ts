@@ -14,6 +14,12 @@ vi.mock('../db.js', () => ({
 
 vi.mock('../services/predgg-token-service.js', () => ({
   getPlatformAccessToken: vi.fn().mockResolvedValue(null),
+  readPlatformOAuthStatus: vi.fn().mockResolvedValue({
+    requestedScopes: ['offline_access', 'profile'], grantedScopes: [], missingScopes: ['offline_access', 'profile'],
+    capabilities: { profile: false, offlineRefresh: false, playerIntervals: false, heroLeaderboard: false, matchupStatistics: false },
+    checkedAt: null, error: 'Granted scopes have not been inspected yet',
+  }),
+  inspectPlatformOAuthStatus: vi.fn(),
   platformTokenState: { status: 'missing', lastCheckedAt: null, lastError: null },
 }));
 
@@ -22,6 +28,8 @@ vi.mock('../services/sync-service.js', () => ({
   syncVersionsFromPredgg: vi.fn().mockResolvedValue(5),
   syncStalePlayers: vi.fn().mockResolvedValue({ synced: 2, skipped: 0, errors: 0 }),
   syncIncompleteMatches: vi.fn().mockResolvedValue({ synced: 1, errors: 0 }),
+  syncGameCatalog: vi.fn().mockResolvedValue({ version: '1.16.1', items: 270, perks: 276, eternalCategories: 6 }),
+  syncTrackedGameCatalogs: vi.fn().mockResolvedValue({ versions: 1, catalogs: [{ version: '1.16.1', items: 270, perks: 276, eternalCategories: 6 }] }),
   repairEventStreamPlayerIds: vi.fn().mockResolvedValue({
     heroKillsUpdated: 1,
     objectiveKillsUpdated: 1,

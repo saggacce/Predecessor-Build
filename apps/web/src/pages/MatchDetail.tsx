@@ -5,7 +5,8 @@ import { HeroAvatarWithTooltip } from '../components/HeroAvatar';
 import { useHeroMeta } from '../hooks/useHeroMeta';
 import { ArrowLeft, Trophy, Skull, Clock, RefreshCw, Pencil, Check, X, Monitor, Gamepad2, Swords } from 'lucide-react';
 import { toast } from 'sonner';
-import { apiClient, type MatchDetail as MatchDetailData, type MatchPlayerDetail, type MatchEvents, ApiErrorResponse } from '../api/client';
+import { apiClient, type MatchBuildAnalysis, type MatchDetail as MatchDetailData, type MatchPlayerDetail, type MatchEvents, ApiErrorResponse } from '../api/client';
+import { useAuth } from '../hooks/useAuth';
 
 export default function MatchDetail({ liveMode = false }: { liveMode?: boolean }) {
   const { id, predggUuid } = useParams<{ id?: string; predggUuid?: string }>();
@@ -13,11 +14,15 @@ export default function MatchDetail({ liveMode = false }: { liveMode?: boolean }
   const location = useLocation();
   const fromState = location.state as { fromPlayerId?: string; fromPlayerName?: string } | null;
   const heroMeta = useHeroMeta();
+  const { user } = useAuth();
   const [match, setMatch] = useState<MatchDetailData | null>(null);
   const [preloadedEvents, setPreloadedEvents] = useState<MatchEvents | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [tab, setTab] = useState<'scoreboard' | 'statistics' | 'timeline' | 'analysis'>('scoreboard');
+  const requestedTab = new URLSearchParams(location.search).get('tab');
+  const [tab, setTab] = useState<'scoreboard' | 'statistics' | 'timeline' | 'analysis'>(
+    requestedTab === 'statistics' || requestedTab === 'timeline' || requestedTab === 'analysis' ? requestedTab : 'scoreboard',
+  );
   const [syncing, setSyncing] = useState(false);
   const [editingPlayerId, setEditingPlayerId] = useState<string | null>(null);
   const [editingValue, setEditingValue] = useState('');
@@ -94,7 +99,16 @@ export default function MatchDetail({ liveMode = false }: { liveMode?: boolean }
     try {
       const updated = await apiClient.matches.syncPlayers(id);
       setMatch(updated);
-      toast.success('Match data updated', { id: toastId });
+      const updatedPlayers = [...updated.dusk, ...updated.dawn];
+      const hasGoldTimeline = updatedPlayers.some((player) => player.goldEarnedAtInterval?.length);
+      if (hasGoldTimeline) {
+        toast.success('Partida actualizada, incluida la curva de oro', { id: toastId });
+      } else {
+        toast.info('Partida actualizada, pero pred.gg no devolvió la curva de oro', {
+          id: toastId,
+          description: 'Repetir la sincronización no generará esos intervalos con los permisos actuales.',
+        });
+      }
     } catch (err) {
       toast.error(err instanceof ApiErrorResponse ? err.error.message : 'Failed to sync match.', { id: toastId });
     } finally {
@@ -124,6 +138,7 @@ export default function MatchDetail({ liveMode = false }: { liveMode?: boolean }
   const hasHidden = [...match.dusk, ...match.dawn].some((p) => p.playerName === 'HIDDEN');
   const fullySynced = match.rosterSynced && match.eventStreamSynced;
   const showSyncButton = !liveMode && (!fullySynced || hasHidden);
+  const personalMatchPlayer = [...match.dusk, ...match.dawn].find((player) => player.playerId === user?.linkedPlayerId) ?? null;
 
   const tabs: { key: typeof tab; label: string; disabled?: boolean }[] = [
     { key: 'scoreboard', label: 'Scoreboard' },
@@ -215,13 +230,20 @@ export default function MatchDetail({ liveMode = false }: { liveMode?: boolean }
         />
       )}
       {tab === 'statistics' && (
-        <StatisticsTab match={match} duskWon={duskWon} dawnWon={dawnWon} onResync={handleSyncPlayers} syncing={syncing} />
+        <StatisticsTab
+          match={match} duskWon={duskWon} dawnWon={dawnWon} onResync={handleSyncPlayers} syncing={syncing}
+        />
       )}
       {tab === 'timeline' && (
         <TimelineTab match={match} onResync={handleSyncPlayers} syncing={syncing} preloadedEvents={preloadedEvents ?? undefined} />
       )}
       {tab === 'analysis' && (
-        <AnalysisTab match={match} duskWon={duskWon} dawnWon={dawnWon} onResync={handleSyncPlayers} syncing={syncing} preloadedEvents={preloadedEvents ?? undefined} />
+        <AnalysisTab
+          match={match} duskWon={duskWon} dawnWon={dawnWon} onResync={handleSyncPlayers} syncing={syncing}
+          preloadedEvents={preloadedEvents ?? undefined}
+          buildCoachPlayerId={!liveMode ? personalMatchPlayer?.id ?? null : null}
+          liveMode={liveMode}
+        />
       )}
     </div>
   );
@@ -360,7 +382,7 @@ function ScoreboardTab({ match, duskWon, dawnWon, isAram, heroMeta, liveMode, ed
               <HeaderTooltip label="Gold total" tip="Oro total acumulado al final de la partida" style={{ flex: '0 0 76px', display: 'flex', justifyContent: 'center' }} />
               {!isAram && <span className="hide-mobile" style={{ flex: '0 0 80px', display: 'flex', justifyContent: 'center' }}><HeaderTooltip label="Wards" tip="Guardianes colocados / destruidos durante la partida" /></span>}
               <span className="hide-mobile" style={{ flex: '0 0 196px', display: 'flex', justifyContent: 'center' }}><HeaderTooltip label="Items" tip="Inventario final del jugador" /></span>
-              <span className="hide-mobile" style={{ flex: '0 0 160px', display: 'flex', justifyContent: 'center' }}><HeaderTooltip label="Augments" tip="Mejoras pre-partida seleccionadas por el jugador" /></span>
+              <span className="hide-mobile" style={{ flex: '0 0 210px', display: 'flex', justifyContent: 'center' }}><HeaderTooltip label="Loadout" tip="Augmento de héroe, Eternal y bendiciones seleccionadas" /></span>
             </div>
 
             {/* Player rows */}
@@ -386,6 +408,18 @@ function ScoreboardTab({ match, duskWon, dawnWon, isAram, heroMeta, liveMode, ed
       })}
     </div>
   );
+}
+
+function perkSlotLabel(slot: string | null): string {
+  if (slot === 'HERO_SPECIFIC_1') return 'Augmento';
+  if (slot === 'ETERNAL_1') return 'Eternal';
+  if (slot === 'BLESSING_MINOR_1') return 'Bendición I';
+  if (slot === 'BLESSING_MINOR_2') return 'Bendición II';
+  return 'Mejora';
+}
+
+function stripPredggMarkup(value: string): string {
+  return value.replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim();
 }
 
 function PlayerRow({ player, isAram, teamColor, maxDamage, teamKills, matchDuration, heroMeta, liveMode, isEditing, editingValue, onStartEdit, onSaveEdit, onCancelEdit, onEditValueChange }: {
@@ -556,22 +590,26 @@ function PlayerRow({ player, isAram, teamColor, maxDamage, teamKills, matchDurat
         ))}
       </div>
 
-      {/* Augments */}
-      <div className="hide-mobile" style={{ flex: '0 0 160px', display: 'flex', flexDirection: 'column', gap: '3px', justifyContent: 'center', padding: '0 4px' }}>
+      {/* Hero augment + Eternal loadout */}
+      <div className="hide-mobile" style={{ flex: '0 0 210px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '3px', alignContent: 'center', padding: '0 4px' }}>
         {player.perks && player.perks.length > 0 ? player.perks.map((perk) => (
-          <div key={perk.id} title={perk.displayName} style={{
-            fontSize: '0.6rem',
-            fontFamily: 'var(--font-mono)',
-            padding: '1px 5px',
+          <div key={perk.id} title={[perk.displayName, perk.eternalCategory?.name, stripPredggMarkup(perk.simpleDescription ?? perk.description ?? '')].filter(Boolean).join(' — ')} style={{
+            fontSize: '0.58rem',
+            padding: '2px 4px',
             borderRadius: '3px',
             whiteSpace: 'nowrap',
             overflow: 'hidden',
             textOverflow: 'ellipsis',
-            background: perk.slot === 'HERO_SPECIFIC_1' ? 'rgba(167,139,250,0.15)' : 'rgba(255,255,255,0.05)',
-            color: perk.slot === 'HERO_SPECIFIC_1' ? 'var(--accent-violet)' : 'var(--text-muted)',
-            border: perk.slot === 'HERO_SPECIFIC_1' ? '1px solid rgba(167,139,250,0.3)' : '1px solid rgba(255,255,255,0.06)',
+            display: 'flex', alignItems: 'center', gap: '4px',
+            background: perk.slot === 'ETERNAL_1' ? 'rgba(240,180,41,0.12)' : perk.slot === 'HERO_SPECIFIC_1' ? 'rgba(167,139,250,0.15)' : 'rgba(56,212,200,0.06)',
+            color: perk.slot === 'ETERNAL_1' ? 'var(--accent-prime)' : perk.slot === 'HERO_SPECIFIC_1' ? 'var(--accent-violet)' : 'var(--text-muted)',
+            border: perk.slot === 'ETERNAL_1' ? '1px solid rgba(240,180,41,0.28)' : perk.slot === 'HERO_SPECIFIC_1' ? '1px solid rgba(167,139,250,0.3)' : '1px solid rgba(56,212,200,0.14)',
           }}>
-            {perk.displayName}
+            {perk.icon && <img src={perk.icon} alt="" style={{ width: 17, height: 17, objectFit: 'contain', borderRadius: 2, flexShrink: 0 }} />}
+            <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              <span style={{ display: 'block', fontSize: '0.5rem', opacity: 0.7, textTransform: 'uppercase', letterSpacing: '0.04em' }}>{perkSlotLabel(perk.slot)}</span>
+              <span style={{ display: 'block', overflow: 'hidden', textOverflow: 'ellipsis' }}>{perk.displayName}</span>
+            </span>
           </div>
         )) : (
           <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)', opacity: 0.4 }}>—</span>
@@ -586,14 +624,15 @@ function PlayerRow({ player, isAram, teamColor, maxDamage, teamKills, matchDurat
 const OBJ_GROUPS = [
   { key: 'fangtooth', label: 'Fangtooth',  types: ['FANGTOOTH', 'PRIMAL_FANGTOOTH'], color: '#ef4444' },
   { key: 'prime',     label: 'Prime',      types: ['ORB_PRIME', 'MINI_PRIME'],        color: '#a78bfa' },
-  { key: 'shaper',    label: 'Shaper',     types: ['SHAPER'],                         color: '#c084fc' },
+  { key: 'shaper',    label: 'Shaper',     types: ['SHAPER', 'GENESIS_CORE'],         color: '#c084fc' },
   { key: 'buffs',     label: 'Buffs',      types: ['RED_BUFF','BLUE_BUFF','CYAN_BUFF','GOLD_BUFF'], color: '#f0b429' },
-  { key: 'river',     label: 'River',      types: ['RIVER','SEEDLING'],               color: '#38d4c8' },
+  { key: 'river',     label: 'River',      types: ['RIVER','SEEDLING','LANE_SEEDLING'], color: '#38d4c8' },
 ] as const;
 
-function AnalysisTab({ match, duskWon, dawnWon: _dawnWon, onResync, syncing, preloadedEvents }: {
+function AnalysisTab({ match, duskWon, dawnWon: _dawnWon, onResync, syncing, preloadedEvents, buildCoachPlayerId, liveMode }: {
   match: MatchDetailData; duskWon: boolean; dawnWon: boolean;
   onResync: () => void; syncing: boolean; preloadedEvents?: MatchEvents;
+  buildCoachPlayerId: string | null; liveMode: boolean;
 }) {
   const [events, setEvents] = useState<MatchEvents | null>(preloadedEvents ?? null);
   const [loadingEvents, setLoadingEvents] = useState(false);
@@ -610,15 +649,18 @@ function AnalysisTab({ match, duskWon, dawnWon: _dawnWon, onResync, syncing, pre
 
   if (!match.eventStreamSynced) {
     return (
-      <div className="glass-card" style={{ padding: '2.5rem', textAlign: 'center' }}>
-        <div style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', fontWeight: 600, marginBottom: '0.5rem' }}>Analysis not available</div>
-        <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', maxWidth: '380px', margin: '0 auto 1.5rem' }}>
-          Sync this match to load objective control, gold timeline and deaths before objectives.
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+        {(liveMode || buildCoachPlayerId) && <BuildCoachCard matchId={liveMode ? match.predggUuid : match.id} matchPlayerId={buildCoachPlayerId} liveMode={liveMode} />}
+        <div className="glass-card" style={{ padding: '2.5rem', textAlign: 'center' }}>
+          <div style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', fontWeight: 600, marginBottom: '0.5rem' }}>Objective analysis not available</div>
+          <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', maxWidth: '380px', margin: '0 auto 1.5rem' }}>
+            Sync this match to load objective control, gold timeline and deaths before objectives. El análisis de build superior no depende de estos eventos.
+          </div>
+          <button onClick={onResync} disabled={syncing} style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.8rem', fontWeight: 600, padding: '0.45rem 1rem', borderRadius: '6px', cursor: syncing ? 'not-allowed' : 'pointer', border: '1px solid var(--accent-blue)', background: 'rgba(91,156,246,0.1)', color: 'var(--accent-blue)', opacity: syncing ? 0.6 : 1 }}>
+            <RefreshCw size={13} style={{ animation: syncing ? 'spin 1s linear infinite' : 'none' }} />
+            {syncing ? 'Syncing…' : 'Sync match'}
+          </button>
         </div>
-        <button onClick={onResync} disabled={syncing} style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.8rem', fontWeight: 600, padding: '0.45rem 1rem', borderRadius: '6px', cursor: syncing ? 'not-allowed' : 'pointer', border: '1px solid var(--accent-blue)', background: 'rgba(91,156,246,0.1)', color: 'var(--accent-blue)', opacity: syncing ? 0.6 : 1 }}>
-          <RefreshCw size={13} style={{ animation: syncing ? 'spin 1s linear infinite' : 'none' }} />
-          {syncing ? 'Syncing…' : 'Sync match'}
-        </button>
       </div>
     );
   }
@@ -675,6 +717,7 @@ function AnalysisTab({ match, duskWon, dawnWon: _dawnWon, onResync, syncing, pre
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+      {(liveMode || buildCoachPlayerId) && <BuildCoachCard matchId={liveMode ? match.predggUuid : match.id} matchPlayerId={buildCoachPlayerId} liveMode={liveMode} />}
 
       {/* ── Objective Control ── */}
       <div>
@@ -720,9 +763,13 @@ function AnalysisTab({ match, duskWon, dawnWon: _dawnWon, onResync, syncing, pre
           <GoldDiffChart goldDiff={goldDiff} events={events} match={match} duskWon={duskWon} />
         </div>
       ) : match.eventStreamSynced && !hasGold ? (
-        <div className="glass-card" style={{ padding: '1.25rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-          <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Gold timeline not available — re-sync to fetch per-minute gold data.</span>
-          <button onClick={onResync} disabled={syncing} style={{ fontSize: '0.72rem', padding: '0.2rem 0.6rem', borderRadius: '4px', cursor: 'pointer', border: '1px solid var(--accent-blue)', background: 'transparent', color: 'var(--accent-blue)' }}>Re-sync</button>
+        <div className="glass-card" style={{ padding: '1.25rem', display: 'flex', alignItems: 'flex-start', gap: '0.65rem' }}>
+          <div>
+            <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', fontWeight: 700 }}>Curva de oro no disponible</div>
+            <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '0.25rem', lineHeight: 1.5 }}>
+              La partida y sus eventos están actualizados, pero pred.gg no devolvió los intervalos de oro por minuto con los permisos actuales. Repetir la sincronización no puede reconstruirlos.
+            </div>
+          </div>
         </div>
       ) : null}
 
@@ -1668,7 +1715,335 @@ function TlTipItemRow({ itemName }: { itemName: string | null }) {
   );
 }
 
-// ── Statistics Tab ────────────────────────────────────────────────────────────
+// ── Player build coaching ─────────────────────────────────────────────────────
+
+function CoachHover({ children, content, label }: { children: React.ReactNode; content: React.ReactNode; label: string }) {
+  const [position, setPosition] = useState<{ left: number; top: number } | null>(null);
+  const show = (element: HTMLElement) => {
+    const rect = element.getBoundingClientRect();
+    setPosition({
+      left: Math.min(Math.max(rect.left + rect.width / 2, 170), window.innerWidth - 170),
+      top: rect.bottom + 8,
+    });
+  };
+  return (
+    <div
+      tabIndex={0}
+      aria-label={label}
+      onMouseEnter={(event) => show(event.currentTarget)}
+      onMouseLeave={() => setPosition(null)}
+      onFocus={(event) => show(event.currentTarget)}
+      onBlur={() => setPosition(null)}
+      style={{ display: 'inline-flex', cursor: 'help', outline: 'none' }}
+    >
+      {children}
+      {position && createPortal(
+        <div role="tooltip" style={{
+          position: 'fixed', left: position.left, top: position.top, transform: 'translateX(-50%)', width: 'min(330px, calc(100vw - 24px))',
+          zIndex: 1000, padding: '0.75rem', borderRadius: 8, background: '#111827', border: '1px solid rgba(148,163,184,0.28)',
+          boxShadow: '0 12px 35px rgba(0,0,0,0.6)', pointerEvents: 'none', color: 'var(--text-secondary)', fontSize: '0.66rem', lineHeight: 1.45,
+        }}>
+          {content}
+        </div>,
+        document.body,
+      )}
+    </div>
+  );
+}
+
+function ItemCoachTooltip({ item }: {
+  item: { displayName: string; totalPrice?: number; stats?: Array<{ stat: string; value: number; showPercent?: boolean }>; effects?: Array<{ name: string; text: string; condition?: string | null; cooldown?: string | null }> };
+}) {
+  return (
+    <div>
+      <strong style={{ display: 'block', color: 'var(--accent-cyan)', fontSize: '0.72rem', marginBottom: '0.35rem' }}>{item.displayName}{item.totalPrice ? ` · ${item.totalPrice.toLocaleString()} oro` : ''}</strong>
+      {item.stats && item.stats.length > 0 && <div style={{ marginBottom: '0.35rem', color: 'var(--text-primary)' }}>
+        {item.stats.map((stat) => <span key={stat.stat} style={{ display: 'inline-block', marginRight: '0.55rem' }}>+{stat.value}{stat.showPercent ? '%' : ''} {stat.stat.toLowerCase().replaceAll('_', ' ')}</span>)}
+      </div>}
+      {item.effects && item.effects.length > 0
+        ? item.effects.map((effect, index) => <p key={`${effect.name}-${index}`} style={{ margin: index === 0 ? 0 : '0.35rem 0 0' }}><strong style={{ color: 'var(--text-primary)' }}>{effect.name}</strong>{effect.name ? ': ' : ''}{stripPredggMarkup(effect.text)}{effect.condition ? ` · ${stripPredggMarkup(effect.condition)}` : ''}</p>)
+        : <span style={{ color: 'var(--text-muted)' }}>No hay descripción adicional del objeto para este parche.</span>}
+    </div>
+  );
+}
+
+function PerkCoachTooltip({ perk }: { perk: { displayName: string; slot: string; effect: string | null } }) {
+  return <div><strong style={{ display: 'block', color: 'var(--accent-violet)', marginBottom: '0.3rem' }}>{perkSlotLabel(perk.slot)} · {perk.displayName}</strong>{perk.effect ? stripPredggMarkup(perk.effect) : 'Sin descripción disponible para este parche.'}</div>;
+}
+
+function BuildCoachCard({ matchId, matchPlayerId, liveMode }: { matchId: string; matchPlayerId: string | null; liveMode: boolean }) {
+  const [analysis, setAnalysis] = useState<MatchBuildAnalysis | null>(null);
+  useEffect(() => {
+    if (!liveMode && !matchPlayerId) return;
+    let cancelled = false;
+    const request = liveMode
+      ? apiClient.matches.liveBuildAnalysis(matchId)
+      : apiClient.matches.buildAnalysis(matchId, matchPlayerId!);
+    void request
+      .then((result) => { if (!cancelled) setAnalysis(result); })
+      .catch(() => { if (!cancelled) setAnalysis(null); });
+    return () => { cancelled = true; };
+  }, [liveMode, matchId, matchPlayerId]);
+
+  if (!analysis) return null;
+  const gradeLabel = {
+    correct: 'Build correcta', mostly_correct: 'Correcta con una adaptación pendiente',
+    mixed: 'Build mejorable', poor: 'Build mal adaptada al rival',
+  }[analysis.verdict.grade];
+  const gradeColor = analysis.verdict.grade === 'correct'
+    ? 'var(--accent-win)'
+    : analysis.verdict.grade === 'poor'
+      ? 'var(--accent-loss)'
+      : 'var(--accent-prime)';
+  return (
+    <section className="glass-card" style={{ padding: '1rem', borderColor: 'rgba(240,180,41,0.3)' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.75rem', flexWrap: 'wrap' }}>
+        <div>
+          <p style={{ margin: 0, color: 'var(--accent-prime)', fontSize: '0.64rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Coach de build</p>
+          <strong style={{ display: 'block', marginTop: '0.3rem', fontSize: '0.92rem', textTransform: 'capitalize' }}>{analysis.heroSlug} · {analysis.role?.toLowerCase() ?? 'sin rol'}</strong>
+        </div>
+        <div style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-muted)', fontSize: '0.67rem', textAlign: 'right' }}>
+          Daño recibido: {analysis.context.damageReceived.physical.toLocaleString()} físico · {analysis.context.damageReceived.magical.toLocaleString()} mágico
+        </div>
+      </div>
+
+      <div style={{ marginTop: '0.85rem', padding: '0.85rem', borderRadius: 9, background: `color-mix(in srgb, ${gradeColor} 7%, rgba(15,23,42,0.6))`, border: `1px solid color-mix(in srgb, ${gradeColor} 30%, transparent)` }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.7rem', alignItems: 'center', flexWrap: 'wrap' }}>
+          <strong style={{ color: gradeColor, fontSize: '0.84rem' }}>{gradeLabel}</strong>
+          <span style={{ fontFamily: 'var(--font-mono)', color: gradeColor, fontSize: '0.72rem', fontWeight: 800 }}>{analysis.verdict.score}/100 adaptación</span>
+        </div>
+        <p style={{ margin: '0.4rem 0 0', color: 'var(--text-secondary)', fontSize: '0.72rem', lineHeight: 1.5 }}>{analysis.verdict.summary}</p>
+      </div>
+
+      <div style={{ marginTop: '0.9rem' }}>
+        <p style={{ margin: '0 0 0.45rem', color: 'var(--text-muted)', fontSize: '0.61rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Qué tenía el equipo rival</p>
+        <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
+          {analysis.context.enemyHeroes.map((enemy) => (
+            <span key={`${enemy.heroSlug}-${enemy.role}`} title={`${enemy.healing.toLocaleString()} curación · ${enemy.shieldingReceived.toLocaleString()} escudos recibidos · ${enemy.damageMitigated.toLocaleString()} daño mitigado`} style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', padding: '0.3rem 0.45rem', borderRadius: 6, background: 'rgba(255,255,255,0.035)', border: '1px solid var(--border-color)', fontSize: '0.65rem', color: 'var(--text-secondary)' }}>
+              <img src={`/heroes/${enemy.heroSlug}.webp`} alt="" style={{ width: 22, height: 22, borderRadius: 4, objectFit: 'cover' }} onError={(event) => { (event.currentTarget as HTMLImageElement).style.display = 'none'; }} />
+              <strong style={{ color: 'var(--text-primary)', textTransform: 'capitalize' }}>{enemy.heroSlug}</strong> · {enemy.role?.toLowerCase() ?? 'sin rol'}
+            </span>
+          ))}
+        </div>
+      </div>
+
+      <div style={{ marginTop: '1rem', padding: '0.85rem', borderRadius: 9, background: 'rgba(91,156,246,0.035)', border: '1px solid rgba(91,156,246,0.2)' }}>
+        <p style={{ margin: 0, color: 'var(--accent-blue)', fontSize: '0.62rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Lectura global de la partida</p>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(270px, 1fr))', gap: '0.7rem', marginTop: '0.65rem' }}>
+          <article style={{ padding: '0.7rem', borderRadius: 8, background: 'rgba(15,23,42,0.5)', border: '1px solid var(--border-color)' }}>
+            <strong style={{ color: 'var(--text-primary)', fontSize: '0.72rem' }}>Qué quiere hacer {analysis.heroSlug}</strong>
+            <div style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap', marginTop: '0.45rem' }}>
+              {analysis.globalAnalysis.playerIdentity.map((concept) => <CoachHover key={concept.key} label={`Entender ${concept.label}`} content={<div><strong style={{ display: 'block', color: 'var(--accent-blue)', marginBottom: '0.25rem' }}>{concept.label}</strong>{concept.description}<span style={{ display: 'block', marginTop: '0.35rem', color: 'var(--text-muted)' }}>Evidencia: {concept.evidence.join(', ')}</span></div>}>
+                <span style={{ padding: '0.25rem 0.4rem', borderRadius: 5, background: 'rgba(91,156,246,0.09)', border: '1px solid rgba(91,156,246,0.18)', color: 'var(--accent-blue)', fontSize: '0.6rem', fontWeight: 700 }}>{concept.label}</span>
+              </CoachHover>)}
+            </div>
+          </article>
+          <article style={{ padding: '0.7rem', borderRadius: 8, background: 'rgba(15,23,42,0.5)', border: '1px solid var(--border-color)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.5rem' }}><strong style={{ color: 'var(--text-primary)', fontSize: '0.72rem' }}>Qué priorizó tu build</strong><span style={{ color: 'var(--accent-cyan)', fontSize: '0.64rem', fontWeight: 800 }}>{analysis.globalAnalysis.coherence.score}% coherencia</span></div>
+            <p style={{ margin: '0.35rem 0 0', color: 'var(--text-secondary)', fontSize: '0.64rem', lineHeight: 1.45 }}>{analysis.globalAnalysis.coherence.summary}</p>
+            <div style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap', marginTop: '0.45rem' }}>
+              {analysis.globalAnalysis.buildProfile.slice(0, 6).map((concept) => <CoachHover key={concept.key} label={`Ver objetos de ${concept.label}`} content={<div><strong style={{ display: 'block', color: 'var(--accent-cyan)', marginBottom: '0.25rem' }}>{concept.label}</strong>{concept.description}<span style={{ display: 'block', marginTop: '0.35rem', color: 'var(--text-muted)' }}>Objetos: {concept.items.join(', ')}</span></div>}>
+                <span style={{ padding: '0.25rem 0.4rem', borderRadius: 5, background: 'rgba(56,212,200,0.07)', border: '1px solid rgba(56,212,200,0.16)', color: 'var(--accent-cyan)', fontSize: '0.6rem' }}>{concept.label} · {concept.items.length}</span>
+              </CoachHover>)}
+            </div>
+          </article>
+        </div>
+
+        {analysis.globalAnalysis.enemyThreats.length > 0 && <div style={{ marginTop: '0.75rem' }}>
+          <strong style={{ display: 'block', color: 'var(--text-primary)', fontSize: '0.7rem', marginBottom: '0.45rem' }}>Cómo quería jugar el rival y cómo responder</strong>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(245px, 1fr))', gap: '0.5rem' }}>
+            {analysis.globalAnalysis.enemyThreats.map((threat) => <article key={threat.key} style={{ padding: '0.65rem', borderRadius: 7, background: 'rgba(15,23,42,0.48)', border: `1px solid ${threat.severity === 'critical' ? 'rgba(248,113,113,0.25)' : 'var(--border-color)'}` }}>
+              <strong style={{ color: threat.severity === 'critical' ? 'var(--accent-loss)' : 'var(--accent-prime)', fontSize: '0.69rem' }}>{threat.label}</strong>
+              <p style={{ margin: '0.28rem 0', color: 'var(--text-muted)', fontSize: '0.61rem', lineHeight: 1.4 }}>{threat.description} {threat.evidence}</p>
+              {threat.sources.length > 0 && <div style={{ display: 'flex', gap: '0.25rem', flexWrap: 'wrap', margin: '0.35rem 0' }}>
+                {threat.sources.map((source, index) => <CoachHover key={`${source.heroSlug}-${source.name}-${index}`} label={`Ver ${source.name}`} content={<div><strong style={{ display: 'block', color: 'var(--text-primary)', textTransform: 'capitalize', marginBottom: '0.25rem' }}>{source.heroSlug} · {source.name}</strong>{source.description}</div>}>
+                  <span style={{ padding: '0.18rem 0.32rem', borderRadius: 4, background: 'rgba(255,255,255,0.04)', color: 'var(--text-secondary)', fontSize: '0.56rem', textTransform: 'capitalize' }}>{source.heroSlug} · {source.name}</span>
+                </CoachHover>)}
+              </div>}
+              <p style={{ margin: '0.35rem 0 0', color: 'var(--text-secondary)', fontSize: '0.62rem', lineHeight: 1.42 }}><strong style={{ color: 'var(--text-primary)' }}>Respuesta:</strong> {threat.response}</p>
+            </article>)}
+          </div>
+        </div>}
+
+        {analysis.globalAnalysis.tradeoffs.length > 0 && <div style={{ marginTop: '0.65rem', padding: '0.6rem', borderRadius: 7, background: 'rgba(240,180,41,0.045)', border: '1px solid rgba(240,180,41,0.15)' }}>
+          <strong style={{ display: 'block', color: 'var(--accent-prime)', fontSize: '0.65rem', marginBottom: '0.25rem' }}>Huecos que dejó la build</strong>
+          {analysis.globalAnalysis.tradeoffs.map((tradeoff, index) => <p key={index} style={{ margin: index === 0 ? 0 : '0.25rem 0 0', color: 'var(--text-secondary)', fontSize: '0.62rem', lineHeight: 1.4 }}>• {tradeoff}</p>)}
+        </div>}
+      </div>
+
+      <div style={{ marginTop: '0.95rem' }}>
+        <p style={{ margin: '0 0 0.45rem', color: 'var(--text-muted)', fontSize: '0.61rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Evaluación de tu build final</p>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '0.55rem' }}>
+          {analysis.inventoryAssessments.map((item) => {
+            const catalogItem = analysis.inventory.find((entry) => entry.slug === item.slug);
+            return <article key={item.slug} style={{ display: 'flex', gap: '0.55rem', padding: '0.65rem', borderRadius: 8, background: 'rgba(15,23,42,0.52)', border: '1px solid var(--border-color)' }}>
+              <CoachHover label={`Ver información de ${item.displayName}`} content={<ItemCoachTooltip item={{ ...catalogItem, displayName: item.displayName }} />}>
+                <img src={`/items/${item.slug}.webp`} alt="" style={{ width: 36, height: 36, borderRadius: 5, flexShrink: 0 }} onError={(event) => { (event.currentTarget as HTMLImageElement).style.display = 'none'; }} />
+              </CoachHover>
+              <div>
+                <strong style={{ display: 'block', color: item.verdict === 'correct' ? 'var(--accent-win)' : 'var(--text-primary)', fontSize: '0.72rem' }}>{item.displayName}</strong>
+                {item.functions.length > 0 && <div style={{ display: 'flex', gap: '0.25rem', flexWrap: 'wrap', marginTop: '0.25rem' }}>{item.functions.slice(0, 4).map((concept) => <span key={concept.key} title={concept.description} style={{ color: 'var(--accent-cyan)', fontSize: '0.55rem' }}>{concept.label}</span>)}</div>}
+                <p style={{ margin: '0.22rem 0 0', color: 'var(--text-muted)', fontSize: '0.64rem', lineHeight: 1.4 }}>{item.explanation}</p>
+                <p style={{ margin: '0.24rem 0 0', color: 'var(--text-secondary)', fontSize: '0.6rem', lineHeight: 1.4 }}><strong>Con tu héroe:</strong> {item.roleFit}</p>
+                <p style={{ margin: '0.2rem 0 0', color: 'var(--text-secondary)', fontSize: '0.6rem', lineHeight: 1.4 }}><strong>En esta partida:</strong> {item.matchupFit}</p>
+                <p style={{ margin: '0.2rem 0 0', color: 'var(--text-muted)', fontSize: '0.58rem', lineHeight: 1.4 }}><strong>Coste de oportunidad:</strong> {item.tradeoff}</p>
+              </div>
+            </article>;
+          })}
+        </div>
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))', gap: '0.65rem', marginTop: '0.8rem' }}>
+        {analysis.signals.map((signal) => {
+          const color = signal.severity === 'critical' ? 'var(--accent-loss)' : signal.severity === 'warning' ? 'var(--accent-prime)' : 'var(--accent-win)';
+          return (
+            <article key={signal.key} style={{ padding: '0.75rem', borderRadius: 8, background: 'rgba(15,23,42,0.52)', border: `1px solid color-mix(in srgb, ${color} 28%, transparent)` }}>
+              <strong style={{ color, fontSize: '0.78rem' }}>{signal.title}</strong>
+              <p style={{ margin: '0.35rem 0', color: 'var(--text-secondary)', fontSize: '0.7rem', lineHeight: 1.4 }}>{signal.evidence}</p>
+              {signal.whyItMatters && <div style={{ margin: '0.45rem 0', padding: '0.55rem 0.65rem', borderLeft: `3px solid ${color}`, background: 'rgba(255,255,255,0.025)', borderRadius: 4 }}>
+                <strong style={{ display: 'block', color: 'var(--text-primary)', fontSize: '0.65rem', marginBottom: '0.2rem' }}>Por qué importa</strong>
+                <span style={{ color: 'var(--text-secondary)', fontSize: '0.67rem', lineHeight: 1.45 }}>{signal.whyItMatters}</span>
+              </div>}
+              {signal.sources && signal.sources.length > 0 && <div style={{ display: 'grid', gap: '0.35rem', margin: '0.5rem 0' }}>
+                <strong style={{ color: 'var(--text-muted)', fontSize: '0.61rem', textTransform: 'uppercase' }}>De dónde salió en esta partida</strong>
+                {signal.sources.map((source, index) => <div key={`${source.heroSlug}-${source.name}-${index}`} style={{ display: 'flex', gap: '0.45rem', alignItems: 'flex-start', padding: '0.45rem', borderRadius: 6, background: 'rgba(255,255,255,0.025)' }}>
+                  <img src={`/heroes/${source.heroSlug}.webp`} alt="" style={{ width: 24, height: 24, borderRadius: 4, objectFit: 'cover', flexShrink: 0 }} />
+                  <span style={{ color: 'var(--text-muted)', fontSize: '0.63rem', lineHeight: 1.4 }}><strong style={{ color: 'var(--text-primary)', textTransform: 'capitalize' }}>{source.heroSlug} · {source.name}</strong> ({source.sourceType === 'ability' ? 'habilidad' : 'objeto'}): {source.description}</span>
+                </div>)}
+              </div>}
+              <p style={{ margin: 0, color: 'var(--text-primary)', fontSize: '0.7rem', lineHeight: 1.4 }}>{signal.recommendation}</p>
+              {signal.appliesAgainst && signal.appliesAgainst.length > 0 && <p style={{ margin: '0.45rem 0 0', color: 'var(--text-muted)', fontSize: '0.62rem', lineHeight: 1.4 }}><strong>Recuerda el concepto contra:</strong> {signal.appliesAgainst.join(', ')}.</p>}
+              {signal.suggestedItems && signal.suggestedItems.length > 0 && (
+                <div style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap', marginTop: '0.55rem' }}>
+                  {signal.suggestedItems.map((item) => (
+                    <CoachHover key={item.slug} label={`Ver información de ${item.displayName}`} content={<ItemCoachTooltip item={item} />}>
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem', padding: '0.2rem 0.4rem', borderRadius: 5, background: 'rgba(255,255,255,0.04)', fontSize: '0.62rem', color: 'var(--text-secondary)' }}>
+                        <img src={`/items/${item.slug}.webp`} alt="" style={{ width: 18, height: 18, borderRadius: 3 }} /> {item.displayName}
+                      </span>
+                    </CoachHover>
+                  ))}
+                </div>
+              )}
+            </article>
+          );
+        })}
+      </div>
+
+      <div style={{ marginTop: '1rem', padding: '0.85rem', borderRadius: 9, background: 'rgba(56,212,200,0.035)', border: '1px solid rgba(56,212,200,0.18)' }}>
+        <p style={{ margin: 0, color: 'var(--accent-cyan)', fontSize: '0.62rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Build recomendada contra este equipo</p>
+        <p style={{ margin: '0.35rem 0 0', color: 'var(--text-secondary)', fontSize: '0.68rem', lineHeight: 1.45 }}>{analysis.recommendedBuild.principle}</p>
+        {analysis.recommendedBuild.changes.length > 0 ? (
+          <div style={{ display: 'grid', gap: '0.55rem', marginTop: '0.7rem' }}>
+            {analysis.recommendedBuild.changes.map((change) => (
+              <article key={`${change.signalKey}-${change.item.slug}`} style={{ padding: '0.7rem', borderRadius: 8, background: 'rgba(15,23,42,0.5)', border: '1px solid var(--border-color)' }}>
+                <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
+                  {change.insteadOf && <>
+                    <CoachHover label={`Ver información de ${change.insteadOf.displayName}`} content={<ItemCoachTooltip item={{ ...analysis.inventory.find((item) => item.slug === change.insteadOf?.slug), displayName: change.insteadOf.displayName }} />}>
+                      <img src={`/items/${change.insteadOf.slug}.webp`} alt="" style={{ width: 32, height: 32, borderRadius: 5, opacity: 0.55 }} />
+                    </CoachHover>
+                    <span style={{ color: 'var(--text-muted)', fontSize: '0.65rem', textDecoration: 'line-through' }}>{change.insteadOf.displayName}</span>
+                    <span style={{ color: 'var(--text-muted)' }}>→</span>
+                  </>}
+                  <CoachHover label={`Ver información de ${change.item.displayName}`} content={<ItemCoachTooltip item={change.item} />}>
+                    <img src={`/items/${change.item.slug}.webp`} alt="" style={{ width: 36, height: 36, borderRadius: 5 }} />
+                  </CoachHover>
+                  <strong style={{ color: 'var(--accent-cyan)', fontSize: '0.76rem' }}>{change.item.displayName}</strong>
+                </div>
+                <p style={{ margin: '0.4rem 0 0', color: 'var(--text-secondary)', fontSize: '0.67rem', lineHeight: 1.45 }}><strong>Por qué:</strong> {change.why}</p>
+                <p style={{ margin: '0.28rem 0 0', color: 'var(--accent-prime)', fontSize: '0.65rem', lineHeight: 1.4 }}><strong>Cuándo:</strong> {change.timing}</p>
+              </article>
+            ))}
+          </div>
+        ) : <p style={{ margin: '0.6rem 0 0', color: 'var(--accent-win)', fontSize: '0.68rem' }}>No hace falta sustituir una pieza por una respuesta contextual con los datos disponibles.</p>}
+        {analysis.recommendedBuild.sequence.length > 0 && <div style={{ marginTop: '0.85rem' }}>
+          <strong style={{ display: 'block', color: 'var(--text-primary)', fontSize: '0.68rem', marginBottom: '0.5rem' }}>Orden que habría usado en esta partida</strong>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(145px, 1fr))', gap: '0.45rem' }}>
+            {analysis.recommendedBuild.sequence.map((step) => <article key={`${step.position}-${step.slug}`} style={{ padding: '0.55rem', borderRadius: 7, background: 'rgba(15,23,42,0.55)', border: '1px solid var(--border-color)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                <span style={{ width: 18, height: 18, borderRadius: 999, display: 'inline-grid', placeItems: 'center', background: 'var(--accent-cyan)', color: '#071219', fontSize: '0.58rem', fontWeight: 900 }}>{step.position}</span>
+                <CoachHover label={`Ver información de ${step.displayName}`} content={<ItemCoachTooltip item={step} />}>
+                  <img src={`/items/${step.slug}.webp`} alt="" style={{ width: 30, height: 30, borderRadius: 4 }} />
+                </CoachHover>
+                <span style={{ minWidth: 0 }}><strong style={{ display: 'block', color: 'var(--text-primary)', fontSize: '0.66rem' }}>{step.displayName}</strong><span style={{ color: 'var(--accent-cyan)', fontSize: '0.56rem' }}>{step.phase}</span></span>
+              </div>
+              <p style={{ margin: '0.4rem 0 0', color: 'var(--text-muted)', fontSize: '0.59rem', lineHeight: 1.4 }}>{step.reason}</p>
+            </article>)}
+          </div>
+        </div>}
+      </div>
+
+      {analysis.eternalLoadout.length > 0 && (
+        <div style={{ marginTop: '1rem' }}>
+          <p style={{ margin: '0 0 0.45rem', color: 'var(--text-muted)', fontSize: '0.61rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Augmento, Eternal y bendiciones</p>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '0.55rem' }}>
+            {analysis.eternalLoadout.map((perk, index) => {
+              const color = perk.verdict === 'correct' ? 'var(--accent-win)' : perk.verdict === 'questionable' ? 'var(--accent-loss)' : 'var(--accent-prime)';
+              const verdict = perk.verdict === 'correct' ? 'Correcto' : perk.verdict === 'questionable' ? 'Cuestionable' : 'Situacional';
+              return (
+                <CoachHover key={`${perk.id}-${index}`} label={`Ver información de ${perk.displayName}`} content={<PerkCoachTooltip perk={perk} />}>
+                <article style={{ width: '100%', padding: '0.7rem', borderRadius: 8, background: 'rgba(167,139,250,0.045)', border: '1px solid rgba(167,139,250,0.18)' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.5rem' }}>
+                    <div>
+                      <span style={{ display: 'block', color: 'var(--accent-violet)', fontSize: '0.59rem', fontWeight: 800 }}>{perkSlotLabel(perk.slot)}</span>
+                      <strong style={{ color: 'var(--text-primary)', fontSize: '0.72rem' }}>{perk.displayName}</strong>
+                    </div>
+                    <span style={{ color, fontSize: '0.6rem', fontWeight: 800 }}>{verdict}</span>
+                  </div>
+                  <p style={{ margin: '0.4rem 0 0', color: 'var(--text-secondary)', fontSize: '0.65rem', lineHeight: 1.45 }}>{perk.why}</p>
+                  {perk.effect && <p style={{ margin: '0.3rem 0 0', color: 'var(--text-muted)', fontSize: '0.61rem', lineHeight: 1.35 }}>{stripPredggMarkup(perk.effect)}</p>}
+                </article>
+                </CoachHover>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {(analysis.recommendedLoadout.augment || analysis.recommendedLoadout.eternal || analysis.recommendedLoadout.blessings.length > 0) && (
+        <div style={{ marginTop: '1rem', padding: '0.85rem', borderRadius: 9, background: 'rgba(167,139,250,0.045)', border: '1px solid rgba(167,139,250,0.22)' }}>
+          <p style={{ margin: 0, color: 'var(--accent-violet)', fontSize: '0.62rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Loadout que habría elegido el coach</p>
+          <p style={{ margin: '0.35rem 0 0', color: 'var(--text-secondary)', fontSize: '0.66rem', lineHeight: 1.45 }}>{analysis.recommendedLoadout.explanation}</p>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: '0.5rem', marginTop: '0.65rem' }}>
+            {[analysis.recommendedLoadout.augment, analysis.recommendedLoadout.eternal, ...analysis.recommendedLoadout.blessings].flatMap((perk) => perk ? [perk] : []).map((perk) => (
+              <CoachHover key={`${perk.slot}-${perk.id}`} label={`Ver información de ${perk.displayName}`} content={<PerkCoachTooltip perk={perk} />}>
+                <article style={{ width: '100%', padding: '0.65rem', borderRadius: 7, background: 'rgba(15,23,42,0.52)', border: '1px solid var(--border-color)' }}>
+                  <span style={{ display: 'block', color: 'var(--accent-violet)', fontSize: '0.57rem', fontWeight: 800 }}>{perkSlotLabel(perk.slot)}</span>
+                  <strong style={{ display: 'block', color: 'var(--text-primary)', fontSize: '0.71rem', marginTop: '0.15rem' }}>{perk.displayName}</strong>
+                  {perk.replaces && <span style={{ display: 'block', color: 'var(--text-muted)', fontSize: '0.58rem', marginTop: '0.2rem' }}>En lugar de {perk.replaces.displayName}</span>}
+                  <p style={{ margin: '0.4rem 0 0', color: 'var(--text-secondary)', fontSize: '0.63rem', lineHeight: 1.45 }}>{perk.reason}</p>
+                </article>
+              </CoachHover>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div style={{ marginTop: '1rem' }}>
+        <p style={{ margin: '0 0 0.45rem', color: 'var(--text-muted)', fontSize: '0.61rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Cómo evolucionó la compra</p>
+        <p style={{ margin: 0, color: 'var(--text-secondary)', fontSize: '0.67rem', lineHeight: 1.45 }}>{analysis.purchaseTimeline.lesson}</p>
+        {analysis.purchaseTimeline.ownPurchases.length > 0 && (
+          <div style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap', marginTop: '0.55rem' }}>
+            {analysis.purchaseTimeline.ownPurchases.slice(0, 16).map((purchase, index) => (
+              <span key={`${purchase.gameTime}-${purchase.itemName}-${index}`} title={`Comprado en ${purchase.minute}`} style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem', padding: '0.22rem 0.38rem', borderRadius: 5, background: 'rgba(255,255,255,0.035)', color: 'var(--text-muted)', fontSize: '0.6rem' }}>
+                <img src={`/items/${purchase.itemSlug}.webp`} alt="" style={{ width: 18, height: 18, borderRadius: 3 }} onError={(event) => { (event.currentTarget as HTMLImageElement).style.display = 'none'; }} />
+                {purchase.minute} · {purchase.itemName}
+              </span>
+            ))}
+          </div>
+        )}
+        {analysis.purchaseTimeline.opponentResponses.length > 0 && (
+          <div style={{ display: 'grid', gap: '0.4rem', marginTop: '0.65rem' }}>
+            {analysis.purchaseTimeline.opponentResponses.map((response, index) => (
+              <div key={`${response.gameTime}-${response.heroSlug}-${index}`} style={{ padding: '0.55rem 0.65rem', borderLeft: '3px solid var(--accent-violet)', background: 'rgba(167,139,250,0.04)', borderRadius: 5, color: 'var(--text-secondary)', fontSize: '0.65rem', lineHeight: 1.4 }}>
+                <strong style={{ color: 'var(--accent-violet)', textTransform: 'capitalize' }}>{response.minute} · {response.heroSlug}:</strong> {response.explanation}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </section>
+  );
+}
 
 function StatisticsTab({ match, duskWon, dawnWon, onResync, syncing }: {
   match: MatchDetailData; duskWon: boolean; dawnWon: boolean;

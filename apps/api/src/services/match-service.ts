@@ -194,8 +194,13 @@ export interface MatchPlayerDetail {
   inventoryItems: string[];
   /** @deprecated Always null — use perks instead */
   perkSlug: string | null;
-  /** Pre-game augments: [{id, name, displayName, slot}]. null = not yet synced. */
-  perks: Array<{ id: string; name: string; displayName: string; slot: string | null }> | null;
+  /** Current loadout: hero augment, Eternal and two minor blessings. */
+  perks: Array<{
+    id: string; name: string; displayName: string; slot: string | null;
+    icon?: string | null; simpleDescription?: string | null; description?: string | null;
+    unlockLevel?: number | null; eternalCategory?: { id: string; name: string } | null;
+  }> | null;
+  abilityOrder: Array<{ ability: string; gameTime: number }> | null;
   /** From the most recent PlayerSnapshot — e.g. "Diamond III" */
   rankLabel: string | null;
   ratingPoints: number | null;
@@ -205,17 +210,36 @@ export interface MatchPlayerDetail {
   heroDamageTaken: number | null;
   totalDamageTaken: number | null;
   totalHealingDone: number | null;
+  crestHealingDone: number | null;
+  itemHealingDone: number | null;
+  utilityHealingDone: number | null;
+  totalShieldingReceived: number | null;
+  totalDamageMitigated: number | null;
+  physicalDamageTaken: number | null;
+  magicalDamageTaken: number | null;
+  trueDamageTaken: number | null;
+  physicalDamageTakenFromHeroes: number | null;
+  magicalDamageTakenFromHeroes: number | null;
+  trueDamageTakenFromHeroes: number | null;
   totalDamageDealtToStructures: number | null;
   totalDamageDealtToObjectives: number | null;
   largestCriticalStrike: number | null;
   /** CS — lane minions only, excludes jungle camps */
   laneMinionsKilled: number | null;
+  minionsKilled: number | null;
+  neutralMinionsKilled: number | null;
+  neutralMinionsTeamJungle: number | null;
+  neutralMinionsEnemyJungle: number | null;
   goldSpent: number | null;
   largestKillingSpree: number | null;
   multiKill: number | null;
   physicalDamageDealt: number | null;
   magicalDamageDealt: number | null;
   trueDamageDealt: number | null;
+  matchRating: {
+    ratingId: string | null; points: number | null; newPoints: number | null; delta: number | null;
+    rankName: string | null; tierName: string | null; isRankup: boolean | null;
+  } | null;
   /** Cumulative gold per minute array — requires event stream sync */
   goldEarnedAtInterval: number[] | null;
 }
@@ -228,6 +252,7 @@ export interface MatchDetail {
   id: string;
   predggUuid: string;
   startTime: Date;
+  endTime: Date | null;
   /** Duration in seconds */
   duration: number;
   /** "RANKED" | "ARAM" | "BRAWL" | "STANDARD" */
@@ -235,6 +260,8 @@ export interface MatchDetail {
   region: string | null;
   /** "DUSK" | "DAWN" | null */
   winningTeam: string | null;
+  endReason: string | null;
+  spoilerBlockedUntil: Date | null;
   /** Patch name string e.g. "0.19.2", null if version not resolved */
   version: string | null;
   rosterSynced: boolean;
@@ -316,7 +343,8 @@ export async function getMatchDetail(matchId: string): Promise<MatchDetail> {
   }
 
   /** Maps a DB MatchPlayer row to the MatchPlayerDetail API shape. */
-  function toDetail(mp: (typeof match.matchPlayers)[number]): MatchPlayerDetail {
+  type LoadedMatch = NonNullable<typeof match>;
+  function toDetail(mp: LoadedMatch['matchPlayers'][number]): MatchPlayerDetail {
     const snap = mp.player?.snapshots[0] ?? null;
     const hero = heroMeta.get(mp.heroSlug);
     return {
@@ -342,7 +370,8 @@ export async function getMatchDetail(matchId: string): Promise<MatchDetail> {
       level: mp.level,
       inventoryItems: Array.isArray(mp.inventoryItems) ? (mp.inventoryItems as string[]) : [],
       perkSlug: mp.perkSlug,
-      perks: Array.isArray(mp.perks) ? (mp.perks as Array<{ id: string; name: string; displayName: string; slot: string | null }>) : null,
+      perks: Array.isArray(mp.perks) ? (mp.perks as MatchPlayerDetail['perks']) : null,
+      abilityOrder: Array.isArray(mp.abilityOrder) ? (mp.abilityOrder as Array<{ ability: string; gameTime: number }>) : null,
       rankLabel: snap?.rankLabel ?? null,
       ratingPoints: snap?.ratingPoints ?? null,
       physicalDamageDealtToHeroes: mp.physicalDamageDealtToHeroes,
@@ -351,16 +380,40 @@ export async function getMatchDetail(matchId: string): Promise<MatchDetail> {
       heroDamageTaken: mp.heroDamageTaken,
       totalDamageTaken: mp.totalDamageTaken,
       totalHealingDone: mp.totalHealingDone,
+      crestHealingDone: mp.crestHealingDone,
+      itemHealingDone: mp.itemHealingDone,
+      utilityHealingDone: mp.utilityHealingDone,
+      totalShieldingReceived: mp.totalShieldingReceived,
+      totalDamageMitigated: mp.totalDamageMitigated,
+      physicalDamageTaken: mp.physicalDamageTaken,
+      magicalDamageTaken: mp.magicalDamageTaken,
+      trueDamageTaken: mp.trueDamageTaken,
+      physicalDamageTakenFromHeroes: mp.physicalDamageTakenFromHeroes,
+      magicalDamageTakenFromHeroes: mp.magicalDamageTakenFromHeroes,
+      trueDamageTakenFromHeroes: mp.trueDamageTakenFromHeroes,
       totalDamageDealtToStructures: mp.totalDamageDealtToStructures,
       totalDamageDealtToObjectives: mp.totalDamageDealtToObjectives,
       largestCriticalStrike: mp.largestCriticalStrike,
       laneMinionsKilled: mp.laneMinionsKilled,
+      minionsKilled: mp.minionsKilled,
+      neutralMinionsKilled: mp.neutralMinionsKilled,
+      neutralMinionsTeamJungle: mp.neutralMinionsTeamJungle,
+      neutralMinionsEnemyJungle: mp.neutralMinionsEnemyJungle,
       goldSpent: mp.goldSpent,
       largestKillingSpree: mp.largestKillingSpree,
       multiKill: mp.multiKill,
       physicalDamageDealt: mp.physicalDamageDealt,
       magicalDamageDealt: mp.magicalDamageDealt,
       trueDamageDealt: mp.trueDamageDealt,
+      matchRating: mp.ratingId || mp.ratingPoints != null || mp.ratingNewPoints != null ? {
+        ratingId: mp.ratingId,
+        points: mp.ratingPoints,
+        newPoints: mp.ratingNewPoints,
+        delta: mp.ratingDelta,
+        rankName: mp.ratingRankName,
+        tierName: mp.ratingTierName,
+        isRankup: mp.ratingIsRankup,
+      } : null,
       goldEarnedAtInterval: Array.isArray(mp.goldEarnedAtInterval) ? (mp.goldEarnedAtInterval as number[]) : null,
     };
   }
@@ -373,10 +426,13 @@ export async function getMatchDetail(matchId: string): Promise<MatchDetail> {
     id: match.id,
     predggUuid: match.predggUuid,
     startTime: match.startTime,
+    endTime: match.endTime,
     duration: match.duration,
     gameMode: match.gameMode,
     region: match.region,
     winningTeam: match.winningTeam,
+    endReason: match.endReason,
+    spoilerBlockedUntil: match.spoilerBlockedUntil,
     version: match.version?.name ?? null,
     rosterSynced: match.rosterSynced,
     eventStreamSynced: match.eventStreamSynced,

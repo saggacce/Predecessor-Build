@@ -102,6 +102,7 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  vi.unstubAllEnvs();
 });
 
 describe('syncMatchEventStream', () => {
@@ -132,6 +133,57 @@ describe('syncMatchEventStream', () => {
       where: { matchId: 'match-1', predggPlayerUuid: 'predgg-warder' },
       data: { goldEarnedAtInterval: [100, 200] },
     });
+  });
+
+  it('syncs the gold timeline without requiring a user OAuth token', async () => {
+    const mockDb = createMockDb();
+
+    await syncMatchEventStream(mockDb as never, 'match-1', 'predgg-match-1');
+
+    expect(fetch).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({
+        headers: expect.not.objectContaining({ Authorization: expect.any(String) }),
+      }),
+    );
+    expect(mockDb.matchPlayer.updateMany).toHaveBeenCalledWith({
+      where: { matchId: 'match-1', predggPlayerUuid: 'predgg-warder' },
+      data: { goldEarnedAtInterval: [100, 200] },
+    });
+  });
+
+  it('falls back to the public gold-only query when protected event data is rejected', async () => {
+    vi.stubEnv('PRED_GG_CLIENT_SECRET', 'stale-api-key');
+    vi.mocked(fetch)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ errors: [{ message: 'Forbidden' }] }),
+      } as Response)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          data: {
+            match: {
+              matchPlayers: [{
+                player: { id: 'predgg-warder' }, goldEarnedAtInterval: [100, 200],
+              }],
+            },
+          },
+        }),
+      } as Response);
+    const mockDb = createMockDb();
+
+    await syncMatchEventStream(mockDb as never, 'match-1', 'predgg-match-1');
+
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(vi.mocked(fetch).mock.calls[0][1]).toEqual(expect.objectContaining({
+      headers: expect.objectContaining({ 'X-Api-Key': 'stale-api-key' }),
+    }));
+    expect(vi.mocked(fetch).mock.calls[1][1]).toEqual(expect.objectContaining({
+      headers: { 'Content-Type': 'application/json' },
+    }));
+    expect(mockDb.matchPlayer.updateMany).toHaveBeenCalled();
+    expect(mockDb.heroKill.deleteMany).not.toHaveBeenCalled();
   });
 });
 

@@ -10,10 +10,10 @@ Este documento cubre **la capa de integración de API** (GraphQL/OAuth2, queries
 No reemplaza la especificación de producto. La visión, alcance y roadmap funcional viven en `docs/project_predecessor.md`.
 
 Prioridad actual del producto:
-1. Seguimiento de jugadores.
-2. Scouting de jugadores rivales.
-3. Análisis de equipos para scrims y partidos.
-4. Build/stat calculator como fase posterior.
+1. Coach personal basado en partidas propias.
+2. Champion pool, matchups, progreso y builds contextuales.
+3. Mantener scouting y análisis ya existentes.
+4. Gestión y mejora de equipos como siguiente etapa del producto.
 
 ---
 
@@ -85,7 +85,7 @@ LeaderboardRatingType: (valores del sistema de ranking por temporada)
 
 pred.gg usa **OAuth2**. Su cliente web guarda tokens en `localStorage`, pero RiftLine implementa OAuth2 PKCE con una única credencial de plataforma controlada por el servidor.
 
-En RiftLine, el refresh token rotatorio se guarda exclusivamente en `PlatformCredential`. El navegador solo recibe un access token HTTP-only de corta duración y una marca de expiración. Todas las sincronizaciones solicitan acceso a `predgg-token-service`, que serializa la renovación y persiste atómicamente cualquier refresh token rotado.
+En RiftLine, el refresh token rotatorio se guarda exclusivamente en `PlatformCredential`. El navegador solo recibe un access token HTTP-only de corta duración y una marca de expiración. Todas las sincronizaciones solicitan acceso a `predgg-token-service`, que serializa la renovación y persiste atómicamente cualquier refresh token rotado. También se persisten los scopes concedidos y se comparan con los solicitados; una función avanzada sin permiso se desactiva de forma aislada.
 
 ### Variables en localStorage (solo referencia del cliente web de pred.gg)
 
@@ -243,7 +243,9 @@ PREDGG_CLIENT_SECRET=<client_secret>
 
 ## 3. Schema GraphQL Completo
 
-### 3.1 Queries disponibles (35 total)
+### 3.1 Queries disponibles
+
+La tabla original se levantó cuando el schema exponía 35 queries. La introspección de agosto de 2026 expone 39; entre las incorporaciones relevantes para el coach están `eternalCategories` y `ratingDistribution`. Véase `docs/predgg_api_inventory.md` para la fecha y el estado de acceso.
 
 | Query | Parámetros | Retorna | Descripción |
 |-------|-----------|---------|-------------|
@@ -277,6 +279,8 @@ PREDGG_CLIENT_SECRET=<client_secret>
 | `backend` | — | `Backend` | Info del servidor |
 | `connectionInfo` | — | `ConnectionInfo` | IP y país del cliente |
 | `currentAuth` | — | `Authorization` | Auth actual |
+| `eternalCategories` | — | `[EternalCategory]` | Categorías y relaciones de Eternals |
+| `ratingDistribution` | `ratingId, bucketSize` | `RatingDistribution` | Distribución de rating; puede estar restringida |
 | `comment` | `id: ID` | `Comment` | Comentario |
 | `communityChallenge` | `id: Int` | `CommunityChallenge` | Reto comunidad |
 | `matchSpoilerBlocks` | `includeRejected` | `[MatchSpoilerBlock]` | Bloques spoiler |
@@ -1258,24 +1262,30 @@ query ItemDiff($itemId: ID!, $versionId: ID!) {
 
 > **Nota:** La API no tiene un endpoint directo "dame el ítem en versión X vs versión Y". La estrategia es cachear todos los ítems con cada versión y comparar localmente.
 
-### 9.4 Tipo `PerkData` (Crests)
+### 9.4 Tipo `PerkData` (loadout actual)
 
 ```
 id, name, displayName
-slot:            String   # Posición del crest
+slot:            String   # Posición reportada por pred.gg dentro del loadout
 aggressionTypes: [String]
 simpleDescription: String
 description:     String
 icon:            String (URL)
+iconCenterPosition: [Float]
 displayOrder:    Int
+unlockLevel:     Int
 
-hero → Hero           # Si es crest específico de héroe
+hero → Hero           # Si es augmento específico de héroe
 heroData → HeroData   # Datos del héroe asociado
+eternalCategory → EternalCategory
+minorBlessings → [{ perk → Perk }]
 version → Version
 perk → Perk
 ```
 
-### 9.5 Todos los crests
+En una partida moderna se esperan cuatro elecciones ordenadas: augmento, Eternal y dos bendiciones menores. Deben representarse como loadout; “tres augments” es un modelo heredado incorrecto.
+
+### 9.5 Catálogo de perks, Eternals y bendiciones
 
 ```graphql
 query AllPerks {

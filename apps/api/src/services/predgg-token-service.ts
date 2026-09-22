@@ -1,11 +1,12 @@
 import type { Prisma } from '@prisma/client';
 import { db } from '../db.js';
 import { logger } from '../logger.js';
-import { exchangeToken, type TokenResponse } from './predgg-oauth.js';
+import { exchangeToken, predggOAuthConfig, type TokenResponse } from './predgg-oauth.js';
 
 const REFRESH_TOKEN_KEY = 'predgg_refresh_token';
 const ACCESS_TOKEN_KEY = 'predgg_access_token';
 const ACCESS_EXPIRES_AT_KEY = 'predgg_access_expires_at';
+const GRANTED_SCOPES_KEY = 'predgg_granted_scopes';
 const ACCESS_TOKEN_BUFFER_MS = 10 * 60 * 1000;
 const DEFAULT_ACCESS_TTL_SECONDS = 3600;
 const ADVISORY_LOCK_KEY = 1_947_420_126;
@@ -22,6 +23,22 @@ export type PlatformAccessToken = {
   accessToken: string;
   expiresAt: number;
 };
+
+export type PredggOAuthCapability =
+  | 'profile'
+  | 'offlineRefresh'
+  | 'playerIntervals'
+  | 'heroLeaderboard'
+  | 'matchupStatistics';
+
+export interface PredggOAuthStatus {
+  requestedScopes: string[];
+  grantedScopes: string[];
+  missingScopes: string[];
+  capabilities: Record<PredggOAuthCapability, boolean>;
+  checkedAt: string | null;
+  error: string | null;
+}
 
 type CredentialClient = Pick<Prisma.TransactionClient, 'platformCredential'>;
 
@@ -73,8 +90,88 @@ async function persistTokenResponse(client: CredentialClient, data: TokenRespons
     }));
   }
 
+  if (data.scope?.trim()) {
+    writes.push(client.platformCredential.upsert({
+      where: { key: GRANTED_SCOPES_KEY },
+      update: { value: normalizeScopes(data.scope).join(' ') },
+      create: { key: GRANTED_SCOPES_KEY, value: normalizeScopes(data.scope).join(' ') },
+    }));
+  }
+
   await Promise.all(writes);
   return { accessToken: data.access_token, expiresAt };
+}
+
+function normalizeScopes(value: string | null | undefined): string[] {
+  return [...new Set((value ?? '').trim().split(/\s+/).filter(Boolean))].sort();
+}
+
+function buildOAuthStatus(grantedScope: string | null | undefined, error: string | null = null): PredggOAuthStatus {
+  const requestedScopes = normalizeScopes(predggOAuthConfig.scopes);
+  const grantedScopes = normalizeScopes(grantedScope);
+  const granted = new Set(grantedScopes);
+  return {
+    requestedScopes,
+    grantedScopes,
+    missingScopes: requestedScopes.filter((scope) => !granted.has(scope)),
+    capabilities: {
+      profile: granted.has('profile'),
+      offlineRefresh: granted.has('offline_access'),
+      playerIntervals: granted.has('player:read:interval'),
+      heroLeaderboard: granted.has('hero_leaderboard:read'),
+      matchupStatistics: granted.has('matchup_statistic:read'),
+    },
+    checkedAt: platformTokenState.lastCheckedAt,
+    error,
+  };
+}
+
+/** Returns the last known grant without exposing any credential values. */
+export async function readPlatformOAuthStatus(): Promise<PredggOAuthStatus> {
+  const credential = await db.platformCredential.findUnique({ where: { key: GRANTED_SCOPES_KEY } });
+  return buildOAuthStatus(credential?.value, credential ? null : 'Granted scopes have not been inspected yet');
+}
+
+/**
+ * Verifies the grant carried by the current access token against pred.gg.
+ * This also backfills scope metadata for credentials stored before scope tracking existed.
+ */
+export async function inspectPlatformOAuthStatus(accessToken: string): Promise<PredggOAuthStatus> {
+  const endpoint = process.env.PRED_GG_GQL_URL ?? 'https://pred.gg/gql';
+  try {
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
+      body: JSON.stringify({ query: 'query RiftlineOAuthCapabilities { currentAuth { scope } }' }),
+      signal: AbortSignal.timeout(5000),
+    });
+    const payload = await response.json() as {
+      data?: { currentAuth?: { scope?: string | null } | null };
+      errors?: Array<{ message?: string }>;
+    };
+    const scope = payload.data?.currentAuth?.scope;
+    if (!response.ok || !scope) {
+      const message = payload.errors?.map((item) => item.message).filter(Boolean).join('; ')
+        || `pred.gg capability check failed (HTTP ${response.status})`;
+      const stored = await readPlatformOAuthStatus();
+      return { ...stored, checkedAt: new Date().toISOString(), error: message };
+    }
+
+    const normalized = normalizeScopes(scope).join(' ');
+    await db.platformCredential.upsert({
+      where: { key: GRANTED_SCOPES_KEY },
+      update: { value: normalized },
+      create: { key: GRANTED_SCOPES_KEY, value: normalized },
+    });
+    return { ...buildOAuthStatus(normalized), checkedAt: new Date().toISOString() };
+  } catch (error) {
+    const stored = await readPlatformOAuthStatus();
+    return {
+      ...stored,
+      checkedAt: new Date().toISOString(),
+      error: error instanceof Error ? error.message : String(error),
+    };
+  }
 }
 
 /** Stores an OAuth callback response as the single platform credential source. */

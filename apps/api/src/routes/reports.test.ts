@@ -16,10 +16,14 @@ vi.mock('../services/player-weekly-report-service.js', () => ({
 vi.mock('../services/player-coach-chat-service.js', () => ({
   answerPlayerCoachQuestion: vi.fn().mockResolvedValue({ answer: 'Respuesta [E2]', evidence: [{ id: 'E2' }] }),
 }));
+vi.mock('../services/player-build-review-service.js', () => ({
+  getPlayerBuildReview: vi.fn().mockResolvedValue({ playerId: 'player-1', matches: [] }),
+}));
 
 import { db } from '../db.js';
 import { generatePlayerWeeklyReport } from '../services/player-weekly-report-service.js';
 import { answerPlayerCoachQuestion } from '../services/player-coach-chat-service.js';
+import { getPlayerBuildReview } from '../services/player-build-review-service.js';
 import { reportsRouter } from './reports.js';
 
 const app = express();
@@ -51,6 +55,30 @@ describe('GET /reports/player-weekly/:playerId', () => {
 
     expect(response.status).toBe(403);
     expect(generatePlayerWeeklyReport).not.toHaveBeenCalled();
+  });
+});
+
+describe('GET /reports/player-builds/:playerId', () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it('returns recent build reviews for the linked player', async () => {
+    mockDb.user.findUnique.mockResolvedValue({ linkedPlayerId: 'player-1' });
+    const cookie = await authCookie({ globalRole: 'PLAYER', memberships: [] });
+
+    const response = await request(app).get('/reports/player-builds/player-1?days=30&limit=3').set('Cookie', cookie);
+
+    expect(response.status).toBe(200);
+    expect(getPlayerBuildReview).toHaveBeenCalledWith('player-1', { days: 30, limit: 3 });
+  });
+
+  it('does not expose another player build review', async () => {
+    mockDb.user.findUnique.mockResolvedValue({ linkedPlayerId: 'player-1' });
+    const cookie = await authCookie({ globalRole: 'PLAYER', memberships: [] });
+
+    const response = await request(app).get('/reports/player-builds/player-2').set('Cookie', cookie);
+
+    expect(response.status).toBe(403);
+    expect(getPlayerBuildReview).not.toHaveBeenCalled();
   });
 });
 
